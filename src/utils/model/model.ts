@@ -180,7 +180,7 @@ export function getRuntimeMainLoopModel(params: {
  */
 export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
   if (isCodexSubscriber()) {
-    return 'gpt-5.2-codex'
+    return getModelStrings().gpt53codex
   }
 
   // Ants default to defaultModel from flag config, or Opus 1M if not configured
@@ -189,11 +189,6 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
       getAntModelOverrideConfig()?.defaultModel ??
       getDefaultOpusModel() + '[1m]'
     )
-  }
-
-  // Codex users get GPT-5.3 Codex as default
-  if (isCodexSubscriber()) {
-    return getModelStrings().gpt53codex
   }
 
   // Max users get Opus as default
