@@ -18,6 +18,10 @@ import { ensureKeychainPrefetchCompleted, startKeychainPrefetch } from './utils/
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 startKeychainPrefetch();
+// free-code 首次啟動 migration hint（偵測 ~/.claude/ 存在但 ~/.free-code/ 不存在）
+import { printFreeCodeMigrationHintOnce } from './utils/envUtils.js';
+// eslint-disable-next-line custom-rules/no-top-level-side-effects
+printFreeCodeMigrationHintOnce();
 import { feature } from 'bun:bundle';
 import { Command as CommanderCommand, InvalidArgumentError, Option } from '@commander-js/extra-typings';
 import chalk from 'chalk';

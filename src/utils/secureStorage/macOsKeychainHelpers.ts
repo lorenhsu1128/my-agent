@@ -37,7 +37,10 @@ export function getMacOsKeychainStorageServiceName(
   const dirHash = isDefaultDir
     ? ''
     : `-${createHash('sha256').update(configDir).digest('hex').substring(0, 8)}`
-  return `Claude Code${getOauthConfig().OAUTH_FILE_SUFFIX}${serviceSuffix}${dirHash}`
+  // free-code fork：改用獨立 prefix 避免與官方 Claude Code 共用 macOS
+  // keychain entry，跟 ~/.free-code/ 家目錄隔離的決定一致。Windows / Linux
+  // 不走此路（改用 plaintext ~/.free-code/.credentials.json）。
+  return `free-code${getOauthConfig().OAUTH_FILE_SUFFIX}${serviceSuffix}${dirHash}`
 }
 
 export function getUsername(): string {
