@@ -154,10 +154,12 @@ bun test                         # 執行測試
 （參見 TODO.md）
 
 ### 已做出的架構決策
-- ADR-001：使用 LiteLLM 作為本地模型的 proxy（不是直接整合 Ollama）
+- ~~ADR-001：使用 LiteLLM 作為本地模型的 proxy（不是直接整合 Ollama）~~ **已推翻（2026-04-15）** — 改為直接跑 llama.cpp server（OpenAI 相容，`http://127.0.0.1:8080/v1`）。理由：部署已完成（見 `scripts/llama/`）、少一層中介、減少相依性。
 - ADR-002：新的 provider 程式碼放在 `src/services/providers/`，不修改 `src/services/api/`
 - ADR-003：新功能不使用 feature flag — 所有功能直接啟用
 - ADR-004：Hermes 原始碼作為唯讀參考，用 TypeScript 重新實作
+- ADR-005（2026-04-15）：provider 內部做格式轉譯（OpenAI SSE → Anthropic `stream_event`），保持 `QueryEngine.ts` 與 `StreamingToolExecutor.ts` 零修改。理由：這兩個檔案在 `.claude/settings.json` 的 deny list；在 provider 邊界做轉譯讓下游主幹無感。
+- ADR-006（2026-04-15）：Qwen3.5-Neo 的 `reasoning_content` 映射為 Anthropic `thinking` content block。理由：模型把 CoT 放 `reasoning_content`、答案放 `content`，對應到 Anthropic 的 thinking block 在語意上最貼近，也保留 UI 顯示 CoT 的能力。
 
 ---
 

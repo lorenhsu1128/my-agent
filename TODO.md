@@ -3,64 +3,55 @@
 > Claude Code 在每次 session 開始時讀取此檔案，在工作過程中更新任務狀態。
 > 里程碑結構由人類維護。Claude Code 負責管理任務狀態的勾選。
 
-## 當前里程碑：M1 — 透過 LiteLLM Proxy 支援本地模型
+## 當前里程碑：M1 — 透過 llama.cpp 支援本地模型
 
-**目標**：free-code 能透過 LiteLLM proxy 連接本地模型（Qwen 3.5 9B via Ollama），支援串流和全部 39 個工具的 tool calling。
+**目標**：free-code 能直接連接專案內跑的 llama.cpp server（`http://127.0.0.1:8080/v1`，model alias `qwen3.5-9b-neo`），支援串流和全部 39 個工具的 tool calling。**不再**經過 LiteLLM proxy（ADR-001 已推翻，見 CLAUDE.md）。
 
-### 階段一：Provider 抽象層
-- [ ] 閱讀並理解 free-code 目前的 API 架構（`src/services/api/`、`src/utils/model/`、`src/QueryEngine.ts`）
-- [ ] 閱讀 Hermes Agent 的 provider 系統（`reference/hermes-agent/hermes_cli/auth.py`、`reference/hermes-agent/agent/auxiliary_client.py`）
-- [ ] 設計 provider 介面，寫入 `src/services/providers/types.ts`
-  - 必須支援：sendMessage、sendMessageStream、listModels
-  - 必須處理：Anthropic 格式（原生）和 OpenAI 格式（透過 LiteLLM）
-- [ ] 實作 provider 註冊表，寫入 `src/services/providers/index.ts`
-- [ ] 實作 Anthropic 轉接器，寫入 `src/services/providers/anthropicAdapter.ts`
-  - 封裝既有的 `src/services/api/client.ts` 作為 provider
-  - 確保對當前 Anthropic 使用者零行為改變
-- [ ] 驗證：`bun run typecheck` 通過，既有測試通過
+**架構硬約束**：`src/QueryEngine.ts` 與 `src/Tool.ts` 在 `.claude/settings.json` deny list — **不能改**。因此 provider 必須在內部把 OpenAI SSE 轉成 Anthropic 形狀的 stream event，下游無感。
 
-### 階段二：LiteLLM Provider
-- [ ] 實作 LiteLLM provider，寫入 `src/services/providers/litellm.ts`
-  - 向 LiteLLM proxy 端點發送 HTTP 請求
-  - 串流 SSE 解析（OpenAI 格式）
-  - 錯誤處理和逾時管理
-- [ ] 實作工具呼叫轉譯器，寫入 `src/services/providers/toolCallTranslator.ts`
-  - Anthropic tool_use → OpenAI function calling（出站）
-  - OpenAI function calling → Anthropic tool_use（入站）
-  - 處理串流區塊邊界
-  - 處理單次回應中的多個工具呼叫
-  - 處理 tool_result 對話歷史轉譯
-- [ ] 新增模型選擇支援（--model 旗標或 /model 指令支援 LiteLLM 模型）
-- [ ] 驗證：能透過 LiteLLM 向 Ollama 發送基本聊天訊息
+### 階段一：Provider 抽象層（零 runtime 行為變化）
+- [ ] 閱讀並記錄 free-code 現有 API 架構的實測事實（`src/services/api/client.ts`、`src/services/api/claude.ts`、`src/utils/model/providers.ts`），把發現寫進 `skills/freecode-architecture/SKILL.md`
+- [ ] 閱讀 Hermes 的 `reference/hermes-agent/hermes_cli/auth.py` 與 `reference/hermes-agent/agent/auxiliary_client.py`，只取「ProviderConfig + 動態客戶端工廠」設計概念（不直接複製 Python）
+- [ ] 設計 `src/services/providers/types.ts`：以 Anthropic 的 stream event schema 為通用格式，定義 `Provider` 介面含 `sendMessageStream`、`listModels`、`getCapabilities`
+- [ ] 實作 `src/services/providers/index.ts`：註冊表 + 工廠，依 `APIProvider` 值選 provider
+- [ ] 實作 `src/services/providers/anthropicAdapter.ts`：薄封裝既有 `src/services/api/client.ts`，確保當前 Anthropic 使用者行為位元級相同
+- [ ] 驗證：`bun run typecheck` 通過；`./cli -p "hello"` 用 Anthropic 路徑正常
 
-### 階段三：串流整合
-- [ ] 將 LiteLLM provider 整合進 StreamingToolExecutor
-  - 將 OpenAI SSE 事件對應到 free-code 的內部串流格式
-  - 確保 content_block_start/delta/stop 事件正確發出
-  - 處理模型支援的 thinking blocks
-- [ ] 使用 Qwen 3.5 9B 測試串流
-- [ ] 驗證：串流文字回應在 CLI 中正確顯示
+### 階段二：llama.cpp（OpenAI 相容）Provider
+- [ ] 實作 `src/services/providers/llamaCpp.ts`：
+  - 對 `http://127.0.0.1:8080/v1/chat/completions` 發 streaming 請求
+  - 解析 OpenAI SSE（`data: {...}\n\n`、`data: [DONE]`）
+  - **在 provider 內**把 OpenAI SSE chunks 轉成 Anthropic 形狀的 `stream_event`（`message_start` / `content_block_start` / `content_block_delta` / `message_delta` / `message_stop`）
+  - Qwen3.5-Neo 的 `reasoning_content` 映射成 Anthropic 的 `thinking` content block
+- [ ] 實作 `src/services/providers/toolCallTranslator.ts`：
+  - 出站：Anthropic `tools: [{name, input_schema}]` → OpenAI `tools: [{type:'function', function:{name, parameters}}]`
+  - 入站：OpenAI `tool_calls: [{id, function:{name, arguments}}]`（串流切多個 chunk，arguments 需累積）→ Anthropic `ToolUseBlock`
+  - `tool_result` 對話歷史：Anthropic `tool_result` → OpenAI `role:'tool'` message
+- [ ] 新增環境變數 `LLAMA_BASE_URL`（預設 `http://127.0.0.1:8080/v1`）與 `LLAMA_MODEL`（預設 `qwen3.5-9b-neo`）到設定層
+- [ ] 驗證：單元測試轉譯器兩方向 round-trip；整合測試打活著的 server 跑一次 `hello world` 串流
+
+### 階段三：串流完整性
+- [ ] 驗證 `StreamingToolExecutor`（**不改動**）收到 llama.cpp provider 產出的 `content_block_start/delta/stop` 事件時運作正常
+- [ ] 處理 Qwen3.5-Neo 的 `finish_reason=length` 邊界：provider 轉成 `message_delta.stop_reason='max_tokens'`
+- [ ] CLI 串流顯示實測：`./cli --model qwen3.5-9b-neo -p "寫一個 fibonacci"`，確認文字逐字出現而非整塊
 
 ### 階段四：工具呼叫整合
-- [ ] 透過 LiteLLM 使用 Qwen 3.5 9B 測試全部 39 個工具
-- [ ] 記錄哪些工具可用、哪些失敗，附失敗原因
-- [ ] 修復測試中發現的轉接器問題
-- [ ] 建立工具呼叫的整合測試套件
-- [ ] 撰寫測試結果報告
+- [ ] 建立 `tests/integration/TOOL_TEST_RESULTS.md` 骨架（39 個工具一張表）
+- [ ] 針對前五個核心工具（Bash、Read、Write、Edit、Glob）用 Qwen3.5-Neo 跑端到端測試，記錄：(a) 模型選對工具 (b) 轉譯正確 (c) 工具執行成功 (d) 結果顯示正確
+- [ ] 其餘 34 個工具依樣畫葫蘆補完（可分批）
+- [ ] 修復測試中發現的轉譯器 bug（只動 `toolCallTranslator.ts`，不改 `Tool.ts`）
 
 ### 階段五：設定與使用者體驗
-- [ ] 新增 LiteLLM proxy 設定（URL、模型名稱）到 free-code 設定中
-- [ ] 更新 /model 指令以顯示 LiteLLM 代理的模型
-- [ ] 確保 proxy 不可用時有優雅的降級處理
-- [ ] 更新啟動橫幅以顯示已連接的 provider
-- [ ] 最終冒煙測試：使用本地模型完成完整的程式開發任務
+- [ ] `src/utils/model/model.ts`：優先級解析中新增 `qwen3.5-9b-neo` 別名 → 映射到 llama.cpp provider
+- [ ] `/model` 指令：列出可用 provider + 模型名
+- [ ] server 不可用時的降級：provider 工廠偵測 `fetch` 失敗時 log 清楚錯誤、不 crash
+- [ ] 啟動橫幅顯示已連接的 provider（Anthropic / llama.cpp）
 
-### 完成標準
-- [ ] `./cli --model qwen3.5:9b` 啟動並透過 LiteLLM 連接到 Ollama
-- [ ] 串流文字回應正常運作
-- [ ] 工具呼叫可用（至少 BashTool 必須正常；記錄全部 39 個的結果）
-- [ ] 既有的 Anthropic API 使用完全不受影響
-- [ ] 全部 39 個工具已測試，結果記錄在 `tests/integration/TOOL_TEST_RESULTS.md`
+### 完成標準（取代原 M1 標準）
+- [ ] `./cli --model qwen3.5-9b-neo -p "hello"` 成功串流輸出；log 顯示連接 `http://127.0.0.1:8080/v1`
+- [ ] 工具呼叫可用：至少 Bash、Read、Write、Edit、Glob 五個核心工具端到端通過
+- [ ] 既有 Anthropic 使用者路徑**完全不受影響**（`ANTHROPIC_API_KEY` 存在時 `./cli -p "hello"` 行為位元級相同）
+- [ ] `tests/integration/TOOL_TEST_RESULTS.md` 記錄 39 個工具的結果表格
 
 ---
 
