@@ -397,15 +397,21 @@ async function* iterOpenAISSELines(
 
 /**
  * 核心狀態機：把 OpenAI chat completion chunks 翻譯成 Anthropic stream
- * events。支援純文字 + thinking（ADR-006），tool_calls 本階段忽略留給
- * 階段三實作。
+ * events。支援純文字 + thinking（ADR-006）+ tool_use。
  *
- * 事件序列：
+ * 事件序列範例（有 tool call）：
  *   message_start
  *   [content_block_start(thinking) → thinking_delta × N → content_block_stop]
  *   [content_block_start(text) → text_delta × N → content_block_stop]
- *   message_delta(stop_reason, usage)
+ *   [content_block_start(tool_use) → input_json_delta × N → content_block_stop] ×M
+ *   message_delta(stop_reason=tool_use, usage)
  *   message_stop
+ *
+ * 狀態管理（階段三重構）：
+ *   - textIndex / textType：最多一個開啟中的 text/thinking block
+ *   - openToolBlocks：Map<openai tool_call index, anthropic block index>
+ *     — 每個工具呼叫佔一個 content block，全部留到 stream 結束才關
+ *   - nextBlockIndex：單調遞增的 Anthropic content block index 分配器
  */
 async function* translateOpenAIStreamToAnthropic(
   upstream: ReadableStream<Uint8Array>,
@@ -413,8 +419,11 @@ async function* translateOpenAIStreamToAnthropic(
   msgId: string,
 ): AsyncGenerator<string> {
   let msgStarted = false
-  let currentBlockIndex = -1
-  let currentBlockType: 'text' | 'thinking' | null = null
+  let nextBlockIndex = 0
+  let textIndex = -1
+  let textType: 'text' | 'thinking' | null = null
+  // OpenAI tool_call.index → Anthropic content block index（開啟中的工具塊）
+  const openToolBlocks = new Map<number, number>()
   const accUsage = { input_tokens: 0, output_tokens: 0 }
   let finalFinishReason: string | null = null
 
@@ -435,25 +444,30 @@ async function* translateOpenAIStreamToAnthropic(
     })
   }
 
-  const closeCurrentBlock = () => {
-    if (currentBlockIndex < 0) return null
-    const out = formatSSE('content_block_stop', {
+  const stopBlock = (index: number) =>
+    formatSSE('content_block_stop', {
       type: 'content_block_stop',
-      index: currentBlockIndex,
+      index,
     })
+
+  const closeTextBlock = (): string | null => {
+    if (textIndex < 0) return null
+    const out = stopBlock(textIndex)
+    textIndex = -1
+    textType = null
     return out
   }
 
-  const openBlock = (blockType: 'text' | 'thinking') => {
-    currentBlockIndex++
-    currentBlockType = blockType
+  const openTextBlock = (kind: 'text' | 'thinking'): string => {
+    textIndex = nextBlockIndex++
+    textType = kind
     const content_block =
-      blockType === 'text'
+      kind === 'text'
         ? { type: 'text', text: '' }
         : { type: 'thinking', thinking: '' }
     return formatSSE('content_block_start', {
       type: 'content_block_start',
-      index: currentBlockIndex,
+      index: textIndex,
       content_block,
     })
   }
@@ -472,34 +486,77 @@ async function* translateOpenAIStreamToAnthropic(
 
     const choice = chunk.choices?.[0]
     if (choice?.delta) {
-      const { content, reasoning_content } = choice.delta
+      const { content, reasoning_content, tool_calls } = choice.delta
 
+      // 1. thinking delta
       if (typeof reasoning_content === 'string' && reasoning_content.length > 0) {
-        if (currentBlockType !== 'thinking') {
-          const stopLine = closeCurrentBlock()
-          if (stopLine) yield stopLine
-          yield openBlock('thinking')
+        if (textType !== 'thinking') {
+          const stop = closeTextBlock()
+          if (stop) yield stop
+          yield openTextBlock('thinking')
         }
         yield formatSSE('content_block_delta', {
           type: 'content_block_delta',
-          index: currentBlockIndex,
+          index: textIndex,
           delta: { type: 'thinking_delta', thinking: reasoning_content },
         })
       }
 
+      // 2. text delta
       if (typeof content === 'string' && content.length > 0) {
-        if (currentBlockType !== 'text') {
-          const stopLine = closeCurrentBlock()
-          if (stopLine) yield stopLine
-          yield openBlock('text')
+        if (textType !== 'text') {
+          const stop = closeTextBlock()
+          if (stop) yield stop
+          yield openTextBlock('text')
         }
         yield formatSSE('content_block_delta', {
           type: 'content_block_delta',
-          index: currentBlockIndex,
+          index: textIndex,
           delta: { type: 'text_delta', text: content },
         })
       }
-      // tool_calls 本階段忽略；階段三實作
+
+      // 3. tool_call deltas（可多筆，按 openai index 區分）
+      if (Array.isArray(tool_calls) && tool_calls.length > 0) {
+        // 一旦進入 tool call，先關掉任何開啟的 text/thinking block
+        // （OpenAI Chat Completions 串流實務上 text/reasoning 不與 tool_calls 交錯）
+        if (textIndex >= 0) {
+          yield stopBlock(textIndex)
+          textIndex = -1
+          textType = null
+        }
+
+        for (const tc of tool_calls) {
+          const openaiIdx = tc.index ?? 0
+          let anthropicIdx = openToolBlocks.get(openaiIdx)
+
+          // 第一次見到這個 openai index：開 tool_use block
+          if (anthropicIdx === undefined) {
+            anthropicIdx = nextBlockIndex++
+            openToolBlocks.set(openaiIdx, anthropicIdx)
+            yield formatSSE('content_block_start', {
+              type: 'content_block_start',
+              index: anthropicIdx,
+              content_block: {
+                type: 'tool_use',
+                id: tc.id ?? `toolu_${Date.now()}_${openaiIdx}`,
+                name: tc.function?.name ?? '',
+                input: {},
+              },
+            })
+          }
+
+          // 累積 arguments chunk
+          const argDelta = tc.function?.arguments
+          if (typeof argDelta === 'string' && argDelta.length > 0) {
+            yield formatSSE('content_block_delta', {
+              type: 'content_block_delta',
+              index: anthropicIdx,
+              delta: { type: 'input_json_delta', partial_json: argDelta },
+            })
+          }
+        }
+      }
     }
 
     if (choice?.finish_reason) {
@@ -517,12 +574,17 @@ async function* translateOpenAIStreamToAnthropic(
 
   // 收尾
   if (!msgStarted) {
-    // 上游沒吐任何資料：至少發個空 message_start + stop 讓 SDK 不掛住
     yield startMessage()
   }
 
-  const lastStop = closeCurrentBlock()
-  if (lastStop) yield lastStop
+  const lastTextStop = closeTextBlock()
+  if (lastTextStop) yield lastTextStop
+
+  // 關掉所有開啟中的 tool_use block
+  for (const anthropicIdx of openToolBlocks.values()) {
+    yield stopBlock(anthropicIdx)
+  }
+  openToolBlocks.clear()
 
   yield formatSSE('message_delta', {
     type: 'message_delta',

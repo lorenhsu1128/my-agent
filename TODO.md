@@ -33,11 +33,11 @@
 - [x] 驗證 V5：結構驗證通過 — 未設 `CLAUDE_CODE_USE_LLAMACPP` 時 `getAPIProvider()` 不回 `'llamacpp'`、`getLlamaCppConfig()` 回 `null`、llamacpp 分支不進，走原 Anthropic 初始化鏈。**需使用者用真 Anthropic key 跑端到端最後確認** `ANTHROPIC_API_KEY=<real> ./cli -p "hi"` 行為與修訂前位元級相同
 
 ### 階段三：工具呼叫翻譯
-- [ ] 在 adapter 中加 tool 翻譯：
-  - 出站：Anthropic `tools: [{name, input_schema}]` → OpenAI `tools: [{type:'function', function:{name, parameters}}]`
-  - 入站 non-streaming：OpenAI `tool_calls: [{id, function:{name, arguments}}]` → Anthropic `ToolUseBlock`
-  - 入站 streaming：`tool_calls` 的 `arguments` 會切多個 chunk，需累積後輸出 `content_block_delta.input_json_delta`
-  - `tool_result` 對話歷史：Anthropic `tool_result` content block → OpenAI `role:'tool'` message
+- [x] 在 adapter 中加 tool 翻譯：
+  - 出站：Anthropic `tools` → OpenAI `tools`（translateToolsToOpenAI，Step 2a 時已做）
+  - 入站 non-streaming：tool_calls → `ToolUseBlock`（Step 2a 時已做）
+  - 入站 streaming：tool_calls 切多 chunk 的 arguments 累積 → `input_json_delta`（階段三重構狀態機，用 `openToolBlocks: Map<openai idx → anthropic idx>` 追蹤；實測 Qwen3.5-Neo 呼叫 get_weather 工具成功，input 正確重組為 `{"city":"Tokyo"}`，stop_reason=tool_use；見 `scripts/poc/llamacpp-tool-streaming-poc.ts`）
+  - `tool_result` 對話歷史 → `role:'tool'` message（translateMessagesToOpenAI，Step 2a 時已做）
 - [ ] 建立 `tests/integration/TOOL_TEST_RESULTS.md` 骨架（39 個工具一張表）
 - [ ] 針對前五個核心工具（Bash、Read、Write、Edit、Glob）用 Qwen3.5-Neo 跑端到端測試，記錄：(a) 模型選對工具 (b) 翻譯正確 (c) 工具執行成功 (d) 結果顯示正確
 - [ ] 其餘 34 個工具依樣畫葫蘆補完（可分批）
@@ -102,3 +102,5 @@
 - 2026-04-15 16:18: Session 結束 | 進度：5/26 任務 | 66d2a1a chore(m1): 完成階段一最後一項 — typecheck 綠燈基線
 
 - 2026-04-15 16:34: Session 結束 | 進度：10/27 任務 | 403a514 feat(api): llamacpp-fetch-adapter 串流翻譯（純文字 + thinking）
+
+- 2026-04-15 16:54: Session 結束 | 進度：14/27 任務 | 4730c0a chore(m1): 勾選 V5 回歸驗證（結構驗證通過，待真 key e2e 確認）
