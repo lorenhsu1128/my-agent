@@ -27,6 +27,16 @@
 
 ## Provider 整合相關
 
+### 新增 APIProvider enum 值時必須補全所有「provider-aware lookup」fallback
+- **發生什麼事**：M1 新增 `'llamacpp'` 到 `APIProvider` 聯集後，沒下 `--model` 的情境下 CLI bootstrap 在 `WebSearchTool.isEnabled()` 卡死約 600ms 後。FREECODE_TRACE 逐層追蹤到：`getMainLoopModel()` → `getDefaultMainLoopModel()` → `getDefaultSonnetModel()` → `getModelStrings().sonnet45` → `undefined` → `parseUserSpecifiedModel(undefined)` 進入死迴圈。
+- **根本原因**：`src/utils/model/modelStrings.ts:25-31` 的 `getBuiltinModelStrings(provider)` 用 `ALL_MODEL_CONFIGS[key][provider]` 查表，但 `ALL_MODEL_CONFIGS`（`configs.ts`）每個 key 只有 `firstParty / bedrock / vertex / foundry / openai / codex` 的欄位，**沒有 `llamacpp`**。lookup 全 undefined → `sonnet45` / `opus46` / 等全 undefined → 預設模型解析路徑壞掉。
+- **為何隱藏**：`--model qwen3.5-9b-neo` 會讓 `getUserSpecifiedModelSetting()` 直接回傳 flag 值，**完全繞過** `getDefaultMainLoopModel()`。之前所有 M1 的 `./cli -p --model qwen...` 測試都沒踩到。真正進 TUI 互動模式（`bun run dev`、沒 `--model`）才會踩。
+- **正確做法**：
+  1. 短期修法（已實施）：`src/utils/model/model.ts` 的 `getDefaultMainLoopModelSetting()` 頂端加 `if (getAPIProvider() === 'llamacpp') return DEFAULT_LLAMACPP_MODEL` 短路。不污染 `ALL_MODEL_CONFIGS`、不改 `parseUserSpecifiedModel`（核心檔案）。
+  2. 長期提醒：**新增 APIProvider enum 值時（未來 vLLM、sglang 等），先 grep 所有 `ALL_MODEL_CONFIGS[key][provider]` 類的 provider-aware lookup**，每個都要補 fallback（短路或新增欄位）。
+- **相關檔案**：`src/utils/model/model.ts`（修法位置）、`src/utils/model/modelStrings.ts:25-31`（lookup 根源）、`src/utils/model/configs.ts`（`ALL_MODEL_CONFIGS` 資料結構）、`src/utils/model/providers.ts`（APIProvider enum）。
+- **日期**：2026-04-15
+
 ### `ANTHROPIC_API_KEY=dummy` 會讓 free-code bootstrap 無限阻塞
 - **發生什麼事**：V4 測試時設 `ANTHROPIC_API_KEY=dummy CLAUDE_CODE_USE_LLAMACPP=true ./cli -p "hi"`，CLI 掛住 60 秒 + 無任何 stdout/stderr，連 `getAnthropicClient()` 都沒被呼叫。把 `ANTHROPIC_API_KEY=dummy` 拿掉（只保留 `CLAUDE_CODE_USE_LLAMACPP=true`）馬上解開。
 - **根本原因**：free-code 的 bootstrap（`src/bootstrap/state.ts` + `src/main.tsx` 初始化鏈）偵測到 `ANTHROPIC_API_KEY` 存在時會觸發同步 / 網路驗證，dummy key 讓這步卡住。具體哪一步目前未追到，但行為可重現。
