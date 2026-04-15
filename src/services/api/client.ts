@@ -21,6 +21,7 @@ import { getUserAgent } from 'src/utils/http.js'
 import { getSmallFastModel } from 'src/utils/model/model.js'
 import {
   getAPIProvider,
+  getLlamaCppConfig,
   isFirstPartyAnthropicBaseUrl,
 } from 'src/utils/model/providers.js'
 import { getProxyFetchOptions } from 'src/utils/proxy.js'
@@ -36,6 +37,7 @@ import {
   isEnvTruthy,
 } from '../../utils/envUtils.js'
 import { createCodexFetch } from './codex-fetch-adapter.js'
+import { createLlamaCppFetch } from './llamacpp-fetch-adapter.js'
 
 /**
  * Environment variables for different client types:
@@ -76,6 +78,13 @@ import { createCodexFetch } from './codex-fetch-adapter.js'
  * 2. Global CLOUD_ML_REGION variable
  * 3. Default region from config
  * 4. Fallback region (us-east5)
+ *
+ * LlamaCpp (local OpenAI-compatible server via llama-server):
+ * - CLAUDE_CODE_USE_LLAMACPP=true  啟用本路徑（優先級最高）
+ * - LLAMA_BASE_URL                 預設 http://127.0.0.1:8080/v1
+ * - LLAMA_MODEL                    預設 qwen3.5-9b-neo
+ * 實作：src/services/api/llamacpp-fetch-adapter.ts 把 Anthropic
+ * Messages API 翻譯成 OpenAI Chat Completions（見 ADR-005/006）。
  */
 
 function createStderrLogger(): ClientOptions['logger'] {
@@ -106,6 +115,30 @@ export async function getAnthropicClient({
   fetchOverride?: ClientOptions['fetch']
   source?: string
 }): Promise<Anthropic> {
+  if (process.env.LLAMA_DEBUG) {
+    // biome-ignore lint/suspicious/noConsole:: debug only
+    console.error('[LLAMA_DEBUG] getAnthropicClient called, model=', model, 'source=', source)
+  }
+  // ── LlamaCpp (local OpenAI-compatible server) via fetch adapter ─────
+  // 放最前面：本地 provider 不需要任何 Anthropic auth / header 設定，
+  // 直接回傳純淨的 SDK client 避免後續 OAuth refresh 等阻塞呼叫。
+  const llamaCppConfig = getLlamaCppConfig()
+  if (llamaCppConfig) {
+    if (process.env.LLAMA_DEBUG) {
+      // biome-ignore lint/suspicious/noConsole:: debug only
+      console.error('[LLAMA_DEBUG] llamacpp branch hit, baseUrl=', llamaCppConfig.baseUrl)
+    }
+    const llamaCppFetch = createLlamaCppFetch(llamaCppConfig)
+    return new Anthropic({
+      apiKey: 'llamacpp-placeholder', // SDK 要求非空；adapter 無 auth
+      maxRetries,
+      timeout: parseInt(process.env.API_TIMEOUT_MS || String(600 * 1000), 10),
+      dangerouslyAllowBrowser: true,
+      fetch: llamaCppFetch as unknown as typeof globalThis.fetch,
+      ...(isDebugToStdErr() && { logger: createStderrLogger() }),
+    })
+  }
+
   const containerId = process.env.CLAUDE_CODE_CONTAINER_ID
   const remoteSessionId = process.env.CLAUDE_CODE_REMOTE_SESSION_ID
   const clientApp = process.env.CLAUDE_AGENT_SDK_CLIENT_APP

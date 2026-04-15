@@ -27,7 +27,19 @@
 
 ## Provider 整合相關
 
-（尚無記錄）
+### `ANTHROPIC_API_KEY=dummy` 會讓 free-code bootstrap 無限阻塞
+- **發生什麼事**：V4 測試時設 `ANTHROPIC_API_KEY=dummy CLAUDE_CODE_USE_LLAMACPP=true ./cli -p "hi"`，CLI 掛住 60 秒 + 無任何 stdout/stderr，連 `getAnthropicClient()` 都沒被呼叫。把 `ANTHROPIC_API_KEY=dummy` 拿掉（只保留 `CLAUDE_CODE_USE_LLAMACPP=true`）馬上解開。
+- **根本原因**：free-code 的 bootstrap（`src/bootstrap/state.ts` + `src/main.tsx` 初始化鏈）偵測到 `ANTHROPIC_API_KEY` 存在時會觸發同步 / 網路驗證，dummy key 讓這步卡住。具體哪一步目前未追到，但行為可重現。
+- **正確做法**：llamacpp 路徑完全不需要 Anthropic key。**不要**設 `ANTHROPIC_API_KEY`（即使設成假值也不行）。只設 `CLAUDE_CODE_USE_LLAMACPP=true` + 可選的 `LLAMA_BASE_URL` / `LLAMA_MODEL`。
+- **相關檔案**：`src/services/api/client.ts`（getAnthropicClient 的 llamacpp 分支已放最前面，但上游還有別的阻塞）；`scripts/llama/DEPLOYMENT_PLAN.md` 與 `scripts/llama/README.md` 的範例指令需移除 `ANTHROPIC_API_KEY=dummy`。
+- **日期**：2026-04-15
+
+### free-code 的 CLI system prompt 遠大於 16K token
+- **發生什麼事**：第一次跑 V4 時 llama-server 回 `request (18485 tokens) exceeds the available context size (16384 tokens)`。實測 free-code 光系統 prompt 就 18K+，加 user prompt 更大。
+- **根本原因**：`scripts/llama/serve.sh` 預設 `LLAMA_CTX=16384` 是給一般對話準備的，對 Claude Code 類的 agent 系統 prompt 太小。
+- **正確做法**：`serve.sh` 預設改成 `LLAMA_CTX=32768`。RTX 5070 12GB VRAM + Q5_K_M 模型（6.85GB）仍有約 5GB 給 KV cache，32K context 綽綽有餘。若使用者 OOM 再往下降。
+- **相關檔案**：`scripts/llama/serve.sh`
+- **日期**：2026-04-15
 
 ---
 

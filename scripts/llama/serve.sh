@@ -12,7 +12,7 @@ MODEL="$ROOT_DIR/models/Jackrong_Qwen3.5-9B-Neo-Q5_K_M.gguf"
 # --- 可調參數（環境變數覆蓋）-------------------------------------------
 HOST="${LLAMA_HOST:-127.0.0.1}"
 PORT="${LLAMA_PORT:-8080}"
-CTX_SIZE="${LLAMA_CTX:-16384}"
+CTX_SIZE="${LLAMA_CTX:-32768}"
 NGL="${LLAMA_NGL:-99}"
 ALIAS="${LLAMA_ALIAS:-qwen3.5-9b-neo}"
 
