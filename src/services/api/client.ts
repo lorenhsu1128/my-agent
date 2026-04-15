@@ -122,7 +122,8 @@ export async function getAnthropicClient({
   // ── LlamaCpp (local OpenAI-compatible server) via fetch adapter ─────
   // 放最前面：本地 provider 不需要任何 Anthropic auth / header 設定，
   // 直接回傳純淨的 SDK client 避免後續 OAuth refresh 等阻塞呼叫。
-  const llamaCppConfig = getLlamaCppConfig()
+  // 偵測兩路：CLAUDE_CODE_USE_LLAMACPP env 或 --model <alias>。
+  const llamaCppConfig = getLlamaCppConfig(model)
   if (llamaCppConfig) {
     if (process.env.LLAMA_DEBUG) {
       // biome-ignore lint/suspicious/noConsole:: debug only

@@ -15,7 +15,11 @@ import {
 } from '../modelCost.js'
 import { getSettings_DEPRECATED } from '../settings/settings.js'
 import { checkOpus1mAccess, checkSonnet1mAccess } from './check1mAccess.js'
-import { getAPIProvider } from './providers.js'
+import {
+  DEFAULT_LLAMACPP_BASE_URL,
+  getAPIProvider,
+  LLAMACPP_MODEL_ALIASES,
+} from './providers.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import {
   getCanonicalName,
@@ -499,6 +503,18 @@ function getKnownModelOption(model: string): ModelOption | null {
 
 export function getModelOptions(fastMode = false): ModelOption[] {
   const options = getModelOptionsBase(fastMode)
+
+  // 本地 llama.cpp 模型 — 選擇它會透過 llamacpp-fetch-adapter 走本地
+  // server（ADR-005）。使用者不需額外設 CLAUDE_CODE_USE_LLAMACPP env。
+  for (const alias of LLAMACPP_MODEL_ALIASES) {
+    if (!options.some(existing => existing.value === alias)) {
+      options.push({
+        value: alias,
+        label: `${alias} (local)`,
+        description: `Local via llama.cpp server（${DEFAULT_LLAMACPP_BASE_URL}）`,
+      })
+    }
+  }
 
   // Add the custom model from the ANTHROPIC_CUSTOM_MODEL_OPTION env var
   const envCustomModel = process.env.ANTHROPIC_CUSTOM_MODEL_OPTION

@@ -673,15 +673,42 @@ export function createLlamaCppFetch(
       )
     }
 
-    // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-    const openaiRes = await globalThis.fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: openaiBody.stream ? 'text/event-stream' : 'application/json',
-      },
-      body: JSON.stringify(openaiBody),
-    })
+    let openaiRes: Response
+    try {
+      // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+      openaiRes = await globalThis.fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: openaiBody.stream ? 'text/event-stream' : 'application/json',
+        },
+        body: JSON.stringify(openaiBody),
+      })
+    } catch (err) {
+      // 連線層失敗（server 沒跑、DNS 錯、網路斷）— 回一個 Anthropic shape
+      // 的 error response，訊息指示使用者啟動本地 server
+      const e = err as { code?: string; cause?: { code?: string }; message?: string }
+      const code = e?.code ?? e?.cause?.code ?? ''
+      const detail = e?.message ?? String(err)
+      // 連線層失敗的各種訊息樣式（Node undici、Bun native fetch、各平台）
+      const isConnErr =
+        code === 'ECONNREFUSED' ||
+        code === 'ECONNRESET' ||
+        code === 'ENOTFOUND' ||
+        /ECONNREFUSED|Unable to connect|fetch failed|ECONNRESET|ENOTFOUND/i.test(detail)
+      const hint = isConnErr
+        ? `llama.cpp server 未啟動於 ${config.baseUrl}。請在另一個終端執行：\n  bash scripts/llama/serve.sh\n或設定 LLAMA_BASE_URL 指向已啟動的 server。`
+        : `無法連接 llama.cpp server（${config.baseUrl}）：${detail}`
+      // 用 400 而非 5xx：Anthropic SDK 對 5xx 會自動重試，但連線層失敗
+      // 重試也沒意義（還是連不上），讓 SDK 立即把錯誤往上拋。
+      return new Response(
+        JSON.stringify({
+          type: 'error',
+          error: { type: 'invalid_request_error', message: hint },
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
 
     if (!openaiRes.ok) {
       const errText = await openaiRes.text()

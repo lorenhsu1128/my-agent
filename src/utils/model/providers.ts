@@ -25,14 +25,49 @@ export const DEFAULT_LLAMACPP_BASE_URL = 'http://127.0.0.1:8080/v1'
 export const DEFAULT_LLAMACPP_MODEL = 'qwen3.5-9b-neo'
 
 /**
+ * 已知對應到本地 llama.cpp server 的模型別名 / ID。
+ * 呼叫 `--model <alias>` 時會自動啟用 llamacpp 分支，使用者不需另外
+ * 設 CLAUDE_CODE_USE_LLAMACPP=true。
+ * 未來擴充（vLLM、sglang、其他本地模型）在此加。
+ */
+export const LLAMACPP_MODEL_ALIASES: readonly string[] = [
+  'qwen3.5-9b-neo',
+]
+
+export function isLlamaCppModel(model: string | undefined | null): boolean {
+  return !!model && LLAMACPP_MODEL_ALIASES.includes(model)
+}
+
+/**
+ * 快速判斷：本次 session 是否走 llama.cpp 路徑。
+ * 只看 env flag（`CLAUDE_CODE_USE_LLAMACPP`），因此在使用者只下
+ * `--model qwen3.5-9b-neo` 而沒設 env flag 的情境下仍會回 false —
+ * 那時 banner 會顯示一般 billing，但模型名本身就足以表明路徑。
+ */
+export function isLlamaCppActive(): boolean {
+  return getAPIProvider() === 'llamacpp'
+}
+
+/**
  * 當 provider 為 llamacpp 時回傳連線設定，否則 null。
  * base URL / model 可分別用 LLAMA_BASE_URL、LLAMA_MODEL 覆蓋。
+ *
+ * 偵測條件（任一成立即回非 null）：
+ *   1. `CLAUDE_CODE_USE_LLAMACPP=true`（顯式 flag）
+ *   2. 傳入的 `model` 符合 LLAMACPP_MODEL_ALIASES（模型名觸發）
  */
-export function getLlamaCppConfig(): { baseUrl: string; model: string } | null {
-  if (getAPIProvider() !== 'llamacpp') return null
+export function getLlamaCppConfig(
+  model?: string | null,
+): { baseUrl: string; model: string } | null {
+  const envActivated = getAPIProvider() === 'llamacpp'
+  const modelActivated = isLlamaCppModel(model)
+  if (!envActivated && !modelActivated) return null
   return {
     baseUrl: process.env.LLAMA_BASE_URL || DEFAULT_LLAMACPP_BASE_URL,
-    model: process.env.LLAMA_MODEL || DEFAULT_LLAMACPP_MODEL,
+    // 若是透過 model 名稱觸發，優先沿用該名稱（不覆蓋成 DEFAULT）
+    model:
+      process.env.LLAMA_MODEL ||
+      (modelActivated ? (model as string) : DEFAULT_LLAMACPP_MODEL),
   }
 }
 

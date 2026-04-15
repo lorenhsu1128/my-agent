@@ -15,6 +15,7 @@ import {
 } from './releaseNotes.js'
 import { gt } from './semver.js'
 import { loadMessageLogs } from './sessionStorage.js'
+import { isLlamaCppActive } from './model/providers.js'
 import { getInitialSettings } from './settings/settings.js'
 
 // Layout constants
@@ -256,11 +257,13 @@ export function getLogoDisplayData(): {
   const cwd = serverUrl
     ? `${displayPath} in ${serverUrl.replace(/^https?:\/\//, '')}`
     : displayPath
-  const billingType = isClaudeAISubscriber()
-    ? getSubscriptionName()
-    : isCodexSubscriber()
-      ? 'Codex API Billing'
-      : 'API Usage Billing'
+  const billingType = isLlamaCppActive()
+    ? 'llama.cpp (local)'
+    : isClaudeAISubscriber()
+      ? getSubscriptionName()
+      : isCodexSubscriber()
+        ? 'Codex API Billing'
+        : 'API Usage Billing'
   const agentName = getInitialSettings().agent
 
   return {
