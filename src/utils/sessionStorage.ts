@@ -24,12 +24,14 @@ import {
 import {
   getOriginalCwd,
   getPlanSlugCache,
+  getProjectRoot,
   getPromptId,
   getSessionId,
   getSessionProjectDir,
   isSessionPersistenceDisabled,
   switchSession,
 } from '../bootstrap/state.js'
+import { indexEntry } from '../services/sessionIndex/index.js'
 import { builtInCommandNames } from '../commands.js'
 import { COMMAND_NAME_TAG, TICK_TAG } from '../constants/xml.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
@@ -1245,6 +1247,16 @@ class Project {
           void this.enqueueWrite(targetFile, entry)
 
           if (!isAgentSidechain) {
+            // M2-02：fire-and-forget tee 到 SQLite FTS 索引。
+            // 用 getProjectRoot()（session identity 穩定源），不是 getOriginalCwd()
+            // 後者會在 EnterWorktreeTool 被改動 → 索引分裂。
+            // indexEntry 內部全 try/catch，SQLITE_BUSY 直接吞掉，絕不拋錯。
+            indexEntry(
+              entry as Parameters<typeof indexEntry>[0],
+              sessionId,
+              getProjectRoot(),
+            )
+
             // messageSet is main-file-authoritative. Sidechain entries go to a
             // separate agent file — adding their UUIDs here causes recordTranscript
             // to skip them on the main thread (line ~1270), so the message is never

@@ -1,7 +1,10 @@
 /**
- * Smoke test for M2-01: session index schema + connection.
+ * Smoke test：
+ * - M2-01：session index schema + connection（27 check）
+ * - M2-01 審查：parent_session_id + idx_sessions_parent（3 check）
+ * - M2-02：indexEntry tee 流程、shadow dedup、空內容、busy 吞錯（新增 check）
  *
- * Runs against a throwaway CLAUDE_CONFIG_DIR so ~/.free-code 不會被污染。
+ * 走 throwaway CLAUDE_CONFIG_DIR，不污染真實 ~/.free-code。
  *
  * Usage:
  *   bun run scripts/poc/session-index-smoke.ts
@@ -19,6 +22,7 @@ const {
   closeSessionIndex,
   getSessionIndexPath,
   SCHEMA_VERSION,
+  indexEntry,
 } = await import('../../src/services/sessionIndex/index.js')
 
 let passed = 0
@@ -43,7 +47,7 @@ try {
   console.log('Test 1: 首次開啟建立 schema')
   const db = openSessionIndex(cwd)
   check('db is open', !!db)
-  check('SCHEMA_VERSION constant', SCHEMA_VERSION === 1, `v=${SCHEMA_VERSION}`)
+  check('SCHEMA_VERSION constant', SCHEMA_VERSION === 2, `v=${SCHEMA_VERSION}`)
 
   // 檢查 schema_version 表
   const ver = db
@@ -232,13 +236,218 @@ try {
   )
 
   closeSessionIndex(cwd)
+
+  // ========================================================================
+  // M2-02：indexEntry tee 流程
+  // ========================================================================
+  console.log()
+  console.log('Test 6: messages_seen shadow 表存在（v2 schema）')
+  const dbM2 = openSessionIndex(cwd)
+  const seenTable = dbM2
+    .query<{ name: string }, []>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='messages_seen'",
+    )
+    .get()
+  check('messages_seen 表存在', seenTable !== null)
+
+  console.log()
+  console.log('Test 7: indexEntry 寫入 user/assistant 訊息')
+  const SESS = 'm2-02-sess-1'
+
+  // 用 user 訊息（string content）
+  indexEntry(
+    {
+      type: 'user',
+      uuid: 'uuid-u-1',
+      message: { role: 'user', content: '請教我用 llama.cpp 跑本地模型' },
+    },
+    SESS,
+    cwd,
+  )
+  const rowSess = dbM2
+    .query<
+      { session_id: string; message_count: number; first_user_message: string },
+      [string]
+    >(
+      'SELECT session_id, message_count, first_user_message FROM sessions WHERE session_id = ?',
+    )
+    .get(SESS)
+  check('sessions 行已建立', rowSess?.session_id === SESS)
+  check('message_count = 1', rowSess?.message_count === 1)
+  check(
+    'first_user_message 摘要（前 200 字）已填',
+    (rowSess?.first_user_message ?? '').includes('llama.cpp'),
+  )
+
+  // assistant 訊息（ContentBlock[] — text + tool_use + thinking）
+  indexEntry(
+    {
+      type: 'assistant',
+      uuid: 'uuid-a-1',
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: '使用者想跑本地模型，建議用 serve.sh' },
+          { type: 'text', text: '你可以跑 scripts/llama/serve.sh 啟動 server' },
+          { type: 'tool_use', name: 'Bash', input: { command: 'bash scripts/llama/serve.sh' } },
+        ],
+      },
+    },
+    SESS,
+    cwd,
+  )
+  const rowSess2 = dbM2
+    .query<{ message_count: number }, [string]>(
+      'SELECT message_count FROM sessions WHERE session_id = ?',
+    )
+    .get(SESS)
+  check('message_count = 2（user + assistant）', rowSess2?.message_count === 2)
+
+  // 驗證 thinking / tool_use input / text 都進 FTS
+  const ftsHits = dbM2
+    .query<{ content: string; tool_name: string | null }, [string]>(
+      'SELECT content, tool_name FROM messages_fts WHERE session_id = ?',
+    )
+    .all(SESS)
+  check('messages_fts 有 2 筆', ftsHits.length === 2)
+
+  const assistantRow = ftsHits.find(r => r.content.includes('serve.sh'))
+  check('assistant FTS 含 text', !!assistantRow)
+  check(
+    'assistant FTS 含 thinking',
+    assistantRow?.content.includes('建議用 serve.sh') ?? false,
+  )
+  check(
+    'assistant FTS 含 tool_use input（JSON）',
+    assistantRow?.content.includes('[tool:Bash]') ?? false,
+  )
+  check('assistant tool_name 記錄為 Bash', assistantRow?.tool_name === 'Bash')
+
+  // FTS 搜尋整條鏈：search "serve"（FTS5 MATCH 的 . 是 reserved，需 quote；用純 word 測）
+  const sessionSearch = dbM2
+    .query<{ session_id: string }, [string]>(
+      'SELECT session_id FROM messages_fts WHERE messages_fts MATCH ?',
+    )
+    .all('serve')
+  check('FTS 可搜回 assistant 訊息', sessionSearch.some(r => r.session_id === SESS))
+
+  console.log()
+  console.log('Test 8: shadow 表去重 — 同 UUID 第二次呼叫不重複寫')
+  indexEntry(
+    {
+      type: 'user',
+      uuid: 'uuid-u-1', // 同 UUID
+      message: { role: 'user', content: '應該被忽略的重複內容' },
+    },
+    SESS,
+    cwd,
+  )
+  const rowSess3 = dbM2
+    .query<{ message_count: number }, [string]>(
+      'SELECT message_count FROM sessions WHERE session_id = ?',
+    )
+    .get(SESS)
+  check(
+    'message_count 仍為 2（去重生效）',
+    rowSess3?.message_count === 2,
+    `count=${rowSess3?.message_count}`,
+  )
+  const ftsCountAfterDup = dbM2
+    .query<{ c: number }, [string]>(
+      'SELECT COUNT(*) as c FROM messages_fts WHERE session_id = ?',
+    )
+    .get(SESS)
+  check(
+    'messages_fts 仍為 2 筆（去重生效）',
+    ftsCountAfterDup?.c === 2,
+    `count=${ftsCountAfterDup?.c}`,
+  )
+
+  console.log()
+  console.log('Test 9: 空內容訊息不寫入 FTS')
+  indexEntry(
+    {
+      type: 'user',
+      uuid: 'uuid-empty-1',
+      message: { role: 'user', content: '' },
+    },
+    SESS,
+    cwd,
+  )
+  const ftsCountAfterEmpty = dbM2
+    .query<{ c: number }, [string]>(
+      'SELECT COUNT(*) as c FROM messages_fts WHERE session_id = ?',
+    )
+    .get(SESS)
+  check(
+    'messages_fts 仍為 2 筆（空內容跳過）',
+    ftsCountAfterEmpty?.c === 2,
+    `count=${ftsCountAfterEmpty?.c}`,
+  )
+  // 但 messages_seen 應已為空內容 UUID 建 row（之後若補 content 也不會重複進 FTS — 保守策略）
+  const seenEmpty = dbM2
+    .query<{ c: number }, [string]>(
+      'SELECT COUNT(*) as c FROM messages_seen WHERE uuid = ?',
+    )
+    .get('uuid-empty-1')
+  check('messages_seen 已記錄空內容 uuid', (seenEmpty?.c ?? 0) === 1)
+
+  console.log()
+  console.log('Test 10: 非訊息型別（例：tag）早退、不插入')
+  indexEntry(
+    { type: 'tag', uuid: 'uuid-tag-1' } as unknown as Parameters<typeof indexEntry>[0],
+    SESS,
+    cwd,
+  )
+  const ftsCountAfterTag = dbM2
+    .query<{ c: number }, [string]>(
+      'SELECT COUNT(*) as c FROM messages_fts WHERE session_id = ?',
+    )
+    .get(SESS)
+  check('非訊息型別不插 FTS', ftsCountAfterTag?.c === 2)
+  const seenTag = dbM2
+    .query<{ c: number }, [string]>(
+      'SELECT COUNT(*) as c FROM messages_seen WHERE uuid = ?',
+    )
+    .get('uuid-tag-1')
+  check('非訊息型別也不插 messages_seen', (seenTag?.c ?? 0) === 0)
+
+  console.log()
+  console.log('Test 11: 內部錯誤被吞（絕不拋錯）')
+  // 故意傳壞物件；indexEntry 應 try/catch 吞掉
+  let threw = false
+  try {
+    indexEntry(
+      null as unknown as Parameters<typeof indexEntry>[0],
+      SESS,
+      cwd,
+    )
+  } catch {
+    threw = true
+  }
+  check('壞 entry 不拋錯', !threw)
+
+  closeSessionIndex(cwd)
 } catch (err) {
   console.error()
   console.error('[smoke] FATAL:', err)
   failed++
 } finally {
+  // 關閉所有 db 連線讓 Windows 能釋放檔案鎖，否則 rmSync 會 EBUSY
+  try {
+    const { closeAllSessionIndexes } = await import(
+      '../../src/services/sessionIndex/index.js'
+    )
+    closeAllSessionIndexes()
+  } catch {
+    // 無所謂
+  }
   console.log()
   console.log(`[smoke] ${passed} passed, ${failed} failed`)
-  rmSync(tempHome, { recursive: true, force: true })
+  try {
+    rmSync(tempHome, { recursive: true, force: true })
+  } catch {
+    // Windows 偶爾還在釋放；不影響測試結果
+  }
   process.exit(failed > 0 ? 1 : 0)
 }

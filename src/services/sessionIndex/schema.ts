@@ -13,7 +13,7 @@
  * - unicode61 為 fallback（罕見），另有「整段 CJK 當一個 token」的副作用 → 短 CJK 查詢反而難命中
  * - schema_version 目前 1；未來 migration 透過新增 CASE 分支向上升
  */
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 /** 建立 sessions / schema_version 表與索引（IF NOT EXISTS，可重複執行）。 */
 export const SCHEMA_SQL = `
@@ -37,6 +37,15 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
+
+-- Shadow 去重表（M2-02）：FTS5 虛擬表不支援 UNIQUE constraint，
+-- 所以 indexWriter 先 INSERT OR IGNORE 這裡，changes=0 就跳過 FTS 寫入。
+-- 目的：replay / bulk reindex / 多程序重跑不會重複插 FTS row。
+CREATE TABLE IF NOT EXISTS messages_seen (
+  session_id TEXT NOT NULL,
+  uuid TEXT NOT NULL,
+  PRIMARY KEY (session_id, uuid)
+);
 `
 
 /**

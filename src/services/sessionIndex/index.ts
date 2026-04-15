@@ -11,5 +11,6 @@ export {
   closeSessionIndex,
   openSessionIndex,
 } from './db.js'
+export { indexEntry } from './indexWriter.js'
 export { getSessionIndexPath, SESSION_INDEX_FILENAME } from './paths.js'
 export { SCHEMA_VERSION } from './schema.js'

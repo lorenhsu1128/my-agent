@@ -498,3 +498,232 @@ $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.free-code-profile"
 - 壓縮鏈 `parent_session_id` tracking（free-code 已有 compact）
 - Prompt-injection 靜默改寫 / 自動清洗（只拒絕）
 - **Anthropic 路徑下的 M2 功能驗收**（ADR-M2-10：未來另開任務）
+# M2-02 計畫 — 將 JSONL 寫入同步 tee 到 session FTS 索引
+
+## 緣由
+
+M2-01 已落地（commits `7e057f5` + `224cf7c`）：SQLite FTS5 索引檔在 `{CLAUDE_CONFIG_HOME}/projects/{slug}/session-index.db`，含：
+- `sessions` 表（10 欄 + `parent_session_id`）
+- `messages_fts` FTS5 虛擬表（`session_id`/`message_index`/`role`/`timestamp`/`tool_name`/`finish_reason` UNINDEXED + `content` 用 trigram 索引）
+- 透過 `src/services/sessionIndex/db.ts` 的 `openSessionIndex(cwd)` 開啟
+
+M2-02 目標：每次訊息被寫進 session JSONL 時，**同步 tee 一份進 SQLite 索引**。JSONL 仍是 source of truth；索引只是衍生快取，可隨時砍掉重建。
+
+**不可妥協的約束**：
+- JSONL 仍是 source of truth
+- Tee 失敗**絕對不能**中斷主寫入流程
+- 不動 `QueryEngine.ts` / `Tool.ts` / `StreamingToolExecutor.ts`（deny list）
+- 必須撐得過 session 中途跑 `EnterWorktreeTool` 的情境，索引不能分裂
+
+## 探勘結論
+
+主要寫入漏斗：`SessionStorage.appendEntry()` 在 `src/utils/sessionStorage.ts:1128` → `enqueueWrite()`（line 606，fire-and-forget）→ 100ms debounce 的 `drainWriteQueue()`（line 645）→ `appendToFile()`（line 634）。
+
+所有 `user` / `assistant` / `attachment` / `system` 訊息都在 line 1216 起的 TranscriptMessage 分支收斂。`isNewUuid` 去重已經在 line 1242 完成 — 我們就 hook 在那之後。
+
+同步元資料路徑 `appendEntryToFile()`（line 2572）只處理 UI 狀態（標題 / 標籤 / 模式），**沒有訊息內容**，安全忽略。
+
+已知繞過路徑（記錄下來，延後到 M2-03 的 bulk reconcile 處理）：
+- `src/commands/branch/branch.ts:161` 用 `writeFile` 整份寫分叉 session 檔案
+- `src/services/PromptSuggestion/speculation.ts:790` 直接寫 `speculation-accept`（非可搜尋內容，優先度低）
+
+## Plan agent 的批評 — 全數吸收
+
+以下六項（兩個 blocker、三個 high、一個 medium）全部融入下方設計：
+
+| # | 問題 | 修法 |
+|---|---|---|
+| Blocker | `getOriginalCwd()` 在 `EnterWorktreeTool` 會被改 | 改用 `src/bootstrap/state.ts:511` 的 `getProjectRoot()`（明示為 session identity 穩定源） |
+| Blocker | `shouldSkipPersistence()` 守衛 | 上游 `appendEntry:1129` 已經處理，我們 hook 在它後面自然繼承守衛，不用另加 |
+| High | `SQLITE_BUSY` 可能卡主執行緒最多 1 秒 | 捕捉 `SQLITE_BUSY` → 直接吞掉 return；失去的幾筆讓 M2-03 bulk indexer 補回 |
+| High | 不要自己重寫內容抽取 | 重用 `src/utils/messages.ts:2893–2913` 的 `getContentText` / `extractTextContent`，只在外層擴充 tool_use / tool_result / thinking |
+| Medium | `branch.ts` 分叉 gap | 文件明載，交給 M2-03 |
+| Medium | 跨 replay 的去重 | 新增 shadow 表 `messages_seen(session_id, uuid)` UNIQUE，用 `INSERT OR IGNORE` 把關 |
+
+## 設計
+
+### Schema 升級（`SCHEMA_VERSION` 由 1 升到 2）
+
+FTS5 虛擬表不支援 UNIQUE constraint — 新增一張 shadow 去重表，所有寫入都先過它。
+
+檔案：`src/services/sessionIndex/schema.ts`
+
+```sql
+CREATE TABLE IF NOT EXISTS messages_seen (
+  session_id TEXT NOT NULL,
+  uuid TEXT NOT NULL,
+  PRIMARY KEY (session_id, uuid)
+);
+```
+
+`SCHEMA_VERSION` 從 1 改 2。因為 M2-01 只在開發分支、尚未有實際使用者的索引檔存在，**直接就地加表升級**可接受；在 `db.ts:initializeSchema()` 加一段：若查到 `version=1` 就 `CREATE TABLE IF NOT EXISTS messages_seen`、更新版本為 2。
+
+### 新檔：`src/services/sessionIndex/indexWriter.ts`
+
+```ts
+// 同步 bun:sqlite tee。所有錯誤都吞掉。
+// 主執行緒效能：一般情境每次呼叫 sub-millisecond。
+export function indexEntry(
+  entry: TranscriptEntry,
+  sessionId: string,
+  projectRoot: string,  // 傳 getProjectRoot()，不是 getOriginalCwd()
+): void {
+  try {
+    // 非訊息型別早退
+    if (!isMessageBearingType(entry.type)) return
+    const uuid = (entry as { uuid?: string }).uuid
+    if (!uuid) return  // 防呆：訊息都有 uuid
+
+    const db = openSessionIndex(projectRoot)
+
+    // Shadow 表去重 — INSERT OR IGNORE 若已存在回 0 changes
+    const seen = db
+      .query('INSERT OR IGNORE INTO messages_seen (session_id, uuid) VALUES (?, ?)')
+      .run(sessionId, uuid)
+    if (seen.changes === 0) return  // 已索引過，跳過 FTS + sessions 更新
+
+    const content = extractSearchableContent(entry)
+    if (!content) return
+
+    const now = Date.now()
+    const role = entry.message?.role ?? entry.type
+    const toolName = extractToolName(entry)
+    const finishReason = (entry.message as { stop_reason?: string })?.stop_reason ?? null
+
+    // 上插 sessions — started_at 只在第一次 INSERT 時設
+    db.query(
+      `INSERT INTO sessions (session_id, started_at, ended_at, first_user_message, message_count)
+       VALUES (?, ?, ?, ?, 1)
+       ON CONFLICT(session_id) DO UPDATE SET
+         ended_at = excluded.ended_at,
+         message_count = sessions.message_count + 1,
+         first_user_message = COALESCE(sessions.first_user_message, excluded.first_user_message)`,
+    ).run(
+      sessionId,
+      now,
+      now,
+      entry.type === 'user' ? content.slice(0, 200) : null,
+    )
+
+    // message_index 取當前 message_count（post-increment 後的值）
+    const row = db
+      .query<{ message_count: number }, [string]>(
+        'SELECT message_count FROM sessions WHERE session_id = ?',
+      )
+      .get(sessionId)
+
+    db.query(
+      `INSERT INTO messages_fts (session_id, message_index, role, timestamp, tool_name, finish_reason, content)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      sessionId,
+      row?.message_count ?? 0,
+      role,
+      now,
+      toolName,
+      finishReason,
+      content,
+    )
+  } catch (err) {
+    // SQLITE_BUSY 在多程序競爭時是預期的 — 直接丟（M2-03 bulk indexer 會補）
+    // 其他錯誤每次 session 只 log 一次，避免洗版
+    if (!isSqliteBusy(err)) logIndexError(err)
+  }
+}
+```
+
+### Hook 呼叫位置（`sessionStorage.ts`）
+
+插在 line 1243–1245（TranscriptMessage 分支，`isNewUuid` 檢查之後）：
+
+```ts
+if (isAgentSidechain || isNewUuid) {
+  if (!isAgentSidechain) {
+    // Fire-and-forget tee 到 FTS 索引。
+    // getProjectRoot() 能撐過 EnterWorktreeTool（state.ts:504-513 明示）。
+    // indexEntry 內部全 try/catch — 絕對不會拋錯。
+    indexEntry(entry, sessionId, getProjectRoot())
+  }
+  void this.enqueueWrite(targetFile, entry)
+  // ... 原有 messageSet.add ...
+}
+```
+
+Agent sidechain 訊息（`isAgentSidechain === true`）**跳過** — 它們寫到獨立的 `agent-{id}.jsonl`，會讓 session 計數複雜化。未來 M2-05 recall 若感覺不完整再加。
+
+### 內容抽取 helper（`indexWriter.ts` 內）
+
+在 `getContentText` 基礎上擴充 tool_use / tool_result / thinking：
+
+```ts
+// 擴充 src/utils/messages.ts 的 getContentText，多處理 tool_use / tool_result / thinking
+function extractSearchableContent(entry: TranscriptEntry): string {
+  const message = entry.message
+  if (!message) return ''
+  const content = message.content
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+
+  const parts: string[] = []
+  for (const block of content) {
+    if (block.type === 'text') parts.push(block.text)
+    else if (block.type === 'thinking') parts.push(block.thinking)
+    else if (block.type === 'tool_use') {
+      parts.push(`[tool:${block.name}] ${JSON.stringify(block.input)}`)
+    } else if (block.type === 'tool_result') {
+      const rc = block.content
+      if (typeof rc === 'string') parts.push(rc)
+      else if (Array.isArray(rc)) {
+        for (const b of rc) {
+          if (b.type === 'text') parts.push(b.text)
+        }
+      }
+    }
+  }
+  return parts.join('\n').trim()
+}
+
+function extractToolName(entry: TranscriptEntry): string | null {
+  const content = entry.message?.content
+  if (!Array.isArray(content)) return null
+  const toolUse = content.find(b => b.type === 'tool_use')
+  return toolUse ? (toolUse as { name: string }).name : null
+}
+```
+
+### 要動的關鍵檔案
+
+- **修改**：`src/services/sessionIndex/schema.ts` — 新增 `messages_seen` 表、`SCHEMA_VERSION` 改 2
+- **修改**：`src/services/sessionIndex/db.ts` — `initializeSchema` 加 v1→v2 migration case
+- **新增**：`src/services/sessionIndex/indexWriter.ts` — `indexEntry` + 抽取 helper + `SQLITE_BUSY` 識別
+- **修改**：`src/services/sessionIndex/index.ts` — 匯出 `indexEntry`
+- **修改**：`src/utils/sessionStorage.ts:1243` — 在 TranscriptMessage 分支插 `indexEntry()` 一行
+- **修改**：`scripts/poc/session-index-smoke.ts` — 擴充覆蓋新表 + `indexEntry` 流程
+
+### 只讀的關鍵參考檔案（不改）
+
+- `src/bootstrap/state.ts:511` — `getProjectRoot()` 來源
+- `src/utils/messages.ts:2893–2913` — 內容抽取邏輯參考
+- `src/utils/sessionStorage.ts:1128`, `:960`, `:976` — 理解上下文，不重構
+
+## 驗收方式
+
+1. `conda activate aiagent` 後 `bun run typecheck` — 必須與 baseline 一致（只有 `tsconfig.json:10` 的 `baseUrl` deprecation warning）
+2. 擴充 `scripts/poc/session-index-smoke.ts`：
+   - 驗證 v2 schema 建立成功
+   - 直接用假的 user/assistant/attachment/system 訊息呼叫 `indexEntry`
+   - 驗證 `messages_seen` / `sessions` / `messages_fts` 三表都有對應 row
+   - 用同 UUID 呼叫 `indexEntry` 兩次 — 驗證 FTS 只有一筆（去重）
+   - 用空內容訊息呼叫 — 驗證沒有任何 insert
+   - 模擬 `SQLITE_BUSY` 例外 — 驗證被吞掉、流程不崩
+3. 端到端：`bun run dev --model qwen3.5-9b-neo`，問一個問題，然後開 `session-index.db` 跑 `SELECT * FROM sessions; SELECT content FROM messages_fts;`，確認有對應內容
+4. 驗證 slug 一致：`.free-code/projects/{slug}/session-index.db` 的 `{slug}` 與 JSONL 目錄名相同
+5. 迴歸：原本的 30 筆 smoke check 還是要綠
+
+## 明確不在本任務範圍的 gap（已知、延後處理）
+
+1. **分叉 session**（`branch.ts:161`）— 整份檔案 `writeFile` 繞過 `appendEntry`。M2-03 bulk indexer 於啟動時對齊
+2. **Agent sidechains** — subagent 的 transcript 不索引。若 M2-05 recall 感覺不完整再加
+3. **Tombstone 刪訊** — JSONL 刪行時 FTS 殘留。M2 可接受，實際踩到再處理
+4. **Hard-kill 掉最後一筆** — WAL + `synchronous=NORMAL` 可能丟最後幾筆。bulk indexer 對齊
+

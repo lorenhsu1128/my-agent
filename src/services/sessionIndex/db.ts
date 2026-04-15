@@ -100,12 +100,23 @@ function initializeSchema(db: Database, path: string): void {
     return
   }
 
-  if (row.version !== SCHEMA_VERSION) {
-    throw new Error(
-      `[sessionIndex] schema version mismatch at ${path}: ` +
-        `db=${row.version}, code=${SCHEMA_VERSION}. ` +
-        `No migration path implemented yet — 刪除索引檔讓它重建：` +
-        `rm "${path}"`,
-    )
+  if (row.version === SCHEMA_VERSION) {
+    return
   }
+
+  // Migration chain — 每個 case 把 db 從上個版本升到下個
+  // SCHEMA_SQL 用 IF NOT EXISTS，所以 v1→v2 時重跑整段就會自動補上 messages_seen 表。
+  if (row.version === 1 && SCHEMA_VERSION === 2) {
+    // SCHEMA_SQL 已在本函式前段執行過，messages_seen 此時應已存在。
+    // 只需把 schema_version 更新到 2。
+    db.query('UPDATE schema_version SET version = ?').run(SCHEMA_VERSION)
+    return
+  }
+
+  throw new Error(
+    `[sessionIndex] schema version mismatch at ${path}: ` +
+      `db=${row.version}, code=${SCHEMA_VERSION}. ` +
+      `No migration path from v${row.version} to v${SCHEMA_VERSION} — ` +
+      `刪除索引檔讓它重建：rm "${path}"`,
+  )
 }
