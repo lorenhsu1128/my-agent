@@ -363,3 +363,138 @@ free-code 沿用官方 Claude Code 的 `~/.claude/` 路徑，bootstrap 會讀到
 $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.free-code-profile"
 ```
 未來可能改為 free-code 預設用 `~/.free-code/`，由使用者決定後實作。
+
+---
+
+# M2 里程碑：Session Recall & Dynamic Memory（llama.cpp 主場）
+
+**建立日期**：2026-04-15
+**狀態**：規劃完成，待執行
+**前置條件**：M1 完成（llama.cpp provider 已可用，JSONL transcript 在 llamacpp 路徑下會產出）
+**運行情境**：以 **llama.cpp 本地模型（`qwen3.5-9b-neo`）** 為主要設計目標。Anthropic 路徑保留既有 code（黃金規則 #2），但不列為設計考量與驗收門檻。
+
+## Context
+
+讀完 Hermes Agent `tools/memory_tool.py` + `hermes_state.py` + `agent/memory_manager.py` + `agent/context_compressor.py`，對照 free-code 既有 `src/memdir/` + `src/services/SessionMemory/` + `src/services/extractMemories/` + `src/services/compact/` + `src/services/autoDream/`，發現 free-code 已具備 Hermes 大部分功能：
+
+| Hermes | free-code 對應 | 評估 |
+|---|---|---|
+| MEMORY.md + USER.md | `src/memdir/` 四型分類，各型獨立檔案 + MEMORY.md 索引 | free-code 較優，不倒退 |
+| Session-start 凍結 snapshot | `systemPromptSection('memory', ...)` 快取 | 已有 |
+| Session 抽取 | `SessionMemory/` + `extractMemories/` | 已有 |
+| Context compaction | `services/compact/` pipeline | 已有 |
+| 日誌蒸餾 | `services/autoDream/` | 已有 |
+| JSONL transcripts | `.claude/projects/{slug}/conversations/*.jsonl` | 已有 |
+
+**Hermes 有、free-code 沒有**只四件：(1) 跨 session 對話搜尋（FTS5 + session_search tool）、(2) query-driven pre-turn prefetch、(3) Provider plugin 抽象層、(4) 專用 MemoryTool。M2 做 (1)(2)(4)；(3) 棄（違反黃金規則 #2，且目前無外部後端需求）。
+
+## 架構決策
+
+### ADR-M2-01：JSONL source of truth，SQLite 只是索引
+
+- 不動 `sessionStorage.ts` 既有寫入流程
+- 索引損毀可砍重建
+- Hermes 反過來（SQLite 為主）是因為它無先存 JSONL 機制，不是優越設計
+
+### ADR-M2-02：即時 tee + 啟動掃描
+
+- 即時：JSONL append 點 hook，失敗不中斷主流程，降級為 log warning
+- 啟動：比對 SQLite 記錄 last_indexed_at 與 JSONL mtime 補漏
+
+### ADR-M2-03：Prefetch 注入 user message 前綴 fence，不碰 system prompt
+
+```
+<memory-context>
+## 相關歷史對話
+[session_id:abc 2026-04-10] ...片段...
+## 相關持久記憶
+[user] ...topic file 內容...
+</memory-context>
+
+<使用者原始 message>
+```
+
+保 prefix cache；每輪多 ~2000 tokens 的 user turn 前綴，成本可接受。
+
+### ADR-M2-04（修訂，llamacpp-primary）：memdir re-rank 不用 Anthropic LLM
+
+**原規劃**：沿用 `findRelevantMemories.ts` 的 Sonnet 挑選邏輯
+**修訂**：第一版用**非 LLM 方法** — 關鍵字 overlap（query tokens ∩ frontmatter `description` + topic file 首段 tokens），取 top-3。
+
+**理由**：
+- llamacpp-primary 原則：不預設 Anthropic 模型可用
+- 非 LLM 方法零延遲、零成本，品質對 9B 本地模型情境已夠用
+- 若實測品質不足，**才**升級為 llamacpp 呼叫（不回去用 Sonnet）
+
+**預算**：總 ~2000 tokens（FTS 900 + memdir 900 + fence/標題 200），超額截斷。
+
+### ADR-M2-05：MemoryTool 與 Edit/Write 並存
+
+`extractMemories.ts` 的 forked agent 仍走 Edit/Write，不強制。MemoryTool 是主 agent 的受控路徑：
+- 原子寫入（temp + rename）
+- 檔案鎖（與 forked agent 協調）
+- Prompt injection 掃描
+- 自動維護 MEMORY.md 索引
+- memdir 總量配額提醒
+
+### ADR-M2-06（修訂，llamacpp-primary）：SessionSearch summarize 用 llamacpp
+
+**預設**：回 top-K 片段 + 元資料
+**`summarize: true`**：當前 session 主模型（= llamacpp）做摘要
+
+**對 llamacpp 的特殊考量**：
+- Qwen3.5-9B Q5_K_M + 32K ctx 下，摘要輸入**先截到 ~8K token** 再送（避免塞爆 context）
+- llamacpp 推論慢（58 tok/s）；摘要呼叫需有 timeout，超時 fallback 回純片段模式
+- 不加 Sonnet/Haiku 備援路徑（違反 llamacpp-primary）
+
+### ADR-M2-07：SQLite 路徑 `~/.free-code/projects/{slug}/session-index.db`，用 `bun:sqlite`
+
+走 `~/.free-code/` 而非 `~/.claude/`，與 free-code 既有 profile 隔離方向一致。
+
+### ADR-M2-08：FTS schema 多存欄位
+
+**sessions**：session_id / started_at / ended_at / model / message_count / first_user_message / total_input_tokens / total_output_tokens / estimated_cost
+**messages_fts**（FTS5 virtual）：session_id / message_index / role / timestamp / tool_name / finish_reason / content（FTS）
+
+未來想做 token/成本分析不用 migrate。
+
+### ADR-M2-09：只索引當前 project
+
+跨 project 全域索引延後。
+
+### ADR-M2-10（新增，llamacpp-primary）：驗收情境僅限 llamacpp
+
+- 所有完成標準以 `./cli --model qwen3.5-9b-neo` 為準
+- Anthropic 路徑既有 code 保留（不主動破壞），但**不**列為回歸測試項
+- 未來若要讓 M2 功能在 Anthropic 路徑也綠，單獨開新任務
+
+## 風險與緩解
+
+| 風險 | 緩解 |
+|---|---|
+| JSONL append 點不只一個，tee hook 漏 | M2-02 先 grep 盤點所有 append call site |
+| SQLite 被其他 free-code 實例鎖 | WAL mode（Hermes 做法） |
+| Prefetch 注入點得改 QueryEngine | 先 spike；若真必須碰 QueryEngine 停下來問使用者 |
+| MemoryTool 鎖與 forked agent 的 Edit/Write 衝突 | advisory lock（`.lock` 哨兵檔），Edit/Write 不查 lock 但會被 MemoryTool 短暫阻擋 |
+| injection scanner 誤殺 | 只拒絕不靜默改寫；寫 false positive test case |
+| **llamacpp 摘要慢到主 agent 卡住** | `summarize: true` 加 30s timeout，超時回純片段 |
+| **llamacpp context 32K 上限被 summarize 灌爆** | 片段總量先截到 ~8K token 再送 |
+| **關鍵字 re-rank 品質對 9B 模型不夠** | 實測若不行，升級為 llamacpp 呼叫（不回去用 Anthropic） |
+
+## 實作路徑概述
+
+詳細任務見 TODO.md 的 M2 階段一～五（共 22 條 + 完成標準）。高階順序：
+
+1. **基建**（M2-01～04）：SQLite schema + tee hook + 啟動掃描
+2. **搜尋工具**（M2-05～08）：SessionSearchTool，llamacpp 摘要分支
+3. **Prefetch**（M2-09～13）：memoryPrefetch service（關鍵字 re-rank）+ fence 注入
+4. **寫入工具**（M2-14～18）：MemoryTool + injection 掃描
+5. **收尾**（M2-19～22）：整合測試、llamacpp smoke
+
+## 不在本里程碑範圍
+
+- Memory provider plugin 抽象層（未來若要接 Mem0 / vector DB 再開里程碑）
+- 跨 project 全域索引（未來）
+- 壓縮鏈 `parent_session_id` tracking（free-code 已有 compact）
+- Prompt-injection 靜默改寫 / 自動清洗（只拒絕）
+- **Anthropic 路徑下的 M2 功能驗收**（ADR-M2-10：未來另開任務）
