@@ -13,4 +13,10 @@ export {
 } from './db.js'
 export { indexEntry } from './indexWriter.js'
 export { getSessionIndexPath, SESSION_INDEX_FILENAME } from './paths.js'
+export {
+  ensureReconciled,
+  reconcileProjectIndex,
+  _resetReconcileCacheForTest,
+  type ReconcileStats,
+} from './reconciler.js'
 export { SCHEMA_VERSION } from './schema.js'

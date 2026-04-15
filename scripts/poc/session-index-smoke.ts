@@ -23,6 +23,9 @@ const {
   getSessionIndexPath,
   SCHEMA_VERSION,
   indexEntry,
+  reconcileProjectIndex,
+  ensureReconciled,
+  _resetReconcileCacheForTest,
 } = await import('../../src/services/sessionIndex/index.js')
 
 let passed = 0
@@ -426,6 +429,154 @@ try {
     threw = true
   }
   check('壞 entry 不拋錯', !threw)
+
+  closeSessionIndex(cwd)
+
+  // ========================================================================
+  // M2-03：reconcileProjectIndex 啟動掃描
+  // ========================================================================
+  console.log()
+  console.log('Test 12: reconcile — 空專案目錄時靜默成功')
+  _resetReconcileCacheForTest()
+  const { mkdirSync, writeFileSync } = await import('fs')
+  const { getProjectDir } = await import(
+    '../../src/utils/sessionStoragePortable.js'
+  )
+  const statsEmpty = await reconcileProjectIndex(cwd)
+  check(
+    '空目錄 sessionsScanned=0',
+    statsEmpty.sessionsScanned === 0,
+    `scanned=${statsEmpty.sessionsScanned}`,
+  )
+  check('空目錄 errors=0', statsEmpty.errors === 0)
+
+  console.log()
+  console.log('Test 13: reconcile — 建假 JSONL 然後掃描')
+  const projectDir = getProjectDir(cwd)
+  mkdirSync(projectDir, { recursive: true })
+
+  // session A：3 個訊息
+  const sessA = 'recon-sess-A'
+  const jsonlA = join(projectDir, `${sessA}.jsonl`)
+  const linesA = [
+    {
+      type: 'user',
+      uuid: 'reconA-u1',
+      sessionId: sessA,
+      message: { role: 'user', content: '我要寫一個 memoir 的小程式' },
+    },
+    {
+      type: 'assistant',
+      uuid: 'reconA-a1',
+      sessionId: sessA,
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: '好的，讓我幫你設計。' },
+          { type: 'tool_use', name: 'Write', input: { file_path: 'memoir.py' } },
+        ],
+      },
+    },
+    {
+      type: 'user',
+      uuid: 'reconA-u2',
+      sessionId: sessA,
+      message: { role: 'user', content: '加上註解' },
+    },
+  ]
+  writeFileSync(jsonlA, linesA.map(e => JSON.stringify(e)).join('\n') + '\n')
+
+  // session B：1 個訊息 + 1 個壞行（JSON 解析失敗）+ 1 個 sidechain 需跳過
+  const sessB = 'recon-sess-B'
+  const jsonlB = join(projectDir, `${sessB}.jsonl`)
+  const linesB = [
+    JSON.stringify({
+      type: 'user',
+      uuid: 'reconB-u1',
+      sessionId: sessB,
+      message: { role: 'user', content: '這是第二個 session 的訊息' },
+    }),
+    '{ this is not valid json',
+    JSON.stringify({
+      type: 'user',
+      uuid: 'reconB-sidechain',
+      sessionId: sessB,
+      isSidechain: true,
+      agentId: 'agent-x',
+      message: { role: 'user', content: '這筆應該被跳過 (sidechain)' },
+    }),
+  ]
+  writeFileSync(jsonlB, linesB.join('\n') + '\n')
+
+  _resetReconcileCacheForTest()
+  const stats1 = await reconcileProjectIndex(cwd)
+  check(
+    'sessionsScanned = 2',
+    stats1.sessionsScanned === 2,
+    `scanned=${stats1.sessionsScanned}`,
+  )
+  check(
+    'sessionsIndexed = 2',
+    stats1.sessionsIndexed === 2,
+    `indexed=${stats1.sessionsIndexed}`,
+  )
+  check('newSessions = 2', stats1.newSessions === 2, `new=${stats1.newSessions}`)
+  check(
+    'messagesIndexed = 4（A: 3 + B: 1；sidechain 跳過）',
+    stats1.messagesIndexed === 4,
+    `msg=${stats1.messagesIndexed}`,
+  )
+  check('errors = 1（壞 JSON 那行）', stats1.errors === 1, `err=${stats1.errors}`)
+
+  // 驗證實際寫進 DB
+  const dbR = openSessionIndex(cwd)
+  const ftsCountA = dbR
+    .query<{ c: number }, [string]>(
+      'SELECT COUNT(*) as c FROM messages_fts WHERE session_id = ?',
+    )
+    .get(sessA)
+  check('session A FTS 有 3 筆', ftsCountA?.c === 3, `count=${ftsCountA?.c}`)
+  const ftsCountB = dbR
+    .query<{ c: number }, [string]>(
+      'SELECT COUNT(*) as c FROM messages_fts WHERE session_id = ?',
+    )
+    .get(sessB)
+  check('session B FTS 有 1 筆（sidechain 跳過）', ftsCountB?.c === 1, `count=${ftsCountB?.c}`)
+
+  const lastA = dbR
+    .query<{ last_indexed_at: number | null }, [string]>(
+      'SELECT last_indexed_at FROM sessions WHERE session_id = ?',
+    )
+    .get(sessA)
+  check('session A last_indexed_at 已設', (lastA?.last_indexed_at ?? 0) > 0)
+
+  console.log()
+  console.log('Test 14: reconcile — 再跑一次（up-to-date）跳過所有 session')
+  _resetReconcileCacheForTest()
+  const stats2 = await reconcileProjectIndex(cwd)
+  check(
+    'sessionsScanned = 2',
+    stats2.sessionsScanned === 2,
+    `scanned=${stats2.sessionsScanned}`,
+  )
+  check(
+    'sessionsIndexed = 0（全 up-to-date）',
+    stats2.sessionsIndexed === 0,
+    `indexed=${stats2.sessionsIndexed}`,
+  )
+  check(
+    'messagesIndexed = 0',
+    stats2.messagesIndexed === 0,
+    `msg=${stats2.messagesIndexed}`,
+  )
+
+  console.log()
+  console.log('Test 15: ensureReconciled 冪等（同 projectRoot 回同一 Promise）')
+  _resetReconcileCacheForTest()
+  const p1 = ensureReconciled(cwd)
+  const p2 = ensureReconciled(cwd)
+  check('ensureReconciled 快取 Promise', p1 === p2)
+  await p1 // 確保跑完不影響後續
 
   closeSessionIndex(cwd)
 } catch (err) {

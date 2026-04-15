@@ -19,6 +19,7 @@ import {
   switchSession,
 } from './bootstrap/state.js'
 import { getCommands } from './commands.js'
+import { ensureReconciled } from './services/sessionIndex/index.js'
 import { initSessionMemory } from './services/SessionMemory/sessionMemory.js'
 import { asSessionId } from './types/ids.js'
 import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js'
@@ -292,6 +293,9 @@ export async function setup(
   // raced ahead and memoized an empty bundledSkills list.
   if (!isBareMode()) {
     initSessionMemory() // Synchronous - registers hook, gate check happens lazily
+    // M2-03：fire-and-forget bulk reconcile，把舊 / 分叉 / 漏寫的 JSONL 補進 FTS 索引。
+    // ensureReconciled 冪等 — M2-05 SessionSearchTool 之後也會 await 同一 Promise。
+    void ensureReconciled(getProjectRoot())
     if (feature('CONTEXT_COLLAPSE')) {
       /* eslint-disable @typescript-eslint/no-require-imports */
       ;(
