@@ -24,11 +24,11 @@
 
 - [x] Step 1：擴充 `src/utils/model/providers.ts` — 加 `'llamacpp'` APIProvider、`CLAUDE_CODE_USE_LLAMACPP` 檢測、`getLlamaCppConfig()` helper、`DEFAULT_LLAMACPP_{BASE_URL,MODEL}` 常數
 - [x] Step 2a：建立 `src/services/api/llamacpp-fetch-adapter.ts` non-streaming 路徑 — inline 型別、請求翻譯（Anthropic→OpenAI）、回應翻譯（ChatCompletion→BetaMessage）、`FINISH_TO_STOP` 映射表、`reasoning_content`→`thinking` block（ADR-006）
-- [ ] Step 2b：同檔加 streaming 路徑 — `translateOpenAIStreamToAnthropicSSE` async generator、6 步狀態機、`thinking_delta` 主路徑 + text+`<think>` 備援（D6）
+- [x] Step 2b：同檔加 streaming 路徑 — `translateOpenAIStreamToAnthropic` async generator、6 步狀態機、`thinking_delta` 主路徑（D6 fallback 不需啟動 — SDK 原生接受）
 - [ ] Step 3：修改 `src/services/api/client.ts` — 在 Codex 分支（L308）前插 llamacpp 分支：`new Anthropic({ apiKey:'llamacpp-placeholder', fetch: createLlamaCppFetch(config) })`
 - [ ] Step 4：補進 `client.ts` 頂部 env JSDoc 說明 `CLAUDE_CODE_USE_LLAMACPP` / `LLAMA_BASE_URL` / `LLAMA_MODEL`
 - [x] 驗證 V2：`bun run scripts/poc/llamacpp-fetch-poc.ts` 通過（non-streaming 迴歸）
-- [ ] 驗證 V3：新寫 `scripts/poc/llamacpp-streaming-poc.ts`，SDK `messages.stream()` 收到正確事件序列
+- [x] 驗證 V3：新寫 `scripts/poc/llamacpp-streaming-poc.ts`，SDK `messages.stream()` 收到正確事件序列（thinking_delta/text_delta 各 N 次、兩個 content block、stop_reason=end_turn）
 - [ ] 驗證 V4：`CLAUDE_CODE_USE_LLAMACPP=true ... ./cli -p "寫一個 fibonacci"` 逐字串流回應
 - [ ] 驗證 V5：未設 `CLAUDE_CODE_USE_LLAMACPP` 時 `./cli -p "hi"` 走 Anthropic 原路徑行為位元級相同
 

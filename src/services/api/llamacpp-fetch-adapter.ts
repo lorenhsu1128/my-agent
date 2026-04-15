@@ -111,6 +111,33 @@ interface OpenAIChatCompletion {
   }
 }
 
+interface OpenAIStreamChunk {
+  id?: string
+  object?: string
+  created?: number
+  model?: string
+  choices?: Array<{
+    index: number
+    delta: {
+      role?: string
+      content?: string | null
+      reasoning_content?: string | null
+      tool_calls?: Array<{
+        index?: number
+        id?: string
+        type?: 'function'
+        function?: { name?: string; arguments?: string }
+      }>
+    }
+    finish_reason?: string | null
+  }>
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+  }
+}
+
 // ── 映射表 & helpers ─────────────────────────────────────────────────────
 
 const FINISH_TO_STOP: Record<string, string> = {
@@ -324,6 +351,213 @@ function translateChatCompletionToAnthropic(
   }
 }
 
+// ── SSE helpers ──────────────────────────────────────────────────────────
+
+/**
+ * 組 Anthropic SSE event line。格式：`event: <type>\ndata: <json>\n\n`
+ */
+function formatSSE(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+}
+
+/**
+ * 把 OpenAI SSE byte stream 拆成 line buffer，逐行 yield JSON 字串
+ * （去掉 `data: ` 前綴，遇 `[DONE]` 停止）。
+ */
+async function* iterOpenAISSELines(
+  upstream: ReadableStream<Uint8Array>,
+): AsyncGenerator<string> {
+  const reader = upstream.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      // SSE event 以空行分隔（\n\n 或 \r\n\r\n），每個 event 可能多行
+      // 我們只關心 data: 行
+      let idx: number
+      while ((idx = buf.indexOf('\n')) !== -1) {
+        const line = buf.slice(0, idx).replace(/\r$/, '')
+        buf = buf.slice(idx + 1)
+        if (!line.startsWith('data:')) continue
+        const payload = line.slice(5).trim()
+        if (!payload) continue
+        if (payload === '[DONE]') return
+        yield payload
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+// ── 串流翻譯器：OpenAI SSE → Anthropic SSE ────────────────────────────────
+
+/**
+ * 核心狀態機：把 OpenAI chat completion chunks 翻譯成 Anthropic stream
+ * events。支援純文字 + thinking（ADR-006），tool_calls 本階段忽略留給
+ * 階段三實作。
+ *
+ * 事件序列：
+ *   message_start
+ *   [content_block_start(thinking) → thinking_delta × N → content_block_stop]
+ *   [content_block_start(text) → text_delta × N → content_block_stop]
+ *   message_delta(stop_reason, usage)
+ *   message_stop
+ */
+async function* translateOpenAIStreamToAnthropic(
+  upstream: ReadableStream<Uint8Array>,
+  model: string,
+  msgId: string,
+): AsyncGenerator<string> {
+  let msgStarted = false
+  let currentBlockIndex = -1
+  let currentBlockType: 'text' | 'thinking' | null = null
+  const accUsage = { input_tokens: 0, output_tokens: 0 }
+  let finalFinishReason: string | null = null
+
+  const startMessage = () => {
+    msgStarted = true
+    return formatSSE('message_start', {
+      type: 'message_start',
+      message: {
+        id: msgId,
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 0, output_tokens: 0 },
+      },
+    })
+  }
+
+  const closeCurrentBlock = () => {
+    if (currentBlockIndex < 0) return null
+    const out = formatSSE('content_block_stop', {
+      type: 'content_block_stop',
+      index: currentBlockIndex,
+    })
+    return out
+  }
+
+  const openBlock = (blockType: 'text' | 'thinking') => {
+    currentBlockIndex++
+    currentBlockType = blockType
+    const content_block =
+      blockType === 'text'
+        ? { type: 'text', text: '' }
+        : { type: 'thinking', thinking: '' }
+    return formatSSE('content_block_start', {
+      type: 'content_block_start',
+      index: currentBlockIndex,
+      content_block,
+    })
+  }
+
+  for await (const payload of iterOpenAISSELines(upstream)) {
+    let chunk: OpenAIStreamChunk
+    try {
+      chunk = JSON.parse(payload) as OpenAIStreamChunk
+    } catch {
+      continue
+    }
+
+    if (!msgStarted) {
+      yield startMessage()
+    }
+
+    const choice = chunk.choices?.[0]
+    if (choice?.delta) {
+      const { content, reasoning_content } = choice.delta
+
+      if (typeof reasoning_content === 'string' && reasoning_content.length > 0) {
+        if (currentBlockType !== 'thinking') {
+          const stopLine = closeCurrentBlock()
+          if (stopLine) yield stopLine
+          yield openBlock('thinking')
+        }
+        yield formatSSE('content_block_delta', {
+          type: 'content_block_delta',
+          index: currentBlockIndex,
+          delta: { type: 'thinking_delta', thinking: reasoning_content },
+        })
+      }
+
+      if (typeof content === 'string' && content.length > 0) {
+        if (currentBlockType !== 'text') {
+          const stopLine = closeCurrentBlock()
+          if (stopLine) yield stopLine
+          yield openBlock('text')
+        }
+        yield formatSSE('content_block_delta', {
+          type: 'content_block_delta',
+          index: currentBlockIndex,
+          delta: { type: 'text_delta', text: content },
+        })
+      }
+      // tool_calls 本階段忽略；階段三實作
+    }
+
+    if (choice?.finish_reason) {
+      finalFinishReason = choice.finish_reason
+    }
+    if (chunk.usage) {
+      if (typeof chunk.usage.prompt_tokens === 'number') {
+        accUsage.input_tokens = chunk.usage.prompt_tokens
+      }
+      if (typeof chunk.usage.completion_tokens === 'number') {
+        accUsage.output_tokens = chunk.usage.completion_tokens
+      }
+    }
+  }
+
+  // 收尾
+  if (!msgStarted) {
+    // 上游沒吐任何資料：至少發個空 message_start + stop 讓 SDK 不掛住
+    yield startMessage()
+  }
+
+  const lastStop = closeCurrentBlock()
+  if (lastStop) yield lastStop
+
+  yield formatSSE('message_delta', {
+    type: 'message_delta',
+    delta: {
+      stop_reason: FINISH_TO_STOP[finalFinishReason ?? ''] ?? 'end_turn',
+      stop_sequence: null,
+    },
+    usage: { output_tokens: accUsage.output_tokens },
+  })
+  yield formatSSE('message_stop', { type: 'message_stop' })
+}
+
+/**
+ * 把 async generator 包成 ReadableStream<Uint8Array>，供 Response 使用。
+ */
+function sseGeneratorToStream(
+  gen: AsyncGenerator<string>,
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder()
+  // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { value, done } = await gen.next()
+      if (done) {
+        controller.close()
+        return
+      }
+      controller.enqueue(encoder.encode(value))
+    },
+    async cancel() {
+      await gen.return(undefined)
+    },
+  })
+}
+
 // ── 主 export：fetch 攔截器 ────────────────────────────────────────────────
 
 export interface LlamaCppConfig {
@@ -363,31 +597,15 @@ export function createLlamaCppFetch(
 
     const openaiBody = translateRequestToOpenAI(anthropicBody, config.model)
     const endpoint = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`
+    const reportedModel = anthropicBody.model ?? config.model
 
-    // 串流在 Step 2b 實作；本階段走 non-streaming 為主
-    if (openaiBody.stream) {
-      // TODO(階段二 Step 2b)：實作 translateOpenAIStreamToAnthropicSSE
-      return new Response(
-        JSON.stringify({
-          type: 'error',
-          error: {
-            type: 'api_error',
-            message:
-              'llamacpp adapter streaming not yet implemented — will be added in Step 2b',
-          },
-        }),
-        {
-          status: 501,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      )
-    }
-
-    // Non-streaming：完整翻譯
     // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
     const openaiRes = await globalThis.fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: openaiBody.stream ? 'text/event-stream' : 'application/json',
+      },
       body: JSON.stringify(openaiBody),
     })
 
@@ -408,10 +626,35 @@ export function createLlamaCppFetch(
       )
     }
 
+    if (openaiBody.stream) {
+      if (!openaiRes.body) {
+        return new Response(
+          JSON.stringify({
+            type: 'error',
+            error: { type: 'api_error', message: 'llama.cpp 回應缺少 body' },
+          }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      const sseGen = translateOpenAIStreamToAnthropic(
+        openaiRes.body,
+        reportedModel,
+        mkMsgId(),
+      )
+      return new Response(sseGeneratorToStream(sseGen), {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      })
+    }
+
     const openaiJson = (await openaiRes.json()) as OpenAIChatCompletion
     const anthropicJson = translateChatCompletionToAnthropic(
       openaiJson,
-      anthropicBody.model ?? config.model,
+      reportedModel,
     )
 
     return new Response(JSON.stringify(anthropicJson), {
