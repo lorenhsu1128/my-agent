@@ -113,7 +113,15 @@
 > 這個分類記錄 free-code 原始碼中發現的「不明顯的行為」或「容易誤解的設計」，
 > 不一定是 bug，但如果不知道就容易踩坑。
 
-（尚無記錄）
+### FTS5 trigram tokenizer 的最小查詢長度 = 3
+- **發生什麼事**：M2-01 的 smoke 測試用 `MATCH 'KV'` 和 `MATCH '討論'` 預期命中 — 結果兩者都 0 筆。內容明明有這些字串。
+- **根本原因**：SQLite FTS5 的 `tokenize='trigram'` 會把內容切成 3-char sliding window（"cache" → cac/ach/che），查詢字串也走相同規則。**查詢字串 <3 字元就產生不出任何 trigram**，等於沒有搜尋條件可比對，自動回 0 筆。
+- **正確做法**：
+  1. `SessionSearchTool`（M2-05）必須在上層驗證：query 長度 <3 時要嘛拒絕、要嘛自動擴展（加空白上下文字元、或切回其他策略）
+  2. 中文短詞查詢（「記憶」「討論」這類 2-char 常用詞）必須想辦法處理 — 考慮：查不到就 fallback 到 `sessions.first_user_message` / `sessions.title` 的 LIKE 匹配
+  3. 不要把 trigram 換成 `unicode61` — 它對中文反而更差（整段 CJK 被當一個 token，「我們討論了」變成一個 token，「討論」查不到）
+- **相關檔案**：`src/services/sessionIndex/schema.ts`（註釋已標記）、`scripts/poc/session-index-smoke.ts`（驗證測試）
+- **日期**：2026-04-15
 
 ---
 
