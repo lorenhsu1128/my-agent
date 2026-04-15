@@ -50,6 +50,10 @@ import { jsonParse, jsonStringify } from './slowOperations.js'
 // reads GrowthBook features from the global config, which calls getConfig again.
 let insideGetConfig = false
 
+// 去重：ENOENT 警告訊息對同一個 file path 只印一次。多個 bootstrap
+// 子系統各自呼叫 getConfig() 會觸發同樣的 miss 警告，舊行為會印 3+ 次。
+const missingConfigWarnedPaths = new Set<string>()
+
 // Image dimension info for coordinate mapping (only set when image was resized)
 export type PastedContent = {
   id: number // Sequential numeric ID
@@ -1472,7 +1476,10 @@ function getConfig<A>(
     const errCode = getErrnoCode(error)
     if (errCode === 'ENOENT') {
       const backupPath = findMostRecentBackup(file)
-      if (backupPath) {
+      // 去重：同個 file path 多個 bootstrap 子系統各自呼叫 getConfig()
+      // 會讓同樣的 miss 警告印好幾次（實測 3 次）。只印第一次。
+      if (backupPath && !missingConfigWarnedPaths.has(file)) {
+        missingConfigWarnedPaths.add(file)
         process.stderr.write(
           `\nClaude configuration file not found at: ${file}\n` +
             `A backup file exists at: ${backupPath}\n` +
