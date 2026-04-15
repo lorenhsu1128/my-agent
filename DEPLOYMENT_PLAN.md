@@ -21,8 +21,8 @@ TODO.md 原本的 M1「透過 LiteLLM proxy 支援本地模型」假設走 LiteL
 ## 新 M1 任務結構（要寫入 TODO.md）
 
 ### 階段一：Provider 抽象層（零 runtime 行為變化）
-- [ ] 閱讀並記錄 free-code 現有 API 架構的實測事實（`src/services/api/client.ts`、`src/services/api/claude.ts`、`src/utils/model/providers.ts`）— 把發現寫進 `skills/freecode-architecture/SKILL.md`。
-- [ ] 閱讀 Hermes 的 `hermes_cli/auth.py` 和 `agent/auxiliary_client.py`，只取其「ProviderConfig + 動態客戶端工廠」的設計概念。
+- [x] 閱讀並記錄 free-code 現有 API 架構的實測事實（`src/services/api/client.ts`、`src/services/api/claude.ts`、`src/utils/model/providers.ts`）— 把發現寫進 `skills/freecode-architecture/SKILL.md`。【2026-04-15，commit e5ea9f2；關鍵發現：`src/services/api/codex-fetch-adapter.ts` 已是現成 Anthropic ↔ OpenAI 翻譯層，llama.cpp 可能循此模式】
+- [x] 閱讀 Hermes 的 `hermes_cli/auth.py` 和 `agent/auxiliary_client.py`，只取其「ProviderConfig + 動態客戶端工廠」的設計概念。【2026-04-15 完成；借鑑 `apiMode` 中樞、`apiKeyEnvVars` 優先鏈、`ProviderConfig` dataclass 模板，寫入 `skills/provider-system/SKILL.md`】
 - [ ] 設計 `src/services/providers/types.ts`：以 Anthropic 的 stream event schema 為通用格式（非最小公分母），定義 `Provider` 介面含 `sendMessageStream`、`listModels`、`getCapabilities`。
 - [ ] 實作 `src/services/providers/index.ts` 註冊表 + 工廠：依 `APIProvider` 值選 provider。
 - [ ] 實作 `src/services/providers/anthropicAdapter.ts`：薄封裝既有 `client.ts`，**確保當前 Anthropic 使用者行為完全不變**。

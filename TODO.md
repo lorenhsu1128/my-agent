@@ -11,7 +11,7 @@
 
 ### 階段一：Provider 抽象層（零 runtime 行為變化）
 - [x] 閱讀並記錄 free-code 現有 API 架構的實測事實（`src/services/api/client.ts`、`src/services/api/claude.ts`、`src/utils/model/providers.ts`），把發現寫進 `skills/freecode-architecture/SKILL.md`
-- [ ] 閱讀 Hermes 的 `reference/hermes-agent/hermes_cli/auth.py` 與 `reference/hermes-agent/agent/auxiliary_client.py`，只取「ProviderConfig + 動態客戶端工廠」設計概念（不直接複製 Python）
+- [x] 閱讀 Hermes 的 `reference/hermes-agent/hermes_cli/auth.py` 與 `reference/hermes-agent/agent/auxiliary_client.py`，只取「ProviderConfig + 動態客戶端工廠」設計概念（不直接複製 Python）
 - [ ] 設計 `src/services/providers/types.ts`：以 Anthropic 的 stream event schema 為通用格式，定義 `Provider` 介面含 `sendMessageStream`、`listModels`、`getCapabilities`
 - [ ] 實作 `src/services/providers/index.ts`：註冊表 + 工廠，依 `APIProvider` 值選 provider
 - [ ] 實作 `src/services/providers/anthropicAdapter.ts`：薄封裝既有 `src/services/api/client.ts`，確保當前 Anthropic 使用者行為位元級相同
@@ -82,3 +82,5 @@
 - 2026-04-15: 本地 llama.cpp b8457 + Qwen3.5-9B-Neo Q5_K_M 部署完成（scripts/llama/*），煙測 2+2=4 通過，58 tok/s prompt eval | 踩了 --log-colors 參數變更、Git Bash UTF-8 mangling、Neo reasoning_content/content 分離三個坑，都已記入 LESSONS.md | 下一步：M1 階段一，整合這個 server 作為 free-code 的本地 provider
 
 ---
+
+- 2026-04-15 15:33: Session 結束 | 進度：1/25 任務 | e5ea9f2 docs(m1): 改寫 freecode-architecture skill，記錄 API 層實測事實
