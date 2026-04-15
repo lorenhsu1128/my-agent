@@ -7,4 +7,10 @@ openclaw/
 # 本地 llama.cpp 部署（scripts/llama/setup.sh 建立）
 /llama/
 /models/
-/.cache/llama-setup/
+/.cache/
+
+# Hermes Agent 唯讀參考原始碼（CLAUDE.md 指明不追蹤）
+/reference/
+
+# Claude Code 本機專屬設定（每台機器自己的權限覆蓋）
+.claude/settings.local.json
