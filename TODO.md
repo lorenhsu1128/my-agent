@@ -10,7 +10,7 @@
 **架構硬約束**：`src/QueryEngine.ts` 與 `src/Tool.ts` 在 `.claude/settings.json` deny list — **不能改**。因此 provider 必須在內部把 OpenAI SSE 轉成 Anthropic 形狀的 stream event，下游無感。
 
 ### 階段一：Provider 抽象層（零 runtime 行為變化）
-- [ ] 閱讀並記錄 free-code 現有 API 架構的實測事實（`src/services/api/client.ts`、`src/services/api/claude.ts`、`src/utils/model/providers.ts`），把發現寫進 `skills/freecode-architecture/SKILL.md`
+- [x] 閱讀並記錄 free-code 現有 API 架構的實測事實（`src/services/api/client.ts`、`src/services/api/claude.ts`、`src/utils/model/providers.ts`），把發現寫進 `skills/freecode-architecture/SKILL.md`
 - [ ] 閱讀 Hermes 的 `reference/hermes-agent/hermes_cli/auth.py` 與 `reference/hermes-agent/agent/auxiliary_client.py`，只取「ProviderConfig + 動態客戶端工廠」設計概念（不直接複製 Python）
 - [ ] 設計 `src/services/providers/types.ts`：以 Anthropic 的 stream event schema 為通用格式，定義 `Provider` 介面含 `sendMessageStream`、`listModels`、`getCapabilities`
 - [ ] 實作 `src/services/providers/index.ts`：註冊表 + 工廠，依 `APIProvider` 值選 provider
