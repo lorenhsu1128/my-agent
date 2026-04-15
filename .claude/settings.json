@@ -1,0 +1,77 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(conda activate*)",
+      "Bash(bun *)",
+      "Bash(git *)",
+      "Bash(curl http://localhost*)",
+      "Bash(ollama *)",
+      "Bash(litellm *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(echo *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(rm tests/integration/test-output*)",
+      "Bash(rm -f tests/integration/test-output*)",
+      "Bash(mkdir -p skills/*)",
+      "Read(**)",
+      "Write(src/services/providers/**)",
+      "Write(src/utils/providers/**)",
+      "Write(tests/**)",
+      "Write(TODO.md)",
+      "Write(LESSONS.md)",
+      "Write(skills/**)",
+      "Edit(src/services/providers/**)",
+      "Edit(src/utils/providers/**)",
+      "Edit(tests/**)",
+      "Edit(TODO.md)",
+      "Edit(LESSONS.md)",
+      "Edit(skills/**)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(sudo *)",
+      "Bash(chmod *)",
+      "Bash(* > /dev/*)",
+      "Write(src/QueryEngine.ts)",
+      "Write(src/Tool.ts)",
+      "Edit(src/QueryEngine.ts)",
+      "Edit(src/Tool.ts)",
+      "Write(reference/**)",
+      "Edit(reference/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/pre-tool-use-conda.sh" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/post-tool-use-typecheck.sh" }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/notification-session-end.sh" }
+        ]
+      }
+    ]
+  }
+}
