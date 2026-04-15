@@ -108,20 +108,20 @@ bun test                         # 執行測試
 
 | 指令 | 功能 |
 |------|------|
-| `/project:next` | 找到 TODO.md 中下一個未完成的任務並開始執行。載入相關 skill、讀取 Hermes 程式碼（如需要）、執行、測試、提交。 |
-| `/project:status` | 顯示專案進度（TODO 計數、最近 commit、typecheck 結果、服務健康狀態）。唯讀 — 不修改任何東西。 |
-| `/project:test` | 執行完整測試套件（typecheck → 單元測試 → 整合測試 → 建構檢查）。報告結果但不自動修復。 |
-| `/project:review-hermes` | 分析 Hermes Agent 的指定模組（provider、memory、tools、cron、gateway、skills、agent）。唯讀分析 — 提出設計方案等我決定。 |
-| `/project:create-skill` | 手動建立新 skill。指定主題後，Claude Code 在 `skills/` 下建立目錄和 SKILL.md。 |
+| `/project-next` | 找到 TODO.md 中下一個未完成的任務並開始執行。載入相關 skill、讀取 Hermes 程式碼（如需要）、執行、測試、提交。 |
+| `/project-status` | 顯示專案進度（TODO 計數、最近 commit、typecheck 結果、服務健康狀態）。唯讀 — 不修改任何東西。 |
+| `/project-test` | 執行完整測試套件（typecheck → 單元測試 → 整合測試 → 建構檢查）。報告結果但不自動修復。 |
+| `/project-review-hermes` | 分析 Hermes Agent 的指定模組（provider、memory、tools、cron、gateway、skills、agent）。唯讀分析 — 提出設計方案等我決定。 |
+| `/project-create-skill` | 手動建立新 skill。指定主題後，Claude Code 在 `skills/` 下建立目錄和 SKILL.md。 |
 
-## Agents
+## Subagents（由 Claude Code 依情境調度）
 
-用 `/agent:名稱` 切換到專門角色：
+`.claude/agents/` 下的 subagent 不是手動 slash command；Claude Code 會依任務內容自動啟動對應 subagent（或透過 Task tool 顯式指定 `subagent_type`）。使用者不需喚起。
 
-| Agent | 角色 |
-|-------|------|
-| `/agent:reviewer` | 僅做程式碼審查。檢查架構合規性、程式碼品質、整合安全性、測試覆蓋。不寫程式碼。 |
-| `/agent:tester` | 僅做 QA 測試。驗證功能、找 bug、測試邊界情況。提供含重現步驟的測試報告。 |
+| Subagent | 職責 |
+|----------|------|
+| `reviewer` | 程式碼審查專職。檢查架構合規性、程式碼品質、整合安全性、測試覆蓋。僅審查、不寫程式碼。當階段性成果完成需要 review 時由 Claude Code 調度。 |
+| `tester` | QA 測試專職。驗證功能、找 bug、測試邊界情況，產出含重現步驟的測試報告。當需要獨立驗證時由 Claude Code 調度。 |
 
 ## Hooks（自動執行 — 不需手動介入）
 
