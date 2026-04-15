@@ -1,108 +1,112 @@
-# M1 里程碑修訂：llama.cpp 取代 LiteLLM+Ollama
+# M1 里程碑：llama.cpp 本地模型支援（路徑 B — fetch adapter）
 
 ## Context
 
-TODO.md 原本的 M1「透過 LiteLLM proxy 支援本地模型」假設走 LiteLLM + Ollama，但實際部署已經改成專案目錄內跑 llama.cpp server（`http://127.0.0.1:8080/v1`，OpenAI 相容，model alias `qwen3.5-9b-neo`）。原 M1 任務的工具鏈、驗證條件、完成標準全部需要對齊新現實。
+原 M1「透過 LiteLLM proxy 支援本地模型」路線（ADR-001）已推翻，改成直接連接專案內跑的 llama.cpp server（`http://127.0.0.1:8080/v1`，OpenAI 相容，model alias `qwen3.5-9b-neo`）。經 2026-04-15 的 PoC 驗證（commit `b2af143`），確認採用 **路徑 B（fetch adapter）**：仿 `src/services/api/codex-fetch-adapter.ts` 模式，寫 `llamacpp-fetch-adapter.ts`，塞給 `new Anthropic({ fetch })`，翻譯層集中一處，`claude.ts` / `QueryEngine.ts` / `StreamingToolExecutor.ts` **零修改**。
 
-本 plan **只修改 TODO.md 與 CLAUDE.md 的 ADR 章節**，不動任何程式碼。目的是把 M1 路線固化成正確方向後，下一個 /project-next 能直接按表操課。
+## 為什麼路徑 B
 
-## 核心現狀（Explore 結果摘要）
+| 路徑 | 做法 | 工作量 | 狀態 |
+|------|------|--------|------|
+| ~~A. 新 Provider 層~~ | 在 `src/services/providers/` 從零建 types / registry / Anthropic adapter / llama.cpp provider / tool translator | 大（~820 行） | **棄用** |
+| **B. fetch adapter** | 寫 `src/services/api/llamacpp-fetch-adapter.ts`、`client.ts` 加一條分支、`providers.ts` 加 env 判斷 | 中（~440 行） | **採用** |
 
-- `src/services/providers/`、`src/utils/providers/` **都不存在** — 完全從零建。
-- `src/utils/model/providers.ts` 的 `APIProvider` 字串聯集已有 `'openai'` 值，但只用在環境變數切換，沒有動態 provider 物件。
-- `src/services/api/client.ts` 既有 multi-provider（Bedrock/Vertex/Foundry）都走 `CLAUDE_CODE_USE_*` env switch，還是拿 Anthropic SDK 客戶端 — **不是 provider 抽象**。
-- `src/QueryEngine.ts`（第 788–828 行）**硬依賴** Anthropic 的 `stream_event` schema（`event.message.usage`、`event.delta.stop_reason` 等），且此檔在 `.claude/settings.json` 的 deny list — **不能改**。
-- `src/services/tools/StreamingToolExecutor.ts` 的 `addTool(block: ToolUseBlock, ...)` 直接吃 `@anthropic-ai/sdk` 的 `ToolUseBlock`，無抽象。
-- 專案內**完全沒有** OpenAI SSE 解析器、function-calling ↔ tool_use 轉譯層。
-- Qwen3.5-Neo 的回應把 CoT 放 `reasoning_content`、答案放 `content`（已記入 LESSONS.md）。
+路徑 B 的技術可行性已由 `scripts/poc/llamacpp-fetch-poc.ts` 端到端證實：Anthropic SDK 對翻譯後的 Anthropic-shape 回應無額外 validation，`thinking` content block 原生支援，`usage` 欄位 SDK 只讀必要欄位。
 
-**架構結論**：因為 QueryEngine / Tool.ts 不能改，provider 必須產出「Anthropic 形狀的 stream event」才能注入既有主幹；轉譯發生在 provider **內部**，下游無感。
+## 核心事實（摸底結果）
 
-## 新 M1 任務結構（要寫入 TODO.md）
+- `src/services/api/codex-fetch-adapter.ts`（812 行）已是現成 Anthropic ↔ OpenAI 翻譯層範本，處理訊息格式、工具呼叫、串流事件翻譯，端點寫死在 ChatGPT Codex。
+- `src/services/api/client.ts` L308–321 已有「Codex subscriber → `new Anthropic({ fetch: codexFetch })`」的現成分支可仿。
+- `src/services/api/claude.ts` 的串流事件是**透明轉發**原始 `BetaRawMessageStreamEvent`（L2301–2302），所以 adapter 必須產出 Anthropic-shape SSE。
+- `src/utils/model/providers.ts` 的 `APIProvider` 聯集已有 `'openai'` 值但無對應路徑；可新增 `'llamacpp'` 或沿用 `'openai'`。
+- `src/QueryEngine.ts`、`src/Tool.ts` 在 `.claude/settings.json` deny list，**不能改**。路徑 B 本來就不改這兩個檔案。
+- Qwen3.5-Neo 回應把 CoT 放 `reasoning_content`、答案放 `content`（LESSONS.md 記錄、PoC 已驗證映射成 `thinking` block 可行）。
 
-### 階段一：Provider 抽象層（零 runtime 行為變化）
-- [x] 閱讀並記錄 free-code 現有 API 架構的實測事實（`src/services/api/client.ts`、`src/services/api/claude.ts`、`src/utils/model/providers.ts`）— 把發現寫進 `skills/freecode-architecture/SKILL.md`。【2026-04-15，commit e5ea9f2；關鍵發現：`src/services/api/codex-fetch-adapter.ts` 已是現成 Anthropic ↔ OpenAI 翻譯層，llama.cpp 可能循此模式】
-- [x] 閱讀 Hermes 的 `hermes_cli/auth.py` 和 `agent/auxiliary_client.py`，只取其「ProviderConfig + 動態客戶端工廠」的設計概念。【2026-04-15 完成；借鑑 `apiMode` 中樞、`apiKeyEnvVars` 優先鏈、`ProviderConfig` dataclass 模板，寫入 `skills/provider-system/SKILL.md`】
-- [ ] 設計 `src/services/providers/types.ts`：以 Anthropic 的 stream event schema 為通用格式（非最小公分母），定義 `Provider` 介面含 `sendMessageStream`、`listModels`、`getCapabilities`。
-- [ ] 實作 `src/services/providers/index.ts` 註冊表 + 工廠：依 `APIProvider` 值選 provider。
-- [ ] 實作 `src/services/providers/anthropicAdapter.ts`：薄封裝既有 `client.ts`，**確保當前 Anthropic 使用者行為完全不變**。
-- [ ] 驗證：`bun run typecheck` 通過；`./cli -p "hello"` 用 Anthropic 路徑仍正常。
+詳細摸底見 `skills/freecode-architecture/SKILL.md` 與 `skills/provider-system/SKILL.md`。
 
-### 階段二：llama.cpp（OpenAI 相容）Provider
-- [ ] 實作 `src/services/providers/llamaCpp.ts`：
-  - 對 `http://127.0.0.1:8080/v1/chat/completions` 發 streaming 請求
-  - 解析 OpenAI SSE（`data: {...}\n\n`、`data: [DONE]`）
-  - **在 provider 內** 把 OpenAI SSE chunks 轉成 Anthropic 形狀的 `stream_event`（`message_start` / `content_block_start` / `content_block_delta` / `message_delta` / `message_stop`）
-  - Qwen3.5-Neo 的 `reasoning_content` 映射成 Anthropic 的 `thinking` content block
-- [ ] 實作 `src/services/providers/toolCallTranslator.ts`：
-  - 出站：Anthropic `tools: [{name, input_schema}]` → OpenAI `tools: [{type:'function', function:{name, parameters}}]`
-  - 入站：OpenAI `tool_calls: [{id, function:{name, arguments}}]`（串流時會切多個 chunk，arguments 需累積）→ Anthropic `ToolUseBlock`
-  - `tool_result` 對話歷史轉譯：Anthropic `tool_result` → OpenAI `role:'tool'` message
-- [ ] Server 啟動方式的設定：新增 env `LLAMA_BASE_URL`（預設 `http://127.0.0.1:8080/v1`）與 `LLAMA_MODEL`（預設 `qwen3.5-9b-neo`）。
-- [ ] 驗證：單元測試轉譯器兩個方向 round-trip；整合測試用 server 跑一次 `hello world` 串流。
+## 新 M1 任務結構
 
-### 階段三：串流完整性
-- [ ] 驗證 StreamingToolExecutor 收到 llama.cpp provider 產出的 `content_block_start/delta/stop` 事件時運作正常（不改 StreamingToolExecutor 本身）。
-- [ ] 處理 Qwen3.5-Neo 吃 token 吃到 `finish_reason=length` 的邊界情況：provider 應轉成 `message_delta.stop_reason='max_tokens'`。
-- [ ] CLI 串流顯示實測：`./cli --model qwen3.5-9b-neo -p "寫一個 fibonacci"`，確認文字逐字出現而非整塊。
+### 階段一：摸底與可行性驗證
+- [x] 閱讀並記錄 free-code 現有 API 架構的實測事實 — 寫入 `skills/freecode-architecture/SKILL.md`。【2026-04-15 commit `e5ea9f2`；關鍵發現：`codex-fetch-adapter.ts` 是現成範本】
+- [x] 閱讀 Hermes `auth.py` + `auxiliary_client.py`，取 ProviderConfig / apiMode / env 優先鏈設計概念 — 寫入 `skills/provider-system/SKILL.md`。【2026-04-15 commit `fa03174`】
+- [x] PoC：路徑 B 可行性驗證 — `scripts/poc/llamacpp-fetch-poc.ts` 端到端測試通過。【2026-04-15 commit `b2af143`】
+- [x] 架構決策：確定走路徑 B，棄路徑 A。
+- [ ] 驗證：`bun run typecheck` 在當前 main 上仍通過（建立實作前的綠燈基準）。
 
-### 階段四：工具呼叫整合
+### 階段二：`llamacpp-fetch-adapter.ts` 實作（non-streaming 先行）
+- [ ] 建立 `src/services/api/llamacpp-fetch-adapter.ts`（仿 `codex-fetch-adapter.ts` 結構）：
+  - `createLlamaCppFetch(config)` 回傳 fetch 介面
+  - 攔截 `/v1/messages`，其他請求透傳
+  - 請求翻譯：Anthropic MessagesCreate → OpenAI ChatCompletion（system / user / assistant、max_tokens、temperature）
+  - 回應翻譯：OpenAI ChatCompletion → Anthropic BetaMessage JSON，包進 `new Response(...)` 回給 SDK
+  - `reasoning_content` → `thinking` content block（ADR-006）
+  - `finish_reason` → `stop_reason` 映射（`stop→end_turn` / `length→max_tokens` / `tool_calls→tool_use`）
+- [ ] 修改 `src/services/api/client.ts`：在 Codex 分支前加 llamacpp 分支，`new Anthropic({ apiKey:'llamacpp-placeholder', fetch: llamaCppFetch })`。
+- [ ] 修改 `src/utils/model/providers.ts`：支援 `CLAUDE_CODE_USE_LLAMACPP` 或 `LLAMA_BASE_URL` 存在時的分流。
+- [ ] 新增環境變數 `LLAMA_BASE_URL`（預設 `http://127.0.0.1:8080/v1`）與 `LLAMA_MODEL`（預設 `qwen3.5-9b-neo`）。
+- [ ] 驗證：`LLAMA_BASE_URL=... ANTHROPIC_API_KEY=dummy ./cli -p "hi"` 單次 non-streaming 回答正確。
+
+### 階段三：串流（SSE）翻譯
+- [ ] 在 adapter 中實作 streaming 路徑：`stream: true` 時翻譯 OpenAI SSE → Anthropic SSE（`message_start` / `content_block_start` / `content_block_delta` / `content_block_stop` / `message_delta` / `message_stop`）。
+- [ ] `reasoning_content` delta 映射到 `thinking_delta`（需驗證 SDK 是否認得這個 delta type；若不認，用 text_delta + 標記）。
+- [ ] `finish_reason=length` 邊界：轉成 `message_delta.stop_reason='max_tokens'`。
+- [ ] CLI 串流實測：`./cli --model qwen3.5-9b-neo -p "寫一個 fibonacci"`，文字逐字出現。
+
+### 階段四：工具呼叫翻譯
+- [ ] Adapter 加 tool 翻譯：
+  - 出站：Anthropic `tools[{name, input_schema}]` → OpenAI `tools[{type:'function', function:{name, parameters}}]`
+  - 入站 non-streaming：OpenAI `tool_calls` → Anthropic `ToolUseBlock`
+  - 入站 streaming：`tool_calls.arguments` 切多 chunk → 累積後輸出 `content_block_delta.input_json_delta`
+  - `tool_result` 對話歷史：Anthropic `tool_result` → OpenAI `role:'tool'` message
 - [ ] 建立 `tests/integration/TOOL_TEST_RESULTS.md` 骨架（39 個工具一張表）。
-- [ ] 針對前五個核心工具（Bash、Read、Write、Edit、Glob）用 Qwen3.5-Neo 跑端到端測試，記錄：(a) 模型是否選對工具、(b) 轉譯是否正確、(c) 工具是否成功執行、(d) 結果是否顯示。
-- [ ] 其餘 34 個工具依樣畫葫蘆補完（可分批）。
-- [ ] 修復測試中發現的轉譯器 bug（不改 Tool.ts，只動 toolCallTranslator.ts）。
+- [ ] 前五個核心工具（Bash/Read/Write/Edit/Glob）端到端測試，記錄 (a)(b)(c)(d)。
+- [ ] 其餘 34 個工具分批補完。
+- [ ] 修復翻譯 bug（只動 adapter，不改 `Tool.ts`）。
 
 ### 階段五：設定與使用者體驗
-- [ ] `src/utils/model/model.ts`：在優先級解析中新增 `qwen3.5-9b-neo` 的別名映射到 llama.cpp provider。
-- [ ] `/model` 指令：列出可用 provider + 模型名。
-- [ ] server 不可用時的降級：provider 工廠偵測到 `fetch` 失敗時 log 清楚錯誤，不 crash。
-- [ ] 啟動橫幅顯示已連接的 provider（Anthropic / llama.cpp）。
+- [ ] `src/utils/model/model.ts`：優先級解析認得 `qwen3.5-9b-neo` 別名，自動啟用 llama.cpp 分支。
+- [ ] `/model` 指令：llama.cpp 模型與 Anthropic 模型並列。
+- [ ] server 不可用降級：adapter 偵測 `fetch` 失敗（ECONNREFUSED）時回傳清楚錯誤（指示執行 `bash scripts/llama/serve.sh`），不 crash。
+- [ ] 啟動橫幅顯示已連接 provider。
 
-### 完成標準（取代原 M1 標準）
+### 完成標準
 - [ ] `./cli --model qwen3.5-9b-neo -p "hello"` 成功串流輸出；log 顯示連接 `http://127.0.0.1:8080/v1`。
-- [ ] 工具呼叫可用：至少 Bash、Read、Write、Edit、Glob 五個核心工具端到端通過。
-- [ ] 既有 Anthropic 使用者路徑完全不受影響（`ANTHROPIC_API_KEY` 存在時 `./cli -p "hello"` 行為位元級相同）。
-- [ ] `tests/integration/TOOL_TEST_RESULTS.md` 記錄 39 個工具的結果表格。
+- [ ] 工具呼叫可用：至少 Bash / Read / Write / Edit / Glob 五個核心工具端到端通過。
+- [ ] 既有 Anthropic 使用者路徑**完全不受影響**（`ANTHROPIC_API_KEY` 存在、未設 `LLAMA_BASE_URL` 時行為位元級相同）。
+- [ ] `tests/integration/TOOL_TEST_RESULTS.md` 記錄 39 個工具結果表格。
 
-## CLAUDE.md ADR 變更
+## CLAUDE.md ADR 狀態
 
-在「已做出的架構決策」章節：
-- ADR-001 **推翻**：改為「直接跑 llama.cpp server（OpenAI 相容），不經 LiteLLM proxy」，理由：部署已完成、少一層中介、減少相依性。
-- 新增 ADR-005：「provider 內部做格式轉譯（OpenAI SSE → Anthropic stream_event），保持 QueryEngine / StreamingToolExecutor 零修改」，理由：這兩個檔案在 .claude/settings.json deny list。
-- 新增 ADR-006：「Qwen3.5-Neo 的 `reasoning_content` 映射為 Anthropic `thinking` content block」。
+- ~~ADR-001（LiteLLM）~~ 已推翻（2026-04-15），改為 llama.cpp 直連。
+- ADR-002：provider 程式碼仍需放 `src/services/providers/` —— **路徑 B 改寫此 ADR 的解讀**：adapter 是 SDK 擴充而非 provider 抽象，放 `src/services/api/` 與既有 `codex-fetch-adapter.ts` 同目錄更自然。（本 plan 採後者；如需正式改 ADR-002 再另立 ADR-007。）
+- ADR-003：新功能直接啟用，不用 feature flag。
+- ADR-004：Hermes 只作參考。
+- ADR-005：provider 內部做格式翻譯，保持主幹零修改。
+- ADR-006：Qwen3.5-Neo 的 `reasoning_content` 映射為 Anthropic `thinking` block（PoC 已驗證）。
 
-## 修改的檔案
+## 修改的檔案（路徑 B 完整範圍）
 
-| 檔案 | 改動 |
-|------|------|
-| `TODO.md` | 重寫 M1 整段（階段一～五 + 完成標準） |
-| `CLAUDE.md` | ADR-001 標註推翻、新增 ADR-005 / ADR-006 |
-| `DEPLOYMENT_PLAN.md`（專案根目錄） | 覆寫為本 plan 內容（新慣例：已確認的 plan 都存此） |
+| 檔案 | 改動 | 階段 |
+|------|------|------|
+| `src/services/api/llamacpp-fetch-adapter.ts` | **新建**（~440 行，參照 codex-fetch-adapter.ts）| 2–4 |
+| `src/services/api/client.ts` | L308 前加一條 llamacpp 分支 | 2 |
+| `src/utils/model/providers.ts` | 加 env 判斷 / 分流 | 2 |
+| `src/utils/model/model.ts` / `modelStrings.ts` | 加 `qwen3.5-9b-neo` 別名 | 5 |
+| `src/bootstrap/state.ts` | 讀 `LLAMA_BASE_URL` / `LLAMA_MODEL` | 2 or 5 |
+| `tests/integration/TOOL_TEST_RESULTS.md` | **新建**，39 工具表格 | 4 |
+| `TODO.md`、`DEPLOYMENT_PLAN.md` | 隨任務完成勾選 | 持續 |
 
-## 新慣例：確認後的 plan 存檔流程
+**不動**：`src/QueryEngine.ts`、`src/Tool.ts`、`src/services/api/claude.ts`、`src/services/tools/StreamingToolExecutor.ts`、所有 `src/tools/*`、`src/services/providers/`（路徑 B 根本不建此目錄）。
 
-本專案從 2026-04-15 起，所有經使用者確認（ExitPlanMode 通過）的 plan 都要複製
-到專案根目錄的 `DEPLOYMENT_PLAN.md`，覆寫舊內容，與 `git` 共同提供歷史追蹤。
+## 驗證計畫
 
-執行步驟（加到本 plan 的落地動作首位）：
-1. `Read` 本 plan 檔（`C:\Users\LOREN\.claude\plans\composed-dancing-aho.md`）
-2. `Write` 同內容到 `DEPLOYMENT_PLAN.md`（專案根目錄，覆寫）
-3. 之後再做其他 plan 任務（改 TODO.md、改 CLAUDE.md）
-4. commit 時把 `DEPLOYMENT_PLAN.md` 跟其他變更併入同一個 docs commit（或視情況獨立）
-
-此慣例也要存進 memory，避免下次 plan 時忘記。
-
-備註：既有的 `scripts/llama/DEPLOYMENT_PLAN.md` 是上一輪部署計畫的副本，保留不動 —
-它的路徑已說明是那個部署的一部分。新慣例只適用根目錄 `DEPLOYMENT_PLAN.md`。
-
-## 驗證（本 plan 本身）
-
-此 plan 只改文件，無程式行為可測。驗證方式：
-1. 讀 TODO.md 的新 M1 — 確認每一項任務動詞具體、結果可測、無「研究一下」類含糊描述。
-2. 讀 CLAUDE.md 的 ADR 段 — 確認 ADR-001 明確標註「已推翻」並指向取代方案。
-3. 跑 `/project-next` — 應讀到階段一第一項任務並正確啟動。
+- 階段二完成後：`LLAMA_BASE_URL=http://127.0.0.1:8080/v1 ANTHROPIC_API_KEY=dummy ./cli -p "hi"` 回文字
+- 階段三完成後：`./cli --model qwen3.5-9b-neo -p "寫一個 fibonacci"` 逐字串流
+- 階段四完成後：`tests/integration/TOOL_TEST_RESULTS.md` 前五個工具全綠
+- 回歸測試：`ANTHROPIC_API_KEY=real-key ./cli -p "hi"` 與修訂前行為位元級相同
 
 ## 不在範圍內
-- 任何實作（那是修訂後依 /project-next 跑的事）。
-- 修改核心檔案 QueryEngine.ts / Tool.ts（被 deny list 擋，且架構設計刻意繞過）。
-- M2–M6 的修訂（只動 M1）。
+- `src/services/providers/` 抽象層（路徑 A 已棄）。
+- LiteLLM、Ollama（ADR-001 推翻後不再相關）。
+- 核心檔案 QueryEngine.ts / Tool.ts 的修改（deny list）。
+- M2–M6 的任何工作（只動 M1）。
