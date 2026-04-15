@@ -25,6 +25,12 @@ import { writeFileSync_DEPRECATED } from './slowOperations.js'
 // eslint-disable-next-line custom-rules/no-process-env-top-level
 const DETAILED_PROFILING = isEnvTruthy(process.env.CLAUDE_CODE_PROFILE_STARTUP)
 
+// free-code 即時 trace：FREECODE_TRACE=1 時每個 checkpoint 立刻印到 stderr，
+// 用來找 bootstrap 卡在哪一步（最後印出的行就是卡住前最後成功點）。
+// eslint-disable-next-line custom-rules/no-process-env-top-level
+const FREECODE_TRACE = isEnvTruthy(process.env.FREECODE_TRACE)
+let traceStart = 0
+
 // Sampling for Statsig logging: 100% ant, 0.5% external
 // Decision made once at startup - non-sampled users pay no profiling cost
 const STATSIG_SAMPLE_RATE = 0.005
@@ -63,6 +69,19 @@ if (SHOULD_PROFILE) {
  * Record a checkpoint with the given name
  */
 export function profileCheckpoint(name: string): void {
+  if (FREECODE_TRACE) {
+    if (traceStart === 0) traceStart = Date.now()
+    const elapsed = Date.now() - traceStart
+    const line = `[FREECODE_TRACE +${elapsed}ms] ${name}\n`
+    process.stderr.write(line)
+    // 同時寫到檔（若 TUI 渲染干擾 stderr 看不到，檔案仍有完整紀錄）
+    try {
+      // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+      require('fs').appendFileSync('.cache/freecode-trace.log', line)
+    } catch {
+      // 忽略（.cache/ 可能不存在；若真要看 trace 使用者手動 mkdir .cache）
+    }
+  }
   if (!SHOULD_PROFILE) return
 
   const perf = getPerformance()
