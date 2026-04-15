@@ -31,10 +31,12 @@ CREATE TABLE IF NOT EXISTS sessions (
   total_input_tokens INTEGER NOT NULL DEFAULT 0,
   total_output_tokens INTEGER NOT NULL DEFAULT 0,
   estimated_cost_usd REAL,
-  last_indexed_at INTEGER
+  last_indexed_at INTEGER,
+  parent_session_id TEXT REFERENCES sessions(session_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
 `
 
 /**

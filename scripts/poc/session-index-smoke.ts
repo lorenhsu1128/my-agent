@@ -70,6 +70,7 @@ try {
     'total_output_tokens',
     'estimated_cost_usd',
     'last_indexed_at',
+    'parent_session_id',
   ]
   for (const col of expectedSessionCols) {
     check(
@@ -114,6 +115,36 @@ try {
   check('session insert roundtrip', got?.session_id === 'sess-test-1')
   check('session.model', got?.model === 'qwen3.5-9b-neo')
   check('session.first_user_message', got?.first_user_message === 'hello world')
+
+  // Compaction chain：插入一個「子 session」指回父 session
+  db.query(
+    `INSERT INTO sessions (session_id, started_at, parent_session_id, model)
+     VALUES (?, ?, ?, ?)`,
+  ).run('sess-test-2', 1712345700, 'sess-test-1', 'qwen3.5-9b-neo')
+  const child = db
+    .query<{ session_id: string; parent_session_id: string | null }, []>(
+      "SELECT session_id, parent_session_id FROM sessions WHERE session_id = 'sess-test-2'",
+    )
+    .get()
+  check(
+    'parent_session_id FK 可寫入',
+    child?.parent_session_id === 'sess-test-1',
+    `parent=${child?.parent_session_id}`,
+  )
+
+  // 反向查所有 child：驗證 idx_sessions_parent 起作用（用 EXPLAIN QUERY PLAN）
+  const plan = db
+    .query<{ detail: string }, [string]>(
+      'EXPLAIN QUERY PLAN SELECT session_id FROM sessions WHERE parent_session_id = ?',
+    )
+    .all('sess-test-1')
+    .map(r => r.detail)
+    .join(' | ')
+  check(
+    'idx_sessions_parent 被使用',
+    plan.toLowerCase().includes('idx_sessions_parent'),
+    plan,
+  )
 
   console.log()
   console.log('Test 3: 寫入 + FTS 查詢 messages_fts')
