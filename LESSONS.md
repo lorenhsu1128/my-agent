@@ -34,6 +34,13 @@
 - **相關檔案**：`src/services/api/client.ts`（getAnthropicClient 的 llamacpp 分支已放最前面，但上游還有別的阻塞）；`scripts/llama/DEPLOYMENT_PLAN.md` 與 `scripts/llama/README.md` 的範例指令需移除 `ANTHROPIC_API_KEY=dummy`。
 - **日期**：2026-04-15
 
+### Windows Git Bash `/tmp/...` 不能直接給 Bun/Node fs API
+- **發生什麼事**：Part B 端到端測試用 `TESTDIR="${TMPDIR:-/tmp}/..."`，透過 `./cli` 把 `$TESTDIR/foo.txt` 形式的路徑塞進 FileRead/Write/Edit 工具時全部 ENOENT，但 bash 本身 `cat "$TESTDIR/foo.txt"` 能讀到。
+- **根本原因**：Git Bash 的 `/tmp/...` 是虛擬 mount 到 `C:\Users\<user>\AppData\Local\Temp`。bash 自己的 IO 認這個虛擬路徑；但 Bun on Windows 的 `fs` / `path` API 只認真實 Windows 路徑（`C:\...` 或 `C:/...`）。CLI 把 prompt 裡的路徑字串直接當 arg 傳給工具的 `fs.readFile` 之類呼叫，所以 ENOENT。
+- **正確做法**：測試腳本在塞給 CLI 之前用 `cygpath -m "$path"` 轉成 forward-slash Windows 形式（`C:/Users/.../Temp/...`）。bash 自己讀寫仍用 `/tmp/...`（cygpath -u 或原路徑），只有 CLI 的 prompt 與後續斷言需要 Windows 格式。範例見 `scripts/poc/llamacpp-core-tools-e2e.sh`。
+- **相關檔案**：所有會跟 `./cli` + 檔案路徑互動的測試腳本
+- **日期**：2026-04-15
+
 ### free-code 的 CLI system prompt 遠大於 16K token
 - **發生什麼事**：第一次跑 V4 時 llama-server 回 `request (18485 tokens) exceeds the available context size (16384 tokens)`。實測 free-code 光系統 prompt 就 18K+，加 user prompt 更大。
 - **根本原因**：`scripts/llama/serve.sh` 預設 `LLAMA_CTX=16384` 是給一般對話準備的，對 Claude Code 類的 agent 系統 prompt 太小。

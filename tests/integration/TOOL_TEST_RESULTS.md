@@ -20,21 +20,28 @@
 
 ## 環境
 
-- 測試日期：尚未開始
+- 測試日期：2026-04-15
 - llama-server build：b8457-149b2493c（CUDA 13.1）
 - 模型：`models/Jackrong_Qwen3.5-9B-Neo-Q5_K_M.gguf`
 - 上下文：32768 tokens（serve.sh 預設）
-- free-code 版本：（測試時補上 `git rev-parse --short HEAD`）
+- free-code 版本：commit `9d4198e` 之後
+- 測試腳本：
+  - Part A 翻譯正確性：`scripts/poc/llamacpp-core-tools-poc.ts`
+  - Part B 端到端：`scripts/poc/llamacpp-core-tools-e2e.sh`
 
 ## 前五個核心工具（優先測試）
 
+全部 5/5 通過（Part A 翻譯 + Part B 端到端）。
+
 | # | 工具 | (a) 選擇 | (b) 翻譯 | (c) 執行 | (d) 顯示 | 備註 |
 |---|------|---------|---------|---------|---------|------|
-| 1 | `BashTool` | ⏸️ | ⏸️ | ⏸️ | ⏸️ | |
-| 2 | `FileReadTool` | ⏸️ | ⏸️ | ⏸️ | ⏸️ | |
-| 3 | `FileWriteTool` | ⏸️ | ⏸️ | ⏸️ | ⏸️ | |
-| 4 | `FileEditTool` | ⏸️ | ⏸️ | ⏸️ | ⏸️ | |
-| 5 | `GlobTool` | ⏸️ | ⏸️ | ⏸️ | ⏸️ | |
+| 1 | `BashTool` | ✅ | ✅ | ✅ | ✅ | `{"command":"ls -la"}` 正確；`echo MARKER` 端到端回傳 |
+| 2 | `FileReadTool` | ✅ | ✅ | ✅ | ✅ | `{"file_path":"..."}` 正確；讀到 `READOK_MARKER_5678` |
+| 3 | `FileWriteTool` | ✅ | ✅ | ✅ | ✅ | `{"file_path","content"}` 正確；檔案被寫入 |
+| 4 | `FileEditTool` | ✅ | ✅ | ✅ | ✅ | `{"file_path","old_string","new_string"}` 正確；替換成功 |
+| 5 | `GlobTool` | ✅ | ✅ | ✅ | ✅ | `{"pattern":"*.md"}` 正確；列出兩個 .md 檔 |
+
+**注意**：Part B 在 Windows Git Bash 上必須用 `cygpath -m` 把 `/tmp/...` 轉成 `C:/Users/.../Temp/...` 格式的路徑給 `./cli`，否則 Bun/Node 的 fs API 會 ENOENT（見腳本註解與 LESSONS.md）。
 
 ## 其餘工具（可分批）
 
@@ -135,12 +142,12 @@
 
 ## 發現的翻譯 Bug（若有）
 
-（尚未測試；發現時在此追加條目 + 修復 commit hash）
+**前 5 核心工具階段無翻譯 bug**。唯一發現的是測試 fixture 問題（Git Bash `/tmp/` 路徑不被 Windows 下 Bun fs API 認），非 adapter 缺陷，已在測試腳本內用 `cygpath -m` 轉換解決。
 
-## 翻譯正確性總結
+## 翻譯正確性總結（進行中）
 
-（全部測完後填）
+- 翻譯成功率：5/43（前 5 核心工具）
+- 模型選擇成功率：5/43（前 5 核心工具）
+- 工具執行成功率：5/43（前 5 核心工具）
 
-- 翻譯成功率：__/43
-- 模型選擇成功率：__/43（非我方責任，但影響使用體驗）
-- 工具執行成功率：__/43
+其餘 34 個工具將分批補完（TODO 階段三第三項）。

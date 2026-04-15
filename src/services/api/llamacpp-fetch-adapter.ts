@@ -661,6 +661,18 @@ export function createLlamaCppFetch(
     const endpoint = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`
     const reportedModel = anthropicBody.model ?? config.model
 
+    if (process.env.LLAMA_DEBUG) {
+      // biome-ignore lint/suspicious/noConsole:: debug
+      console.error(
+        '[LLAMA_DEBUG] request tools=',
+        (openaiBody.tools ?? []).map(t => t.function.name).join(','),
+        'msgs=',
+        openaiBody.messages.length,
+        'stream=',
+        openaiBody.stream,
+      )
+    }
+
     // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
     const openaiRes = await globalThis.fetch(endpoint, {
       method: 'POST',
