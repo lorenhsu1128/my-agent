@@ -26,7 +26,7 @@ import { getModelStrings, resolveOverriddenModel } from './modelStrings.js'
 import { formatModelPricing, getOpus46CostTier } from '../modelCost.js'
 import { getSettings_DEPRECATED } from '../settings/settings.js'
 import type { PermissionMode } from '../permissions/PermissionMode.js'
-import { getAPIProvider } from './providers.js'
+import { DEFAULT_LLAMACPP_MODEL, getAPIProvider } from './providers.js'
 import { LIGHTNING_BOLT } from '../../constants/figures.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { type ModelAlias, isModelAlias } from './aliases.js'
@@ -179,6 +179,14 @@ export function getRuntimeMainLoopModel(params: {
  * @returns The default model setting to use
  */
 export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
+  // llamacpp provider 沒對應的 ALL_MODEL_CONFIGS 欄位，下游 getModelStrings()
+  // 會全部回 undefined。短路回 DEFAULT_LLAMACPP_MODEL 避免
+  // parseUserSpecifiedModel(undefined) 死迴圈。對應 CLAUDE_CODE_USE_LLAMACPP=true
+  // 但沒下 --model 的情境（例如使用者直接跑 `bun run dev`）。
+  if (getAPIProvider() === 'llamacpp') {
+    return DEFAULT_LLAMACPP_MODEL
+  }
+
   if (isCodexSubscriber()) {
     return getModelStrings().gpt53codex
   }

@@ -1869,7 +1869,9 @@ async function run(): Promise<CommanderCommand> {
     // (which returns isProactiveActive()) passes and Sleep is included.
     // The later REPL-path maybeActivateProactive() calls are idempotent.
     maybeActivateProactive(options);
+    profileCheckpoint('action_after_maybeActivateProactive');
     let tools = getTools(toolPermissionContext);
+    profileCheckpoint('action_after_getTools');
 
     // Apply coordinator mode tool filtering for headless path
     // (mirrors useMergedTools.ts filtering for REPL/interactive path)
