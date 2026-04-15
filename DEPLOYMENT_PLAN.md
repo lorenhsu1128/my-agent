@@ -31,7 +31,7 @@
 - [x] 閱讀 Hermes `auth.py` + `auxiliary_client.py`，取 ProviderConfig / apiMode / env 優先鏈設計概念 — 寫入 `skills/provider-system/SKILL.md`。【2026-04-15 commit `fa03174`】
 - [x] PoC：路徑 B 可行性驗證 — `scripts/poc/llamacpp-fetch-poc.ts` 端到端測試通過。【2026-04-15 commit `b2af143`】
 - [x] 架構決策：確定走路徑 B，棄路徑 A。
-- [ ] 驗證：`bun run typecheck` 在當前 main 上仍通過（建立實作前的綠燈基準）。
+- [x] 驗證：`bun run typecheck` 在當前 main 上仍通過（建立實作前的綠燈基準）— exit 0，僅 `tsconfig.json:10` `baseUrl` 一條 TS5101 deprecation warning，無實際 code 錯誤。同步把 `typecheck` 加進 `package.json`（原本缺）。
 
 ### 階段二：`llamacpp-fetch-adapter.ts` 實作（non-streaming 先行）
 - [ ] 建立 `src/services/api/llamacpp-fetch-adapter.ts`（仿 `codex-fetch-adapter.ts` 結構）：
