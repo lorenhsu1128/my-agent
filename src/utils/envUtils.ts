@@ -29,38 +29,50 @@ export const getClaudeConfigHomeDir = memoize(
 /**
  * 首次啟動提示：若使用者沒設 CLAUDE_CONFIG_DIR、新家目錄不存在、但舊的
  * ~/.claude/ 存在，代表很可能是從官方 Claude Code 切過來。印一次 hint
- * 說明 free-code 現在獨立用 ~/.free-code/，以及如何手動 migrate 或沿用
- * 舊路徑。
+ * 說明 free-code 現在獨立用 ~/.free-code/。
  *
- * 呼叫點：bootstrap 早期（main.tsx / bootstrap/state.ts 的合適位置）。
- * 只印到 stderr 避免污染 `-p` 輸出。
+ * 設計：只印到 stderr**一次**、只在首次偵測到切換需求時，之後自動建
+ * `.migration-acknowledged` marker 後不再印。避免 PowerShell + bun.ps1
+ * wrapper 對 stderr 訊息過度反應卡住 TUI 的問題（2026-04-15 使用者回報）。
+ *
+ * 使用者若要永久關閉：設 CLAUDE_CODE_SKIP_MIGRATION_HINT=1 或建立檔案
+ * ~/.free-code/.migration-acknowledged。
  */
 let freeCodeMigrationHintPrinted = false
 export function printFreeCodeMigrationHintOnce(): void {
   if (freeCodeMigrationHintPrinted) return
-  if (process.env.CLAUDE_CODE_SKIP_MIGRATION_HINT) return
-  if (process.env.CLAUDE_CONFIG_DIR) return // 使用者顯式指定，不 hint
-  const newDir = join(homedir(), FREE_CODE_HOME_DIR_NAME)
-  const legacyDir = join(homedir(), LEGACY_CLAUDE_HOME_DIR_NAME)
-  if (existsSync(newDir)) return // 已有 free-code 家目錄，使用者知道自己在幹嘛
-  if (!existsSync(legacyDir)) return // 新使用者，沒有 Claude Code 歷史
-  freeCodeMigrationHintPrinted = true
-  // biome-ignore lint/suspicious/noConsole:: 告知 user 的 stderr 訊息
-  console.error(
-    [
-      '',
-      `[free-code] 偵測到 ${legacyDir} 存在但 ${newDir} 不存在。`,
-      'free-code 現在預設使用獨立的家目錄，避免污染官方 Claude Code 的登入狀態。',
-      '',
-      '想要的行為請挑一：',
-      `  1. 獨立 free-code 設定（建議）— 正常繼續，${newDir} 會在首次需要時自動建立`,
-      `  2. 沿用官方 Claude Code 登入/設定 — 設 CLAUDE_CONFIG_DIR="${legacyDir}"`,
-      `  3. 手動遷移 — 把 ${legacyDir} 的檔案複製到 ${newDir}`,
-      '',
-      '要永久關閉此提示：設環境變數 CLAUDE_CODE_SKIP_MIGRATION_HINT=1',
-      '',
-    ].join('\n'),
-  )
+  freeCodeMigrationHintPrinted = true // 同一程序內只嘗試一次，不論是否實際印出
+  try {
+    if (process.env.CLAUDE_CODE_SKIP_MIGRATION_HINT) return
+    if (process.env.CLAUDE_CONFIG_DIR) return
+    const newDir = join(homedir(), FREE_CODE_HOME_DIR_NAME)
+    const legacyDir = join(homedir(), LEGACY_CLAUDE_HOME_DIR_NAME)
+    const ackFile = join(newDir, '.migration-acknowledged')
+    if (existsSync(ackFile)) return // 已印過並記錄
+    if (!existsSync(legacyDir)) return // 新使用者，沒有 Claude Code 歷史
+    // hint 只寫一次到 stderr；同時在 newDir 建 ack marker 避免下次再印
+    // 這也繞過 PS bun.ps1 wrapper 對多行 stderr 敏感的問題
+    try {
+      if (!existsSync(newDir)) {
+        // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+        require('fs').mkdirSync(newDir, { recursive: true })
+      }
+      // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+      require('fs').writeFileSync(
+        ackFile,
+        `printed at ${new Date().toISOString()}\n`,
+      )
+    } catch {
+      // 建 marker 失敗就算了；下次還是會再印一次（邊界情境）
+    }
+    // biome-ignore lint/suspicious/noConsole:: 告知 user 的 stderr 訊息
+    console.error(
+      `[free-code] 家目錄改為 ${newDir}（原 ~/.claude/ 不動）。` +
+        `沿用舊登入：CLAUDE_CONFIG_DIR="${legacyDir}"。此訊息只顯示一次。`,
+    )
+  } catch {
+    // 任何錯誤都靜默吞掉 — 避免 bootstrap 被 hint 阻斷
+  }
 }
 
 export function getTeamsDir(): string {
