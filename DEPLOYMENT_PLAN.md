@@ -275,3 +275,91 @@ if (llamaCppConfig) {
 - `finish_reason=length` 的 CLI 視覺優化
 - 病態 reasoning/text 交錯
 - 正式 `tests/` integration suite
+
+---
+
+# 手動測試指南（PowerShell；2026-04-15 批准）
+
+M1 完成後的使用者操作手冊。在 PowerShell 執行，**互動模式一律 `bun run dev`**（compiled `.\cli.exe` 在 Windows 進 TUI 會 Bun panic — 已記入 LESSONS.md）。
+
+## 前提（一次性）
+
+```powershell
+conda activate aiagent
+bun install                          # 若 node_modules 空
+bash scripts\llama\setup.sh          # 若 llama\ 或 models\ 空（一次 ~7.3GB）
+```
+
+## Step 1 — 啟動 llama-server
+
+```powershell
+bash scripts\llama\serve.sh
+# 前景執行；Ctrl+C 停。Context 預設 32768。
+```
+另一個 PS 驗證：
+```powershell
+curl.exe -sf http://127.0.0.1:8080/v1/models | Select-Object -First 1
+```
+注意用 `curl.exe`（真 curl），不要 PS 別名的 `curl`（那是 `Invoke-WebRequest`）。
+
+## Step 2 — CLI 啟動
+
+### 互動模式（推薦：走源碼）
+
+```powershell
+Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+$env:CLAUDE_CODE_USE_LLAMACPP = "true"
+bun run dev
+# 或 bun src/entrypoints/cli.tsx
+```
+
+或用 --model 別名：
+```powershell
+Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+bun src/entrypoints/cli.tsx --model qwen3.5-9b-neo
+```
+
+互動進去後：
+- Logo 下方應看到 `qwen3.5-9b-neo · llama.cpp (local)`（env flag 模式下會顯示）
+- `/model` 打開 picker，最下有 `qwen3.5-9b-neo (local)`
+
+### 非互動（`-p`，compiled `.\cli.exe` 可用）
+
+```powershell
+Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+.\cli.exe --dangerously-skip-permissions --model qwen3.5-9b-neo -p "你好"
+```
+
+## Debug
+
+加 `$env:LLAMA_DEBUG = "1"` 在 stderr 印 adapter 診斷訊息。測完 `Remove-Item Env:LLAMA_DEBUG`。
+
+## 快速驗證 PoC 腳本
+
+| 用途 | 指令 | 預期 |
+|------|------|------|
+| Non-streaming 煙測 | `bun run scripts\poc\llamacpp-fetch-poc.ts` | `2+2=4` |
+| Streaming 煙測 | `bun run scripts\poc\llamacpp-streaming-poc.ts` | thinking+text 雙 block |
+| Tool call 煙測 | `bun run scripts\poc\llamacpp-tool-streaming-poc.ts` | tool_use 正確 |
+| 前 5 工具翻譯 | `bun run scripts\poc\llamacpp-core-tools-poc.ts` | 5/5 ✓ |
+| 34 工具翻譯 | `bun run scripts\poc\llamacpp-rest-tools-poc.ts` | 34/34 ✓ |
+| 前 5 工具 E2E（要 Git Bash） | `bash scripts\poc\llamacpp-core-tools-e2e.sh` | 5/5 pass |
+
+## 常見狀況
+
+| 症狀 | 對策 |
+|------|------|
+| `.\cli.exe` 互動模式 Bun panic / 卡死 | 改用 `bun run dev`（compiled TUI 為 Bun bug） |
+| CLI 卡 >30 秒無輸出 | `Remove-Item Env:ANTHROPIC_API_KEY`（dummy key 也會卡 bootstrap） |
+| `API Error: 400 ... 未啟動於 ...` | `bash scripts\llama\serve.sh` 起 server |
+| `exceeds the available context size` | `$env:LLAMA_CTX = "32768"` 重啟 server |
+| `curl` 結果怪 | 用 `curl.exe` 不要 PS 別名 |
+| 想切回 Anthropic 官方 | `Remove-Item Env:CLAUDE_CODE_USE_LLAMACPP`；不用 `--model qwen...`；設 `$env:ANTHROPIC_API_KEY = "<真 key>"` |
+
+## Credential 共享待解
+
+free-code 沿用官方 Claude Code 的 `~/.claude/` 路徑，bootstrap 會讀到真實 credentials。暫時隔離法：
+```powershell
+$env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.free-code-profile"
+```
+未來可能改為 free-code 預設用 `~/.free-code/`，由使用者決定後實作。
