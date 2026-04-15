@@ -110,3 +110,168 @@
 - LiteLLM、Ollama（ADR-001 推翻後不再相關）。
 - 核心檔案 QueryEngine.ts / Tool.ts 的修改（deny list）。
 - M2–M6 的任何工作（只動 M1）。
+
+---
+
+# M1 階段二實作 plan（2026-04-15 批准；合併原階段二、三）
+
+## Context
+
+M1 階段一全部打勾（commits `e5ea9f2` → `66d2a1a`）。進入階段二寫第一個實質產品碼。
+
+實測發現 `src/services/api/claude.ts:1824` 對主 query 永遠發 `stream: true`，TODO.md 原本「階段二只做 non-streaming、階段三才做 streaming」無法用 `./cli` 驗證。使用者決定**合併原階段二、三**為單一「實作完整串流的階段二」，把純文字串流做到位，`./cli -p "hi"` 端到端可用。工具仍不含（留給合併後的新階段三）。
+
+## 架構決策
+
+### D1 — Provider 偵測：新 env flag
+`CLAUDE_CODE_USE_LLAMACPP=true` 啟用。與既有 `CLAUDE_CODE_USE_BEDROCK/VERTEX/FOUNDRY` 風格一致。`APIProvider` 聯集加 `'llamacpp'`。不沿用 `'openai'`（語意混淆 Codex），不靠單獨 `LLAMA_BASE_URL` 隱式啟用（未來 vLLM / sglang 衝突）。
+
+### D2 — Helper 位置
+`src/utils/model/providers.ts` 新增 `getLlamaCppConfig(): {baseUrl, model} | null`。不放 `auth.ts`（llamacpp 無 token）。
+
+### D3 — 檔案結構
+單一檔案 `src/services/api/llamacpp-fetch-adapter.ts`，預估 400–500 行（non-streaming ~100 + streaming 狀態機 ~250 + helpers ~100）。工具翻譯留 stub 不寫。
+
+### D4 — 型別策略
+仿 codex：inline interface，**不 import `@anthropic-ai/sdk` 型別**。邊界乾淨、可獨立單測。
+
+### D5 — Non-streaming 也實作
+Haiku 快查走 non-streaming。PoC 已驗證，~100 行可直接移植。
+
+### D6 — `thinking` streaming fallback
+Anthropic SDK 對串流 `thinking_delta` 容忍度未驗。主路徑先試；若下游異常，切備援：reasoning 併入 text、加 `<think>...</think>` 包裹，保留可視性但放棄語意分離。階段內決策，不延後。
+
+## 實作步驟
+
+### Step 1 — `src/utils/model/providers.ts` 擴充（43 → ~70 行）
+
+```ts
+export type APIProvider = 'firstParty' | 'bedrock' | 'vertex' | 'foundry' | 'openai' | 'llamacpp'
+
+export function getAPIProvider(): APIProvider {
+  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_LLAMACPP)) return 'llamacpp'
+  // ... 其餘鏈不變
+}
+
+export const DEFAULT_LLAMACPP_BASE_URL = 'http://127.0.0.1:8080/v1'
+export const DEFAULT_LLAMACPP_MODEL = 'qwen3.5-9b-neo'
+
+export function getLlamaCppConfig(): { baseUrl: string; model: string } | null {
+  if (getAPIProvider() !== 'llamacpp') return null
+  return {
+    baseUrl: process.env.LLAMA_BASE_URL || DEFAULT_LLAMACPP_BASE_URL,
+    model: process.env.LLAMA_MODEL || DEFAULT_LLAMACPP_MODEL,
+  }
+}
+```
+
+### Step 2 — `src/services/api/llamacpp-fetch-adapter.ts` 新建
+
+```
+// 1. inline 型別（~50 行）：AnthropicContentBlock、AnthropicMessage、
+//    OpenAIMessage、OpenAIRequestBody、OpenAIStreamChunk
+// 2. 請求翻譯 Anthropic → OpenAI（~80 行）：
+//    translateMessagesToOpenAI、translateRequestToOpenAI
+// 3a. 回應翻譯 non-streaming（~100 行，從 PoC 移植）：
+//    translateChatCompletionToAnthropic
+// 3b. 回應翻譯 streaming（~250 行，核心）：
+//    translateOpenAIStreamToAnthropicSSE (async generator yielding SSE lines)
+// 4. 映射表：FINISH_TO_STOP = {stop:'end_turn', length:'max_tokens', tool_calls:'tool_use'}
+// 5. helpers：formatSSE、mkMsgId
+// 6. export createLlamaCppFetch(config): typeof globalThis.fetch
+```
+
+**串流狀態機變數**：
+```
+msgStarted: boolean
+currentBlockIndex: number (-1 起)
+currentBlockType: 'text' | 'thinking' | null
+accumulatedUsage: { input_tokens, output_tokens }
+finalFinishReason: string | null
+```
+
+**每個 OpenAI chunk 處理規則**：
+1. 解析 `data: ...\n\n`；`data: [DONE]` 收尾
+2. 第一 chunk：emit `message_start`
+3. `delta.reasoning_content`：切到 thinking block（必要時先關上一個）；emit `thinking_delta`
+4. `delta.content`：切到 text block；emit `text_delta`
+5. `delta.tool_calls`：本階段忽略
+6. `finish_reason`：記 `finalFinishReason`
+7. `usage`：累積
+8. 收尾：emit `content_block_stop` + `message_delta` + `message_stop`
+
+**SSE 格式**：`event: <type>\ndata: <json>\n\n`
+
+### Step 3 — `src/services/api/client.ts` 整合
+
+在 L308（Codex 分支前）插入：
+
+```ts
+const llamaCppConfig = getLlamaCppConfig()
+if (llamaCppConfig) {
+  const llamaCppFetch = createLlamaCppFetch(llamaCppConfig)
+  return new Anthropic({
+    apiKey: 'llamacpp-placeholder',
+    ...ARGS,
+    fetch: llamaCppFetch as unknown as typeof globalThis.fetch,
+    ...(isDebugToStdErr() && { logger: createStderrLogger() }),
+  })
+}
+```
+
+### Step 4 — env 文件
+補進 `client.ts` 頂部 JSDoc（L40–79）後方說明 `CLAUDE_CODE_USE_LLAMACPP` / `LLAMA_BASE_URL` / `LLAMA_MODEL`。
+
+### Step 5 — TODO.md 結構對齊
+原階段二、三合併為新階段二；原階段四→新三；原階段五→新四；完成標準不動。
+
+## 關鍵檔案參照
+
+| 檔案 | 用途 | 關鍵行號 |
+|------|------|---------|
+| `src/services/api/codex-fetch-adapter.ts` | 結構範本 | L81–101 型別、L290–735 串流翻譯器、L279–281 formatSSE、L746–812 主 export |
+| `src/services/api/client.ts` | 整合切入點 | L40–79 env JSDoc、L308–321 Codex 分支 |
+| `src/services/api/claude.ts` | 下游消費者 | L1980–2295 明確處理的 Anthropic SSE 事件類型 |
+| `src/utils/model/providers.ts` | provider 偵測 | 整檔 43 行 |
+| `scripts/poc/llamacpp-fetch-poc.ts` | Non-streaming 翻譯 | 整檔 190 行，清理移植 |
+
+## 驗證計畫
+
+- **V1 typecheck**：每 Step 後 `bun run typecheck` 必須維持基線（exit 0，只有 tsconfig baseUrl 一條 warning）
+- **V2 Non-streaming 回歸**：`bun run scripts/poc/llamacpp-fetch-poc.ts` 通過
+- **V3 Streaming 煙測**：新寫 `scripts/poc/llamacpp-streaming-poc.ts`（~60 行），用 SDK `messages.stream()` 對 llama-server 發串流，驗證事件序列：`message_start → content_block_start(thinking) → thinking_delta × N → content_block_stop → content_block_start(text) → text_delta × N → content_block_stop → message_delta → message_stop`
+- **V4 `./cli` 端到端**：`CLAUDE_CODE_USE_LLAMACPP=true LLAMA_BASE_URL=... ANTHROPIC_API_KEY=dummy ./cli -p "寫一個 fibonacci"` 逐字串流回應
+- **V5 Anthropic 路徑回歸**：未設 `CLAUDE_CODE_USE_LLAMACPP` 時 `./cli -p "hi"` 與修訂前位元級相同
+- **V6 `thinking_delta` fallback**：若 V3/V4 SDK 下游異常，切 D6 備援，記入 LESSONS.md
+
+## commit 策略（4–5 個繁中 commit）
+
+1. `feat(providers): 新增 llamacpp APIProvider 值與 getLlamaCppConfig()`（Step 1）
+2. `feat(api): llamacpp-fetch-adapter non-streaming 翻譯（請求 + 回應）`（Step 2 前半）
+3. `feat(api): llamacpp-fetch-adapter 串流翻譯（純文字 + thinking）`（Step 2 後半）
+4. `feat(client): 整合 llama.cpp provider 分支，補 env 文件`（Step 3 + Step 4）
+5. `docs(m1): 合併階段二、三，結構對齊純文字串流里程碑`（Step 5）
+
+每 commit 後 V1 + 對應 V2–V4 必須通過。
+
+## 修改檔案範圍
+
+| 檔案 | 動作 | 行數 |
+|------|------|------|
+| `src/utils/model/providers.ts` | 擴充 | 43 → ~70 |
+| `src/services/api/llamacpp-fetch-adapter.ts` | **新建** | 400–500 |
+| `src/services/api/client.ts` | 一條分支 + JSDoc | +20 |
+| `scripts/poc/llamacpp-streaming-poc.ts` | **新建** | ~60 |
+| `TODO.md` / `DEPLOYMENT_PLAN.md` | 階段結構對齊 + 進度同步 | 持續 |
+
+**不動**：QueryEngine.ts / Tool.ts（deny list）、claude.ts、codex-fetch-adapter.ts、services/tools/*、modelStrings.ts（階段四才碰）。
+
+## 不在範圍內（留給合併後新階段三、四）
+
+- 工具呼叫翻譯（含 tool_use↔function_call、streaming argument 累積、tool_result 歷史翻譯）
+- ECONNREFUSED 降級訊息
+- `/model` 指令、啟動橫幅
+- `modelStrings.ts` 新增別名
+- `finish_reason=length` 的 CLI 視覺優化
+- 病態 reasoning/text 交錯
+- 正式 `tests/` integration suite

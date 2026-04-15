@@ -18,34 +18,21 @@
 - [x] 架構決策：確定走路徑 B（fetch adapter）— 棄新 provider 層
 - [x] 驗證：`bun run typecheck` 在當前 main 上仍通過（建立實作前的綠燈基準）— exit 0，僅 `tsconfig.json` L10 `baseUrl` 一條 TS5101 deprecation warning，無實際錯誤。同步把 `typecheck` 加進 `package.json` scripts（原本缺）
 
-### 階段二：`llamacpp-fetch-adapter.ts` 實作（non-streaming 先行）
-- [ ] 建立 `src/services/api/llamacpp-fetch-adapter.ts`（仿 `codex-fetch-adapter.ts` 結構）：
-  - `createLlamaCppFetch(config)` 回傳 fetch 介面
-  - 攔截 `/v1/messages` 請求，不攔截其他（讓原本 fetch 照常走）
-  - 請求翻譯：Anthropic MessagesCreate → OpenAI ChatCompletion（system / user / assistant 訊息、max_tokens、temperature）
-  - 回應翻譯：OpenAI ChatCompletion → Anthropic BetaMessage JSON，包進 `new Response(...)` 回給 SDK
-  - `reasoning_content` → `thinking` content block（ADR-006）
-  - `finish_reason` → `stop_reason` 映射表：`stop→end_turn` / `length→max_tokens` / `tool_calls→tool_use`
-- [ ] 修改 `src/services/api/client.ts`：
-  - 在 Codex 分支（L308）之前新增 llamacpp 分支：`if (apiMode === 'chat_completions' && LLAMA_BASE_URL) ...`
-  - 使用 `new Anthropic({ apiKey: 'llamacpp-placeholder', fetch: llamaCppFetch })`
-- [ ] 修改 `src/utils/model/providers.ts`：
-  - 新增 `CLAUDE_CODE_USE_LLAMACPP` 支援到 `getAPIProvider()`
-  - 或改用 `APIProvider` 中的 `'openai'` 值、靠 `LLAMA_BASE_URL` 存在與否分流（待實作時決定）
-- [ ] 新增環境變數 `LLAMA_BASE_URL`（預設 `http://127.0.0.1:8080/v1`）與 `LLAMA_MODEL`（預設 `qwen3.5-9b-neo`）到適當的設定模組
-- [ ] 驗證：`./cli --model qwen3.5-9b-neo -p "hello"` 單次 non-streaming 成功（`LLAMA_BASE_URL=http://127.0.0.1:8080/v1 ANTHROPIC_API_KEY=dummy ./cli -p "hi"`）
+### 階段二：`llamacpp-fetch-adapter.ts` 實作（串流為主，純文字端到端）
 
-### 階段三：串流（SSE）翻譯
-- [ ] 在 `llamacpp-fetch-adapter.ts` 中實作 streaming 路徑：
-  - 請求參數加 `stream: true` 時，不再呼叫 non-streaming 翻譯
-  - 向 llama-server 發 streaming 請求，取得 OpenAI SSE ReadableStream
-  - 寫 `translateOpenAIStreamToAnthropic(openaiStream, model)` 把 OpenAI SSE chunks 轉成 Anthropic SSE（`message_start` / `content_block_start` / `content_block_delta` / `content_block_stop` / `message_delta` / `message_stop`）
-  - 回傳 `new Response(anthropicSSEStream, { headers: { 'content-type': 'text/event-stream' } })` 給 SDK
-  - `reasoning_content` delta 映射到 `thinking_delta`（需確認 Anthropic SDK 是否認這個 delta type）
-- [ ] 處理 `finish_reason=length` 邊界：轉成 `message_delta.stop_reason='max_tokens'`
-- [ ] CLI 串流顯示實測：`./cli --model qwen3.5-9b-neo -p "寫一個 fibonacci"`，確認文字逐字出現而非整塊
+> 原階段二（non-streaming）與階段三（串流）2026-04-15 合併 — `claude.ts:1824` 主 query 永遠發 `stream: true`，`./cli` 無法用 non-streaming 驗證。詳細實作設計見 DEPLOYMENT_PLAN.md 底部「M1 階段二實作 plan」段。
 
-### 階段四：工具呼叫翻譯
+- [ ] Step 1：擴充 `src/utils/model/providers.ts` — 加 `'llamacpp'` APIProvider、`CLAUDE_CODE_USE_LLAMACPP` 檢測、`getLlamaCppConfig()` helper、`DEFAULT_LLAMACPP_{BASE_URL,MODEL}` 常數
+- [ ] Step 2a：建立 `src/services/api/llamacpp-fetch-adapter.ts` non-streaming 路徑 — inline 型別、請求翻譯（Anthropic→OpenAI）、回應翻譯（ChatCompletion→BetaMessage）、`FINISH_TO_STOP` 映射表、`reasoning_content`→`thinking` block（ADR-006）
+- [ ] Step 2b：同檔加 streaming 路徑 — `translateOpenAIStreamToAnthropicSSE` async generator、6 步狀態機、`thinking_delta` 主路徑 + text+`<think>` 備援（D6）
+- [ ] Step 3：修改 `src/services/api/client.ts` — 在 Codex 分支（L308）前插 llamacpp 分支：`new Anthropic({ apiKey:'llamacpp-placeholder', fetch: createLlamaCppFetch(config) })`
+- [ ] Step 4：補進 `client.ts` 頂部 env JSDoc 說明 `CLAUDE_CODE_USE_LLAMACPP` / `LLAMA_BASE_URL` / `LLAMA_MODEL`
+- [ ] 驗證 V2：`bun run scripts/poc/llamacpp-fetch-poc.ts` 通過（non-streaming 迴歸）
+- [ ] 驗證 V3：新寫 `scripts/poc/llamacpp-streaming-poc.ts`，SDK `messages.stream()` 收到正確事件序列
+- [ ] 驗證 V4：`CLAUDE_CODE_USE_LLAMACPP=true ... ./cli -p "寫一個 fibonacci"` 逐字串流回應
+- [ ] 驗證 V5：未設 `CLAUDE_CODE_USE_LLAMACPP` 時 `./cli -p "hi"` 走 Anthropic 原路徑行為位元級相同
+
+### 階段三：工具呼叫翻譯
 - [ ] 在 adapter 中加 tool 翻譯：
   - 出站：Anthropic `tools: [{name, input_schema}]` → OpenAI `tools: [{type:'function', function:{name, parameters}}]`
   - 入站 non-streaming：OpenAI `tool_calls: [{id, function:{name, arguments}}]` → Anthropic `ToolUseBlock`
@@ -56,7 +43,7 @@
 - [ ] 其餘 34 個工具依樣畫葫蘆補完（可分批）
 - [ ] 修復測試中發現的翻譯 bug（只動 `llamacpp-fetch-adapter.ts`，不改 `Tool.ts`）
 
-### 階段五：設定與使用者體驗
+### 階段四：設定與使用者體驗
 - [ ] `src/utils/model/model.ts`：優先級解析認得 `qwen3.5-9b-neo` 別名，自動啟用 llama.cpp 分支
 - [ ] `/model` 指令：列出 llama.cpp 模型與 Anthropic 模型並列
 - [ ] server 不可用時的降級：adapter 偵測 `fetch` 失敗（ECONNREFUSED）時回傳清楚的錯誤訊息（指示執行 `bash scripts/llama/serve.sh`），不 crash
@@ -105,3 +92,11 @@
 - 2026-04-15 15:46: Session 結束 | 進度：2/25 任務 | b2af143 poc: 驗證路徑 B（fetch adapter）可行性
 
 - 2026-04-15 15:54: Session 結束 | 進度：4/26 任務 | fbacb96 docs(m1): 對齊路徑 B — 以 fetch adapter 實作 llama.cpp 整合
+
+- 2026-04-15 16:02: Session 結束 | 進度：5/26 任務 | 66d2a1a chore(m1): 完成階段一最後一項 — typecheck 綠燈基線
+
+- 2026-04-15 16:07: Session 結束 | 進度：5/26 任務 | 66d2a1a chore(m1): 完成階段一最後一項 — typecheck 綠燈基線
+
+- 2026-04-15 16:14: Session 結束 | 進度：5/26 任務 | 66d2a1a chore(m1): 完成階段一最後一項 — typecheck 綠燈基線
+
+- 2026-04-15 16:18: Session 結束 | 進度：5/26 任務 | 66d2a1a chore(m1): 完成階段一最後一項 — typecheck 綠燈基線
