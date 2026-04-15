@@ -57,6 +57,14 @@
 
 ## 型別與編譯相關
 
+### Bun 1.3.6+ `--bytecode` 與 ESM 互斥
+- **發生什麼事**：`bun run build` 報 `format must be 'cjs' when bytecode is true. Eventually we'll add esm support as well.` 無法產出 `./cli`。
+- **根本原因**：Bun 1.3.6（當前 runtime 版本）的 bytecode 編譯只支援 CJS format。而本專案 `package.json` 是 `"type": "module"`、原始碼用 ESM import，`scripts/build.ts` 原本同時傳 `--format esm` 和 `--bytecode`，衝突。
+- **正確做法**：移除 `--bytecode` flag（啟動時間增加數百毫秒，可接受），保留 `--format esm`。未來 Bun 支援 ESM bytecode 時可加回。**不要**改成 `--format cjs` — `--packages bundle` 後還是可能踩到 ESM-only 套件的坑。
+- **副作用**：`./cli` 二進位檔（Windows 上叫 `cli.exe`）比有 bytecode 時稍大 / 啟動稍慢，但功能完整。實測 `./cli -p "What is 2+2?"` → `2 + 2 = 4`，~20 秒（含 llama.cpp 推理）。
+- **相關檔案**：scripts/build.ts
+- **日期**：2026-04-15
+
 ### Typecheck 綠燈基線（2026-04-15 建立）
 - **基線狀態**：`bun run typecheck` 回 exit 0，輸出唯一一行：`tsconfig.json(10,5): error TS5101: Option 'baseUrl' is deprecated ...`（TypeScript 6.0 的 deprecation warning，非實際 code 錯誤）。
 - **怎麼來的**：M1 階段一最後一項任務（commit 見 git log）在 commit `fbacb96` 之後的 main 上實測。

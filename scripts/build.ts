@@ -158,6 +158,11 @@ const defines = {
   ),
 } as const
 
+// 注意（2026-04-15）：Bun 1.3.6+ 要求 `--bytecode` 必須搭配 `--format cjs`，
+// 但本專案 package.json 是 "type": "module"、程式碼使用 ESM import，強制
+// 改 cjs 會在 bundle 階段踩到 ESM-only 套件。權衡後暫時移除 --bytecode：
+// 啟動時間會略微增加（數百毫秒量級），但相容性無損。未來 Bun 支援 ESM
+// bytecode 時可以加回來。
 const cmd = [
   'bun',
   'build',
@@ -170,7 +175,6 @@ const cmd = [
   '--outfile',
   outfile,
   '--minify',
-  '--bytecode',
   '--packages',
   'bundle',
   '--conditions',
