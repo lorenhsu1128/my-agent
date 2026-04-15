@@ -22,7 +22,7 @@
 
 > 原階段二（non-streaming）與階段三（串流）2026-04-15 合併 — `claude.ts:1824` 主 query 永遠發 `stream: true`，`./cli` 無法用 non-streaming 驗證。詳細實作設計見 DEPLOYMENT_PLAN.md 底部「M1 階段二實作 plan」段。
 
-- [ ] Step 1：擴充 `src/utils/model/providers.ts` — 加 `'llamacpp'` APIProvider、`CLAUDE_CODE_USE_LLAMACPP` 檢測、`getLlamaCppConfig()` helper、`DEFAULT_LLAMACPP_{BASE_URL,MODEL}` 常數
+- [x] Step 1：擴充 `src/utils/model/providers.ts` — 加 `'llamacpp'` APIProvider、`CLAUDE_CODE_USE_LLAMACPP` 檢測、`getLlamaCppConfig()` helper、`DEFAULT_LLAMACPP_{BASE_URL,MODEL}` 常數
 - [ ] Step 2a：建立 `src/services/api/llamacpp-fetch-adapter.ts` non-streaming 路徑 — inline 型別、請求翻譯（Anthropic→OpenAI）、回應翻譯（ChatCompletion→BetaMessage）、`FINISH_TO_STOP` 映射表、`reasoning_content`→`thinking` block（ADR-006）
 - [ ] Step 2b：同檔加 streaming 路徑 — `translateOpenAIStreamToAnthropicSSE` async generator、6 步狀態機、`thinking_delta` 主路徑 + text+`<think>` 備援（D6）
 - [ ] Step 3：修改 `src/services/api/client.ts` — 在 Codex 分支（L308）前插 llamacpp 分支：`new Anthropic({ apiKey:'llamacpp-placeholder', fetch: createLlamaCppFetch(config) })`
