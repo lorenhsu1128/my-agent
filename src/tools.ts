@@ -102,7 +102,6 @@ export {
   COORDINATOR_MODE_ALLOWED_TOOLS,
 } from './constants/tools.js'
 import { feature } from 'bun:bundle'
-import { profileCheckpoint } from './utils/startupProfiler.js'
 // Dead code elimination: conditional import for OVERFLOW_TEST_TOOL
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 const OverflowTestTool = feature('OVERFLOW_TEST_TOOL')
@@ -270,7 +269,6 @@ export function filterToolsByDenyRules<
 }
 
 export const getTools = (permissionContext: ToolPermissionContext): Tools => {
-  profileCheckpoint('getTools_enter')
   // Simple mode: only Bash, Read, and Edit tools
   if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
     // --bare + REPL mode: REPL wraps Bash/Read/Edit/etc inside the VM, so
@@ -306,13 +304,10 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
     SYNTHETIC_OUTPUT_TOOL_NAME,
   ])
 
-  profileCheckpoint('getTools_before_getAllBaseTools')
   const tools = getAllBaseTools().filter(tool => !specialTools.has(tool.name))
-  profileCheckpoint('getTools_after_getAllBaseTools')
 
   // Filter out tools that are denied by the deny rules
   let allowedTools = filterToolsByDenyRules(tools, permissionContext)
-  profileCheckpoint('getTools_after_filterToolsByDenyRules')
 
   // When REPL mode is enabled, hide primitive tools from direct use.
   // They're still accessible inside REPL via the VM context.
