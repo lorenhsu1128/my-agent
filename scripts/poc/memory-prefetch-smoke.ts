@@ -1,9 +1,15 @@
 /**
- * M2-09 smoke test：驗證 FTS 歷史對話搜尋模組。
+ * M2-09 + M2-10 smoke test：FTS 歷史搜尋 + 預算控制。
  *
  * 用法：bun run scripts/poc/memory-prefetch-smoke.ts
  */
-import { searchSessionHistory } from '../../src/services/memoryPrefetch/index.js'
+import {
+  buildMemoryContextFence,
+  CHAR_BUDGET,
+  MAX_FTS_SNIPPETS,
+  searchSessionHistory,
+  type FtsSnippet,
+} from '../../src/services/memoryPrefetch/index.js'
 import { openSessionIndex } from '../../src/services/sessionIndex/db.js'
 import { reconcileProjectIndex } from '../../src/services/sessionIndex/reconciler.js'
 
@@ -78,6 +84,46 @@ assert(Array.isArray(results5), 'CJK search returns array (no crash)')
 section('Test 6: FTS reserved chars')
 const results6 = await searchSessionHistory('hello.world "test"', projectRoot)
 assert(Array.isArray(results6), 'reserved chars handled (no crash)')
+
+// ── Test 7: buildMemoryContextFence 基本格式 ──
+section('Test 7: buildMemoryContextFence basic format')
+const fence1 = buildMemoryContextFence(results1)
+assert(fence1.startsWith('<memory-context>'), 'fence starts with <memory-context>')
+assert(fence1.endsWith('</memory-context>'), 'fence ends with </memory-context>')
+assert(fence1.includes('[past-sessions]'), 'fence contains [past-sessions] section')
+console.log(`  Fence length: ${fence1.length} chars`)
+
+// ── Test 8: 空結果不產生 fence ──
+section('Test 8: Empty results → empty string')
+const fence2 = buildMemoryContextFence([])
+assert(fence2 === '', 'empty snippets → empty string')
+
+// ── Test 9: 預算截斷 ──
+section('Test 9: Budget truncation')
+const bigSnippets: FtsSnippet[] = Array.from({ length: 10 }, (_, i) => ({
+  sessionId: `sess-${i}`,
+  role: 'user',
+  content: 'A'.repeat(3000), // 每筆 3000 chars，遠超預算
+  startedAt: Date.now() - i * 86400_000,
+}))
+const fence3 = buildMemoryContextFence(bigSnippets)
+assert(fence3.length <= CHAR_BUDGET + 100, `fence within budget (got ${fence3.length}, budget ${CHAR_BUDGET})`)
+assert(fence3.length > 0, 'fence not empty despite truncation')
+// MAX_FTS_SNIPPETS cap
+const lineCount = fence3.split('\n').filter(l => l.startsWith('(')).length
+assert(lineCount <= MAX_FTS_SNIPPETS, `at most ${MAX_FTS_SNIPPETS} snippet lines (got ${lineCount})`)
+
+// ── Test 10: 真實資料的 fence ──
+section('Test 10: Real data fence')
+const realResults = await searchSessionHistory('llama', projectRoot, 3)
+const realFence = buildMemoryContextFence(realResults)
+if (realResults.length > 0) {
+  assert(realFence.length > 0, 'real data produces non-empty fence')
+  assert(realFence.length <= CHAR_BUDGET, `real fence within budget (${realFence.length} chars)`)
+  console.log(`  Real fence:\n${realFence.slice(0, 300)}...`)
+} else {
+  console.log('  (skipped — no FTS results)')
+}
 
 // ── Summary ──
 console.log(`\n${'═'.repeat(50)}`)
