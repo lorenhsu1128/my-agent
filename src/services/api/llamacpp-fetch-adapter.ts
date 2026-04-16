@@ -644,24 +644,30 @@ async function* translateOpenAIStreamToAnthropic(
 }
 
 /**
- * 把 async generator 包成 ReadableStream<Uint8Array>，供 Response 使用。
+ * 把 async generator 的所有 SSE 事件收集成一個完整 string，然後建
+ * ReadableStream 一次送出。
+ *
+ * ⚠️ 代價：使用者看不到漸進式 thinking/text 輸出（全部等 llama-server
+ * 跑完才一次出現）。但這是目前唯一能確保 Anthropic SDK 的 SSE parser
+ * 在 Bun Windows 上不丟 input_json_delta 事件的做法。
+ *
+ * 未來 Bun 修好 ReadableStream async iteration / SDK 修好 SSE parser
+ * 後可改回逐 chunk push。
  */
-function sseGeneratorToStream(
+async function sseGeneratorToStream(
   gen: AsyncGenerator<string>,
-): ReadableStream<Uint8Array> {
+): Promise<ReadableStream<Uint8Array>> {
   const encoder = new TextEncoder()
+  const parts: string[] = []
+  for await (const value of gen) {
+    parts.push(value)
+  }
+  const fullBody = encoder.encode(parts.join(''))
   // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
   return new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      const { value, done } = await gen.next()
-      if (done) {
-        controller.close()
-        return
-      }
-      controller.enqueue(encoder.encode(value))
-    },
-    async cancel() {
-      await gen.return(undefined)
+    start(controller) {
+      controller.enqueue(fullBody)
+      controller.close()
     },
   })
 }
@@ -788,7 +794,7 @@ export function createLlamaCppFetch(
         reportedModel,
         mkMsgId(),
       )
-      return new Response(sseGeneratorToStream(sseGen), {
+      return new Response(await sseGeneratorToStream(sseGen), {
         status: 200,
         headers: {
           'Content-Type': 'text/event-stream',
