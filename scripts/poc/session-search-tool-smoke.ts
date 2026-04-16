@@ -116,13 +116,13 @@ try {
     'raw matches 仍存在（fallback）',
     r6.data.sessions.length > 0 && r6.data.sessions[0]!.matches.length > 0,
   )
-  // 驗證 output map：失敗 fallback 時走 M2-05 的 raw matches 格式，不走 summary 行
+  // 驗證 output map：失敗 fallback 時走 raw matches 格式（2-space indent）
   const block6 = SessionSearchTool.mapToolResultToToolResultBlockParam(
     r6.data,
     'test-6-id',
   )
   const txt6 = typeof block6.content === 'string' ? block6.content : ''
-  check('失敗 fallback 輸出仍含 match 列「- [role」', txt6.includes('- ['))
+  check('失敗 fallback 輸出仍含 match 行（indent）', txt6.includes('\n  '))
 
   console.log()
   console.log('Test 7: FTS5 reserved 字元（含 "."）不炸')
@@ -148,23 +148,24 @@ try {
   const block = SessionSearchTool.mapToolResultToToolResultBlockParam(r8.data, 'test-id')
   check('空結果 tool_result 是 string', typeof block.content === 'string')
   check(
-    '空結果訊息含「未找到」',
-    (typeof block.content === 'string' && block.content.includes('未找到')) === true,
+    '空結果訊息含 "No past conversations"',
+    (typeof block.content === 'string' && block.content.includes('No past conversations')) === true,
   )
 
   console.log()
-  console.log('Test 9: 有結果時輸出 markdown 格式')
+  console.log('Test 9: 有結果時輸出 Grep-style 扁平格式（無 markdown ##）')
   const block2 = SessionSearchTool.mapToolResultToToolResultBlockParam(
     r1.data,
     'test-id-2',
   )
   const txt = typeof block2.content === 'string' ? block2.content : ''
-  check('含 「找到」開頭', txt.startsWith('找到'))
-  check('含 「## [」session header', txt.includes('## ['))
+  check('含 "Found" 開頭', txt.startsWith('Found'))
+  check('不含 markdown "## ["', !txt.includes('## ['))
+  check('含 session header "[xxx] date "title"', /\[[a-f0-9]{8}\] \d{4}-/.test(txt))
+  check('match 行用 2-space indent', txt.includes('\n  '))
 
   console.log()
-  console.log('Test 10: summary 存在時輸出格式改走 summary 單行（mock）')
-  // 直接 mock summary field 驗證 mapToolResultToToolResultBlockParam 優先顯示 summary
+  console.log('Test 10: summary 存在時輸出 "Summary:" 行（mock）')
   const mockedOutput = {
     ...r1.data,
     sessions: r1.data.sessions.map((s, i) => ({
@@ -177,13 +178,12 @@ try {
     'test-id-3',
   )
   const txt3 = typeof block3.content === 'string' ? block3.content : ''
-  check('含 summary 文字', txt3.includes('天氣查詢 API 的選擇'))
-  // 有 summary 的 session 下方不該有 raw match 列「- [role] ...」（改由 summary 取代）
-  // 驗證方式：抓到第一個 ## 後到下一個 ## 間的區塊不含 "- ["
-  const firstBlock = txt3.split('\n\n## ')[0] ?? ''
+  check('含 Summary: 文字', txt3.includes('Summary: 這個 session'))
+  // 有 summary 的 session 下方不該有 raw match（改由 Summary: 取代）
+  const firstSessionBlock = txt3.split('\n\n[')[0] ?? ''
   check(
-    '有 summary 的 session 塊不再列 raw match',
-    !firstBlock.split('\n').some(line => line.startsWith('- [')),
+    '有 summary 的 session 不列 raw match indent 行',
+    !firstSessionBlock.split('\n').some(line => /^  (user|assistant)/.test(line)),
   )
 
   console.log()

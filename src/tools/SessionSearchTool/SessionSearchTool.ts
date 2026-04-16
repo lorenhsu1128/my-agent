@@ -108,7 +108,7 @@ export type Output = z.infer<OutputSchema>
 // ---------------------------------------------------------------------------
 
 const MIN_FTS_QUERY_LEN = 3
-const DEFAULT_LIMIT = 5
+const DEFAULT_LIMIT = 3
 const SNIPPET_MAX_CHARS = 400
 
 /**
@@ -595,49 +595,47 @@ export const SessionSearchTool = buildTool({
     return { data: output }
   },
   mapToolResultToToolResultBlockParam(output, toolUseID) {
+    // 輸出格式對齊 Grep/Glob 風格：英文前綴、扁平文本、無 markdown 標題、精簡。
+    // 9B 模型對 markdown ##/- 嵌套結構理解差，純文本 + 縮排更易消化。
     if (output.sessions.length === 0) {
-      const msg = output.usedFallback
-        ? `未找到任何 session 標題含 "${output.query}"。可試試用更完整的詞彙（FTS5 trigram 需 ≥3 字元）。`
-        : `未找到符合 "${output.query}" 的歷史對話。`
       return {
         tool_use_id: toolUseID,
         type: 'tool_result',
-        content: msg,
+        content: output.usedFallback
+          ? `No session titles match "${output.query}". Try a longer keyword (3+ chars for full-text search).`
+          : `No past conversations match "${output.query}".`,
       }
     }
 
     const lines: string[] = []
-    const header = output.usedFallback
-      ? `查詢 "${output.query}" <3 字元，已 fallback 為 session 標題 LIKE 搜尋。`
-      : `找到 ${output.returnedMatches}/${output.totalMatches} 筆匹配（跨 ${output.sessions.length} 個 session）。`
-    lines.push(header)
-    if (output.note) lines.push(output.note)
-    lines.push('')
+    lines.push(
+      `Found ${output.returnedMatches} matches in ${output.sessions.length} past session(s) for "${output.query}"${output.usedFallback ? ' (title search fallback)' : ''}:`,
+    )
+    if (output.note) lines.push(`Note: ${output.note}`)
 
     for (const s of output.sessions) {
       const dateStr = formatDate(s.started_at)
-      const modelStr = s.model ? `, model=${s.model}` : ''
+      // Session header：扁平單行，像 Grep 的 "file:line" 格式
+      lines.push(``)
       lines.push(
-        `## [${s.session_id.slice(0, 8)}] ${s.title}  (${dateStr}${modelStr}, ${s.message_count} 則訊息)`,
+        `[${s.session_id.slice(0, 8)}] ${dateStr} "${s.title}" (${s.message_count} msgs)`,
       )
       if (s.summary) {
-        // 有 summary：顯示摘要，不列 raw matches（M2-06）
-        lines.push(s.summary)
+        lines.push(`  Summary: ${s.summary}`)
       } else {
-        // 沒 summary（summarize=false 或摘要失敗）：沿用 M2-05 raw matches
         for (const m of s.matches) {
           const toolStr = m.tool_name ? ` tool=${m.tool_name}` : ''
-          const singleLine = m.snippet.replace(/\n+/g, ' ↵ ')
-          lines.push(`- [${m.role}${toolStr}] ${singleLine}`)
+          // snippet 截短到 200 chars、單行化，像 Grep 的 content 輸出
+          const short = m.snippet.replace(/\n+/g, ' ').slice(0, 200)
+          lines.push(`  ${m.role}${toolStr}: ${short}`)
         }
       }
-      lines.push('')
     }
 
     return {
       tool_use_id: toolUseID,
       type: 'tool_result',
-      content: lines.join('\n').trimEnd(),
+      content: lines.join('\n'),
     }
   },
 } satisfies ToolDef<InputSchema, Output>)
