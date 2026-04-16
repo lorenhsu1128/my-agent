@@ -60,8 +60,8 @@ export type SettingsSyncUploadResult = {
  */
 export const SYNC_KEYS = {
   USER_SETTINGS: '~/.my-agent/settings.json',
-  USER_MEMORY: '~/.my-agent/CLAUDE.md',
+  USER_MEMORY: '~/.my-agent/MY-AGENT.md',
   projectSettings: (projectId: string) =>
     `projects/${projectId}/.my-agent/settings.local.json`,
-  projectMemory: (projectId: string) => `projects/${projectId}/CLAUDE.local.md`,
+  projectMemory: (projectId: string) => `projects/${projectId}/MY-AGENT.local.md`,
 } as const
