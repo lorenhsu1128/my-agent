@@ -110,6 +110,21 @@
 
 ---
 
+## 工具定義相關
+
+### `checkPermissions()` 的 `updatedInput` 會覆蓋 tool input — 不需要就不要覆寫
+- **發生什麼事**：SessionSearchTool 在 TUI 執行時 `call()` 收到的 `input.query` 為 `undefined`，工具完全無法運作。前後修了 7+ 次 commit（FTS query、LIKE fallback、UTF-8、輸出格式…），全部治標不治本。
+- **根本原因**：自訂 `checkPermissions()` 回傳 `{ behavior: 'allow', updatedInput: {} as never }`。`toolExecution.ts:1130` 檢查 `updatedInput !== undefined`，`{}` 不是 `undefined`，所以把原本的 `processedInput`（含 `query`）**整個覆寫成空物件**。
+- **正確做法**：
+  1. 如果工具不需要自訂權限檢查 → **不要覆寫 `checkPermissions`**。`TOOL_DEFAULTS` 的預設實作會 `{ behavior: 'allow', updatedInput: input }` 原封傳回
+  2. 如果必須覆寫 → 確保 `updatedInput` 是**原始 input 或其修改版**，不是空物件
+  3. 如果想回 allow 不改 input → 用 `{ behavior: 'allow', updatedInput: undefined }` 或完全不設 `updatedInput`（`toolExecution.ts` 會跳過 `undefined`）
+- **教訓**：tool input 在 `call()` 拿到之前經過一長串管線（Zod parse → backfill → hook → checkPermissions → …），任何一步回傳 `updatedInput` 都可能覆蓋 input。新工具不需要自訂權限時，不要多寫一個空的 `checkPermissions`。
+- **相關檔案**：`src/services/tools/toolExecution.ts`（L1130-1131 覆寫邏輯）、`src/Tool.ts`（L757-769 `TOOL_DEFAULTS`）
+- **日期**：2026-04-16
+
+---
+
 ## 測試相關
 
 （尚無記錄）

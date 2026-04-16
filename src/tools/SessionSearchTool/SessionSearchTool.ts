@@ -23,7 +23,6 @@ import {
   openSessionIndex,
 } from '../../services/sessionIndex/index.js'
 import { lazySchema } from '../../utils/lazySchema.js'
-import type { PermissionDecision } from '../../utils/permissions/PermissionResult.js'
 import { DESCRIPTION, SESSION_SEARCH_TOOL_NAME } from './prompt.js'
 import {
   getToolUseSummary,
@@ -108,31 +107,21 @@ export type Output = z.infer<OutputSchema>
 // ---------------------------------------------------------------------------
 
 const MIN_FTS_QUERY_LEN = 3
-const DEFAULT_LIMIT = 3
+const DEFAULT_LIMIT = 5
 const SNIPPET_MAX_CHARS = 400
 
 /**
  * FTS5 MATCH 的 reserved 字元（. " * ^ 等）在一般 tokens 裡會讓 parser 抱怨。
- * 把 query 按空白切，每段用 phrase literal `"..."` 包起來，AND join。
- * Phrase 內的 `"` 用 `""` escape。
- *
- * **重要**：trigram tokenizer 需要每段 token ≥3 chars 才能產生索引查詢。
- * <3 chars 的 token 直接過濾掉（例如「天氣 預報」→ 兩個 2-char token 都
- * 被丟；「天氣預報 weather」→ 只保留 "weather"）。
- * 若過濾後**無 token 剩餘**回傳空字串 — 呼叫端應檢查並改走 LIKE fallback。
- *
- * Token 間用 **OR** 連接（不是預設的 AND）：使用者與模型常混合中英文
- * keyword（「天氣預報 weather forecast」），AND 要求同一筆 message 同時
- * 含所有 token — 中英文內容很少出現在同一行；OR + BM25 ranking 更實用
- * （命中多 token 的行自動排前面）。
+ * 把 query 按空白切，每段用 phrase literal `"..."` 包起來，AND join — 對大多數
+ * 情境已足夠。Phrase 內的 " 用 "" escape。
  */
 function sanitizeFtsQuery(raw: string): string {
-  const tokens = raw
+  return raw
     .trim()
     .split(/\s+/)
-    .filter(t => t.length >= MIN_FTS_QUERY_LEN)
-  if (tokens.length === 0) return ''
-  return tokens.map(t => `"${t.replace(/"/g, '""')}"`).join(' OR ')
+    .filter(t => t.length > 0)
+    .map(t => `"${t.replace(/"/g, '""')}"`)
+    .join(' ')
 }
 
 interface RawMatch {
@@ -384,10 +373,6 @@ export const SessionSearchTool = buildTool({
     }
     return { result: true }
   },
-  async checkPermissions(): Promise<PermissionDecision> {
-    // 純讀本地索引；不涉及檔案系統權限或網路
-    return { behavior: 'allow', updatedInput: {} as never }
-  },
   async prompt() {
     return DESCRIPTION
   },
@@ -401,19 +386,6 @@ export const SessionSearchTool = buildTool({
       .join('\n')
   },
   async call(input, context) {
-    // 防呆：input.query 不是 string 時 graceful 退
-    if (typeof input?.query !== 'string') {
-      return {
-        data: {
-          query: String(input?.query ?? ''),
-          usedFallback: false,
-          totalMatches: 0,
-          returnedMatches: 0,
-          sessions: [],
-          note: `tool input 格式異常：query 應為 string，收到 ${typeof input?.query}。`,
-        } satisfies Output,
-      }
-    }
     const query = input.query.trim()
     const limit = input.limit ?? DEFAULT_LIMIT
     const summarize = input.summarize ?? false
@@ -433,31 +405,21 @@ export const SessionSearchTool = buildTool({
     let rawMatches: RawMatch[] = []
     let totalMatches = 0
 
-    // 先嘗試 sanitize — 若所有 token <3 chars（trigram 限制），sanitize 回空，走 LIKE
-    const ftsQuery = query.length >= MIN_FTS_QUERY_LEN
-      ? sanitizeFtsQuery(query)
-      : ''
-
-    if (!ftsQuery) {
-      // fallback：掃 sessions.first_user_message 的 LIKE。
-      // 把 query 按空白切成多個詞，每個詞做 LIKE '%詞%'，用 OR 合併。
-      // 模型常送 "天氣 預報"（空格切開），直接用整串搜會搜不到；
-      // 拆成 "天氣" OR "預報" 就能命中 title 含任一詞的 session。
+    if (query.length < MIN_FTS_QUERY_LEN) {
+      // fallback：掃 sessions.first_user_message 的 LIKE
       usedFallback = true
-      const words = query.split(/\s+/).filter(w => w.length > 0)
-      if (words.length === 0) words.push(query) // 防呆
-      const whereClauses = words.map(() => 'first_user_message LIKE ?').join(' OR ')
-      const patterns = words.map(w => `%${w}%`)
-      const sql = `SELECT session_id, first_user_message FROM sessions
-           WHERE (${whereClauses})
-           ORDER BY started_at DESC
-           LIMIT ${limit}`
+      const pattern = `%${query.replace(/[%_\\]/g, c => '\\' + c)}%`
       const rows = db
         .query<
           { session_id: string; first_user_message: string | null },
-          string[]
-        >(sql)
-        .all(...patterns)
+          [string]
+        >(
+          `SELECT session_id, first_user_message FROM sessions
+           WHERE first_user_message LIKE ? ESCAPE '\\'
+           ORDER BY started_at DESC
+           LIMIT ?`,
+        )
+        .all(pattern, limit as unknown as string)
       totalMatches = rows.length
       rawMatches = rows.map(r => ({
         session_id: r.session_id,
@@ -467,7 +429,8 @@ export const SessionSearchTool = buildTool({
         content: r.first_user_message ?? '',
       }))
     } else {
-      // FTS 路徑（ftsQuery 非空，至少一個 token ≥3 chars）
+      // FTS 路徑
+      const ftsQuery = sanitizeFtsQuery(query)
       try {
         // 先算總數（可能 > limit）
         const countRow = db
@@ -595,47 +558,49 @@ export const SessionSearchTool = buildTool({
     return { data: output }
   },
   mapToolResultToToolResultBlockParam(output, toolUseID) {
-    // 輸出格式對齊 Grep/Glob 風格：英文前綴、扁平文本、無 markdown 標題、精簡。
-    // 9B 模型對 markdown ##/- 嵌套結構理解差，純文本 + 縮排更易消化。
     if (output.sessions.length === 0) {
+      const msg = output.usedFallback
+        ? `未找到任何 session 標題含 "${output.query}"。可試試用更完整的詞彙（FTS5 trigram 需 ≥3 字元）。`
+        : `未找到符合 "${output.query}" 的歷史對話。`
       return {
         tool_use_id: toolUseID,
         type: 'tool_result',
-        content: output.usedFallback
-          ? `No session titles match "${output.query}". Try a longer keyword (3+ chars for full-text search).`
-          : `No past conversations match "${output.query}".`,
+        content: msg,
       }
     }
 
     const lines: string[] = []
-    lines.push(
-      `Found ${output.returnedMatches} matches in ${output.sessions.length} past session(s) for "${output.query}"${output.usedFallback ? ' (title search fallback)' : ''}:`,
-    )
-    if (output.note) lines.push(`Note: ${output.note}`)
+    const header = output.usedFallback
+      ? `查詢 "${output.query}" <3 字元，已 fallback 為 session 標題 LIKE 搜尋。`
+      : `找到 ${output.returnedMatches}/${output.totalMatches} 筆匹配（跨 ${output.sessions.length} 個 session）。`
+    lines.push(header)
+    if (output.note) lines.push(output.note)
+    lines.push('')
 
     for (const s of output.sessions) {
       const dateStr = formatDate(s.started_at)
-      // Session header：扁平單行，像 Grep 的 "file:line" 格式
-      lines.push(``)
+      const modelStr = s.model ? `, model=${s.model}` : ''
       lines.push(
-        `[${s.session_id.slice(0, 8)}] ${dateStr} "${s.title}" (${s.message_count} msgs)`,
+        `## [${s.session_id.slice(0, 8)}] ${s.title}  (${dateStr}${modelStr}, ${s.message_count} 則訊息)`,
       )
       if (s.summary) {
-        lines.push(`  Summary: ${s.summary}`)
+        // 有 summary：顯示摘要，不列 raw matches（M2-06）
+        lines.push(s.summary)
       } else {
+        // 沒 summary（summarize=false 或摘要失敗）：沿用 M2-05 raw matches
         for (const m of s.matches) {
           const toolStr = m.tool_name ? ` tool=${m.tool_name}` : ''
-          // snippet 截短到 200 chars、單行化，像 Grep 的 content 輸出
-          const short = m.snippet.replace(/\n+/g, ' ').slice(0, 200)
-          lines.push(`  ${m.role}${toolStr}: ${short}`)
+          const singleLine = m.snippet.replace(/\n+/g, ' ↵ ')
+          lines.push(`- [${m.role}${toolStr}] ${singleLine}`)
         }
       }
+      lines.push('')
     }
 
     return {
       tool_use_id: toolUseID,
       type: 'tool_result',
-      content: lines.join('\n'),
+      content: lines.join('\n').trimEnd(),
     }
   },
 } satisfies ToolDef<InputSchema, Output>)
