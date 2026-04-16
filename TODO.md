@@ -28,7 +28,7 @@
 - [x] M2-04 `bun run typecheck` 綠 + 手動驗證：產幾筆對話、確認 FTS 表有資料、能用 SQL 查到 — typecheck baseline 綠；smoke 66/66 綠；TUI 跑 2 輪天氣查詢後 `scripts/poc/query-session-index.ts` 查到 4 sessions / 79 messages_fts / tool_name 正確抽取（Bash/Read/Skill/Glob）。過程中發現 `indexEntry` 用 `Date.now()` 讓 `started_at` 不準 → 修正為優先 `entry.timestamp`、`ended_at` 改 MAX（commit `0384537`）；砍 db 重建後 started_at 全部對齊真實時間
 
 ### 階段二：Session 搜尋工具
-- [ ] M2-05 新增 `src/tools/SessionSearchTool/SessionSearchTool.ts`：輸入 `query` / `limit` / `summarize`；預設回 top-K 片段 + session 元資料（日期、模型、首條 user message 當標題）
+- [x] M2-05 新增 `src/tools/SessionSearchTool/SessionSearchTool.ts`：輸入 `query` / `limit` / `summarize`；預設回 top-K 片段 + session 元資料（日期、模型、首條 user message 當標題）— 3 檔案（SessionSearchTool.ts / prompt.ts / UI.tsx）。FTS path + <3 char 自動 fallback 到 `sessions.first_user_message` LIKE。FTS5 reserved char（`.` 等）用 phrase-literal sanitize 處理。`summarize:true` 接受但帶 `summaryPending` flag（M2-06 做實際摘要）。`await ensureReconciled(projectRoot)` 在搜尋前保證索引新鮮。Output map 成 markdown（session header + match 列表）。Smoke `session-search-tool-smoke.ts` 24/24 綠，對真實 index 跑英文 / 中英混合 / 短 query fallback / summarize flag / reserved char / 空結果 / markdown 格式
 - [ ] M2-06 `summarize: true` 分支：把片段（先截到 ~8K token）餵回當前 session 主模型 = **llamacpp** 做摘要；複用既有 API client，不新開 provider。超時與 context overflow 需 graceful fallback 回純片段
 - [ ] M2-07 註冊到 `src/tools.ts`、加 prompt 使用說明（模型何時該呼叫，給 qwen3.5-9b-neo 看得懂的簡潔描述）
 - [ ] M2-08 端到端測試：`./cli --model qwen3.5-9b-neo` 跑兩個 session，第二 session 問「上次我們怎麼處理 X」，驗證能找回第一 session 的答案
@@ -195,3 +195,9 @@
 - 2026-04-16 08:48: Session 結束 | 進度：30/56 任務 | 302ebf4 docs(skills): 新增 session-fts-indexing skill
 
 - 2026-04-16 08:59: Session 結束 | 進度：30/56 任務 | 0384537 fix(m2): indexEntry 優先用 entry.timestamp，ended_at 改 MAX
+
+- 2026-04-16 09:06: Session 結束 | 進度：31/56 任務 | 730433f docs(m2): 勾選 M2-04，階段一（索引基礎建設）收尾
+
+- 2026-04-16 09:10: Session 結束 | 進度：32/56 任務 | 730433f docs(m2): 勾選 M2-04，階段一（索引基礎建設）收尾
+
+- 2026-04-16 09:11: Session 結束 | 進度：32/56 任務 | 730433f docs(m2): 勾選 M2-04，階段一（索引基礎建設）收尾
