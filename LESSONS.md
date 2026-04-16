@@ -62,13 +62,14 @@
 
 ## 串流處理相關
 
-### Bun 1.3.6 Windows 的 TextDecoder({stream: true}) 切碎 UTF-8 multi-byte
-- **發生什麼事**：TUI 跑 SessionSearch tool 時，qwen3.5-9b-neo 的 tool_call arguments 含中文「天氣預報」，經 llamacpp adapter 串流翻譯後 `input={}` — 空物件。debug log 顯示 adapter 收到的 `tc.function.arguments` 已是亂碼「憭拇除??」。
-- **根本原因**：`iterOpenAISSELines` 用 `new TextDecoder()` + `decoder.decode(value, {stream: true})` 解碼 SSE upstream bytes。Bun 1.3.6 Windows 的 TextDecoder streaming mode 在 chunk boundary 切到 3-byte CJK 字元中間時**不正確地 emit replacement characters**，而非按 spec 緩衝 incomplete bytes。
-- **正確做法**：改成**累積 raw bytes（`Buffer.concat`）**，在 `\n` byte (0x0a) 處切行，每完整行才 `lineBytes.toString('utf-8')`。SSE 的 `\n` 是 ASCII single-byte，永遠不會切到 multi-byte 字元中間，因此每行的 UTF-8 保證完整。
-- **驗證**：修後 TUI 的 SessionSearch 成功搜到「天氣預報」相關 session（19 筆 FTS match）。
-- **影響範圍**：**所有走 llamacpp adapter 串流翻譯的 tool call arguments，只要含非 ASCII 字元就會踩到。** 純英文 tool call（如 M1 階段三的 get_weather 測試）不受影響。
-- **相關檔案**：`src/services/api/llamacpp-fetch-adapter.ts:367` (`iterOpenAISSELines`)
+### Anthropic SDK 內部 SSE parser 的 decodeUTF8 不帶 {stream: true} 切碎中文
+- **發生什麼事**：TUI 跑 SessionSearch tool 時，qwen3.5-9b-neo 的 tool_call arguments 含中文「天氣預報」，adapter 串流翻譯 → SDK SSE parser → claude.ts 的 `input_json_delta` 累積 → 最終 `input={}` 空物件。debug log 在 **claude.ts 層**確認 `partial_json` 已是亂碼「憭拇除??」。
+- **根本原因**：Anthropic SDK `src/internal/utils/bytes.ts:decodeUTF8()` 用 `decoder.decode(bytes)` **不帶 `{stream: true}`**。SDK 的 `LineDecoder` / `iterSSEChunks` 在 byte 層切割後每行用 `decodeUTF8()` 解碼，但 ReadableStream 的 chunk 邊界可能切到 multi-byte UTF-8（中文 3-byte）中間 → 解出 replacement char → JSON.parse 失敗 → `normalizeContentFromAPI` fallback 到 `{}`。
+- **為什麼 standalone 測試通過但 TUI 失敗**：standalone 測試直接用 `.stream()` 走 `BetaMessageStream` 路徑（SDK 自己累積 input）；TUI 的 `claude.ts` 用 `.create({stream: true})` 走 raw stream 路徑 + 自訂累積。兩條路徑經過不同的 SDK 內部處理。
+- **嘗試過但沒用的修法**：(1) 改 `iterOpenAISSELines` 用 `Buffer.concat` 取代 `TextDecoder({stream: true})`——實測 TextDecoder streaming 在 Bun 上其實是正確的，真正亂碼發生在更下游的 SDK；(2) 各種 FTS 查詢修正（OR/LIKE/ESCAPE）——這些有各自的 bug 但跟 `input={}` 無關。
+- **正確做法**：**在 adapter 層累積完整 tool_call arguments 字串**，不逐 chunk yield `input_json_delta`。改成在 `content_block_stop` 之前一次 yield **單一** `input_json_delta`（含完整 JSON）。這樣 SDK 的 SSE parser 只收到一筆 delta，不需要跨 chunk 拼湊 UTF-8 → 問題從根消除。
+- **具體改動**：`llamacpp-fetch-adapter.ts` 新增 `toolArgBuffers: Map<openaiIdx, string>`，streaming 階段 arguments 累積到 buffer，收尾階段「先 yield 完整 input_json_delta → 再 yield content_block_stop」。
+- **影響範圍**：所有走 llamacpp adapter 的 tool call arguments 含非 ASCII 字元的情境。M1 純英文 tool call 不受影響但也無回歸。
 - **日期**：2026-04-16
 
 ---

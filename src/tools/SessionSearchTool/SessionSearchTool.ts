@@ -401,8 +401,7 @@ export const SessionSearchTool = buildTool({
       .join('\n')
   },
   async call(input, context) {
-    // 防呆：input.query 不是 string 時 graceful 退（Bun 1.3.6 Windows 的
-    // TextDecoder streaming bug 已修，但保留防呆以防其他 adapter 問題）
+    // 防呆：input.query 不是 string 時 graceful 退
     if (typeof input?.query !== 'string') {
       return {
         data: {

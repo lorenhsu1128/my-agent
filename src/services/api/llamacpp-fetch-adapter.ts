@@ -429,6 +429,10 @@ async function* translateOpenAIStreamToAnthropic(
   let textType: 'text' | 'thinking' | null = null
   // OpenAI tool_call.index → Anthropic content block index（開啟中的工具塊）
   const openToolBlocks = new Map<number, number>()
+  // 每個 tool block 的 arguments 累積 buffer（openaiIdx → 累積字串）。
+  // 在 content_block_stop 時一次 yield 完整 JSON 作為單一 input_json_delta，
+  // 避免 Anthropic SDK 的 SSE parser 切碎跨 chunk 的 multi-byte UTF-8。
+  const toolArgBuffers = new Map<number, string>()
   const accUsage = { input_tokens: 0, output_tokens: 0 }
   let finalFinishReason: string | null = null
 
@@ -539,6 +543,7 @@ async function* translateOpenAIStreamToAnthropic(
           if (anthropicIdx === undefined) {
             anthropicIdx = nextBlockIndex++
             openToolBlocks.set(openaiIdx, anthropicIdx)
+            toolArgBuffers.set(openaiIdx, '')
             yield formatSSE('content_block_start', {
               type: 'content_block_start',
               index: anthropicIdx,
@@ -551,14 +556,17 @@ async function* translateOpenAIStreamToAnthropic(
             })
           }
 
-          // 累積 arguments chunk
+          // 累積 arguments chunk 到 buffer（不即時 yield input_json_delta）。
+          // 原因：Anthropic SDK 的 SSE parser 內部用 decodeUTF8() 不帶
+          // {stream: true}，跨 chunk 的 multi-byte UTF-8（如中文）會被切碎成亂碼。
+          // 改成：在 adapter 層累積完整 arguments JSON 字串，在 content_block_stop
+          // 時一次 yield 單一 input_json_delta — 單一 chunk 不會被切割。
           const argDelta = tc.function?.arguments
           if (typeof argDelta === 'string' && argDelta.length > 0) {
-            yield formatSSE('content_block_delta', {
-              type: 'content_block_delta',
-              index: anthropicIdx,
-              delta: { type: 'input_json_delta', partial_json: argDelta },
-            })
+            toolArgBuffers.set(
+              openaiIdx,
+              (toolArgBuffers.get(openaiIdx) ?? '') + argDelta,
+            )
           }
         }
       }
@@ -585,11 +593,21 @@ async function* translateOpenAIStreamToAnthropic(
   const lastTextStop = closeTextBlock()
   if (lastTextStop) yield lastTextStop
 
-  // 關掉所有開啟中的 tool_use block
-  for (const anthropicIdx of openToolBlocks.values()) {
+  // 關掉所有開啟中的 tool_use block。
+  // 先 yield 累積好的完整 arguments（一個 input_json_delta），再 yield stop。
+  for (const [openaiIdx, anthropicIdx] of openToolBlocks.entries()) {
+    const fullArgs = toolArgBuffers.get(openaiIdx) ?? ''
+    if (fullArgs.length > 0) {
+      yield formatSSE('content_block_delta', {
+        type: 'content_block_delta',
+        index: anthropicIdx,
+        delta: { type: 'input_json_delta', partial_json: fullArgs },
+      })
+    }
     yield stopBlock(anthropicIdx)
   }
   openToolBlocks.clear()
+  toolArgBuffers.clear()
 
   yield formatSSE('message_delta', {
     type: 'message_delta',
