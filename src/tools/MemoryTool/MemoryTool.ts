@@ -250,6 +250,49 @@ async function acquireMemdirLock(
   }
 }
 
+// ---------------------------------------------------------------------------
+// M2-17：配額警告
+// ---------------------------------------------------------------------------
+
+const TOKEN_QUOTA_THRESHOLD = 10_000
+const CHARS_PER_TOKEN = 3 // 中英混合保守估計
+
+/**
+ * 估算 memdir 目錄下所有記憶檔案的總 token 量。
+ * 用 char count / 3 做粗略估算（不含 MEMORY.md 索引本身）。
+ * 失敗時回傳 0（不觸發警告）。
+ */
+async function estimateMemdirTokens(memDir: string): Promise<number> {
+  try {
+    const { readdir, stat: statAsync } = await import('fs/promises')
+    const entries = await readdir(memDir)
+    let totalChars = 0
+    for (const entry of entries) {
+      if (!entry.endsWith('.md') || entry === ENTRYPOINT_NAME) continue
+      try {
+        const st = await statAsync(join(memDir, entry))
+        totalChars += st.size
+      } catch {
+        // 單檔 stat 失敗跳過
+      }
+    }
+    return Math.ceil(totalChars / CHARS_PER_TOKEN)
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * 若 memdir token 估算超過閾值，回傳警告字串；否則 null。
+ */
+async function checkQuotaWarning(memDir: string): Promise<string | null> {
+  const tokens = await estimateMemdirTokens(memDir)
+  if (tokens >= TOKEN_QUOTA_THRESHOLD) {
+    return `⚠ memdir 總量約 ${tokens.toLocaleString()} tokens（閾值 ${TOKEN_QUOTA_THRESHOLD.toLocaleString()}），建議整理或刪除不再需要的記憶檔案。`
+  }
+  return null
+}
+
 /**
  * 更新 MEMORY.md 索引。
  * - add：追加一行（若 filename 已存在則跳過）
@@ -544,13 +587,17 @@ export const MemoryTool = buildTool({
         input.description!,
       )
 
+      // M2-17：配額警告
+      const quotaWarn = await checkQuotaWarning(memDir)
+      const msg = `已建立記憶檔案 ${filename}（type=${input.type}）`
+
       return {
         data: {
           success: true,
           action,
           filename,
           filePath,
-          message: `已建立記憶檔案 ${filename}（type=${input.type}）`,
+          message: quotaWarn ? `${msg}\n${quotaWarn}` : msg,
           indexUpdated,
         } satisfies Output,
       }
@@ -637,13 +684,17 @@ export const MemoryTool = buildTool({
         mergedDescription,
       )
 
+      // M2-17：配額警告
+      const quotaWarn = await checkQuotaWarning(memDir)
+      const msg = `已更新記憶檔案 ${filename}`
+
       return {
         data: {
           success: true,
           action,
           filename,
           filePath,
-          message: `已更新記憶檔案 ${filename}`,
+          message: quotaWarn ? `${msg}\n${quotaWarn}` : msg,
           indexUpdated,
         } satisfies Output,
       }
