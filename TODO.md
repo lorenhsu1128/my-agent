@@ -50,7 +50,7 @@
 
 ### 階段五：收尾
 - [x] M2-19 整合測試集 `tests/integration/memory/`：recall 情境、prefetch 注入、MemoryTool injection 拒絕、索引損毀重建 — 3 個測試檔（recall-and-prefetch 14、memory-tool-injection 52、index-rebuild 9）共 75 case 全綠 + run-all.sh runner
-- [ ] M2-20 `bun run typecheck` + `bun test` 全綠
+- [x] M2-20 `bun run typecheck` + `bun test` 全綠 — typecheck 基線不變（僅 TS5101）；全 smoke + integration tests 122 case 全綠（memory-tool-smoke 47 + injection 52 + recall-prefetch 14 + index-rebuild 9）
 - [ ] M2-21 更新 `LESSONS.md`（本次踩到的坑）、`skills/` 下視情況建立 memory-system skill
 - [ ] M2-22 人工跑 smoke：`bun run dev --model qwen3.5-9b-neo` 開兩個 session，手動驗證 recall 行為（llamacpp 路徑）
 
