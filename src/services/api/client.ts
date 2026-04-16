@@ -23,6 +23,7 @@ import {
   getAPIProvider,
   getLlamaCppConfig,
   isFirstPartyAnthropicBaseUrl,
+  queryLlamaCppContextSize,
 } from 'src/utils/model/providers.js'
 import { getProxyFetchOptions } from 'src/utils/proxy.js'
 import {
@@ -129,6 +130,9 @@ export async function getAnthropicClient({
       // biome-ignore lint/suspicious/noConsole:: debug only
       console.error('[LLAMA_DEBUG] llamacpp branch hit, baseUrl=', llamaCppConfig.baseUrl)
     }
+    // 查詢 llama-server 的 /slots 端點取得實際 context size，快取供
+    // getContextWindowForModel() 同步讀取 → autocompact 閾值正確
+    await queryLlamaCppContextSize(llamaCppConfig.baseUrl)
     const llamaCppFetch = createLlamaCppFetch(llamaCppConfig)
     return new Anthropic({
       apiKey: 'llamacpp-placeholder', // SDK 要求非空；adapter 無 auth

@@ -4,6 +4,7 @@ import { getGlobalConfig } from './config.js'
 import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
 import { getModelCapability } from './model/modelCapabilities.js'
+import { getAPIProvider, getLlamaCppContextSize, isLlamaCppModel } from './model/providers.js'
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
@@ -94,6 +95,17 @@ export function getContextWindowForModel(
       return antModel.contextWindow
     }
   }
+  // llamacpp provider：用 /slots 查到的實際 n_ctx，fallback 到 LLAMACPP_CTX_SIZE env
+  if (getAPIProvider() === 'llamacpp' || isLlamaCppModel(model)) {
+    const cached = getLlamaCppContextSize()
+    if (cached) return cached
+    const envCtx = process.env.LLAMACPP_CTX_SIZE
+    if (envCtx) {
+      const parsed = parseInt(envCtx, 10)
+      if (!isNaN(parsed) && parsed > 0) return parsed
+    }
+  }
+
   return MODEL_CONTEXT_WINDOW_DEFAULT
 }
 

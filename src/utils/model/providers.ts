@@ -72,6 +72,48 @@ export function getLlamaCppConfig(
   }
 }
 
+// ── llamacpp context size 偵測 ─────────────────────────────────────────
+// getContextWindowForModel() 是同步的，所以分成：
+//   1. queryLlamaCppContextSize() — async，啟動時呼叫一次快取
+//   2. getLlamaCppContextSize()   — sync，回傳快取值
+
+let _cachedLlamaCppCtxSize: number | null = null
+
+/**
+ * 查詢 llama-server 的 `/slots` 端點取得實際 `--ctx-size` 值。
+ * 結果快取在 module scope，後續 `getLlamaCppContextSize()` 同步讀取。
+ * 3 秒 timeout — server 未啟動時不阻塞。
+ */
+export async function queryLlamaCppContextSize(
+  baseUrl?: string,
+): Promise<number | null> {
+  if (_cachedLlamaCppCtxSize !== null) return _cachedLlamaCppCtxSize
+  const root = (baseUrl || DEFAULT_LLAMACPP_BASE_URL).replace(/\/v1\/?$/, '')
+  try {
+    const res = await globalThis.fetch(`${root}/slots`, {
+      signal: AbortSignal.timeout(3000),
+    })
+    if (!res.ok) return null
+    const slots = (await res.json()) as Array<{ n_ctx?: number }>
+    const n_ctx = slots?.[0]?.n_ctx
+    if (typeof n_ctx === 'number' && n_ctx > 0) {
+      _cachedLlamaCppCtxSize = n_ctx
+      return n_ctx
+    }
+  } catch {
+    /* server 未啟動或不支援 /slots — 靜默 fallback */
+  }
+  return null
+}
+
+/**
+ * 同步回傳 `queryLlamaCppContextSize()` 的快取結果。
+ * 尚未查詢過或查詢失敗時回 null。
+ */
+export function getLlamaCppContextSize(): number | null {
+  return _cachedLlamaCppCtxSize
+}
+
 export function getAPIProviderForStatsig(): AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS {
   return getAPIProvider() as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
 }

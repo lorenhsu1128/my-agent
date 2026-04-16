@@ -15,6 +15,7 @@ SCRIPTS=(
   "tests/integration/memory/memory-tool-injection.ts"
   "tests/integration/memory/recall-and-prefetch.ts"
   "tests/integration/memory/index-rebuild.ts"
+  "tests/integration/memory/m2-22-smoke.ts"
 )
 
 for script in "${SCRIPTS[@]}"; do
