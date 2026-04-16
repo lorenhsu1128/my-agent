@@ -20,6 +20,8 @@ import { openSessionIndex } from './db.js'
 interface TranscriptEntry {
   type: string
   uuid?: string
+  /** ISO 字串；若缺則 fallback 到 Date.now() */
+  timestamp?: string
   message?: {
     role?: string
     content?: string | readonly ContentBlock[]
@@ -100,6 +102,16 @@ function extractSearchableContent(entry: TranscriptEntry): string {
   return parts.join('\n').trim()
 }
 
+/**
+ * 把 entry.timestamp（通常 ISO 字串如 "2026-04-16T00:45:33.970Z"）轉成 epoch ms。
+ * 若缺、空字串、parse 失敗都回 null（讓呼叫端 fallback 到 Date.now()）。
+ */
+function parseEntryTimestamp(raw: string | undefined): number | null {
+  if (!raw) return null
+  const parsed = Date.parse(raw)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 /** 若訊息含 tool_use block，回工具名；否則 null。 */
 function extractToolName(entry: TranscriptEntry): string | null {
   const content = entry.message?.content
@@ -136,23 +148,26 @@ export function indexEntry(
     const content = extractSearchableContent(entry)
     if (!content) return // 空內容不寫（attachment-only 之類）
 
-    const now = Date.now()
+    // 優先用 entry 自帶的 timestamp（reconciler 重播歷史訊息時的真實時間），
+    // 沒有或解析失敗才 fallback 到 Date.now()。
+    const ts = parseEntryTimestamp(entry.timestamp) ?? Date.now()
     const role = entry.message?.role ?? entry.type
     const toolName = extractToolName(entry)
     const finishReason = entry.message?.stop_reason ?? null
 
-    // sessions 上插 — started_at / first_user_message 只在首次 INSERT 設定
+    // sessions 上插 — started_at / first_user_message 只在首次 INSERT 設定。
+    // ended_at 用 MAX 防呆：若 JSONL 順序顛倒或多來源寫入，仍保留最新時間。
     db.query(
       `INSERT INTO sessions (session_id, started_at, ended_at, first_user_message, message_count)
        VALUES (?, ?, ?, ?, 1)
        ON CONFLICT(session_id) DO UPDATE SET
-         ended_at = excluded.ended_at,
+         ended_at = MAX(sessions.ended_at, excluded.ended_at),
          message_count = sessions.message_count + 1,
          first_user_message = COALESCE(sessions.first_user_message, excluded.first_user_message)`,
     ).run(
       sessionId,
-      now,
-      now,
+      ts,
+      ts,
       entry.type === 'user' ? content.slice(0, 200) : null,
     )
 
@@ -170,7 +185,7 @@ export function indexEntry(
       sessionId,
       row?.message_count ?? 0,
       role,
-      now,
+      ts,
       toolName,
       finishReason,
       content,

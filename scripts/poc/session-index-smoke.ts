@@ -416,6 +416,100 @@ try {
   check('非訊息型別也不插 messages_seen', (seenTag?.c ?? 0) === 0)
 
   console.log()
+  console.log('Test 10.5: entry.timestamp 優先於 Date.now()')
+  const SESS_TS = 'ts-sess-1'
+  const historicIso = '2024-01-15T08:30:45.000Z'
+  const historicMs = Date.parse(historicIso)
+  indexEntry(
+    {
+      type: 'user',
+      uuid: 'ts-u-1',
+      timestamp: historicIso,
+      message: { role: 'user', content: '這是歷史訊息，應記錄原 timestamp' },
+    },
+    SESS_TS,
+    cwd,
+  )
+  const tsDb = openSessionIndex(cwd)
+  const tsSess = tsDb
+    .query<{ started_at: number; ended_at: number }, [string]>(
+      'SELECT started_at, ended_at FROM sessions WHERE session_id = ?',
+    )
+    .get(SESS_TS)
+  check(
+    'sessions.started_at = entry.timestamp',
+    tsSess?.started_at === historicMs,
+    `started=${tsSess?.started_at} expect=${historicMs}`,
+  )
+  const tsFts = tsDb
+    .query<{ timestamp: number }, [string]>(
+      'SELECT timestamp FROM messages_fts WHERE session_id = ?',
+    )
+    .get(SESS_TS)
+  check(
+    'messages_fts.timestamp = entry.timestamp',
+    tsFts?.timestamp === historicMs,
+    `ts=${tsFts?.timestamp}`,
+  )
+  // 第二筆用**更早**的 timestamp，驗證 ended_at 用 MAX（不會被更舊值覆蓋）
+  const laterIso = '2024-02-01T12:00:00.000Z'
+  indexEntry(
+    {
+      type: 'assistant',
+      uuid: 'ts-a-1',
+      timestamp: laterIso,
+      message: { role: 'assistant', content: '回覆' },
+    },
+    SESS_TS,
+    cwd,
+  )
+  // 再來一筆**更舊**的，驗證 ended_at 不被往前拉
+  indexEntry(
+    {
+      type: 'user',
+      uuid: 'ts-u-2',
+      timestamp: historicIso, // 比上一筆舊
+      message: { role: 'user', content: '順序顛倒的訊息' },
+    },
+    SESS_TS,
+    cwd,
+  )
+  const tsSessFinal = tsDb
+    .query<{ ended_at: number }, [string]>(
+      'SELECT ended_at FROM sessions WHERE session_id = ?',
+    )
+    .get(SESS_TS)
+  check(
+    'ended_at 用 MAX 不被舊 timestamp 覆蓋',
+    tsSessFinal?.ended_at === Date.parse(laterIso),
+    `ended=${tsSessFinal?.ended_at} expect=${Date.parse(laterIso)}`,
+  )
+
+  // 沒 timestamp 的 entry — 應 fallback 到 Date.now()（不能精確斷言，只驗證「有值且近」）
+  const SESS_NOW = 'ts-sess-2'
+  const beforeNow = Date.now()
+  indexEntry(
+    {
+      type: 'user',
+      uuid: 'tsn-u-1',
+      message: { role: 'user', content: '沒 timestamp 的訊息' },
+    },
+    SESS_NOW,
+    cwd,
+  )
+  const afterNow = Date.now()
+  const nowSess = tsDb
+    .query<{ started_at: number }, [string]>(
+      'SELECT started_at FROM sessions WHERE session_id = ?',
+    )
+    .get(SESS_NOW)
+  check(
+    '無 timestamp 時 fallback 到 Date.now()',
+    (nowSess?.started_at ?? 0) >= beforeNow && (nowSess?.started_at ?? 0) <= afterNow,
+    `started=${nowSess?.started_at} in [${beforeNow}, ${afterNow}]`,
+  )
+
+  console.log()
   console.log('Test 11: 內部錯誤被吞（絕不拋錯）')
   // 故意傳壞物件；indexEntry 應 try/catch 吞掉
   let threw = false
