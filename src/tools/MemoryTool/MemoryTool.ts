@@ -139,6 +139,69 @@ function buildFileContent(
   return `---\nname: ${name}\ndescription: ${description}\ntype: ${type}\n---\n\n${body}\n`
 }
 
+// ---------------------------------------------------------------------------
+// M2-16：Prompt injection scanner
+// ---------------------------------------------------------------------------
+
+/**
+ * 可疑 pattern 清單。每個 entry 有一個 regex 和人類可讀的描述。
+ * 命中任一 pattern 就拒絕寫入，回傳描述讓 LLM 知道為什麼被擋。
+ *
+ * 設計原則：寧可漏抓不誤殺。只擋「幾乎不可能出現在合法記憶內容中」的 pattern。
+ * 模糊地帶（如一般提到 "system" 的句子）不列入。
+ */
+const INJECTION_PATTERNS: Array<{ pattern: RegExp; description: string }> = [
+  {
+    pattern: /ignore\s+(all\s+)?previous\s+instructions/i,
+    description: 'Prompt injection: "ignore previous instructions"',
+  },
+  {
+    pattern: /disregard\s+(all\s+)?(prior|previous|above)\s+(instructions|context)/i,
+    description: 'Prompt injection: "disregard prior instructions"',
+  },
+  {
+    pattern: /you\s+are\s+now\s+(a\s+)?(?:different|new|evil|unrestricted)/i,
+    description: 'Prompt injection: role override attempt',
+  },
+  {
+    pattern: /^system\s*:/im,
+    description: 'Prompt injection: "system:" prefix (偽造系統訊息)',
+  },
+  {
+    pattern: /<script[\s>]/i,
+    description: 'XSS: <script> tag',
+  },
+  {
+    pattern: /javascript\s*:/i,
+    description: 'XSS: javascript: URI',
+  },
+  {
+    pattern: /data:[a-z]+\/[a-z]+;base64,[\w+/=]{100,}/i,
+    description: 'Data exfil: 大型 base64 data URI',
+  },
+  {
+    pattern: /https?:\/\/[^\s]+\?.*(?:key|token|secret|password|api_?key)=[^\s&]+/i,
+    description: 'Data exfil: URL 含疑似敏感參數（key/token/secret）',
+  },
+  {
+    pattern: /\]\(https?:\/\/[^\s)]+\/(?:collect|exfil|steal|log|track)\b/i,
+    description: 'Data exfil: 可疑 markdown link 目標',
+  },
+]
+
+/**
+ * 掃描文字內容是否含可疑 prompt injection pattern。
+ * @returns null 表示通過；否則回傳第一個命中的 pattern 描述。
+ */
+function scanForInjection(text: string): string | null {
+  for (const { pattern, description } of INJECTION_PATTERNS) {
+    if (pattern.test(text)) {
+      return description
+    }
+  }
+  return null
+}
+
 /**
  * 原子寫入：先寫到 `.tmp` 再 rename。
  * rename 在同一 volume 上是原子的（POSIX guarantee；Windows NTFS 亦然）。
@@ -434,6 +497,23 @@ export const MemoryTool = buildTool({
         // ENOENT — 正常，繼續
       }
 
+      // M2-16：Injection scan（掃 content + name + description）
+      const injectionHit = scanForInjection(
+        `${input.name}\n${input.description}\n${input.content}`,
+      )
+      if (injectionHit) {
+        return {
+          data: {
+            success: false,
+            action,
+            filename,
+            filePath,
+            message: `寫入被拒：偵測到可疑內容 — ${injectionHit}`,
+            indexUpdated: false,
+          } satisfies Output,
+        }
+      }
+
       const fileContent = buildFileContent(
         input.name!,
         input.description!,
@@ -509,6 +589,23 @@ export const MemoryTool = buildTool({
         input.type ?? frontmatter.type ?? 'project'
       const mergedContent =
         input.content !== undefined ? input.content : existingBody.trim()
+
+      // M2-16：Injection scan（掃 merged 結果）
+      const injectionHit = scanForInjection(
+        `${mergedName}\n${mergedDescription}\n${mergedContent}`,
+      )
+      if (injectionHit) {
+        return {
+          data: {
+            success: false,
+            action,
+            filename,
+            filePath,
+            message: `寫入被拒：偵測到可疑內容 — ${injectionHit}`,
+            indexUpdated: false,
+          } satisfies Output,
+        }
+      }
 
       const fileContent = buildFileContent(
         mergedName,
