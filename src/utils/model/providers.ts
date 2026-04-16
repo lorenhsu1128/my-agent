@@ -22,7 +22,7 @@ export function getAPIProvider(): APIProvider {
 export const DEFAULT_LLAMACPP_BASE_URL = 'http://127.0.0.1:8080/v1'
 
 /** 與 scripts/llama/serve.sh 的 --alias 一致。 */
-export const DEFAULT_LLAMACPP_MODEL = 'qwen3.5-9b-neo'
+export const DEFAULT_LLAMACPP_MODEL = 'qwopus3.5-9b-v3'
 
 /**
  * 已知對應到本地 llama.cpp server 的模型別名 / ID。
@@ -31,6 +31,7 @@ export const DEFAULT_LLAMACPP_MODEL = 'qwen3.5-9b-neo'
  * 未來擴充（vLLM、sglang、其他本地模型）在此加。
  */
 export const LLAMACPP_MODEL_ALIASES: readonly string[] = [
+  'qwopus3.5-9b-v3',
   'qwen3.5-9b-neo',
 ]
 

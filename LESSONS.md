@@ -82,15 +82,12 @@
 
 ## 型別與編譯相關
 
-### Bun 1.3.6 single-file-executable + Ink React TUI panic（Windows）
-- **發生什麼事**：使用者在 PowerShell 跑 `.\cli.exe --allow-dangerously-skip-permissions`（無 `-p`，進 TUI 互動），跑約 110 秒後 Bun 內部 panic：`panic(main thread): switch on corrupt value / oh no: Bun has crashed. This indicates a bug in Bun, not your code.` 然後實測去掉 `--minify` 的 `bun run build:dev` 出來的 `.\cli-dev.exe` 也不 panic 但對話無反應（卡住），繼續走 compiled 路徑都不行。
-- **根本原因**：Bun 1.3.6 的 `--compile`（single-file-executable）+ Ink React TUI 組合有 runtime bug；`--minify` 不是主因（dev build 也出問題，只是失敗方式不同）。非我方 code 缺陷。
-- **正確做法**：
-  - **互動模式一律用 `bun run dev`**（源碼跑，不 bundle 不 compile），實測 UI 正常、對話順暢。
-  - **非互動 `-p "..."` 仍可用 compiled `.\cli.exe`**（不進 TUI，不受此 bug 影響）。
-  - 等 Bun 更新修好再恢復 compiled TUI；追 Bun changelog 的 single-executable / TUI 相關修正。
-- **相關檔案**：`scripts/build.ts`（保留現有設定，只是 compiled 產物別拿去跑 TUI）；測試指南要區分互動 vs 非互動路徑。
-- **日期**：2026-04-15
+### Bun 1.3.6 "switch on corrupt value" TUI panic（Windows）— 已修
+- **發生什麼事**：`bun run dev` 跑 TUI 互動模式約 2-3 分鐘後 Bun panic：`panic(main thread): switch on corrupt value`。compiled `cli.exe` 也有同樣問題。
+- **根本原因**：Bun 1.3.6 的 Windows 版有多個 ReadableStream / async iterator 相關 bug。
+- **解法**：**升級到 Bun 1.3.12**。`v1.3.10` 的 release note 明確修了此 panic（提到影響 Claude Code 使用者）；`v1.3.12` 額外修了大量 ReadableStream 穩定性問題。
+- **驗證**：`npm install -g bun@1.3.12` → `bun --version` 確認 1.3.12 → typecheck 基線不變。
+- **日期**：2026-04-16（原記錄 2026-04-15，升級修復 2026-04-16）
 
 ### Bun 1.3.6+ `--bytecode` 與 ESM 互斥
 - **發生什麼事**：`bun run build` 報 `format must be 'cjs' when bytecode is true. Eventually we'll add esm support as well.` 無法產出 `./cli`。

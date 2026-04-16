@@ -34,7 +34,8 @@
 - [x] M2-08 端到端測試：`./cli --model qwen3.5-9b-neo` 跑兩個 session，第二 session 問「上次我們怎麼處理 X」，驗證能找回第一 session 的答案 — 根因修復：刪除 `checkPermissions` 覆寫（`updatedInput: {}` 覆蓋 input），還原 6 個無效 fix（保留 3 個 adapter 修正）。E2E `session-search-e2e.ts` 16/16 綠。註：`-p` mode regression 仍在，完整雙 session CLI 測試需 TUI 手動驗證
 
 ### 階段三：Query-driven Prefetch
-- [ ] M2-09 新增 `src/services/memoryPrefetch/`：對 user query 同時搜 FTS 索引 + re-rank memdir topic files。**memdir re-rank 用非 LLM 方法**（關鍵字 overlap + frontmatter `description` 的 token 匹配），不沿用 `findRelevantMemories.ts` 的 Sonnet 路徑
+- [x] M2-09a Local Model Routing：`src/utils/model/model.ts` 的 `getDefaultOpusModel` / `getDefaultSonnetModel` / `getDefaultHaikuModel` 在 llamacpp 模式短路回傳 `DEFAULT_LLAMACPP_MODEL`。效果：既有的 `findRelevantMemories`（Sonnet→本地）、`agenticSessionSearch`（Haiku→本地）、`tokenEstimation`（Sonnet→本地）等 9 個 sideQuery 呼叫點全部自動走 llama-server
+- [ ] M2-09 新增 `src/services/memoryPrefetch/`：FTS 歷史對話搜尋模組。memdir 排序已由既有 `findRelevantMemories`（M2-09a 後走本地模型）處理，本任務只做 FTS session history 搜尋
 - [ ] M2-10 Prefetch 預算控制：總 token 上限 ~2000，FTS 前 3 + memdir 前 3，超額截斷
 - [ ] M2-11 找出 user message 組裝的注入點（避開 `QueryEngine.ts`，預期在 `src/context.ts` 或類似 pre-prompt hook）；包 `<memory-context>...</memory-context>` fence 前置到 user message
 - [ ] M2-12 Prefetch 失敗（索引損毀 / SQLite 鎖）不可中斷主流程，靜默 fallback 到空 fence
@@ -239,3 +240,15 @@
 - 2026-04-16 11:33: Session 結束 | 進度：34/56 任務 | a9da051 fix(api): tool_use SSE 事件合併成單一 chunk 避免 SDK 跨 chunk 丟事件
 
 - 2026-04-16 11:37: Session 結束 | 進度：34/56 任務 | a9da051 fix(api): tool_use SSE 事件合併成單一 chunk 避免 SDK 跨 chunk 丟事件
+
+- 2026-04-16 12:02: Session 結束 | 進度：35/56 任務 | 430d588 fix(api): sseGeneratorToStream 改為 collect-all 一次送出
+
+- 2026-04-16 12:09: Session 結束 | 進度：35/56 任務 | 430d588 fix(api): sseGeneratorToStream 改為 collect-all 一次送出
+
+- 2026-04-16 12:10: Session 結束 | 進度：35/56 任務 | 430d588 fix(api): sseGeneratorToStream 改為 collect-all 一次送出
+
+- 2026-04-16 12:25: Session 結束 | 進度：35/56 任務 | 430d588 fix(api): sseGeneratorToStream 改為 collect-all 一次送出
+
+- 2026-04-16 12:29: Session 結束 | 進度：35/56 任務 | 430d588 fix(api): sseGeneratorToStream 改為 collect-all 一次送出
+
+- 2026-04-16 12:35: Session 結束 | 進度：35/56 任務 | 430d588 fix(api): sseGeneratorToStream 改為 collect-all 一次送出
