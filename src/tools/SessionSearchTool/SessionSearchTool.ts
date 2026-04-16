@@ -439,21 +439,25 @@ export const SessionSearchTool = buildTool({
       : ''
 
     if (!ftsQuery) {
-      // fallback：掃 sessions.first_user_message 的 LIKE（query 太短或所有 token <3 chars）
-      // 不用 ESCAPE — search tool 的 query 裡 % 和 _ 當 wildcard 無害
+      // fallback：掃 sessions.first_user_message 的 LIKE。
+      // 把 query 按空白切成多個詞，每個詞做 LIKE '%詞%'，用 OR 合併。
+      // 模型常送 "天氣 預報"（空格切開），直接用整串搜會搜不到；
+      // 拆成 "天氣" OR "預報" 就能命中 title 含任一詞的 session。
       usedFallback = true
-      const pattern = `%${query}%`
+      const words = query.split(/\s+/).filter(w => w.length > 0)
+      if (words.length === 0) words.push(query) // 防呆
+      const whereClauses = words.map(() => 'first_user_message LIKE ?').join(' OR ')
+      const patterns = words.map(w => `%${w}%`)
+      const sql = `SELECT session_id, first_user_message FROM sessions
+           WHERE (${whereClauses})
+           ORDER BY started_at DESC
+           LIMIT ${limit}`
       const rows = db
         .query<
           { session_id: string; first_user_message: string | null },
-          [string, number]
-        >(
-          `SELECT session_id, first_user_message FROM sessions
-           WHERE first_user_message LIKE ?
-           ORDER BY started_at DESC
-           LIMIT ?`,
-        )
-        .all(pattern, limit)
+          string[]
+        >(sql)
+        .all(...patterns)
       totalMatches = rows.length
       rawMatches = rows.map(r => ({
         session_id: r.session_id,
