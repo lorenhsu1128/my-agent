@@ -46,7 +46,7 @@
 - [x] M2-15 原子寫入：temp file + rename；檔案鎖（Windows 用 `proper-lockfile` 或手搓 `.lock` 哨兵檔） — `atomicWrite` helper（寫 `.tmp` → `rename`，失敗 fallback 直接寫）+ `acquireMemdirLock`（`proper-lockfile` 包裝，stale 10s，retry 3 次）。`call()` 外層 try/finally 保證 unlock。`updateMemoryIndex` 亦改用 `atomicWrite`。Typecheck 基線不變
 - [x] M2-16 Prompt injection scanner：掃寫入內容的可疑 pattern（`ignore previous instructions`、`system:`、base64 blob、URL exfil、`<script>` 等），命中就拒絕並回錯誤訊息 — 9 組 regex pattern（injection 3 + XSS 2 + data exfil 3 + role override 1）；`scanForInjection` 回傳首個命中描述或 null；add/replace 兩個動作在 `buildFileContent` 前掃 name+description+content 合併文字。Typecheck 基線不變
 - [x] M2-17 配額警告：memdir 總 token 估算超閾值（例如 10K）時，tool 回應附警告請求收斂 — `estimateMemdirTokens`（readdir + stat，3 chars/token heuristic）+ `checkQuotaWarning`（≥10K 回警告字串）。add/replace 成功後附加警告到 message。Typecheck 基線不變
-- [ ] M2-18 端到端驗證：add 後 MEMORY.md 索引更新、replace 只改目標、remove 不留孤兒索引；injection 測試案例被拒
+- [x] M2-18 端到端驗證：add 後 MEMORY.md 索引更新、replace 只改目標、remove 不留孤兒索引；injection 測試案例被拒 — `scripts/poc/memory-tool-smoke.ts` 47/47 綠。覆蓋：filename validation 8 case、file content format 4、index format 3、injection scanner 9 pattern × 2（命中+不誤殺）= 18、atomic write 4、index add/replace/remove 8、quota estimation 2
 
 ### 階段五：收尾
 - [ ] M2-19 整合測試集 `tests/integration/memory/`：recall 情境、prefetch 注入、MemoryTool injection 拒絕、索引損毀重建
