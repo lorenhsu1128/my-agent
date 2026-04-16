@@ -356,8 +356,22 @@ function translateChatCompletionToAnthropic(
 /**
  * 組 Anthropic SSE event line。格式：`event: <type>\ndata: <json>\n\n`
  */
+/**
+ * 把 non-ASCII 字元（U+0080+）轉成 `\uXXXX` JSON escape。
+ * Anthropic SDK 的 SSE parser 內部 `decodeUTF8()` 不帶 `{stream: true}`，
+ * ReadableStream chunk 邊界切到 multi-byte UTF-8（如中文 3-byte）中間時會
+ * 產生 replacement char → JSON.parse 失敗 → tool input 變成 {}。
+ * 用純 ASCII 的 JSON 徹底繞過這個問題。
+ */
+function jsonStringifyAsciiSafe(data: unknown): string {
+  return JSON.stringify(data).replace(
+    /[\u0080-\uffff]/g,
+    ch => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  )
+}
+
 function formatSSE(event: string, data: unknown): string {
-  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+  return `event: ${event}\ndata: ${jsonStringifyAsciiSafe(data)}\n\n`
 }
 
 /**
@@ -594,17 +608,26 @@ async function* translateOpenAIStreamToAnthropic(
   if (lastTextStop) yield lastTextStop
 
   // 關掉所有開啟中的 tool_use block。
-  // 先 yield 累積好的完整 arguments（一個 input_json_delta），再 yield stop。
+  // 把 input_json_delta + content_block_stop 合併成**單一 string** yield。
+  // Anthropic SDK 的 SSE parser 在 Bun Windows 上可能跨 ReadableStream chunk
+  // 丟事件；把 delta + stop 塞進同一 chunk 就不會被拆開。
   for (const [openaiIdx, anthropicIdx] of openToolBlocks.entries()) {
     const fullArgs = toolArgBuffers.get(openaiIdx) ?? ''
+
+    // 合併成一個字串：input_json_delta + content_block_stop（中間以 \n\n 分隔 SSE events）
+    let combined = ''
     if (fullArgs.length > 0) {
-      yield formatSSE('content_block_delta', {
+      combined += formatSSE('content_block_delta', {
         type: 'content_block_delta',
         index: anthropicIdx,
         delta: { type: 'input_json_delta', partial_json: fullArgs },
       })
     }
-    yield stopBlock(anthropicIdx)
+    combined += formatSSE('content_block_stop', {
+      type: 'content_block_stop',
+      index: anthropicIdx,
+    })
+    yield combined // 單一 yield → 單一 chunk → SDK 一次 read 拿到全部
   }
   openToolBlocks.clear()
   toolArgBuffers.clear()
