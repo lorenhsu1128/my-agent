@@ -727,3 +727,178 @@ function extractToolName(entry: TranscriptEntry): string | null {
 3. **Tombstone 刪訊** — JSONL 刪行時 FTS 殘留。M2 可接受，實際踩到再處理
 4. **Hard-kill 掉最後一筆** — WAL + `synchronous=NORMAL` 可能丟最後幾筆。bulk indexer 對齊
 
+
+
+---
+
+# M2-03 任務決策摘要（2026-04-15 追補 2026-04-16）
+
+**任務**：啟動時 bulk reconcile JSONL 至 FTS 索引（原 TODO 措辭誤寫 `.claude/projects/.../conversations/*.jsonl`，實際是 `{CLAUDE_CONFIG_HOME}/projects/{slug}/{sessionId}.jsonl`，無 `conversations/` 子目錄）
+
+**緣由**：M2-02 的 tee hook 只處理新訊息寫入，舊 JSONL（M2 之前產生的）/ 分叉 session / 遺漏的 tombstone / hard-kill 丟的最後幾筆都不會進 FTS。啟動時需做一次 reconcile 把歷史對齊。
+
+**架構決策**（使用者當下拍板）：
+- Q1 啟動掃描觸發：**選 C** — 啟動 fire-and-forget + M2-05 SessionSearchTool 呼叫前 await `ensureReconciled` 做冪等雙保險
+- Q2 log 詳盡度：**選 (iii)** — 完整 stats（`掃 N 個 / 索引 M（K 新）/ 寫入 X / Y 錯 / 耗時 Zms`）
+
+**實作**：
+- 新檔 `src/services/sessionIndex/reconciler.ts`：`reconcileProjectIndex` + `ensureReconciled`（`Map<projectRoot, Promise>` 冪等快取）
+- Hook 點：`src/setup.ts` background-jobs 區塊（`!isBareMode()` 內、旁邊 `initSessionMemory`）fire-and-forget
+- 掃描只要直接層 `.jsonl`（不 recurse `subagents/`）
+- `isSidechain=true` 跳過（與 M2-02 tee 行為一致）
+- 壞 JSON 行計 errors 繼續，不中斷
+
+**踩到的坑**：無新坑（schema / path / tee hook 全在 M2-01/02 處理過）
+
+**Commit**：`592d4ca`
+
+Smoke 從 48 擴至 62 綠（M2-02 48 + M2-03 14：空目錄 / 多 session / 壞行 / sidechain 跳過 / up-to-date 跳過 / 冪等）。
+
+---
+
+# M2-04 任務決策摘要（2026-04-15 + 2026-04-16 手動驗證；追補 2026-04-16）
+
+**任務**：typecheck 綠 + 手動驗證 — 產幾筆對話、確認 FTS 有資料、SQL 可查
+
+**緣由**：階段一（索引基礎建設）的 gate，確認 M2-01/02/03 真的會在實際 runtime 下落地。
+
+**方法**：
+- 自動：typecheck baseline（只有 baseUrl warning）+ smoke 66/66 綠
+- 手動：TUI 跑 2 輪天氣查詢後執行 `scripts/poc/query-session-index.ts`（readonly 開 db，不與 TUI 搶鎖）查驗 sessions / messages_fts / tool_name 抽取
+
+**實測結果**：
+- 4 sessions / 79 messages_fts / 81 messages_seen（差 2 = sidechain + 空內容跳過）
+- tool_name 正確：Bash 14 / Read 2 / Skill 1 / Glob 1
+- FTS 搜 "weather" 5 筆（對）；FTS 搜 "天氣" 0 筆（預期，trigram ≥3 字元限制）
+
+**過程中發現的 bug + 修法**：
+- `indexEntry` 用 `Date.now()` 當 timestamp，導致 reconciler 重播歷史訊息時 `started_at` 被寫成「reconcile 執行時間」而非訊息真實時間（偏差 14 小時）
+- 修：優先讀 `entry.timestamp`（ISO 字串 → `Date.parse`），失敗才 fallback `Date.now()`；`ended_at` 從 `excluded.ended_at` 改成 `MAX(現有, excluded)` 防順序顛倒
+- 因 shadow dedup 阻擋原有壞資料更新，需 `rm session-index.db*` 後手動觸發 reconcile（`scripts/poc/rebuild-session-index.ts`）重建；重建後 4 個 session 的 `started_at` 全部對齊真實時間
+
+**Commits**：
+- `7e057f5` (M2-01), `224cf7c` (M2-01 補 parent_session_id), `70c70da` (M2-02), `592d4ca` (M2-03)
+- `302ebf4` (skill), `0384537` (timestamp fix), `da9a505` (rebuild script), `730433f` (勾 M2-04)
+
+**新 skill**：`skills/session-fts-indexing/SKILL.md` 299 行，覆蓋階段一所有踩坑與設計決策，M2-05/09 之前必讀。
+
+---
+
+# M2-05 任務決策摘要（2026-04-16 追補 2026-04-16）
+
+**任務**：SessionSearchTool — 跨 session FTS 搜尋工具
+
+**緣由**：M2 階段二起點。把 M2-01/02/03 建好的 SQLite FTS 包成 agent 可呼叫的 tool，讓 LLM 在使用者問「上次我們怎麼處理 X」時能回憶。
+
+**架構決策**（自定，風險低）：
+- 沿用 GlobTool 骨架（`buildTool` + `ToolDef<InputSchema, Output>`），最輕量 search tool pattern
+- 3 檔案：`SessionSearchTool.ts` / `prompt.ts`（NAME + DESCRIPTION）/ `UI.tsx`（render*）
+- Trigram ≥3 字元限制：query <3 char 自動 fallback 到 `sessions.first_user_message` LIKE（帶 `usedFallback=true` 告知 LLM）
+- FTS5 MATCH reserved char（`.` `"` 等）sanitize：每個 token 包成 phrase literal `"..."`，AND join
+- `summarize:true` M2-05 先接受參數但不實作（帶 `summaryPending=true` + note 給 LLM），**M2-06 補**
+- `await ensureReconciled(projectRoot)` 在搜尋前做冪等雙保險（與啟動掃描共用同一 Promise）
+- Output 用 markdown：`## [id8] title (date, model, N 則)` + `- [role tool=X] snippet`
+
+**實作要點**：
+- `getProjectRoot()` 確保與 tee / reconciler 共用同 slug
+- snippet 截 400 char，換行改 `↵` 保單行
+- `ensureReconciled` 失敗不致命，用舊 index 繼續搜
+- 本階段**不**註冊到 `tools.ts`，LLM 看不到（M2-07 做）
+
+**踩到的坑**：
+- FTS5 MATCH 查 `"serve.sh"` 直接噴 `fts5: syntax error near "."` — 改成只查 `serve` 或用 phrase literal
+- Windows bun:sqlite `EBUSY` rmSync — finally 裡先 `closeAllSessionIndexes()` 再清目錄
+
+**Smoke**：`session-search-tool-smoke.ts` 24/24 綠（對真實 index 跑：英文 / 中英混合 / 短 query fallback / summarize flag / reserved char / 空結果 / markdown 格式）
+
+**Commit**：`c2af789`
+
+---
+
+# M2-06 計畫 — SessionSearchTool `summarize: true` 呼叫 llamacpp 做片段摘要（2026-04-16）
+
+## 緣由
+
+M2-05 的 SessionSearchTool 已接受 `summarize: true`，但目前只設了 `summaryPending=true` flag 沒實際摘要。M2-06 把這個分支補上：把命中片段（先截到 ~8K token）餵回**當前 session 主模型（= llamacpp）** 做摘要，回覆一個精煉版本給 LLM 看。
+
+**不可妥協的約束**：
+- 摘要失敗（timeout / context overflow / server 不可用）必須 graceful fallback 回原片段，tool 不能拋錯
+- 不新建 provider、不新起 LLM client — 複用 `getAnthropicClient()`
+- 不動 `QueryEngine.ts` / `Tool.ts` / `StreamingToolExecutor.ts`（deny list）
+- llamacpp 特殊考量：9B 模型 / 32K ctx / 58 tok/s 推理慢 → 30 秒 timeout、input 先截 8K tokens
+
+## 探勘結論
+
+**可複用的既有設施**：
+
+| 需求 | 位置 | 用法 |
+|---|---|---|
+| 拿主模型名稱 | `ToolUseContext.options.mainLoopModel` (`src/Tool.ts:162`) | 從 `call()` 第二參數取 string |
+| 拿 Anthropic client | `src/services/api/client.ts:getAnthropicClient()` | `await getAnthropicClient()`；llamacpp 分支內建 fetch adapter，透明翻譯 |
+| Abort / timeout | `context.abortController: AbortController` (`src/Tool.ts:180`) | child controller + `setTimeout` |
+| 呼叫 LLM | `client.messages.create({model, max_tokens, messages, signal})` | 直接用 SDK，不走 `runForkedAgent` |
+
+**為何不用 `runForkedAgent`**：那是給「fork 一個繼承 prompt cache 的 mini agent」用（SessionMemory / extractMemories / autoDream 的背景任務）；本場景是一次性單輪 query，直接 `client.messages.create` 更簡單、可控。
+
+**Token 估算簡化**：用 char-based heuristic — 8K tokens ≈ 24,000 chars（3 chars/token 覆蓋中英混合）。不走 `tokenCountWithEstimation`（那吃 `Message[]` 結構）。
+
+## 設計
+
+### 新增私有 helper：`summarizeSessions(...)`（同檔內，不新建檔）
+
+```ts
+async function summarizeSessions(
+  sessions: Output['sessions'],
+  query: string,
+  model: string,
+  parentAbort: AbortController,
+): Promise<Map<string, string> | null>
+```
+
+流程：
+1. 建 prompt（繁中，嚴格 `## [id8]` 格式指示），超 24,000 chars 就停
+2. child AbortController + 30s setTimeout + parent abort 串接
+3. `client.messages.create({model, max_tokens: 2000, messages, signal: child.signal})`
+4. 解析 text content；regex `^## \[([a-f0-9]+)\]` 拆回 session_id
+5. 失敗 / timeout / parse error → 回 null；呼叫端 fallback
+
+### 修改 `call()` summarize 分支
+
+把 M2-05 的 pending flag 改為實際呼叫 `summarizeSessions`：
+- 全部 session 有 summary → 清除 pending flag
+- 部分失敗 → `summaryPending=true` + note 描述哪幾個壞
+- 全部失敗 / 回 null → `summaryPending=true` + note "摘要失敗，顯示原片段"
+
+### Output schema 擴充
+
+`sessionGroupSchema.summary?: z.string()`（optional）。
+
+### `mapToolResultToToolResultBlockParam` 輸出更新
+
+每個 session 有 summary 時：顯示 summary 單行、**不**列 raw matches。沒有 summary 時沿用 M2-05。
+
+### 關鍵檔案
+
+- **修改**：`src/tools/SessionSearchTool/SessionSearchTool.ts`
+- **修改**：`scripts/poc/session-search-tool-smoke.ts`（加 summarize fallback 自動測試）
+- **可選**：`LESSONS.md`（實測若踩到新坑）
+
+## 驗收方式
+
+1. `bun run typecheck` — baseline 不變
+2. Smoke 自動：`summarize:true` **沒有** llamacpp server 時 graceful fallback、`summaryPending=true`、matches 仍在、note 含「摘要失敗」
+3. Smoke 手動（需 llamacpp server 跑著）：實測 `sessions[*].summary` 有中文摘要內容
+4. 端到端可選：`bun run dev --model qwen3.5-9b-neo` 問「上次我們討論什麼 weather 的事？」觀察 agent 走 SessionSearch + summarize
+
+## 風險與緩解
+
+| 風險 | 緩解 |
+|---|---|
+| llamacpp 推理慢，30s 不夠 | 起點 30s；常 timeout 再調 60s。摘要失敗 fallback 不致命 |
+| 模型輸出格式不遵守 | regex 解析失敗時整段當單一 summary；退路 `summaryPending` |
+| Context overflow（24K chars 仍太大） | 預留 margin；prompt 其他部分 ~1-2K token + 回應 2K，總 ~28K < 32K ctx。實測溢出再降 16K chars |
+| Parent abort 傳遞到 child | `.addEventListener('abort', ...)`，finally 裡 removeEventListener 清理 |
+
+## 不在本任務範圍
+
+常數調整、結構化輸出 / tool_use、摘要快取、M2-07 的註冊

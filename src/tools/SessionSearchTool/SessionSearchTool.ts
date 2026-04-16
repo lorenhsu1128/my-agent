@@ -17,6 +17,7 @@ import { z } from 'zod/v4'
 import type { ValidationResult } from '../../Tool.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { getProjectRoot } from '../../bootstrap/state.js'
+import { getAnthropicClient } from '../../services/api/client.js'
 import {
   ensureReconciled,
   openSessionIndex,
@@ -75,6 +76,10 @@ const sessionGroupSchema = z.object({
   model: z.string().nullable(),
   message_count: z.number(),
   matches: z.array(matchSchema),
+  summary: z
+    .string()
+    .optional()
+    .describe('LLM 產生的摘要（summarize=true 且成功時）'),
 })
 
 const outputSchema = lazySchema(() =>
@@ -157,6 +162,174 @@ function formatDate(ms: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// M2-06：Summarization helper
+// ---------------------------------------------------------------------------
+
+/**
+ * char budget for prompt input（char-based heuristic）：
+ *   8K tokens × 3 chars/token ≈ 24,000 chars（中英混合保守估計）
+ * 模型 ctx 32K，留給 prompt 其他部分與 response（max_tokens 2000）充裕 margin。
+ */
+const SUMMARIZE_MAX_INPUT_CHARS = 24_000
+const SUMMARIZE_MAX_OUTPUT_TOKENS = 2000
+const SUMMARIZE_TIMEOUT_MS = 30_000
+
+type SummarizableSession = {
+  session_id: string
+  title: string
+  started_at: number
+  matches: Array<{
+    role: string
+    tool_name: string | null
+    snippet: string
+  }>
+}
+
+/**
+ * 建 summarize prompt（繁中，嚴格 `## [id8]` 輸出格式）。
+ * 若 session 片段太長會截斷，保留至少每 session 前 2 筆 match。
+ * 回傳 `{ prompt, includedSessionIds }` — 有實際納入 prompt 的 sessions。
+ */
+function buildSummarizePrompt(
+  sessions: SummarizableSession[],
+  query: string,
+  maxChars: number,
+): { prompt: string; includedSessionIds: string[] } {
+  const header =
+    `以下是使用者查詢「${query}」在 ${sessions.length} 個過往對話 session 找到的相關片段。\n` +
+    `請用**繁體中文**為每個 session 寫 1-3 句話的摘要，提煉對話的核心結論或脈絡；\n` +
+    `不要複製片段原文。\n\n` +
+    `嚴格遵守輸出格式（每個 session 一段、以 ## 開頭、session_id 前 8 碼標記）：\n\n` +
+    `## [session_id 前 8 碼]\n` +
+    `<你的摘要文字>\n\n` +
+    `Sessions：\n\n`
+
+  const included: string[] = []
+  const parts: string[] = [header]
+  let total = header.length
+
+  for (const s of sessions) {
+    const id8 = s.session_id.slice(0, 8)
+    const sessHeader = `### [${id8}] ${s.title} (${formatDate(s.started_at)})\n`
+    // 先試至少放 session header + 前 2 筆片段
+    const reservedMatches = s.matches.slice(0, 2)
+    const firstBlock =
+      sessHeader +
+      reservedMatches
+        .map(
+          m =>
+            `- [${m.role}${m.tool_name ? ` tool=${m.tool_name}` : ''}] ${m.snippet.replace(/\n+/g, ' ↵ ').slice(0, 300)}`,
+        )
+        .join('\n') +
+      '\n\n'
+    if (total + firstBlock.length > maxChars) break // 沒空間了
+    parts.push(firstBlock)
+    total += firstBlock.length
+    included.push(s.session_id)
+
+    // 剩餘 matches 能塞就塞
+    for (const m of s.matches.slice(2)) {
+      const line = `- [${m.role}${m.tool_name ? ` tool=${m.tool_name}` : ''}] ${m.snippet.replace(/\n+/g, ' ↵ ').slice(0, 300)}\n`
+      if (total + line.length > maxChars) {
+        parts.push(`- …（還有 ${s.matches.length - 2} 筆略）\n\n`)
+        break
+      }
+      parts.push(line)
+      total += line.length
+    }
+  }
+
+  return { prompt: parts.join(''), includedSessionIds: included }
+}
+
+/**
+ * 解析 LLM 回應（預期 `## [id8]\nsummary\n\n## [id8]\nsummary` 結構）。
+ * 解析失敗時把整段當 fallback 放到第一個 session，其餘留空（呼叫端會 set summaryPending）。
+ */
+function parseSummaryResponse(
+  text: string,
+  sessionIdsInOrder: string[],
+): Map<string, string> {
+  const result = new Map<string, string>()
+  // 以 `^## [` 切區塊（保留 `##`）
+  const blocks = text.split(/\n(?=## \[)/)
+  for (const block of blocks) {
+    const m = block.match(/^##\s*\[([a-f0-9]+)\]?\s*\n?([\s\S]*?)$/m)
+    if (!m) continue
+    const id8 = m[1]!
+    const summary = (m[2] ?? '').trim()
+    if (!summary) continue
+    // 找對應的 session_id（前 8 碼匹配）
+    const full = sessionIdsInOrder.find(sid => sid.startsWith(id8))
+    if (full && !result.has(full)) result.set(full, summary)
+  }
+  // 一筆都解析不到時 — 當作單一 summary 貼到第一個 session
+  if (result.size === 0 && sessionIdsInOrder.length > 0 && text.trim()) {
+    result.set(sessionIdsInOrder[0]!, text.trim())
+  }
+  return result
+}
+
+/**
+ * 呼叫主模型（llamacpp）對命中片段做摘要。
+ *
+ * 返回 Map<session_id, summary_text>；失敗 / timeout / connection error / parse
+ * 完全失敗都回 null，呼叫端 fallback 到原片段。絕不拋錯。
+ */
+async function summarizeSessions(
+  sessions: SummarizableSession[],
+  query: string,
+  model: string,
+  parentAbort: AbortController,
+): Promise<Map<string, string> | null> {
+  if (sessions.length === 0) return new Map()
+
+  const { prompt, includedSessionIds } = buildSummarizePrompt(
+    sessions,
+    query,
+    SUMMARIZE_MAX_INPUT_CHARS,
+  )
+  if (includedSessionIds.length === 0) return null
+
+  const childCtrl = new AbortController()
+  const propagateAbort = () => childCtrl.abort()
+  if (parentAbort.signal.aborted) childCtrl.abort()
+  else parentAbort.signal.addEventListener('abort', propagateAbort)
+
+  const timer = setTimeout(() => childCtrl.abort(), SUMMARIZE_TIMEOUT_MS)
+
+  try {
+    const client = await getAnthropicClient()
+    const resp = await client.messages.create(
+      {
+        model,
+        max_tokens: SUMMARIZE_MAX_OUTPUT_TOKENS,
+        messages: [{ role: 'user', content: prompt }],
+      },
+      { signal: childCtrl.signal },
+    )
+
+    // 聚合 text content blocks
+    const textParts: string[] = []
+    for (const block of resp.content) {
+      if (block.type === 'text' && typeof block.text === 'string') {
+        textParts.push(block.text)
+      }
+    }
+    const fullText = textParts.join('\n').trim()
+    if (!fullText) return null
+
+    return parseSummaryResponse(fullText, includedSessionIds)
+  } catch {
+    // 超時 / 連線 / context overflow / 其他 — 全部 graceful fallback
+    return null
+  } finally {
+    clearTimeout(timer)
+    parentAbort.signal.removeEventListener('abort', propagateAbort)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Tool
 // ---------------------------------------------------------------------------
 
@@ -217,7 +390,7 @@ export const SessionSearchTool = buildTool({
       .flatMap(s => s.matches.map(m => m.snippet))
       .join('\n')
   },
-  async call(input) {
+  async call(input, context) {
     const query = input.query.trim()
     const limit = input.limit ?? DEFAULT_LIMIT
     const summarize = input.summarize ?? false
@@ -357,10 +530,34 @@ export const SessionSearchTool = buildTool({
       returnedMatches: rawMatches.length,
       sessions,
     }
-    if (summarize) {
-      output.summaryPending = true
-      output.note =
-        '摘要功能尚未落地（待 M2-06 實作）；目前回傳原始片段。'
+
+    // M2-06：summarize 分支 — 呼叫主模型（llamacpp）做摘要；失敗 graceful fallback
+    if (summarize && output.sessions.length > 0) {
+      const model = context.options.mainLoopModel
+      const summaries = await summarizeSessions(
+        output.sessions,
+        query,
+        model,
+        context.abortController,
+      )
+      if (summaries && summaries.size > 0) {
+        for (const s of output.sessions) {
+          const sum = summaries.get(s.session_id)
+          if (sum) s.summary = sum
+        }
+        const missing = output.sessions.filter(s => !s.summary).length
+        if (missing > 0) {
+          output.summaryPending = true
+          output.note = `${missing} 個 session 的摘要解析失敗，顯示原片段。`
+        }
+      } else {
+        output.summaryPending = true
+        output.note =
+          '摘要失敗（llamacpp 超時 / 不可用 / context overflow），顯示原片段。'
+      }
+    } else if (summarize && output.sessions.length === 0) {
+      // 沒結果時 summarize 不做事，避免呼叫 LLM 浪費
+      output.summaryPending = false
     }
 
     return { data: output }
@@ -391,10 +588,16 @@ export const SessionSearchTool = buildTool({
       lines.push(
         `## [${s.session_id.slice(0, 8)}] ${s.title}  (${dateStr}${modelStr}, ${s.message_count} 則訊息)`,
       )
-      for (const m of s.matches) {
-        const toolStr = m.tool_name ? ` tool=${m.tool_name}` : ''
-        const singleLine = m.snippet.replace(/\n+/g, ' ↵ ')
-        lines.push(`- [${m.role}${toolStr}] ${singleLine}`)
+      if (s.summary) {
+        // 有 summary：顯示摘要，不列 raw matches（M2-06）
+        lines.push(s.summary)
+      } else {
+        // 沒 summary（summarize=false 或摘要失敗）：沿用 M2-05 raw matches
+        for (const m of s.matches) {
+          const toolStr = m.tool_name ? ` tool=${m.tool_name}` : ''
+          const singleLine = m.snippet.replace(/\n+/g, ' ↵ ')
+          lines.push(`- [${m.role}${toolStr}] ${singleLine}`)
+        }
       }
       lines.push('')
     }

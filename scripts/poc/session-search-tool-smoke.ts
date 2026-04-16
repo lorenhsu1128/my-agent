@@ -6,6 +6,13 @@
  *
  * Usage: bun run scripts/poc/session-search-tool-smoke.ts
  */
+// M2-06 smoke：測試 summarize fallback 需要讓 getAnthropicClient() 走到 fetch
+// 但目標不可達 → 快速失敗 → 驗證 graceful fallback。
+// 設在 import 之前：env 被 getClaudeConfigHomeDir / client bootstrap 讀取。
+process.env.CLAUDE_CODE_USE_LLAMACPP = 'true'
+process.env.LLAMA_BASE_URL = 'http://127.0.0.1:9' // 保證 ECONNREFUSED
+process.env.LLAMA_MODEL = 'qwen3.5-9b-neo'
+
 import { setOriginalCwd, setProjectRoot } from '../../src/bootstrap/state.js'
 
 // 設定 bootstrap state，讓 Tool 內的 getProjectRoot() 有值
@@ -29,8 +36,13 @@ function check(name: string, cond: boolean, extra = ''): void {
   }
 }
 
-// Minimal context stub — SessionSearchTool.call 不依賴任何 context 欄位
-const fakeCtx = {} as Parameters<typeof SessionSearchTool.call>[1]
+// M2-06：context 現在被 summarize 分支用 — 要 mainLoopModel + abortController
+const fakeCtx = {
+  options: {
+    mainLoopModel: 'qwen3.5-9b-neo-nonexistent-dummy', // 保證摘要會失敗
+  },
+  abortController: new AbortController(),
+} as unknown as Parameters<typeof SessionSearchTool.call>[1]
 const fakeCanUseTool = (async () => ({ behavior: 'allow' as const })) as Parameters<
   typeof SessionSearchTool.call
 >[2]
@@ -87,10 +99,30 @@ try {
   check('「討論過」usedFallback=false', r5.data.usedFallback === false)
 
   console.log()
-  console.log('Test 6: summarize=true 帶 pending flag')
+  console.log('Test 6: summarize=true 且 llamacpp 不可達 → graceful fallback（M2-06）')
   const r6 = await runSearch({ query: 'weather', limit: 2, summarize: true })
-  check('summaryPending=true', r6.data.summaryPending === true)
-  check('note 有提示 M2-06', r6.data.note?.includes('M2-06') ?? false)
+  check('summaryPending=true（摘要失敗）', r6.data.summaryPending === true)
+  check(
+    'note 提示摘要失敗',
+    (r6.data.note?.includes('失敗') ?? false) ||
+      (r6.data.note?.includes('解析失敗') ?? false),
+    r6.data.note ?? '(none)',
+  )
+  check(
+    'sessions[*].summary 全部為 undefined',
+    r6.data.sessions.every(s => s.summary === undefined),
+  )
+  check(
+    'raw matches 仍存在（fallback）',
+    r6.data.sessions.length > 0 && r6.data.sessions[0]!.matches.length > 0,
+  )
+  // 驗證 output map：失敗 fallback 時走 M2-05 的 raw matches 格式，不走 summary 行
+  const block6 = SessionSearchTool.mapToolResultToToolResultBlockParam(
+    r6.data,
+    'test-6-id',
+  )
+  const txt6 = typeof block6.content === 'string' ? block6.content : ''
+  check('失敗 fallback 輸出仍含 match 列「- [role」', txt6.includes('- ['))
 
   console.log()
   console.log('Test 7: FTS5 reserved 字元（含 "."）不炸')
@@ -129,6 +161,30 @@ try {
   const txt = typeof block2.content === 'string' ? block2.content : ''
   check('含 「找到」開頭', txt.startsWith('找到'))
   check('含 「## [」session header', txt.includes('## ['))
+
+  console.log()
+  console.log('Test 10: summary 存在時輸出格式改走 summary 單行（mock）')
+  // 直接 mock summary field 驗證 mapToolResultToToolResultBlockParam 優先顯示 summary
+  const mockedOutput = {
+    ...r1.data,
+    sessions: r1.data.sessions.map((s, i) => ({
+      ...s,
+      summary: i === 0 ? '這個 session 在討論天氣查詢 API 的選擇。' : undefined,
+    })),
+  }
+  const block3 = SessionSearchTool.mapToolResultToToolResultBlockParam(
+    mockedOutput,
+    'test-id-3',
+  )
+  const txt3 = typeof block3.content === 'string' ? block3.content : ''
+  check('含 summary 文字', txt3.includes('天氣查詢 API 的選擇'))
+  // 有 summary 的 session 下方不該有 raw match 列「- [role] ...」（改由 summary 取代）
+  // 驗證方式：抓到第一個 ## 後到下一個 ## 間的區塊不含 "- ["
+  const firstBlock = txt3.split('\n\n## ')[0] ?? ''
+  check(
+    '有 summary 的 session 塊不再列 raw match',
+    !firstBlock.split('\n').some(line => line.startsWith('- [')),
+  )
 
   console.log()
   console.log('--- 實際輸出樣本（limit=3）---')
