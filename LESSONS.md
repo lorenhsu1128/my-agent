@@ -62,7 +62,14 @@
 
 ## 串流處理相關
 
-（尚無記錄）
+### Bun 1.3.6 Windows 的 TextDecoder({stream: true}) 切碎 UTF-8 multi-byte
+- **發生什麼事**：TUI 跑 SessionSearch tool 時，qwen3.5-9b-neo 的 tool_call arguments 含中文「天氣預報」，經 llamacpp adapter 串流翻譯後 `input={}` — 空物件。debug log 顯示 adapter 收到的 `tc.function.arguments` 已是亂碼「憭拇除??」。
+- **根本原因**：`iterOpenAISSELines` 用 `new TextDecoder()` + `decoder.decode(value, {stream: true})` 解碼 SSE upstream bytes。Bun 1.3.6 Windows 的 TextDecoder streaming mode 在 chunk boundary 切到 3-byte CJK 字元中間時**不正確地 emit replacement characters**，而非按 spec 緩衝 incomplete bytes。
+- **正確做法**：改成**累積 raw bytes（`Buffer.concat`）**，在 `\n` byte (0x0a) 處切行，每完整行才 `lineBytes.toString('utf-8')`。SSE 的 `\n` 是 ASCII single-byte，永遠不會切到 multi-byte 字元中間，因此每行的 UTF-8 保證完整。
+- **驗證**：修後 TUI 的 SessionSearch 成功搜到「天氣預報」相關 session（19 筆 FTS match）。
+- **影響範圍**：**所有走 llamacpp adapter 串流翻譯的 tool call arguments，只要含非 ASCII 字元就會踩到。** 純英文 tool call（如 M1 階段三的 get_weather 測試）不受影響。
+- **相關檔案**：`src/services/api/llamacpp-fetch-adapter.ts:367` (`iterOpenAISSELines`)
+- **日期**：2026-04-16
 
 ---
 

@@ -368,19 +368,24 @@ async function* iterOpenAISSELines(
   upstream: ReadableStream<Uint8Array>,
 ): AsyncGenerator<string> {
   const reader = upstream.getReader()
-  const decoder = new TextDecoder()
-  let buf = ''
+  // 不用 TextDecoder({ stream: true })！Bun 1.3.6 Windows 的 streaming
+  // TextDecoder 會在 chunk 邊界切碎 multi-byte UTF-8（例如中文 3-byte
+  // 字元）→ 產生亂碼 → JSON.parse 失敗 → tool input 變成 {}。
+  //
+  // 改成：累積 raw bytes、在 \n (0x0a, ASCII single-byte) 切行、每完整行
+  // 才 toString('utf-8')。SSE 的行分隔符 \n 是 single-byte，不可能切到
+  // multi-byte 字元中間，所以每行內的 UTF-8 一定完整。
+  let rawBuf = Buffer.alloc(0)
   try {
     while (true) {
       const { value, done } = await reader.read()
       if (done) break
-      buf += decoder.decode(value, { stream: true })
-      // SSE event 以空行分隔（\n\n 或 \r\n\r\n），每個 event 可能多行
-      // 我們只關心 data: 行
+      rawBuf = Buffer.concat([rawBuf, Buffer.from(value)])
       let idx: number
-      while ((idx = buf.indexOf('\n')) !== -1) {
-        const line = buf.slice(0, idx).replace(/\r$/, '')
-        buf = buf.slice(idx + 1)
+      while ((idx = rawBuf.indexOf(0x0a)) !== -1) {
+        const lineBytes = rawBuf.subarray(0, idx)
+        rawBuf = rawBuf.subarray(idx + 1)
+        const line = lineBytes.toString('utf-8').replace(/\r$/, '')
         if (!line.startsWith('data:')) continue
         const payload = line.slice(5).trim()
         if (!payload) continue

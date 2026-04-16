@@ -391,13 +391,9 @@ export const SessionSearchTool = buildTool({
       .join('\n')
   },
   async call(input, context) {
-    // Debug：若 input 形狀異常（例如 qwen 的 tool_call arguments 解析問題），先 log
+    // 防呆：input.query 不是 string 時 graceful 退（Bun 1.3.6 Windows 的
+    // TextDecoder streaming bug 已修，但保留防呆以防其他 adapter 問題）
     if (typeof input?.query !== 'string') {
-      // biome-ignore lint/suspicious/noConsole: 診斷 tool input 形狀
-      console.warn(
-        `[SessionSearch] input.query 不是 string，實際 input =`,
-        JSON.stringify(input),
-      )
       return {
         data: {
           query: String(input?.query ?? ''),
@@ -405,7 +401,7 @@ export const SessionSearchTool = buildTool({
           totalMatches: 0,
           returnedMatches: 0,
           sessions: [],
-          note: `tool input 格式異常：query 應為 string，收到 ${typeof input?.query}。可能是模型 tool_call arguments 解析問題。`,
+          note: `tool input 格式異常：query 應為 string，收到 ${typeof input?.query}。`,
         } satisfies Output,
       }
     }
