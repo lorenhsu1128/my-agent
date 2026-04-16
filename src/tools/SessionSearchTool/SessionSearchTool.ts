@@ -120,6 +120,11 @@ const SNIPPET_MAX_CHARS = 400
  * <3 chars 的 token 直接過濾掉（例如「天氣 預報」→ 兩個 2-char token 都
  * 被丟；「天氣預報 weather」→ 只保留 "weather"）。
  * 若過濾後**無 token 剩餘**回傳空字串 — 呼叫端應檢查並改走 LIKE fallback。
+ *
+ * Token 間用 **OR** 連接（不是預設的 AND）：使用者與模型常混合中英文
+ * keyword（「天氣預報 weather forecast」），AND 要求同一筆 message 同時
+ * 含所有 token — 中英文內容很少出現在同一行；OR + BM25 ranking 更實用
+ * （命中多 token 的行自動排前面）。
  */
 function sanitizeFtsQuery(raw: string): string {
   const tokens = raw
@@ -127,7 +132,7 @@ function sanitizeFtsQuery(raw: string): string {
     .split(/\s+/)
     .filter(t => t.length >= MIN_FTS_QUERY_LEN)
   if (tokens.length === 0) return ''
-  return tokens.map(t => `"${t.replace(/"/g, '""')}"`).join(' ')
+  return tokens.map(t => `"${t.replace(/"/g, '""')}"`).join(' OR ')
 }
 
 interface RawMatch {
