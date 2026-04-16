@@ -143,6 +143,17 @@
 - **相關檔案**：`src/services/sessionIndex/schema.ts`（註釋已標記）、`scripts/poc/session-index-smoke.ts`（驗證測試）
 - **日期**：2026-04-15
 
+### FTS5 trigram 對中文無空格長句 phrase match 幾乎不可能命中
+- **發生什麼事**：M2-22 手動驗證時，使用者在第二個 session 問「你上次說了甚麼笑話」，prefetch 的 FTS 搜尋沒找到第一個 session 的笑話內容，模型直接編了新笑話。
+- **根本原因**：`sanitizeFtsQuery` 把中文無空格句子整段包成 phrase literal `"你上次說了甚麼笑話"`。FTS5 trigram 做精確 phrase matching（需要所有 trigram 按順序連續出現），但 query 的 trigram（你上次/上次說/…）和 content 的 trigram（說個笑/個笑話/…）完全沒交集。語義相關 ≠ 詞彙相同。
+- **正確做法**：
+  1. 中文長字串拆成 3-char sliding window trigrams 用 OR 連接（不是 phrase match）
+  2. FTS 搜不到時加 LIKE fallback 搜 `sessions.first_user_message`
+  3. 從 query 提取 2-char CJK 關鍵詞（從尾端取，通常是名詞/動詞核心）做 LIKE
+  4. 以上三策略已在 `ftsSearch.ts` 的 `sanitizeFtsQuery` + `searchSessionHistory` 實作
+- **相關檔案**：`src/services/memoryPrefetch/ftsSearch.ts`
+- **日期**：2026-04-16
+
 ---
 
 ## Hermes 程式碼閱讀中的誤解
