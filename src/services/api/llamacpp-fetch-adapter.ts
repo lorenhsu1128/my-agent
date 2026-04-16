@@ -7,7 +7,7 @@
  * 完全無感，程式碼路徑維持 Anthropic schema。
  *
  * 設計決策（DEPLOYMENT_PLAN.md M1 階段二實作 plan / ADR-005 / ADR-006）：
- *  - 不 import @anthropic-ai/sdk 型別；inline 自定義 interface，邊界乾淨。
+ *  - 不 import my-agent-ai/sdk 型別；inline 自定義 interface，邊界乾淨。
  *  - reasoning_content → thinking content block（語意符合 Qwen3.5-Neo
  *    的 CoT 分離）。
  *  - finish_reason → stop_reason：stop→end_turn / length→max_tokens /

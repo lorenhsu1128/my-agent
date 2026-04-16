@@ -1,8 +1,8 @@
-import type Anthropic from '@anthropic-ai/sdk'
+import type Anthropic from 'my-agent-ai/sdk'
 import type {
   BetaTool,
   BetaToolUnion,
-} from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+} from 'my-agent-ai/sdk/resources/beta/messages/messages'
 import { createHash } from 'crypto'
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from 'src/constants/prompts.js'
 import { getSystemContext, getUserContext } from 'src/context.js'

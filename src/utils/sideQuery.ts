@@ -1,5 +1,5 @@
-import type Anthropic from '@anthropic-ai/sdk'
-import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages.js'
+import type Anthropic from 'my-agent-ai/sdk'
+import type { BetaToolUnion } from 'my-agent-ai/sdk/resources/beta/messages'
 import {
   getLastApiCompletionTimestamp,
   setLastApiCompletionTimestamp,

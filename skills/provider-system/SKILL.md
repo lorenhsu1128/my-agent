@@ -53,7 +53,8 @@ QueryEngine → query.ts → claude.ts → new Anthropic({ fetch: llamaCppFetch 
 若走路徑 A，`src/services/providers/types.ts` 的雛形：
 
 ```typescript
-// 事件形狀借用 Anthropic SDK（free-code 既有下游依賴的格式）
+// 事件形狀借用 Anthropic SDK（已 vendor 至 src/vendor/my-agent-ai/sdk/，
+// tsconfig paths 映射讓 import 路徑不變）
 import type { BetaRawMessageStreamEvent, BetaMessage } from '@anthropic-ai/sdk/resources/beta'
 
 export interface Provider {

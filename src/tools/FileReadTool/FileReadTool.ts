@@ -1,4 +1,4 @@
-import type { Base64ImageSource } from '@anthropic-ai/sdk/resources/index.mjs'
+import type { Base64ImageSource } from 'my-agent-ai/sdk/resources/index'
 import { readdir, readFile as readFileAsync } from 'fs/promises'
 import * as path from 'path'
 import { posix, win32 } from 'path'
@@ -189,7 +189,7 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp'])
 
 /**
  * Detects if a file path is a session-related file for analytics logging.
- * Only matches files within the Claude config directory (e.g., ~/.claude).
+ * Only matches files within the Claude config directory (e.g., ~/.my-agent).
  * Returns the type of session file or null if not a session file.
  */
 function detectSessionFileType(
@@ -205,7 +205,7 @@ function detectSessionFileType(
   // Normalize path to use forward slashes for consistent matching across platforms
   const normalizedPath = filePath.split(win32.sep).join(posix.sep)
 
-  // Session memory files: ~/.claude/session-memory/*.md (including summary.md)
+  // Session memory files: ~/.my-agent/session-memory/*.md (including summary.md)
   if (
     normalizedPath.includes('/session-memory/') &&
     normalizedPath.endsWith('.md')
@@ -213,7 +213,7 @@ function detectSessionFileType(
     return 'session_memory'
   }
 
-  // Session JSONL transcript files: ~/.claude/projects/*/*.jsonl
+  // Session JSONL transcript files: ~/.my-agent/projects/*/*.jsonl
   if (
     normalizedPath.includes('/projects/') &&
     normalizedPath.endsWith('.jsonl')

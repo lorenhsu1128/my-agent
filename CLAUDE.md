@@ -45,14 +45,17 @@ free-code/
 ├── TODO.md                ← 任務追蹤 — 你負責讀寫此文件
 ├── LESSONS.md             ← 教訓記錄 — 你和人類都可以讀寫
 ├── src/
+│   ├── vendor/            ← @anthropic-ai SDK 內化原始碼（詳見 ADR-007）
+│   │   └── @anthropic-ai/
+│   │       ├── sdk/               # 主 SDK TypeScript 原始碼（83 .ts 檔）
+│   │       ├── bedrock-sdk/       # AWS Bedrock SDK TS 原始碼
+│   │       ├── vertex-sdk/        # Google Vertex SDK TS 原始碼
+│   │       ├── foundry-sdk/       # Azure Foundry SDK TS 原始碼
+│   │       ├── mcpb/              # MCP Bundle 工具（可讀 JS + .d.ts）
+│   │       └── sandbox-runtime/   # Sandbox 執行環境（可讀 JS + .d.ts + .map）
 │   ├── services/
 │   │   ├── api/           ← 既有 — Anthropic 原生 API（不要重組）
-│   │   └── providers/     ← 新增 — 多 provider 支援
-│   │       ├── index.ts           # Provider 註冊表與工廠
-│   │       ├── types.ts           # Provider 介面定義
-│   │       ├── litellm.ts         # LiteLLM proxy provider
-│   │       ├── anthropicAdapter.ts # 將既有 api/ 封裝為 provider
-│   │       └── toolCallTranslator.ts # Anthropic ↔ OpenAI 工具格式轉譯
+│   │   └── providers/     ← 預留 — 多 provider 支援（目前未使用）
 │   ├── tools/             ← 既有 — 39 個 agent 工具（擴充，不要替換）
 │   ├── commands/           ← 既有 — slash 指令
 │   ├── ...                ← 所有其他既有目錄
@@ -73,6 +76,7 @@ free-code/
 - `src/tools.ts` — 工具註冊表。所有 39 個工具在此註冊。使用 `feature()` 做 flag 控制。
 - `src/Tool.ts` — 工具基礎介面（792 行）。所有工具都實作此介面。
 - `src/QueryEngine.ts` — 核心 LLM 查詢引擎（1,295 行）。處理查詢分發、工具呼叫迴圈、用量追蹤。
+- `src/vendor/my-agent-ai/sdk/` — 內化的 Anthropic SDK 原始碼（tsconfig paths 映射 `@anthropic-ai/sdk` → 此處）。
 - `src/services/api/client.ts` — 當前 API 客戶端（Anthropic SDK 封裝）。
 - `src/services/api/claude.ts` — 串流處理和用量累計。
 - `src/services/tools/StreamingToolExecutor.ts` — 串流工具執行（530 行）。
@@ -160,6 +164,7 @@ bun test                         # 執行測試
 - ADR-004：Hermes 原始碼作為唯讀參考，用 TypeScript 重新實作
 - ADR-005（2026-04-15）：provider 內部做格式轉譯（OpenAI SSE → Anthropic `stream_event`），保持 `QueryEngine.ts` 與 `StreamingToolExecutor.ts` 零修改。理由：這兩個檔案在 `.claude/settings.json` 的 deny list；在 provider 邊界做轉譯讓下游主幹無感。
 - ADR-006（2026-04-15）：Qwen3.5-Neo 的 `reasoning_content` 映射為 Anthropic `thinking` content block。理由：模型把 CoT 放 `reasoning_content`、答案放 `content`，對應到 Anthropic 的 thinking block 在語意上最貼近，也保留 UI 顯示 CoT 的能力。
+- ADR-007（2026-04-16）：`@anthropic-ai` 全部 7 個 npm 套件內化為專案原始碼（`src/vendor/my-agent-ai/`）。4 個有 TS 原始碼的（sdk / bedrock / vertex / foundry）直接 vendor `.ts` 檔；2 個只有編譯後 JS 的（mcpb / sandbox-runtime）vendor 可讀 JS + `.d.ts`；1 個（claude-agent-sdk）專案零 import 直接刪除。透過 `tsconfig.json` paths 映射，所有 `@anthropic-ai/sdk` import 自動指向 vendor 目錄，既有 121 個 import 不需修改路徑。理由：完全掌控 SDK 程式碼，可自由修改以支援多 provider；不再受上游版本更新影響。
 
 ---
 

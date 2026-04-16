@@ -3,7 +3,7 @@
  * This isolates mock logic from production code
  */
 
-import { APIError } from '@anthropic-ai/sdk'
+import { APIError } from 'my-agent-ai/sdk'
 import {
   applyMockHeaders,
   checkMockFastModeRateLimit,

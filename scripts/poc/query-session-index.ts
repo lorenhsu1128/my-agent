@@ -8,7 +8,7 @@ import { join } from 'path'
 
 const dbPath = join(
   homedir(),
-  '.free-code',
+  '.my-agent',
   'projects',
   'C--Users-LOREN-Documents--projects-free-code',
   'session-index.db',

@@ -1,4 +1,4 @@
-import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
+import type { ToolResultBlockParam } from 'my-agent-ai/sdk/resources/index'
 import React from 'react'
 import { MessageResponse } from 'src/components/MessageResponse.js'
 import { extractTag } from 'src/utils/messages.js'

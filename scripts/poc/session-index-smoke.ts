@@ -4,7 +4,7 @@
  * - M2-01 審查：parent_session_id + idx_sessions_parent（3 check）
  * - M2-02：indexEntry tee 流程、shadow dedup、空內容、busy 吞錯（新增 check）
  *
- * 走 throwaway CLAUDE_CONFIG_DIR，不污染真實 ~/.free-code。
+ * 走 throwaway CLAUDE_CONFIG_DIR，不污染真實 ~/.my-agent。
  *
  * Usage:
  *   bun run scripts/poc/session-index-smoke.ts

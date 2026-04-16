@@ -1,4 +1,4 @@
-import Anthropic, { type ClientOptions } from '@anthropic-ai/sdk'
+import Anthropic, { type ClientOptions } from 'my-agent-ai/sdk'
 import { randomUUID } from 'crypto'
 import {
   computeCch,
@@ -193,7 +193,7 @@ export async function getAnthropicClient({
     }),
   }
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) {
-    const { AnthropicBedrock } = await import('@anthropic-ai/bedrock-sdk')
+    const { AnthropicBedrock } = await import('my-agent-ai/bedrock-sdk')
     // Use region override for small fast model if specified
     const awsRegion =
       model === getSmallFastModel() &&
@@ -231,7 +231,7 @@ export async function getAnthropicClient({
     return new AnthropicBedrock(bedrockArgs) as unknown as Anthropic
   }
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)) {
-    const { AnthropicFoundry } = await import('@anthropic-ai/foundry-sdk')
+    const { AnthropicFoundry } = await import('my-agent-ai/foundry-sdk')
     // Determine Azure AD token provider based on configuration
     // SDK reads ANTHROPIC_FOUNDRY_API_KEY by default
     let azureADTokenProvider: (() => Promise<string>) | undefined
@@ -268,7 +268,7 @@ export async function getAnthropicClient({
     }
 
     const [{ AnthropicVertex }, { GoogleAuth }] = await Promise.all([
-      import('@anthropic-ai/vertex-sdk'),
+      import('my-agent-ai/vertex-sdk'),
       import('google-auth-library'),
     ])
     // TODO: Cache either GoogleAuth instance or AuthClient to improve performance

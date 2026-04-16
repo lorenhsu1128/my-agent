@@ -1,5 +1,5 @@
 import { c as _c } from "react/compiler-runtime";
-import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import type { ToolResultBlockParam } from 'my-agent-ai/sdk/resources/index';
 import * as React from 'react';
 import { KeyboardShortcutHint } from '../../components/design-system/KeyboardShortcutHint.js';
 import { FallbackToolUseErrorMessage } from '../../components/FallbackToolUseErrorMessage.js';

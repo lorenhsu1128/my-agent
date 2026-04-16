@@ -2,11 +2,11 @@ import {
   APIConnectionError,
   APIConnectionTimeoutError,
   APIError,
-} from '@anthropic-ai/sdk'
+} from 'my-agent-ai/sdk'
 import type {
   BetaMessage,
   BetaStopReason,
-} from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+} from 'my-agent-ai/sdk/resources/beta/messages/messages'
 import { AFK_MODE_BETA_HEADER } from 'src/constants/betas.js'
 import type { SDKAssistantMessageError } from 'src/entrypoints/agentSdkTypes.js'
 import type {

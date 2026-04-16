@@ -1,5 +1,5 @@
-import { APIError } from '@anthropic-ai/sdk'
-import type { MessageParam } from '@anthropic-ai/sdk/resources/index.mjs'
+import { APIError } from 'my-agent-ai/sdk'
+import type { MessageParam } from 'my-agent-ai/sdk/resources/index'
 import isEqual from 'lodash-es/isEqual.js'
 import { getIsNonInteractiveSession } from '../bootstrap/state.js'
 import { isClaudeAISubscriber } from '../utils/auth.js'

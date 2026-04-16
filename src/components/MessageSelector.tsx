@@ -1,5 +1,5 @@
 import { c as _c } from "react/compiler-runtime";
-import type { ContentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import type { ContentBlockParam, TextBlockParam } from 'my-agent-ai/sdk/resources/index';
 import { randomUUID, type UUID } from 'crypto';
 import figures from 'figures';
 import * as React from 'react';

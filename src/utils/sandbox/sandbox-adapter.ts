@@ -1,5 +1,5 @@
 /**
- * Adapter layer that wraps @anthropic-ai/sandbox-runtime with Claude CLI-specific integrations.
+ * Adapter layer that wraps my-agent-ai/sandbox-runtime with Claude CLI-specific integrations.
  * This file provides the bridge between the external sandbox-runtime package and Claude CLI's
  * settings system, tool integration, and additional features.
  */
@@ -14,12 +14,12 @@ import type {
   SandboxDependencyCheck,
   SandboxRuntimeConfig,
   SandboxViolationEvent,
-} from '@anthropic-ai/sandbox-runtime'
+} from 'my-agent-ai/sandbox-runtime'
 import {
   SandboxManager as BaseSandboxManager,
   SandboxRuntimeConfigSchema,
   SandboxViolationStore,
-} from '@anthropic-ai/sandbox-runtime'
+} from 'my-agent-ai/sandbox-runtime'
 import { rmSync, statSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { memoize } from 'lodash-es'
@@ -240,18 +240,18 @@ export function convertToSandboxRuntimeConfig(
   const cwd = getCwdState()
   const originalCwd = getOriginalCwd()
   if (cwd !== originalCwd) {
-    denyWrite.push(resolve(cwd, '.claude', 'settings.json'))
-    denyWrite.push(resolve(cwd, '.claude', 'settings.local.json'))
+    denyWrite.push(resolve(cwd, '.my-agent', 'settings.json'))
+    denyWrite.push(resolve(cwd, '.my-agent', 'settings.local.json'))
   }
 
-  // Block writes to .claude/skills in both original and current working directories.
-  // The sandbox-runtime's getDangerousDirectories() protects .claude/commands and
-  // .claude/agents but not .claude/skills. Skills have the same privilege level
+  // Block writes to .my-agent/skills in both original and current working directories.
+  // The sandbox-runtime's getDangerousDirectories() protects .my-agent/commands and
+  // .my-agent/agents but not .my-agent/skills. Skills have the same privilege level
   // (auto-discovered, auto-loaded, full Claude capabilities) so they need the
   // same OS-level sandbox protection.
-  denyWrite.push(resolve(originalCwd, '.claude', 'skills'))
+  denyWrite.push(resolve(originalCwd, '.my-agent', 'skills'))
   if (cwd !== originalCwd) {
-    denyWrite.push(resolve(cwd, '.claude', 'skills'))
+    denyWrite.push(resolve(cwd, '.my-agent', 'skills'))
   }
 
   // SECURITY: Git's is_git_directory() treats cwd as a bare repo if it has

@@ -40,7 +40,7 @@ section('Step 0: Reconcile JSONL → FTS index')
 
 const projectRoot = process.cwd()
 const configHome =
-  process.env.CLAUDE_CONFIG_HOME || path.join(os.homedir(), '.claude')
+  process.env.CLAUDE_CONFIG_HOME || path.join(os.homedir(), '.my-agent')
 const slug = 'C--Users-LOREN-Documents--projects-free-code'
 const dbPath = path.join(configHome, 'projects', slug, 'session-index.db')
 

@@ -1,10 +1,10 @@
 import { feature } from 'bun:bundle'
-import type Anthropic from '@anthropic-ai/sdk'
+import type Anthropic from 'my-agent-ai/sdk'
 import {
   APIConnectionError,
   APIError,
   APIUserAbortError,
-} from '@anthropic-ai/sdk'
+} from 'my-agent-ai/sdk'
 import type { QuerySource } from 'src/constants/querySource.js'
 import type { SystemAPIErrorMessage } from 'src/types/message.js'
 import { isAwsCredentialsProviderError } from 'src/utils/aws.js'

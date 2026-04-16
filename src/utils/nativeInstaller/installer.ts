@@ -1662,9 +1662,9 @@ export async function cleanupNpmInstallations(): Promise<{
   const warnings: string[] = []
   let removed = 0
 
-  // Always attempt to remove @anthropic-ai/claude-code
+  // Always attempt to remove my-agent-ai/claude-code
   const codePackageResult = await attemptNpmUninstall(
-    '@anthropic-ai/claude-code',
+    'my-agent-ai/claude-code',
   )
   if (codePackageResult.success) {
     removed++
@@ -1676,7 +1676,7 @@ export async function cleanupNpmInstallations(): Promise<{
   }
 
   // Also attempt to remove MACRO.PACKAGE_URL if it's defined and different
-  if (MACRO.PACKAGE_URL && MACRO.PACKAGE_URL !== '@anthropic-ai/claude-code') {
+  if (MACRO.PACKAGE_URL && MACRO.PACKAGE_URL !== 'my-agent-ai/claude-code') {
     const macroPackageResult = await attemptNpmUninstall(MACRO.PACKAGE_URL)
     if (macroPackageResult.success) {
       removed++
@@ -1688,8 +1688,8 @@ export async function cleanupNpmInstallations(): Promise<{
     }
   }
 
-  // Check for local installation at ~/.claude/local
-  const localInstallDir = join(homedir(), '.claude', 'local')
+  // Check for local installation at ~/.my-agent/local
+  const localInstallDir = join(homedir(), '.my-agent', 'local')
 
   try {
     await rm(localInstallDir, { recursive: true })

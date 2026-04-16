@@ -7,7 +7,7 @@
  */
 
 import { feature } from 'bun:bundle'
-import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
+import type { ContentBlockParam } from 'my-agent-ai/sdk/resources/messages'
 
 // ============================================================================
 // Permission Modes
@@ -313,7 +313,7 @@ export type PermissionDecisionReason =
       type: 'safetyCheck'
       reason: string
       // When true, auto mode lets the classifier evaluate this instead of
-      // forcing a prompt. True for sensitive-file paths (.claude/, .git/,
+      // forcing a prompt. True for sensitive-file paths (.my-agent/, .git/,
       // shell configs) — the classifier can see context and decide. False
       // for Windows path bypass attempts and cross-machine bridge messages.
       classifierApprovable: boolean

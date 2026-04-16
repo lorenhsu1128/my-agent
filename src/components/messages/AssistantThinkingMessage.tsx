@@ -1,5 +1,5 @@
 import { c as _c } from "react/compiler-runtime";
-import type { ThinkingBlock, ThinkingBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import type { ThinkingBlock, ThinkingBlockParam } from 'my-agent-ai/sdk/resources/index';
 import React from 'react';
 import { Box, Text } from '../../ink.js';
 import { CtrlOToExpand } from '../CtrlOToExpand.js';

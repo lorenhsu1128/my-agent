@@ -1,5 +1,5 @@
 import { feature } from 'bun:bundle'
-import { APIUserAbortError } from '@anthropic-ai/sdk'
+import { APIUserAbortError } from 'my-agent-ai/sdk'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import {
   getToolNameForPermissionCheck,
@@ -1141,7 +1141,7 @@ export async function checkRuleBasedPermissions(
     return toolPermissionResult
   }
 
-  // 1g. Safety checks (e.g. .git/, .claude/, .vscode/, shell configs) are
+  // 1g. Safety checks (e.g. .git/, .my-agent/, .vscode/, shell configs) are
   // bypass-immune — they must prompt even when a PreToolUse hook returned
   // allow. checkPathSafetyForAutoEdit returns {type:'safetyCheck'} for these.
   if (
@@ -1249,7 +1249,7 @@ async function hasPermissionsToUseToolInner(
     return toolPermissionResult
   }
 
-  // 1g. Safety checks (e.g. .git/, .claude/, .vscode/, shell configs) are
+  // 1g. Safety checks (e.g. .git/, .my-agent/, .vscode/, shell configs) are
   // bypass-immune — they must prompt even in bypassPermissions mode.
   // checkPathSafetyForAutoEdit returns {type:'safetyCheck'} for these paths.
   if (

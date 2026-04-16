@@ -209,14 +209,14 @@ async function detectMultipleInstallations(): Promise<
   const installations: Array<{ type: string; path: string }> = []
 
   // Check for local installation
-  const localPath = join(homedir(), '.claude', 'local')
+  const localPath = join(homedir(), '.my-agent', 'local')
   if (await localInstallationExists()) {
     installations.push({ type: 'npm-local', path: localPath })
   }
 
   // Check for global npm installation
-  const packagesToCheck = ['@anthropic-ai/claude-code']
-  if (MACRO.PACKAGE_URL && MACRO.PACKAGE_URL !== '@anthropic-ai/claude-code') {
+  const packagesToCheck = ['my-agent-ai/claude-code']
+  if (MACRO.PACKAGE_URL && MACRO.PACKAGE_URL !== 'my-agent-ai/claude-code') {
     packagesToCheck.push(MACRO.PACKAGE_URL)
   }
   const npmResult = await execFileNoThrow('npm', [
@@ -469,13 +469,13 @@ async function detectConfigurationIssues(
         // Alias exists but points to invalid target
         warnings.push({
           issue: 'Local installation not accessible',
-          fix: `Alias exists but points to invalid target: ${existingAlias}. Update alias: alias claude="~/.claude/local/claude"`,
+          fix: `Alias exists but points to invalid target: ${existingAlias}. Update alias: alias claude="~/.my-agent/local/claude"`,
         })
       } else {
         // No alias exists and not in PATH
         warnings.push({
           issue: 'Local installation not accessible',
-          fix: 'Create alias: alias claude="~/.claude/local/claude"',
+          fix: 'Create alias: alias claude="~/.my-agent/local/claude"',
         })
       }
     }
@@ -536,10 +536,10 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
 
     for (const install of npmInstalls) {
       if (install.type === 'npm-global') {
-        let uninstallCmd = 'npm -g uninstall @anthropic-ai/claude-code'
+        let uninstallCmd = 'npm -g uninstall my-agent-ai/claude-code'
         if (
           MACRO.PACKAGE_URL &&
-          MACRO.PACKAGE_URL !== '@anthropic-ai/claude-code'
+          MACRO.PACKAGE_URL !== 'my-agent-ai/claude-code'
         ) {
           uninstallCmd += ` && npm -g uninstall ${MACRO.PACKAGE_URL}`
         }

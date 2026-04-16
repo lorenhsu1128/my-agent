@@ -295,8 +295,8 @@ export async function update() {
     const packageName =
       MACRO.PACKAGE_URL ||
       (process.env.USER_TYPE === 'ant'
-        ? '@anthropic-ai/claude-cli'
-        : '@anthropic-ai/claude-code')
+        ? 'my-agent-ai/claude-cli'
+        : 'my-agent-ai/claude-code')
     process.stderr.write(
       `  • Manually check: npm view ${packageName} version\n`,
     )
@@ -386,7 +386,7 @@ export async function update() {
       if (useLocalUpdate) {
         process.stderr.write('Try manually updating with:\n')
         process.stderr.write(
-          `  cd ~/.claude/local && npm update ${MACRO.PACKAGE_URL}\n`,
+          `  cd ~/.my-agent/local && npm update ${MACRO.PACKAGE_URL}\n`,
         )
       } else {
         process.stderr.write('Try running with sudo or fix npm permissions\n')
@@ -401,7 +401,7 @@ export async function update() {
       if (useLocalUpdate) {
         process.stderr.write('Try manually updating with:\n')
         process.stderr.write(
-          `  cd ~/.claude/local && npm update ${MACRO.PACKAGE_URL}\n`,
+          `  cd ~/.my-agent/local && npm update ${MACRO.PACKAGE_URL}\n`,
         )
       } else {
         process.stderr.write(

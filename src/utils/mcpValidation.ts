@@ -2,7 +2,7 @@ import type {
   ContentBlockParam,
   ImageBlockParam,
   TextBlockParam,
-} from '@anthropic-ai/sdk/resources/index.mjs'
+} from 'my-agent-ai/sdk/resources/index'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
   countMessagesTokensWithAPI,

@@ -575,7 +575,7 @@ const PluginManifestMcpServerSchema = lazySchema(() =>
  * Schema for a single user-configurable option in plugin manifest userConfig.
  *
  * Shape intentionally matches `McpbUserConfigurationOption` from
- * `@anthropic-ai/mcpb` so the parsed result is structurally assignable to
+ * `my-agent-ai/mcpb` so the parsed result is structurally assignable to
  * `UserConfigSchema` in mcpbHandler.ts — this lets us reuse
  * `validateUserConfig` and the config dialog without modification.
  * `title` and `description` are required (not optional) because the upstream
@@ -1440,7 +1440,7 @@ export const SettingsPluginEntrySchema = lazySchema(() =>
  *   "version": "1.2.0",
  *   "installedAt": "2024-01-15T10:30:00Z",
  *   "marketplace": "anthropic-tools",
- *   "installPath": "/home/user/.claude/plugins/installed/anthropic-tools/code-formatter"
+ *   "installPath": "/home/user/.my-agent/plugins/installed/anthropic-tools/code-formatter"
  * }
  */
 export const InstalledPluginSchema = lazySchema(() =>
@@ -1496,9 +1496,9 @@ export const InstalledPluginsFileSchemaV1 = lazySchema(() =>
  *
  * Plugins can be installed at different scopes:
  * - managed: Enterprise/system-wide (read-only, platform-specific paths)
- * - user: User's global settings (~/.claude/settings.json)
- * - project: Shared project settings ($project/.claude/settings.json)
- * - local: Personal project overrides ($project/.claude/settings.local.json)
+ * - user: User's global settings (~/.my-agent/settings.json)
+ * - project: Shared project settings ($project/.my-agent/settings.json)
+ * - local: Personal project overrides ($project/.my-agent/settings.local.json)
  *
  * Note: 'flag' scope plugins (from --settings) are session-only and
  * are NOT persisted to installed_plugins.json.
@@ -1585,7 +1585,7 @@ export const InstalledPluginsFileSchema = lazySchema(() =>
  * Example entry:
  * {
  *   "source": { "source": "github", "repo": "anthropic/claude-plugins" },
- *   "installLocation": "/home/user/.claude/plugins/cached/marketplaces/anthropic-tools",
+ *   "installLocation": "/home/user/.my-agent/plugins/cached/marketplaces/anthropic-tools",
  *   "lastUpdated": "2024-01-15T10:30:00Z"
  * }
  */

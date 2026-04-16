@@ -5,15 +5,15 @@ import { join } from 'path'
 
 /**
  * Free-code 專屬的家目錄設定資料夾名稱（取代官方 Claude Code 的 .claude）。
- * 目的：避免 fork 與官方共用 ~/.claude/，污染官方 OAuth / 登入狀態。
+ * 目的：避免 fork 與官方共用 ~/.my-agent/，污染官方 OAuth / 登入狀態。
  * 使用者仍可用 CLAUDE_CONFIG_DIR env var 手動覆蓋到任意路徑（向下相容）。
  */
-export const FREE_CODE_HOME_DIR_NAME = '.free-code'
+export const FREE_CODE_HOME_DIR_NAME = '.my-agent'
 
 /**
  * 官方 Claude Code 的舊家目錄名稱。保留常數用於 migration 提示與疑難排解。
  */
-export const LEGACY_CLAUDE_HOME_DIR_NAME = '.claude'
+export const LEGACY_CLAUDE_HOME_DIR_NAME = '.my-agent'
 
 // Memoized: 150+ callers, many on hot paths. Keyed off CLAUDE_CONFIG_DIR so
 // tests that change the env var get a fresh value without explicit cache.clear.
@@ -28,15 +28,15 @@ export const getClaudeConfigHomeDir = memoize(
 
 /**
  * 首次啟動提示：若使用者沒設 CLAUDE_CONFIG_DIR、新家目錄不存在、但舊的
- * ~/.claude/ 存在，代表很可能是從官方 Claude Code 切過來。印一次 hint
- * 說明 free-code 現在獨立用 ~/.free-code/。
+ * ~/.my-agent/ 存在，代表很可能是從官方 Claude Code 切過來。印一次 hint
+ * 說明 free-code 現在獨立用 ~/.my-agent/。
  *
  * 設計：只印到 stderr**一次**、只在首次偵測到切換需求時，之後自動建
  * `.migration-acknowledged` marker 後不再印。避免 PowerShell + bun.ps1
  * wrapper 對 stderr 訊息過度反應卡住 TUI 的問題（2026-04-15 使用者回報）。
  *
  * 使用者若要永久關閉：設 CLAUDE_CODE_SKIP_MIGRATION_HINT=1 或建立檔案
- * ~/.free-code/.migration-acknowledged。
+ * ~/.my-agent/.migration-acknowledged。
  */
 let freeCodeMigrationHintPrinted = false
 export function printFreeCodeMigrationHintOnce(): void {
@@ -67,7 +67,7 @@ export function printFreeCodeMigrationHintOnce(): void {
     }
     // biome-ignore lint/suspicious/noConsole:: 告知 user 的 stderr 訊息
     console.error(
-      `[free-code] 家目錄改為 ${newDir}（原 ~/.claude/ 不動）。` +
+      `[free-code] 家目錄改為 ${newDir}（原 ~/.my-agent/ 不動）。` +
         `沿用舊登入：CLAUDE_CONFIG_DIR="${legacyDir}"。此訊息只顯示一次。`,
     )
   } catch {

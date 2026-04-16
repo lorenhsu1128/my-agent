@@ -1,4 +1,4 @@
-import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
+import type { ContentBlockParam } from 'my-agent-ai/sdk/resources/index'
 import type { UUID } from 'crypto'
 import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import type { CompactionResult } from '../services/compact/compact.js'

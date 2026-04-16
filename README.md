@@ -294,12 +294,21 @@ src/
   QueryEngine.ts          # LLM query engine
   screens/REPL.tsx        # Main interactive UI (Ink/React)
 
+  vendor/                 # Vendored SDK source (tsconfig paths redirect)
+    my-agent-ai/
+      sdk/                # Main SDK TypeScript source (83 .ts files)
+      bedrock-sdk/        # AWS Bedrock SDK TS source
+      vertex-sdk/         # Google Vertex SDK TS source
+      foundry-sdk/        # Azure Foundry SDK TS source
+      mcpb/               # MCP Bundle tool (readable JS + .d.ts)
+      sandbox-runtime/    # Sandbox runtime (readable JS + .d.ts + .map)
+
   commands/               # /slash command implementations
   tools/                  # Agent tool implementations (Bash, Read, Edit, etc.)
   components/             # Ink/React terminal UI components
   hooks/                  # React hooks
   services/               # API clients, MCP, OAuth, analytics
-    api/                  # API client + Codex fetch adapter
+    api/                  # API client + Codex/llama.cpp fetch adapters
     oauth/                # OAuth flows (Anthropic + OpenAI)
   state/                  # App state store
   utils/                  # Utilities

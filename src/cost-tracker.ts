@@ -1,4 +1,4 @@
-import type { BetaUsage as Usage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import type { BetaUsage as Usage } from 'my-agent-ai/sdk/resources/beta/messages/messages'
 import chalk from 'chalk'
 import {
   addToTotalCostState,

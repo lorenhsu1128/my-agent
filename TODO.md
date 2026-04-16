@@ -14,7 +14,7 @@
 - ADR-M2-04（修訂）：Prefetch = FTS 歷史 + memdir topic files re-rank，預算 ~2000 tokens，片段直接貼原文。**memdir re-rank 第一版用關鍵字 / token overlap 等非 LLM 方法**，不呼叫遠端 LLM；若需 LLM 才能過濾才用 llamacpp（當前主模型），**不**用 Sonnet/Haiku 等 Anthropic 模型
 - ADR-M2-05：MemoryTool 與 Edit/Write 並存（選項 1），不強制，因 `extractMemories.ts` 的 forked agent 仍走 Edit/Write
 - ADR-M2-06（修訂）：SessionSearch 預設回 top-K 片段（輕量），參數 `summarize: true` 時用**當前 session 主模型 = llamacpp** 做摘要；摘要調用需考慮 llamacpp 速度與 context 限制（9B 模型、32K ctx），片段總量需先截斷到 ~8K 以內再送進去
-- ADR-M2-07：SQLite 路徑 `~/.free-code/projects/{slug}/session-index.db`，用 `bun:sqlite`（零依賴）
+- ADR-M2-07：SQLite 路徑 `~/.my-agent/projects/{slug}/session-index.db`，用 `bun:sqlite`（零依賴）
 - ADR-M2-08：FTS schema 多存欄位（token/cost/tool_calls/finish_reason/timestamp），為未來分析預留
 - ADR-M2-09：索引範圍僅當前 project；跨 project 全域索引延後到未來里程碑
 - ADR-M2-10（新增）：所有驗收情境以 `./cli --model qwen3.5-9b-neo` 為準；Anthropic 路徑不作為回歸測試項（既有 code 保留但不保證 M2 下仍綠）
@@ -22,7 +22,7 @@
 **詳細實作設計與決策邏輯見 DEPLOYMENT_PLAN.md 的 M2 區段。**
 
 ### 階段一：索引基礎建設
-- [x] M2-01 在 `src/services/sessionIndex/` 建立 SQLite FTS5 schema（sessions + messages_fts）、`bun:sqlite` 連線管理、索引檔路徑 `~/.free-code/projects/{slug}/session-index.db` — `paths.ts`/`schema.ts`/`db.ts`/`index.ts` 共 4 檔；10 欄 sessions 表 + FTS5 trigram virtual table + schema_version。`scripts/poc/session-index-smoke.ts` 27/27 綠。踩到 trigram ≥3 字元限制，記入 LESSONS.md 供 M2-05 參考
+- [x] M2-01 在 `src/services/sessionIndex/` 建立 SQLite FTS5 schema（sessions + messages_fts）、`bun:sqlite` 連線管理、索引檔路徑 `~/.my-agent/projects/{slug}/session-index.db` — `paths.ts`/`schema.ts`/`db.ts`/`index.ts` 共 4 檔；10 欄 sessions 表 + FTS5 trigram virtual table + schema_version。`scripts/poc/session-index-smoke.ts` 27/27 綠。踩到 trigram ≥3 字元限制，記入 LESSONS.md 供 M2-05 參考
 - [x] M2-02 找出 JSONL append 寫入點（預期在 `src/utils/sessionStorage.ts` 或 `src/assistant/sessionHistory.ts`），加 tee hook 同步寫 FTS；失敗不可中斷主流程 — hook 在 `sessionStorage.ts:1243`（TranscriptMessage 分支，繼承 `shouldSkipPersistence` 守衛）；`indexWriter.ts` 新增；schema v1→v2 加 `messages_seen` shadow 表做 UUID 去重；用 `getProjectRoot()`（不是 `getOriginalCwd()`）避免 EnterWorktreeTool 分裂索引；`SQLITE_BUSY` 直接吞由 M2-03 補。smoke 從 30 擴到 48/48 綠
 - [x] M2-03 啟動時掃描當前 project 的 JSONL，用 mtime 比對補進未索引內容 — 註：實際路徑是 `{CLAUDE_CONFIG_HOME}/projects/{slug}/{sessionId}.jsonl`（無 `conversations/` 子目錄）。新增 `src/services/sessionIndex/reconciler.ts`：`reconcileProjectIndex` 掃描 + per-session mtime vs `last_indexed_at` 比對 + sidechain / 壞行跳過 + stats log；`ensureReconciled` 冪等 Promise 快取供啟動與 M2-05 共用。Hook 點：`src/setup.ts` 的 background-jobs 區塊（`!isBareMode()` 內，旁邊 `initSessionMemory`）fire-and-forget。Smoke 擴至 62/62 綠，覆蓋空目錄 / 多 session / 壞行 / sidechain 跳過 / up-to-date 跳過 / 冪等
 - [x] M2-04 `bun run typecheck` 綠 + 手動驗證：產幾筆對話、確認 FTS 表有資料、能用 SQL 查到 — typecheck baseline 綠；smoke 66/66 綠；TUI 跑 2 輪天氣查詢後 `scripts/poc/query-session-index.ts` 查到 4 sessions / 79 messages_fts / tool_name 正確抽取（Bash/Read/Skill/Glob）。過程中發現 `indexEntry` 用 `Date.now()` 讓 `started_at` 不準 → 修正為優先 `entry.timestamp`、`ended_at` 改 MAX（commit `0384537`）；砍 db 重建後 started_at 全部對齊真實時間
@@ -266,3 +266,39 @@
 - 2026-04-16 13:32: Session 結束 | 進度：46/57 任務 | 2c984c9 test(m2): M2-18 MemoryTool 端到端 smoke test — 47/47 綠
 
 - 2026-04-16 13:34: Session 結束 | 進度：46/57 任務 | 2c984c9 test(m2): M2-18 MemoryTool 端到端 smoke test — 47/47 綠
+
+- 2026-04-16 13:43: Session 結束 | 進度：49/57 任務 | 2bf6dcb docs(m2): 勾選 M2-21 — 無新教訓、不需新 skill
+
+- 2026-04-16 13:54: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 14:05: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 14:08: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 14:10: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 14:13: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 14:26: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 14:38: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 14:45: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 14:49: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 14:51: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 15:02: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 15:25: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 15:26: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 15:30: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 15:36: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 15:43: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 15:50: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓

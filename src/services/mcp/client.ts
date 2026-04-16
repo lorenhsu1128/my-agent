@@ -3,7 +3,7 @@ import type {
   Base64ImageSource,
   ContentBlockParam,
   MessageParam,
-} from '@anthropic-ai/sdk/resources/index.mjs'
+} from 'my-agent-ai/sdk/resources/index'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import {
   SSEClientTransport,

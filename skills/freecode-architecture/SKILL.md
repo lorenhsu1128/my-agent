@@ -27,7 +27,7 @@ file, grep
 
 | 條件 | 分支 | 實際回傳 | 行號 |
 |------|------|---------|------|
-| `CLAUDE_CODE_USE_BEDROCK=true` | `AnthropicBedrock`（動態 import `@anthropic-ai/bedrock-sdk`）| 轉型為 `Anthropic` | L161–198 |
+| `CLAUDE_CODE_USE_BEDROCK=true` | `AnthropicBedrock`（動態 import `@anthropic-ai/bedrock-sdk`，已 vendor 至 `src/vendor/my-agent-ai/bedrock-sdk/`）| 轉型為 `Anthropic` | L161–198 |
 | `CLAUDE_CODE_USE_FOUNDRY=true` | `AnthropicFoundry`（Azure）| 轉型為 `Anthropic` | L199–228 |
 | `CLAUDE_CODE_USE_VERTEX=true` | `AnthropicVertex`（GCP）| 轉型為 `Anthropic` | L229–306 |
 | `isCodexSubscriber()` + Codex OAuth | `new Anthropic({ fetch: codexFetch, ... })`（**fetch adapter 把 SDK 呼叫轉譯到 ChatGPT Codex backend**）| 原生 Anthropic 類別 | L308–321 |
@@ -115,7 +115,7 @@ export function getAPIProvider(): APIProvider {
 - `src/Tool.ts`（792 行）— Tool 基礎介面
 
 **可改但要謹慎**：
-- `src/services/tools/StreamingToolExecutor.ts`（530 行）— `addTool(block: ToolUseBlock, ...)` 直接吃 `@anthropic-ai/sdk` 的 `ToolUseBlock` 型別
+- `src/services/tools/StreamingToolExecutor.ts`（530 行）— `addTool(block: ToolUseBlock, ...)` 直接吃 `@anthropic-ai/sdk` 的 `ToolUseBlock` 型別（SDK 已 vendor 至 `src/vendor/my-agent-ai/sdk/`，import 路徑不變）
 - `src/services/tools/toolExecution.ts`（1,745 行）— 工具生命週期
 
 **架構含意**：provider 層必須在邊界**產出 Anthropic 形狀的 stream event**，下游主幹無感。實作路徑有兩條：
@@ -132,7 +132,7 @@ export function getAPIProvider(): APIProvider {
 - 每個工具：`src/tools/{name}/` 含 `{name}.tsx`、`UI.tsx`、`prompt.ts`、安全性檔
 - `src/services/tools/` 四檔共 ~3,100 行：`StreamingToolExecutor`、`toolExecution`、`toolHooks`、`toolOrchestration`
 
-工具 I/O 型別都直接沿用 `@anthropic-ai/sdk` 的 `ToolUseBlock` / `ToolResultBlockParam`。M1 的 toolCallTranslator 只需處理「出站（發送到 OpenAI endpoint 前翻譯）+ 入站（SSE chunks 拼回 Anthropic ToolUseBlock）」兩個方向。
+工具 I/O 型別都直接沿用 `@anthropic-ai/sdk` 的 `ToolUseBlock` / `ToolResultBlockParam`（SDK 已 vendor 至 `src/vendor/my-agent-ai/sdk/`，透過 tsconfig paths 映射，import 路徑 `@anthropic-ai/sdk` 不變）。M1 的 toolCallTranslator 只需處理「出站（發送到 OpenAI endpoint 前翻譯）+ 入站（SSE chunks 拼回 Anthropic ToolUseBlock）」兩個方向。
 
 ---
 

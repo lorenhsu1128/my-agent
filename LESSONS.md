@@ -76,7 +76,25 @@
 
 ## 建構與設定相關
 
-（尚無記錄）
+### Vendor SDK 後 Bun bundler 不走 tsconfig paths 解析 cross-package import
+- **發生什麼事**：將 `@anthropic-ai/sdk` 從 node_modules vendor 到 `src/vendor/my-agent-ai/sdk/` 後，`bun run build` 報 `Could not resolve: "@anthropic-ai/sdk/client"` — 錯誤來自 vendored `bedrock-sdk/client.ts` 內部的 `import { BaseAnthropic } from '@anthropic-ai/sdk/client'`。
+- **根本原因**：`bun run typecheck`（tsc）正確走 tsconfig paths 解析，但 `bun build --packages bundle` 對「看起來像 npm 套件名的 bare import」會優先查 node_modules，而非 tsconfig paths。vendored bedrock/vertex/foundry SDK 內部有 ~20 個 cross-package import 指向 `@anthropic-ai/sdk/...`，在 node_modules 已刪除的情況下全部 fail。
+- **正確做法**：vendored SDK 之間的 cross-package import 改為相對路徑。例如 `bedrock-sdk/client.ts` 的 `from '@anthropic-ai/sdk/client'` 改成 `from '../sdk/client'`，`bedrock-sdk/core/error.ts` 的改成 `from '../../sdk/core/error'`。這只影響 vendor 目錄內的檔案（~20 處），不影響 `src/` 下既有的 121 個 import（它們的 bare import 被 tsconfig paths 正確處理）。
+- **相關檔案**：`src/vendor/my-agent-ai/{bedrock,vertex,foundry}-sdk/` 內所有 `.ts` 檔
+- **日期**：2026-04-16
+
+### Vendor SDK 時 `.mjs` deep import 路徑需去掉副檔名
+- **發生什麼事**：SDK 的 npm 發佈物有 `.mjs` 編譯檔，專案中 92 個檔案用 `@anthropic-ai/sdk/resources/index.mjs` 之類的 deep import 引用型別。vendor 後 tsconfig paths 映射 `@anthropic-ai/sdk/*` → `src/vendor/my-agent-ai/sdk/*`，但 vendor 目錄裡只有 `.ts` 原始碼，沒有 `.mjs`。
+- **正確做法**：機械式 `sed -i "s|@anthropic-ai/sdk/\([^'\"]*\)\.mjs|@anthropic-ai/sdk/\1|g"` 去掉 92 個檔案的 `.mjs` 副檔名。Bun 的 `moduleResolution: "bundler"` 會自動解析無副檔名 import 到 `.ts` 檔。只有 5 個不同的 `.mjs` 路徑模式，全部是 type-only import。
+- **相關檔案**：92 個 `src/` 下的 `.ts`/`.tsx` 檔案
+- **日期**：2026-04-16
+
+### `bun install --force` 不會清理 orphan 套件目錄
+- **發生什麼事**：從 `package.json` 移除 7 個 `@anthropic-ai` 依賴後，`bun install` 顯示 "Removed: 7"，`bun.lock` 也確認沒有 anthropic 參考。但 `node_modules/@anthropic-ai/` 目錄（3934 個檔案、~66MB）仍然殘留。即使 `bun install --force` 重裝也一樣。
+- **根本原因**：Bun 的 install 只管新增/更新 lockfile 裡的套件，不主動清理 node_modules 裡不在 lockfile 的 orphan 目錄。
+- **正確做法**：手動 `find node_modules/@anthropic-ai -delete` 或 `rm -rf node_modules/@anthropic-ai/` 清理。
+- **相關檔案**：node_modules/
+- **日期**：2026-04-16
 
 ---
 

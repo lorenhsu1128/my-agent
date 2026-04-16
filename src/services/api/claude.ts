@@ -16,9 +16,9 @@ import type {
   BetaToolUnion,
   BetaUsage,
   BetaMessageParam as MessageParam,
-} from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
-import type { Stream } from '@anthropic-ai/sdk/streaming.mjs'
+} from 'my-agent-ai/sdk/resources/beta/messages/messages'
+import type { TextBlockParam } from 'my-agent-ai/sdk/resources/index'
+import type { Stream } from 'my-agent-ai/sdk/streaming'
 import { randomUUID } from 'crypto'
 import {
   getAPIProvider,
@@ -107,12 +107,12 @@ const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
   : null
 
 import { feature } from 'bun:bundle'
-import type { ClientOptions } from '@anthropic-ai/sdk'
+import type { ClientOptions } from 'my-agent-ai/sdk'
 import {
   APIConnectionTimeoutError,
   APIError,
   APIUserAbortError,
-} from '@anthropic-ai/sdk/error'
+} from 'my-agent-ai/sdk/error'
 import {
   getAfkModeHeaderLatched,
   getCacheEditingHeaderLatched,

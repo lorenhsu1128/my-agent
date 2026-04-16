@@ -1,7 +1,7 @@
 /**
  * Smoke test for SessionSearchTool（M2-05）。
  *
- * 跑在使用者真實 session-index.db 上（~/.free-code/projects/{slug}/），
+ * 跑在使用者真實 session-index.db 上（~/.my-agent/projects/{slug}/），
  * 只讀、不改。需先跑過 rebuild-session-index 或 TUI 讓 index 有資料。
  *
  * Usage: bun run scripts/poc/session-search-tool-smoke.ts

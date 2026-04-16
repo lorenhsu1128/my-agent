@@ -7,7 +7,7 @@ const sessionTranscriptModule = feature('KAIROS')
   ? (require('../sessionTranscript/sessionTranscript.js') as typeof import('../sessionTranscript/sessionTranscript.js'))
   : null
 
-import { APIUserAbortError } from '@anthropic-ai/sdk'
+import { APIUserAbortError } from 'my-agent-ai/sdk'
 import { markPostCompaction } from 'src/bootstrap/state.js'
 import { getInvokedSkillsForAgent } from '../../bootstrap/state.js'
 import type { QuerySource } from '../../constants/querySource.js'
@@ -1688,7 +1688,7 @@ function shouldExcludeFromPostCompactRestore(
 
   // Exclude all types of claude.md files
   // TODO: Refactor to use isMemoryFilePath() from claudemd.ts for consistency
-  // and to also match child directory memory files (.claude/rules/*.md, etc.)
+  // and to also match child directory memory files (.my-agent/rules/*.md, etc.)
   try {
     const normalizedMemoryPaths = new Set(
       MEMORY_TYPE_VALUES.map(type => expandPath(getMemoryPath(type))),

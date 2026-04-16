@@ -1163,7 +1163,7 @@ export const AgentDefinitionSchema = lazySchema(() =>
         .enum(['user', 'project', 'local'])
         .optional()
         .describe(
-          "Scope for auto-loading agent memory files. 'user' - ~/.claude/agent-memory/<agentType>/, 'project' - .claude/agent-memory/<agentType>/, 'local' - .claude/agent-memory-local/<agentType>/",
+          "Scope for auto-loading agent memory files. 'user' - ~/.my-agent/agent-memory/<agentType>/, 'project' - .my-agent/agent-memory/<agentType>/, 'local' - .my-agent/agent-memory-local/<agentType>/",
         ),
       effort: z
         .union([z.enum(['low', 'medium', 'high', 'max']), z.number().int()])
@@ -1191,9 +1191,9 @@ export const SettingSourceSchema = lazySchema(() =>
     .enum(['user', 'project', 'local'])
     .describe(
       'Source for loading filesystem-based settings. ' +
-        "'user' - Global user settings (~/.claude/settings.json). " +
-        "'project' - Project settings (.claude/settings.json). " +
-        "'local' - Local settings (.claude/settings.local.json).",
+        "'user' - Global user settings (~/.my-agent/settings.json). " +
+        "'project' - Project settings (.my-agent/settings.json). " +
+        "'local' - Local settings (.my-agent/settings.local.json).",
     ),
 )
 
@@ -1234,13 +1234,13 @@ export const RewindFilesResultSchema = lazySchema(() =>
 // The generation script uses TypeOverrideMap to output the correct TS type references.
 // This allows us to define SDK message types in Zod while maintaining proper typing.
 
-/** Placeholder for APIUserMessage from @anthropic-ai/sdk */
+/** Placeholder for APIUserMessage from my-agent-ai/sdk */
 export const APIUserMessagePlaceholder = lazySchema(() => z.unknown())
 
-/** Placeholder for APIAssistantMessage from @anthropic-ai/sdk */
+/** Placeholder for APIAssistantMessage from my-agent-ai/sdk */
 export const APIAssistantMessagePlaceholder = lazySchema(() => z.unknown())
 
-/** Placeholder for RawMessageStreamEvent from @anthropic-ai/sdk */
+/** Placeholder for RawMessageStreamEvent from my-agent-ai/sdk */
 export const RawMessageStreamEventPlaceholder = lazySchema(() => z.unknown())
 
 /** Placeholder for UUID from crypto */
