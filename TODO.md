@@ -43,7 +43,7 @@
 
 ### 階段四：MemoryTool 寫入
 - [x] M2-14 新增 `src/tools/MemoryTool/MemoryTool.ts`：動作 `add` / `replace` / `remove`；target 指 memdir 四型檔案；自動維護 `MEMORY.md` 索引行 — 3 檔案（MemoryTool.ts / prompt.ts / UI.tsx）+ 註冊到 tools.ts。`validateMemoryFilename` 路徑安全驗證 + `updateMemoryIndex` regex 索引管理。不覆寫 checkPermissions。Typecheck 基線不變
-- [ ] M2-15 原子寫入：temp file + rename；檔案鎖（Windows 用 `proper-lockfile` 或手搓 `.lock` 哨兵檔）
+- [x] M2-15 原子寫入：temp file + rename；檔案鎖（Windows 用 `proper-lockfile` 或手搓 `.lock` 哨兵檔） — `atomicWrite` helper（寫 `.tmp` → `rename`，失敗 fallback 直接寫）+ `acquireMemdirLock`（`proper-lockfile` 包裝，stale 10s，retry 3 次）。`call()` 外層 try/finally 保證 unlock。`updateMemoryIndex` 亦改用 `atomicWrite`。Typecheck 基線不變
 - [ ] M2-16 Prompt injection scanner：掃寫入內容的可疑 pattern（`ignore previous instructions`、`system:`、base64 blob、URL exfil、`<script>` 等），命中就拒絕並回錯誤訊息
 - [ ] M2-17 配額警告：memdir 總 token 估算超閾值（例如 10K）時，tool 回應附警告請求收斂
 - [ ] M2-18 端到端驗證：add 後 MEMORY.md 索引更新、replace 只改目標、remove 不留孤兒索引；injection 測試案例被拒
@@ -258,3 +258,5 @@
 - 2026-04-16 13:04: Session 結束 | 進度：41/57 任務 | 5f46900 docs(m2): 勾選 M2-13 — prefetch 端到端 TUI 驗證通過
 
 - 2026-04-16 13:04: Session 結束 | 進度：41/57 任務 | 5f46900 docs(m2): 勾選 M2-13 — prefetch 端到端 TUI 驗證通過
+
+- 2026-04-16 13:14: Session 結束 | 進度：42/57 任務 | 915cf58 feat(m2): M2-14 MemoryTool — memdir 四型檔案管理工具

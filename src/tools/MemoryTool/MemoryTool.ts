@@ -1,15 +1,18 @@
 /**
- * M2-14：MemoryTool — memdir 四型檔案管理工具。
+ * M2-14 + M2-15：MemoryTool — memdir 四型檔案管理工具。
  *
  * 三個動作：add / replace / remove。
  * 操作 memdir 記憶檔案（user / feedback / project / reference），
  * 並自動維護 MEMORY.md 索引行。
  *
- * M2-15 會加原子寫入與檔案鎖；M2-16 會加 injection 掃描。
- * 本階段用簡單 writeFile / unlink。
+ * M2-15：原子寫入（temp file + rename）+ advisory lock（proper-lockfile）。
+ * 鎖定目標是 memdir 目錄，保護記憶檔和 MEMORY.md 索引的一致性。
+ * extractMemories forked agent 的 Edit/Write 不查 lock，但 MemoryTool 的
+ * 短暫鎖定（毫秒級）不會造成可感知的阻擋。
  */
 import {
   readFile as readFileAsync,
+  rename as renameAsync,
   unlink as unlinkAsync,
   writeFile as writeFileAsync,
 } from 'fs/promises'
@@ -27,6 +30,7 @@ import { getAutoMemPath, isAutoMemoryEnabled } from '../../memdir/paths.js'
 import { parseFrontmatter } from '../../utils/frontmatterParser.js'
 import { getFsImplementation } from '../../utils/fsOperations.js'
 import { lazySchema } from '../../utils/lazySchema.js'
+import { lock } from '../../utils/lockfile.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { DESCRIPTION, MEMORY_TOOL_NAME } from './prompt.js'
 import {
@@ -136,6 +140,54 @@ function buildFileContent(
 }
 
 /**
+ * 原子寫入：先寫到 `.tmp` 再 rename。
+ * rename 在同一 volume 上是原子的（POSIX guarantee；Windows NTFS 亦然）。
+ * 若 rename 失敗（Windows 檔案被佔用等），fallback 到直接 writeFile。
+ */
+async function atomicWrite(targetPath: string, content: string): Promise<void> {
+  const tmpPath = targetPath + '.tmp'
+  await writeFileAsync(tmpPath, content, 'utf-8')
+  try {
+    await renameAsync(tmpPath, targetPath)
+  } catch {
+    // rename 失敗（e.g. Windows cross-volume 或鎖定）→ fallback 直接寫
+    await writeFileAsync(targetPath, content, 'utf-8')
+    // 清理殘留 tmp（ignore errors）
+    try {
+      await unlinkAsync(tmpPath)
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/**
+ * 取得 memdir 目錄的 advisory lock。
+ * 使用 proper-lockfile（已在 src/utils/lockfile.ts 包裝）。
+ * 鎖定目標是 memdir 目錄本身，同時保護記憶檔和 MEMORY.md。
+ *
+ * 回傳 unlock 函式；呼叫端在 finally 中 release。
+ * 若 lock 取不到（其他實例佔用），等待最多 3 秒後放棄。
+ */
+async function acquireMemdirLock(
+  memDir: string,
+): Promise<(() => Promise<void>) | null> {
+  try {
+    const release = await lock(memDir, {
+      stale: 10_000, // 鎖超過 10 秒視為 stale（crash 殘留）
+      retries: { retries: 3, minTimeout: 200, maxTimeout: 1000 },
+    })
+    return release
+  } catch (err) {
+    logForDebugging(
+      `memdir lock 取得失敗，繼續無鎖操作：${err instanceof Error ? err.message : String(err)}`,
+      { level: 'warn' },
+    )
+    return null
+  }
+}
+
+/**
  * 更新 MEMORY.md 索引。
  * - add：追加一行（若 filename 已存在則跳過）
  * - replace：找到同 filename 的行替換（找不到則追加）
@@ -219,7 +271,7 @@ async function updateMemoryIndex(
   }
 
   try {
-    await writeFileAsync(indexPath, lines.join('\n'), 'utf-8')
+    await atomicWrite(indexPath, lines.join('\n'))
     return true
   } catch (err) {
     logForDebugging(
@@ -357,6 +409,10 @@ export const MemoryTool = buildTool({
     const fsOps = getFsImplementation()
     await ensureMemoryDirExists(memDir)
 
+    // Advisory lock：保護「記憶檔 + MEMORY.md 索引」的一致性。
+    // lock 失敗時繼續（無鎖操作），不阻塞工具執行。
+    const release = await acquireMemdirLock(memDir)
+    try {
     // -----------------------------------------------------------------------
     // ADD
     // -----------------------------------------------------------------------
@@ -364,7 +420,6 @@ export const MemoryTool = buildTool({
       // 檢查檔案不存在
       try {
         await fsOps.stat(filePath)
-        // 如果走到這裡，代表檔案已存在
         return {
           data: {
             success: false,
@@ -387,7 +442,7 @@ export const MemoryTool = buildTool({
       )
 
       try {
-        await writeFileAsync(filePath, fileContent, 'utf-8')
+        await atomicWrite(filePath, fileContent)
       } catch (err) {
         return {
           data: {
@@ -425,7 +480,6 @@ export const MemoryTool = buildTool({
     // REPLACE
     // -----------------------------------------------------------------------
     if (action === 'replace') {
-      // 檢查檔案存在
       let existingContent: string
       try {
         existingContent = await readFileAsync(filePath, 'utf-8')
@@ -442,13 +496,11 @@ export const MemoryTool = buildTool({
         }
       }
 
-      // 解析舊 frontmatter
       const { frontmatter, content: existingBody } = parseFrontmatter(
         existingContent,
         filePath,
       )
 
-      // Merge：提供的欄位覆蓋，未提供的保留原值
       const mergedName =
         input.name ?? (frontmatter as Record<string, unknown>).name as string ?? filename
       const mergedDescription =
@@ -466,7 +518,7 @@ export const MemoryTool = buildTool({
       )
 
       try {
-        await writeFileAsync(filePath, fileContent, 'utf-8')
+        await atomicWrite(filePath, fileContent)
       } catch (err) {
         return {
           data: {
@@ -545,6 +597,15 @@ export const MemoryTool = buildTool({
         message: `已刪除記憶檔案 ${filename}`,
         indexUpdated,
       } satisfies Output,
+    }
+    } finally {
+      if (release) {
+        try {
+          await release()
+        } catch {
+          // unlock 失敗不致命
+        }
+      }
     }
   },
 
