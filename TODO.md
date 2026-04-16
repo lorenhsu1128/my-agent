@@ -39,7 +39,7 @@
 - [x] M2-10 Prefetch 預算控制 — `budget.ts`（`buildMemoryContextFence`）：TOKEN_BUDGET=2000（≈6000 chars）、MAX_FTS_SNIPPETS=3、`<memory-context>[past-sessions]</memory-context>` fence 格式。超額截斷最後一筆 content。Smoke 23/23 綠
 - [x] M2-11 注入點：`src/query.ts` L655 附近（`callModel` 前），取最新 user message text → `searchSessionHistory` → `buildMemoryContextFence` → prepend `isMeta: true` user message。改 `prependUserContext(messagesWithMemoryContext, ...)` 替代原 `messagesForQuery`。Typecheck 基線不變
 - [x] M2-12 Prefetch 失敗靜默 fallback — 已在 M2-11 實作中內建：`ftsSearch.ts` 雙層 try/catch 回空、`query.ts` 注入邏輯外層 try/catch 保持原 messages 不變
-- [ ] M2-13 端到端驗證（走 llamacpp）：prefetch 後 log 顯示注入的 memory-context 內容、llamacpp 能正確使用該脈絡回答
+- [x] M2-13 端到端驗證（走 llamacpp）— TUI 手動測試通過：模型從 memory-context fence 提取關鍵字做 SessionSearch（query 含 "provider 格式轉譯 SSE Anthropic"），讀 TODO.md 後準確總結最近進度。prefetch 注入 + 模型利用 context 兩者確認正常
 
 ### 階段四：MemoryTool 寫入
 - [ ] M2-14 新增 `src/tools/MemoryTool/MemoryTool.ts`：動作 `add` / `replace` / `remove`；target 指 memdir 四型檔案；自動維護 `MEMORY.md` 索引行
@@ -252,3 +252,5 @@
 - 2026-04-16 12:29: Session 結束 | 進度：35/56 任務 | 430d588 fix(api): sseGeneratorToStream 改為 collect-all 一次送出
 
 - 2026-04-16 12:35: Session 結束 | 進度：35/56 任務 | 430d588 fix(api): sseGeneratorToStream 改為 collect-all 一次送出
+
+- 2026-04-16 12:52: Session 結束 | 進度：40/57 任務 | 66b6ce3 docs(m2): 勾選 M2-12 — 失敗靜默 fallback 已內建於 M2-11 實作
