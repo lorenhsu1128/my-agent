@@ -9,7 +9,17 @@
     "types": ["bun"],
     "baseUrl": ".",
     "paths": {
-      "src/*": ["src/*"]
+      "src/*": ["src/*"],
+      "my-agent-ai/sdk": ["src/vendor/my-agent-ai/sdk/index.ts"],
+      "my-agent-ai/sdk/*": ["src/vendor/my-agent-ai/sdk/*"],
+      "my-agent-ai/bedrock-sdk": ["src/vendor/my-agent-ai/bedrock-sdk/index.ts"],
+      "my-agent-ai/bedrock-sdk/*": ["src/vendor/my-agent-ai/bedrock-sdk/*"],
+      "my-agent-ai/vertex-sdk": ["src/vendor/my-agent-ai/vertex-sdk/index.ts"],
+      "my-agent-ai/vertex-sdk/*": ["src/vendor/my-agent-ai/vertex-sdk/*"],
+      "my-agent-ai/foundry-sdk": ["src/vendor/my-agent-ai/foundry-sdk/index.ts"],
+      "my-agent-ai/foundry-sdk/*": ["src/vendor/my-agent-ai/foundry-sdk/*"],
+      "my-agent-ai/mcpb": ["src/vendor/my-agent-ai/mcpb/index"],
+      "my-agent-ai/sandbox-runtime": ["src/vendor/my-agent-ai/sandbox-runtime/index"]
     },
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
