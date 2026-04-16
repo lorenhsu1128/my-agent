@@ -34,6 +34,13 @@ export type BundledSkillDefinition = {
    * same contract as disk-based skills.
    */
   files?: Record<string, string>
+  /**
+   * Binary files to extract to disk on first invocation.
+   * Keys are relative paths, values are base64-encoded content.
+   * Written as raw bytes (not UTF-8). Same extraction and security
+   * guarantees as `files`.
+   */
+  binaryFiles?: Record<string, string>
   getPromptForCommand: (
     args: string,
     context: ToolUseContext,
@@ -51,12 +58,15 @@ const bundledSkills: Command[] = []
  * They follow the same pattern as registerPostSamplingHook() for internal features.
  */
 export function registerBundledSkill(definition: BundledSkillDefinition): void {
-  const { files } = definition
+  const { files, binaryFiles } = definition
+  const hasFiles =
+    (files && Object.keys(files).length > 0) ||
+    (binaryFiles && Object.keys(binaryFiles).length > 0)
 
   let skillRoot: string | undefined
   let getPromptForCommand = definition.getPromptForCommand
 
-  if (files && Object.keys(files).length > 0) {
+  if (hasFiles) {
     skillRoot = getBundledSkillExtractDir(definition.name)
     // Closure-local memoization: extract once per process.
     // Memoize the promise (not the result) so concurrent callers await
@@ -64,7 +74,11 @@ export function registerBundledSkill(definition: BundledSkillDefinition): void {
     let extractionPromise: Promise<string | null> | undefined
     const inner = definition.getPromptForCommand
     getPromptForCommand = async (args, ctx) => {
-      extractionPromise ??= extractBundledSkillFiles(definition.name, files)
+      extractionPromise ??= extractBundledSkillFiles(
+        definition.name,
+        files ?? {},
+        binaryFiles,
+      )
       const extractedDir = await extractionPromise
       const blocks = await inner(args, ctx)
       if (extractedDir === null) return blocks
@@ -131,10 +145,11 @@ export function getBundledSkillExtractDir(skillName: string): string {
 async function extractBundledSkillFiles(
   skillName: string,
   files: Record<string, string>,
+  binaryFiles?: Record<string, string>,
 ): Promise<string | null> {
   const dir = getBundledSkillExtractDir(skillName)
   try {
-    await writeSkillFiles(dir, files)
+    await writeSkillFiles(dir, files, binaryFiles)
     return dir
   } catch (e) {
     logForDebugging(
@@ -147,21 +162,40 @@ async function extractBundledSkillFiles(
 async function writeSkillFiles(
   dir: string,
   files: Record<string, string>,
+  binaryFiles?: Record<string, string>,
 ): Promise<void> {
-  // Group by parent dir so we mkdir each subtree once, then write.
-  const byParent = new Map<string, [string, string][]>()
-  for (const [relPath, content] of Object.entries(files)) {
+  // Collect all entries: text files as [path, content, false], binary as [path, base64, true]
+  type FileEntry = [string, string, boolean]
+  const byParent = new Map<string, FileEntry[]>()
+
+  function addEntry(relPath: string, content: string, isBinary: boolean) {
     const target = resolveSkillFilePath(dir, relPath)
     const parent = dirname(target)
-    const entry: [string, string] = [target, content]
+    const entry: FileEntry = [target, content, isBinary]
     const group = byParent.get(parent)
     if (group) group.push(entry)
     else byParent.set(parent, [entry])
   }
+
+  for (const [relPath, content] of Object.entries(files)) {
+    addEntry(relPath, content, false)
+  }
+  if (binaryFiles) {
+    for (const [relPath, base64Content] of Object.entries(binaryFiles)) {
+      addEntry(relPath, base64Content, true)
+    }
+  }
+
   await Promise.all(
     [...byParent].map(async ([parent, entries]) => {
       await mkdir(parent, { recursive: true, mode: 0o700 })
-      await Promise.all(entries.map(([p, c]) => safeWriteFile(p, c)))
+      await Promise.all(
+        entries.map(([p, c, isBinary]) =>
+          isBinary
+            ? safeWriteBinaryFile(p, Buffer.from(c, 'base64'))
+            : safeWriteFile(p, c),
+        ),
+      )
     }),
   )
 }
@@ -187,6 +221,15 @@ async function safeWriteFile(p: string, content: string): Promise<void> {
   const fh = await open(p, SAFE_WRITE_FLAGS, 0o600)
   try {
     await fh.writeFile(content, 'utf8')
+  } finally {
+    await fh.close()
+  }
+}
+
+async function safeWriteBinaryFile(p: string, data: Buffer): Promise<void> {
+  const fh = await open(p, SAFE_WRITE_FLAGS, 0o600)
+  try {
+    await fh.writeFile(data)
   } finally {
     await fh.close()
   }

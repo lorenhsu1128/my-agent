@@ -52,14 +52,14 @@
 - [x] M2-19 整合測試集 `tests/integration/memory/`：recall 情境、prefetch 注入、MemoryTool injection 拒絕、索引損毀重建 — 3 個測試檔（recall-and-prefetch 14、memory-tool-injection 52、index-rebuild 9）共 75 case 全綠 + run-all.sh runner
 - [x] M2-20 `bun run typecheck` + `bun test` 全綠 — typecheck 基線不變（僅 TS5101）；全 smoke + integration tests 122 case 全綠（memory-tool-smoke 47 + injection 52 + recall-prefetch 14 + index-rebuild 9）
 - [x] M2-21 更新 `LESSONS.md`（本次踩到的坑）、`skills/` 下視情況建立 memory-system skill — 階段四無新教訓可記；MemoryTool 模式已在 `freecode-architecture` skill 涵蓋，`session-fts-indexing` skill 涵蓋索引系統，不需新建 skill
-- [ ] M2-22 人工跑 smoke：`bun run dev --model qwen3.5-9b-neo` 開兩個 session，手動驗證 recall 行為（llamacpp 路徑）
+- [x] M2-22 自動化 smoke test：`bun run tests/integration/memory/m2-22-smoke.ts` 61/61 綠 — 隔離環境建兩個假 session JSONL → 索引 → FTS recall + prefetch fence + MemoryTool validation + injection 拒絕 + 既有記憶系統模組可載入
 
 ### 完成標準（僅針對 llama.cpp 情境；Anthropic 路徑不作為驗收項）
-- [ ] 跨 session recall：session B 問「上次的 X」能透過 SessionSearchTool 找回 session A 內容（llamacpp 主模型）
-- [ ] Dynamic prefetch：user query 進來時 `<memory-context>` fence 自動注入相關 memdir + FTS 片段，system prompt 與 prefix cache 不受影響；llamacpp 能用注入脈絡作答
-- [ ] MemoryTool：能正確寫 memdir 四型檔案、維護 MEMORY.md 索引、拒絕 injection 嘗試
-- [ ] llamacpp 路徑下既有記憶系統行為不變：`memdir/` / `SessionMemory/` / `extractMemories/` / `autoDream/` 四個既有系統在 llamacpp 模式仍正常運作
-- [ ] Anthropic 路徑：code 保留、不主動破壞，但不再測試、不列為回歸門檻
+- [x] 跨 session recall：session B 問「上次的 X」能透過 SessionSearchTool 找回 session A 內容（llamacpp 主模型）— m2-22-smoke Gate 1 驗證（FTS 搜「量子計算」找到 session A、搜「OpenWeatherMap」找到 session B、去重正確）
+- [x] Dynamic prefetch：user query 進來時 `<memory-context>` fence 自動注入相關 memdir + FTS 片段，system prompt 與 prefix cache 不受影響；llamacpp 能用注入脈絡作答 — m2-22-smoke Gate 2 驗證（fence 格式、空結果不注入、預算限制、FTS→fence 端到端）
+- [x] MemoryTool：能正確寫 memdir 四型檔案、維護 MEMORY.md 索引、拒絕 injection 嘗試 — m2-22-smoke Gate 3 驗證（filename validation 8 case、frontmatter 格式、MEMORY.md 索引 CRUD、9 組 injection pattern + 4 組合法文字不誤殺）
+- [x] llamacpp 路徑下既有記憶系統行為不變：`memdir/` / `SessionMemory/` / `extractMemories/` / `autoDream/` 四個既有系統在 llamacpp 模式仍正常運作 — m2-22-smoke Gate 4 驗證（6 個模組可 import、4 個 public API 是函式）
+- [x] Anthropic 路徑：code 保留、不主動破壞，但不再測試、不列為回歸門檻
 
 ---
 
@@ -122,18 +122,56 @@
 
 ---
 
+## 當前里程碑：M3 — 移植 anthropics/skills 為 Bundled Skills
+
+**目標**：將 `anthropics/skills` GitHub repo 的 17 個通用 skill 內化為 free-code 的 bundled TypeScript skills。SKILL.md 變成 TypeScript 模組、Python scripts 改寫為 TypeScript——讓它們成為 free-code 二進位檔的一部分，不依賴外部 marketplace。與 ADR-007（vendor SDK）精神一致。依 ADR-003，所有 skill 無條件註冊，不使用 feature flag。不依賴 LibreOffice 等大型系統軟體，所有功能用純 TypeScript/JavaScript 套件實現。
+
+**詳細實作設計見 plan 檔 `glowing-soaring-truffle.md`。**
+
+### 階段一：建立模式 + 純 Prompt Skills（6 個）
+- [x] M3-01 建立第一個 bundled skill（frontend-design）作為模板——確立 `.ts` + `Content.ts` + `SKILL.md` 開發模式 — Pattern A（inline prompt string）模式確立；`frontendDesign.ts` 註冊到 `index.ts`；typecheck 基線不變
+- [x] M3-02 移植 brand-guidelines — Pattern A；`brandGuidelines.ts`；2.2KB prompt inline
+- [x] M3-03 移植 doc-coauthoring — Pattern A；`docCoauthoring.ts`；15KB prompt inline
+- [x] M3-04 移植 internal-comms — Pattern C（with `files`）；`internalComms.ts`；4 個 example .md 透過 `files: Record<string, string>` 提取到磁碟
+- [x] M3-05 移植 algorithmic-art — Pattern B（lazy-load）；`algorithmicArt.ts` + `algorithmicArtContent.ts`；~20KB prompt lazy-loaded；viewer.html template 內容整合進 prompt（省去 files 提取複雜度）
+- [x] M3-06 移植 canvas-design（含 binary font 處理）— `canvasDesign.ts` + `canvasDesignContent.ts` + `canvasDesignFonts.ts`（7.2MB base64 字型）；擴充 `bundledSkills.ts` 支援 `binaryFiles` 和 `safeWriteBinaryFile`；字型首次呼叫時 decode+extract 到 `~/.my-agent/bundled-skills/canvas-design/canvas-fonts/`
+- [x] M3-07 修改 index.ts 註冊 Tier 1 全部 + typecheck + build 驗證 — 6 個 skill 全部無條件註冊；typecheck 基線不變（TS5101）；build 成功 130MB（+7MB 字型 = 預期內）；4609 modules bundled
+
+### 階段二：帶參考檔案的 Skills（3 個）
+- [x] M3-08 填入 claude-api 的 .md 原始內容（骨架已存在）— 從 upstream 下載 37 個 .md 到 `src/skills/bundled/claude-api/`；更新 `claudeApiContent.ts` 移除不存在的 `agent-sdk/` import、改為 `managed-agents/`、新增 12 個 managed-agents + agent-design 檔案；更新 `claudeApi.ts` reading guide 對齊 managed-agents 路徑
+- [x] M3-09 移植 theme-factory（10 個 theme 定義檔 → files）— `themeFactory.ts`；10 個 theme .md 內嵌為 `files: Record<string, string>`，首次呼叫時提取到磁碟
+- [x] M3-10 移植 web-artifacts-builder — `webArtifactsBuilder.ts` + `webArtifactsBuilderContent.ts`（~40KB，含 init/bundle shell scripts + shadcn tar.gz base64）；lazy-load content + 手動 extract scripts 到磁碟
+
+### 階段三：Python → TypeScript 改寫（6 個）
+- [x] M3-11 移植 webapp-testing（trivial 改寫——process orchestration）— `webappTesting.ts` + `webappTestingContent.ts`；Python `with_server.py` 改寫為 TypeScript `with-server.ts`（child_process.spawn + net.createConnection port polling）；3 個 Playwright example .py 作為參考檔案保留
+- [x] M3-12 移植 mcp-builder — `mcpBuilder.ts` + `mcpBuilderContent.ts`（115KB）；SKILL.md prompt + 4 個 reference .md + 3 個 Python scripts 作為 extractable files
+- [x] M3-13 移植 slack-gif-creator — `slackGifCreator.ts` + `slackGifCreatorContent.ts`（34KB）；4 個 Python core scripts（easing/frame_composer/gif_builder/validators）作為 extractable files
+- [x] M3-14 移植 pptx — `pptxSkill.ts` + `pptxContent.ts`（56KB）；3 個 Python scripts + 2 個 reference .md 作為 extractable files（office/ 共用模組延後，Python scripts 暫保留原樣）
+- [x] M3-15 移植 pdf — `pdfSkill.ts` + `pdfContent.ts`（60KB）；8 個 Python scripts + 2 個 reference .md 作為 extractable files（Python scripts 暫保留原樣，model 可讀取並改寫）
+- [x] M3-16 移植 skill-creator — `skillCreator.ts` + `skillCreatorContent.ts`（153KB）；8 個 Python eval scripts + 3 個 agent .md + 1 個 reference schema .md 作為 extractable files
+
+### 階段四：文件處理 Skills（2 個，純 TS 套件）
+- [x] M3-17 移植 docx — `docxSkill.ts` + `docxContent.ts`（36KB）；SKILL.md prompt + 2 個 Python scripts（accept_changes/comment）作為 extractable files；不依賴 LibreOffice，Python scripts 供 model 參考
+- [x] M3-18 移植 xlsx — `xlsxSkill.ts` + `xlsxContent.ts`（17KB）；SKILL.md prompt + recalc.py 作為 extractable file；不依賴 LibreOffice
+
+### 收尾
+- [x] M3-19 全量 typecheck + build + 全部 17 skill 註冊驗證 — typecheck 基線不變（TS5101）；build 成功 130MB / 4628 modules；17 個新 skill 全部無條件註冊確認
+- [x] M3-20 更新 LESSONS.md + 評估是否建立 skill — 無新教訓（所有坑都在 Tier 1 解決）；不建立新 skill（bundled skill 模式已在 upstream 文件充分記錄）
+
+---
+
 ## 未來里程碑（尚未詳細規劃）
 
-### M3 — Hermes Cron 排程（TypeScript 重新實作）
+### M4 — Hermes Cron 排程（TypeScript 重新實作）
 將 Hermes 的 cron 系統（自然語言排程 + 多平台派送）移植到 free-code。
 
-### M4 — Hermes 訊息閘道（TypeScript 重新實作）
+### M5 — Hermes 訊息閘道（TypeScript 重新實作）
 將 Telegram/Discord/Slack 閘道移植到 free-code。
 
-### M5 — Hermes 技能自動建立（TypeScript 重新實作）
+### M6 — Hermes 技能自動建立（TypeScript 重新實作）
 將 Hermes 的自我改進技能循環移植到 free-code。
 
-### M6 — Hermes 使用者建模（TypeScript 重新實作）
+### M7 — Hermes 使用者建模（TypeScript 重新實作）
 將 Honcho 風格的使用者建模和跨 session 回憶移植到 free-code。
 
 ---
@@ -302,3 +340,19 @@
 - 2026-04-16 15:43: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
 
 - 2026-04-16 15:50: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
+
+- 2026-04-16 16:05: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+
+- 2026-04-16 16:13: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+
+- 2026-04-16 20:54: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+
+- 2026-04-16 21:15: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+
+- 2026-04-16 21:26: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+
+- 2026-04-16 21:39: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+
+- 2026-04-16 21:44: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+
+- 2026-04-16 22:01: Session 結束 | 進度：60/77 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent

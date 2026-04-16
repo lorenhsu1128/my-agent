@@ -120,8 +120,8 @@ The relevant documentation for your detected language is included below in \`<do
 **File uploads across multiple requests:**
 → Refer to \`{lang}/claude-api/README.md\` + \`{lang}/claude-api/files-api.md\`
 
-**Agent with built-in tools (file/web/terminal) (Python & TypeScript only):**
-→ Refer to \`{lang}/agent-sdk/README.md\` + \`{lang}/agent-sdk/patterns.md\`
+**Managed agents with built-in tools (file/web/terminal):**
+→ Refer to \`{lang}/managed-agents/README.md\` + \`shared/managed-agents-overview.md\` + \`shared/agent-design.md\`
 
 **Error handling:**
 → Refer to \`shared/error-codes.md\`
