@@ -441,19 +441,20 @@ export const SessionSearchTool = buildTool({
 
     if (!ftsQuery) {
       // fallback：掃 sessions.first_user_message 的 LIKE（query 太短或所有 token <3 chars）
+      // 不用 ESCAPE — search tool 的 query 裡 % 和 _ 當 wildcard 無害
       usedFallback = true
-      const pattern = `%${query.replace(/[%_\\]/g, c => '\\' + c)}%`
+      const pattern = `%${query}%`
       const rows = db
         .query<
           { session_id: string; first_user_message: string | null },
-          [string]
+          [string, number]
         >(
           `SELECT session_id, first_user_message FROM sessions
-           WHERE first_user_message LIKE ? ESCAPE '\\'
+           WHERE first_user_message LIKE ?
            ORDER BY started_at DESC
            LIMIT ?`,
         )
-        .all(pattern, limit as unknown as string)
+        .all(pattern, limit)
       totalMatches = rows.length
       rawMatches = rows.map(r => ({
         session_id: r.session_id,
