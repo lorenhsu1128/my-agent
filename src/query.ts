@@ -57,6 +57,10 @@ import {
 import { generateToolUseSummary } from './services/toolUseSummary/toolUseSummaryGenerator.js'
 import { prependUserContext, appendSystemContext } from './utils/api.js'
 import {
+  searchSessionHistory,
+  buildMemoryContextFence,
+} from './services/memoryPrefetch/index.js'
+import {
   createAttachmentMessage,
   filterDuplicateMemoryAttachments,
   getAttachmentMessages,
@@ -105,6 +109,7 @@ import type { Terminal, Continue } from './query/transitions.js'
 import { feature } from 'bun:bundle'
 import {
   getCurrentTurnTokenBudget,
+  getProjectRoot,
   getTurnOutputTokens,
   incrementBudgetContinuationCount,
 } from './bootstrap/state.js'
@@ -647,6 +652,29 @@ async function* queryLoop(
       }
     }
 
+    // M2-11：FTS memory-context prefetch — 搜歷史對話、組 fence、prepend。
+    // 只在 llamacpp 模式啟用（Anthropic 路徑用既有 memoryPrefetch）。
+    // 失敗不阻塞（空 fence → 不注入）。
+    let messagesWithMemoryContext = messagesForQuery
+    try {
+      const lastUser = messages.findLast(m => m.type === 'user' && !m.isMeta)
+      const queryText = lastUser?.type === 'user'
+        ? (typeof lastUser.content === 'string' ? lastUser.content : '')
+        : ''
+      if (queryText.trim().length >= 3) {
+        const snippets = await searchSessionHistory(queryText, getProjectRoot())
+        const fence = buildMemoryContextFence(snippets)
+        if (fence) {
+          messagesWithMemoryContext = [
+            createUserMessage({ content: fence, isMeta: true }),
+            ...messagesForQuery,
+          ]
+        }
+      }
+    } catch {
+      // prefetch 失敗靜默忽略
+    }
+
     let attemptWithFallback = true
 
     queryCheckpoint('query_api_loop_start')
@@ -657,7 +685,7 @@ async function* queryLoop(
           let streamingFallbackOccured = false
           queryCheckpoint('query_api_streaming_start')
           for await (const message of deps.callModel({
-            messages: prependUserContext(messagesForQuery, userContext),
+            messages: prependUserContext(messagesWithMemoryContext, userContext),
             systemPrompt: fullSystemPrompt,
             thinkingConfig: toolUseContext.options.thinkingConfig,
             tools: toolUseContext.options.tools,

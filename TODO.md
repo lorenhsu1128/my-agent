@@ -37,7 +37,7 @@
 - [x] M2-09a Local Model Routing：`src/utils/model/model.ts` 的 `getDefaultOpusModel` / `getDefaultSonnetModel` / `getDefaultHaikuModel` 在 llamacpp 模式短路回傳 `DEFAULT_LLAMACPP_MODEL`。效果：既有的 `findRelevantMemories`（Sonnet→本地）、`agenticSessionSearch`（Haiku→本地）、`tokenEstimation`（Sonnet→本地）等 9 個 sideQuery 呼叫點全部自動走 llama-server
 - [x] M2-09 新增 `src/services/memoryPrefetch/`：FTS 歷史對話搜尋模組 — `ftsSearch.ts`（`searchSessionHistory`）+ `index.ts`。複用 sessionIndex，sanitize FTS query，過濾 tool role，截斷 300 chars。Smoke 14/14 綠
 - [x] M2-10 Prefetch 預算控制 — `budget.ts`（`buildMemoryContextFence`）：TOKEN_BUDGET=2000（≈6000 chars）、MAX_FTS_SNIPPETS=3、`<memory-context>[past-sessions]</memory-context>` fence 格式。超額截斷最後一筆 content。Smoke 23/23 綠
-- [ ] M2-11 找出 user message 組裝的注入點（避開 `QueryEngine.ts`，預期在 `src/context.ts` 或類似 pre-prompt hook）；包 `<memory-context>...</memory-context>` fence 前置到 user message
+- [x] M2-11 注入點：`src/query.ts` L655 附近（`callModel` 前），取最新 user message text → `searchSessionHistory` → `buildMemoryContextFence` → prepend `isMeta: true` user message。改 `prependUserContext(messagesWithMemoryContext, ...)` 替代原 `messagesForQuery`。Typecheck 基線不變
 - [ ] M2-12 Prefetch 失敗（索引損毀 / SQLite 鎖）不可中斷主流程，靜默 fallback 到空 fence
 - [ ] M2-13 端到端驗證（走 llamacpp）：prefetch 後 log 顯示注入的 memory-context 內容、llamacpp 能正確使用該脈絡回答
 
