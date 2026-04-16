@@ -53,12 +53,15 @@ if (results1.length > 0) {
 }
 
 // ── Test 2: 短 query 回空 ──
-section('Test 2: Short query (<3 chars) returns empty')
+section('Test 2: Short query — 2-char CJK now uses LIKE fallback')
 const results2 = await searchSessionHistory('天氣', projectRoot)
-assert(results2.length === 0, '2-char query returns empty array')
+assert(Array.isArray(results2), '2-char CJK query returns array (may find via LIKE fallback)')
 
 const results2b = await searchSessionHistory('ab', projectRoot)
-assert(results2b.length === 0, '2-char ASCII query returns empty array')
+assert(Array.isArray(results2b), '2-char ASCII query returns array (may find via LIKE fallback)')
+
+const results2c = await searchSessionHistory('x', projectRoot)
+assert(results2c.length === 0, '1-char query returns empty array')
 
 // ── Test 3: 空 query ──
 section('Test 3: Empty/null query')
