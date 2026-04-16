@@ -1,10 +1,21 @@
 export const SESSION_SEARCH_TOOL_NAME = 'SessionSearch'
 
-export const DESCRIPTION = `- Search past conversation sessions by keyword or phrase.
-- Uses the FTS5 index of JSONL transcripts at {CLAUDE_CONFIG_HOME}/projects/{slug}/session-index.db.
-- Returns up to \`limit\` matches grouped by session, with each session's title (first user message), start time, model, and matching message snippets (role, tool name, content).
-- **Query must be ≥3 characters** (FTS5 trigram tokenizer limit). Short CJK words like "天氣" (2 chars) won't match; expand to "天氣預報" (3+ chars) or a complete phrase.
-- Use this tool when the user asks "what did we discuss about X", "上次我們怎麼處理 Y", "remember when we debugged Z", or any recall-oriented request spanning past sessions.
-- Do NOT use for searching current session's transcript — that's already in context.
-- When in doubt between SessionSearch and a code/file search (Grep/Glob), prefer SessionSearch only for conversation recall; use Grep/Glob for code content.
-- \`summarize: true\` is accepted but currently returns the raw matches with a \`summaryPending\` flag. Full summarization arrives in a later milestone.`
+export const DESCRIPTION = `Search past conversation sessions by keyword to recall what was discussed before.
+
+When to use this tool:
+- User asks "上次我們怎麼處理…", "remember when we discussed…", "我們之前有聊過…嗎"
+- User references a past session topic ("那個天氣查詢的 session", "the one where we fixed the build")
+- You need context from a previous conversation that is NOT in the current session
+
+Input:
+- query (required): keyword or phrase, ≥3 characters recommended. Examples: "weather", "天氣預報", "llama.cpp", "build error"
+  - Short queries (<3 chars like "天氣") auto-fall-back to title search (less precise)
+- limit (optional): max snippets to return, default 5
+- summarize (optional): if true, generates an LLM summary of the matches (slower, needs running model)
+
+Output: matched message snippets grouped by session, with session title, date, and model info.
+
+Do NOT use this tool for:
+- Searching the CURRENT conversation (that context is already available to you)
+- Searching code files (use Grep or Glob instead)
+- Searching the web (use WebSearch instead)`
