@@ -20,20 +20,16 @@
       "Bash(mv *)",
       "Bash(rm tests/integration/test-output*)",
       "Bash(rm -f tests/integration/test-output*)",
-      "Bash(mkdir -p skills/*)",
+      "Bash(mkdir -p .claude/skills/*)",
       "Read(**)",
-      "Write(src/services/providers/**)",
-      "Write(src/utils/providers/**)",
       "Write(tests/**)",
       "Write(TODO.md)",
       "Write(LESSONS.md)",
-      "Write(skills/**)",
-      "Edit(src/services/providers/**)",
-      "Edit(src/utils/providers/**)",
+      "Write(.claude/skills/**)",
       "Edit(tests/**)",
       "Edit(TODO.md)",
       "Edit(LESSONS.md)",
-      "Edit(skills/**)"
+      "Edit(.claude/skills/**)"
     ],
     "deny": [
       "Bash(rm -rf *)",

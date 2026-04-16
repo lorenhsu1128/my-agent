@@ -14,7 +14,7 @@ Hermes Agent 的原始碼作為唯讀參考資料放在 `reference/hermes-agent/
 
 3. **Hermes 程式碼僅供參考。** 絕不直接複製 Python 程式碼。閱讀 `reference/hermes-agent/` 以理解功能的設計和運作方式，然後撰寫符合 free-code 架構（React/Ink UI、Tool 基礎類別、services 模式等）的道地 TypeScript 程式碼。
 
-4. **新的 provider 程式碼放在 `src/services/providers/`。** 這是用於多 provider 支援的新目錄。每個 provider 有自己的檔案。既有的 `src/services/api/` 保持不動，作為 Anthropic 原生路徑。
+4. **本地模型透過 fetch adapter 整合。** M1 已實作 `src/services/api/llamacpp-fetch-adapter.ts`，在 `src/services/api/` 內用 adapter 模式支援 llama.cpp，不另建 `src/services/providers/` 目錄。既有的 Anthropic 路徑完全不受影響。
 
 5. **每次功能性修改後都要測試。** TypeScript 變更後執行 `bun run typecheck`。針對受影響的 provider/工具執行整合測試。如果測試還不存在，先寫測試。
 
@@ -31,7 +31,7 @@ Hermes Agent 的原始碼作為唯讀參考資料放在 `reference/hermes-agent/
    
    如果判斷值得建立 skill：
    - 先告訴我你打算建立什麼 skill、為什麼認為有價值、大致內容摘要
-   - 等我確認後，在 `skills/` 下建立新目錄和 SKILL.md
+   - 等我確認後，在 `.claude/skills/` 下建立新目錄和 SKILL.md
    - 遵循既有 skill 的格式（說明、工具集、具體內容）
    - 在 TODO.md 的 session 日誌中記錄新建了哪個 skill
    
@@ -45,28 +45,37 @@ free-code/
 ├── TODO.md                ← 任務追蹤 — 你負責讀寫此文件
 ├── LESSONS.md             ← 教訓記錄 — 你和人類都可以讀寫
 ├── src/
-│   ├── vendor/            ← @anthropic-ai SDK 內化原始碼（詳見 ADR-007）
-│   │   └── @anthropic-ai/
+│   ├── vendor/            ← my-agent-ai SDK 內化原始碼（詳見 ADR-007）
+│   │   └── my-agent-ai/
 │   │       ├── sdk/               # 主 SDK TypeScript 原始碼（83 .ts 檔）
 │   │       ├── bedrock-sdk/       # AWS Bedrock SDK TS 原始碼
 │   │       ├── vertex-sdk/        # Google Vertex SDK TS 原始碼
 │   │       ├── foundry-sdk/       # Azure Foundry SDK TS 原始碼
 │   │       ├── mcpb/              # MCP Bundle 工具（可讀 JS + .d.ts）
 │   │       └── sandbox-runtime/   # Sandbox 執行環境（可讀 JS + .d.ts + .map）
+│   ├── skills/
+│   │   └── bundled/       ← 17 個 bundled skills（M3 從 anthropics/skills 移植）
 │   ├── services/
-│   │   ├── api/           ← 既有 — Anthropic 原生 API（不要重組）
-│   │   └── providers/     ← 預留 — 多 provider 支援（目前未使用）
-│   ├── tools/             ← 既有 — 39 個 agent 工具（擴充，不要替換）
-│   ├── commands/           ← 既有 — slash 指令
+│   │   ├── api/           ← Anthropic 原生 API + llamacpp-fetch-adapter.ts（M1 新增）
+│   │   ├── sessionIndex/  ← M2 新增 — FTS5 跨 session 搜尋索引
+│   │   └── memoryPrefetch/ ← M2 新增 — query-driven 動態 prefetch
+│   ├── tools/             ← 41+ 個 agent 工具（含 M2 新增的 SessionSearchTool、MemoryTool）
+│   ├── commands/          ← 既有 — slash 指令
 │   ├── ...                ← 所有其他既有目錄
 │   └── utils/
-│       └── providers/     ← 新增 — provider 相關工具函式
+│       └── model/         ← 模型設定、provider 偵測（含 llamacpp 分支）
 ├── reference/
 │   └── hermes-agent/      ← 唯讀的 Hermes 原始碼（在 .gitignore 中）
 ├── tests/
-│   └── integration/       ← 新增 — provider 和工具整合測試
-├── skills/                ← Claude Code 專用的開發技能檔案
-└── .claude/               ← Claude Code 設定、指令、hooks、agents
+│   └── integration/       ← 整合測試（memory smoke tests 等）
+├── scripts/
+│   └── llama/             ← llama.cpp server 部署腳本
+└── .claude/               ← Claude Code 設定、指令、hooks、agents、skills
+    ├── commands/          # 5 個 slash 指令（project-next 等）
+    ├── agents/            # 2 個 subagent（reviewer、tester）
+    ├── hooks/             # 3 個 hook 腳本
+    ├── skills/            # 7 個專案開發技能檔案
+    └── settings.json      # 權限與 hooks 設定
 ```
 
 ## 需要理解的關鍵檔案（free-code）
@@ -103,7 +112,7 @@ bun run build:dev                # 開發建構
 bun run typecheck                # 僅型別檢查
 bun test                         # 執行測試
 ./cli -p "hello"                 # 快速冒煙測試
-./cli --model qwen3.5:9b         # 使用本地模型測試（M1 完成後）
+./cli --model qwen3.5-9b-neo     # 使用本地模型測試（M1 已完成）
 ```
 
 ## 自訂 Slash 指令
@@ -116,7 +125,7 @@ bun test                         # 執行測試
 | `/project-status` | 顯示專案進度（TODO 計數、最近 commit、typecheck 結果、服務健康狀態）。唯讀 — 不修改任何東西。 |
 | `/project-test` | 執行完整測試套件（typecheck → 單元測試 → 整合測試 → 建構檢查）。報告結果但不自動修復。 |
 | `/project-review-hermes` | 分析 Hermes Agent 的指定模組（provider、memory、tools、cron、gateway、skills、agent）。唯讀分析 — 提出設計方案等我決定。 |
-| `/project-create-skill` | 手動建立新 skill。指定主題後，Claude Code 在 `skills/` 下建立目錄和 SKILL.md。 |
+| `/project-create-skill` | 手動建立新 skill。指定主題後，Claude Code 在 `.claude/skills/` 下建立目錄和 SKILL.md。 |
 
 ## Subagents（由 Claude Code 依情境調度）
 
@@ -141,8 +150,8 @@ bun test                         # 執行測試
 
 已預先核准的操作（不會彈出確認提示）：
 - 任何檔案的讀取操作
-- 在 `src/services/providers/`、`src/utils/providers/`、`tests/`、`TODO.md` 的寫入/編輯
-- Shell 指令：conda、bun、git、curl localhost、ollama、litellm、cat/ls/find/grep 等
+- 在 `tests/`、`TODO.md`、`LESSONS.md` 的寫入/編輯
+- Shell 指令：conda、bun、git、curl localhost、cat/ls/find/grep/head/tail/wc/echo/mkdir/cp/mv 等
 
 已封鎖的操作（會被拒絕）：
 - `rm -rf`、`sudo`、`chmod`
@@ -152,14 +161,16 @@ bun test                         # 執行測試
 ## 當前開發狀態
 
 ### 已完成
-（尚無 — 專案剛開始）
+- **M1** — 透過 llama.cpp 支援本地模型（2026-04-15 完成）：fetch adapter 模式、串流 + tool call 翻譯、39 個工具全部通過
+- **M2** — Session Recall & Dynamic Memory（2026-04-16 完成）：FTS5 跨 session 搜尋、query-driven prefetch、MemoryTool 寫入（含 injection 掃描）
+- **M3** — 移植 anthropics/skills 為 Bundled Skills（2026-04-16 完成）：17 個 skill 內化為 TypeScript bundled skills
 
 ### 進行中
-（參見 TODO.md）
+（無 — 參見 TODO.md 底部的 M4–M7 草稿）
 
 ### 已做出的架構決策
 - ~~ADR-001：使用 LiteLLM 作為本地模型的 proxy（不是直接整合 Ollama）~~ **已推翻（2026-04-15）** — 改為直接跑 llama.cpp server（OpenAI 相容，`http://127.0.0.1:8080/v1`）。理由：部署已完成（見 `scripts/llama/`）、少一層中介、減少相依性。
-- ADR-002：新的 provider 程式碼放在 `src/services/providers/`，不修改 `src/services/api/`
+- ~~ADR-002：新的 provider 程式碼放在 `src/services/providers/`，不修改 `src/services/api/`~~ **已被 ADR-005 取代** — M1 實際採用 fetch adapter 模式，程式碼放在 `src/services/api/llamacpp-fetch-adapter.ts`
 - ADR-003：新功能不使用 feature flag — 所有功能直接啟用
 - ADR-004：Hermes 原始碼作為唯讀參考，用 TypeScript 重新實作
 - ADR-005（2026-04-15）：provider 內部做格式轉譯（OpenAI SSE → Anthropic `stream_event`），保持 `QueryEngine.ts` 與 `StreamingToolExecutor.ts` 零修改。理由：這兩個檔案在 `.claude/settings.json` 的 deny list；在 provider 邊界做轉譯讓下游主幹無感。

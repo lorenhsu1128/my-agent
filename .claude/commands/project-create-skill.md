@@ -4,7 +4,7 @@
 
 建立步驟：
 1. 確認 skill 名稱和主題
-2. 在 `skills/` 下建立新目錄：`skills/{skill-名稱}/`
+2. 在 `.claude/skills/` 下建立新目錄：`.claude/skills/{skill-名稱}/`
 3. 在該目錄下建立 `SKILL.md`，遵循以下格式：
 
 ```markdown
