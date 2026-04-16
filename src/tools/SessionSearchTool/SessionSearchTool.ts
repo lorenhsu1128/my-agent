@@ -113,16 +113,21 @@ const SNIPPET_MAX_CHARS = 400
 
 /**
  * FTS5 MATCH 的 reserved 字元（. " * ^ 等）在一般 tokens 裡會讓 parser 抱怨。
- * 把 query 按空白切，每段用 phrase literal `"..."` 包起來，AND join — 對大多數
- * 情境已足夠。Phrase 內的 " 用 "" escape。
+ * 把 query 按空白切，每段用 phrase literal `"..."` 包起來，AND join。
+ * Phrase 內的 `"` 用 `""` escape。
+ *
+ * **重要**：trigram tokenizer 需要每段 token ≥3 chars 才能產生索引查詢。
+ * <3 chars 的 token 直接過濾掉（例如「天氣 預報」→ 兩個 2-char token 都
+ * 被丟；「天氣預報 weather」→ 只保留 "weather"）。
+ * 若過濾後**無 token 剩餘**回傳空字串 — 呼叫端應檢查並改走 LIKE fallback。
  */
 function sanitizeFtsQuery(raw: string): string {
-  return raw
+  const tokens = raw
     .trim()
     .split(/\s+/)
-    .filter(t => t.length > 0)
-    .map(t => `"${t.replace(/"/g, '""')}"`)
-    .join(' ')
+    .filter(t => t.length >= MIN_FTS_QUERY_LEN)
+  if (tokens.length === 0) return ''
+  return tokens.map(t => `"${t.replace(/"/g, '""')}"`).join(' ')
 }
 
 interface RawMatch {
@@ -424,8 +429,13 @@ export const SessionSearchTool = buildTool({
     let rawMatches: RawMatch[] = []
     let totalMatches = 0
 
-    if (query.length < MIN_FTS_QUERY_LEN) {
-      // fallback：掃 sessions.first_user_message 的 LIKE
+    // 先嘗試 sanitize — 若所有 token <3 chars（trigram 限制），sanitize 回空，走 LIKE
+    const ftsQuery = query.length >= MIN_FTS_QUERY_LEN
+      ? sanitizeFtsQuery(query)
+      : ''
+
+    if (!ftsQuery) {
+      // fallback：掃 sessions.first_user_message 的 LIKE（query 太短或所有 token <3 chars）
       usedFallback = true
       const pattern = `%${query.replace(/[%_\\]/g, c => '\\' + c)}%`
       const rows = db
@@ -448,8 +458,7 @@ export const SessionSearchTool = buildTool({
         content: r.first_user_message ?? '',
       }))
     } else {
-      // FTS 路徑
-      const ftsQuery = sanitizeFtsQuery(query)
+      // FTS 路徑（ftsQuery 非空，至少一個 token ≥3 chars）
       try {
         // 先算總數（可能 > limit）
         const countRow = db
