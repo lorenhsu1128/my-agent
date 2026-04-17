@@ -83,10 +83,11 @@ import {
 } from './utils/thinking.js'
 
 // Lazy: MessageSelector.tsx pulls React/ink; only needed for message filtering at query time
-/* eslint-disable @typescript-eslint/no-require-imports */
-const messageSelector =
-  (): typeof import('src/components/MessageSelector.js') =>
-    require('src/components/MessageSelector.js')
+// Cached async import — require() fails with async modules in Bun dev mode
+let _messageSelectorCache: typeof import('src/components/MessageSelector.js') | undefined
+const loadMessageSelector = async () =>
+  (_messageSelectorCache ??= await import('src/components/MessageSelector.js'))
+const messageSelector = () => _messageSelectorCache!
 
 import {
   localCommandOutputToSDKAssistantMessage,
@@ -461,6 +462,9 @@ export class QueryEngine {
         }
       }
     }
+
+    // Ensure MessageSelector is loaded (async import for Bun dev mode compat)
+    await loadMessageSelector()
 
     // Filter messages that should be acknowledged after transcript
     const replayableMessages = messagesFromUserInput.filter(

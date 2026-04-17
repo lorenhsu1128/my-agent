@@ -12,17 +12,32 @@ type Platform = 'win32' | 'darwin' | 'linux'
 
 // Config and data paths
 export const getGlobalClaudeFile = memoize((): string => {
-  // Legacy fallback for backwards compatibility
-  if (
-    getFsImplementation().existsSync(
-      join(getClaudeConfigHomeDir(), '.config.json'),
-    )
-  ) {
+  const fs = getFsImplementation()
+  const configDir = process.env.CLAUDE_CONFIG_DIR || homedir()
+
+  // Legacy fallback for backwards compatibility (.config.json)
+  if (fs.existsSync(join(getClaudeConfigHomeDir(), '.config.json'))) {
     return join(getClaudeConfigHomeDir(), '.config.json')
   }
 
-  const filename = `.claude${fileSuffixForOauthConfig()}.json`
-  return join(process.env.CLAUDE_CONFIG_DIR || homedir(), filename)
+  // 品牌重塑：config 檔名從 .claude.json → .my-agent.json
+  const suffix = fileSuffixForOauthConfig()
+  const newFilename = `.my-agent${suffix}.json`
+  const newPath = join(configDir, newFilename)
+
+  // Migration：舊 .claude.json 存在但新 .my-agent.json 不存在時，複製過去
+  const oldFilename = `.claude${suffix}.json`
+  const oldPath = join(configDir, oldFilename)
+  if (!fs.existsSync(newPath) && fs.existsSync(oldPath)) {
+    try {
+      fs.copyFileSync(oldPath, newPath)
+    } catch {
+      // 複製失敗就沿用舊路徑
+      return oldPath
+    }
+  }
+
+  return newPath
 })
 
 const hasInternetAccess = memoize(async (): Promise<boolean> => {

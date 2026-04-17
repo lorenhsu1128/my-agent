@@ -519,9 +519,7 @@ ${CYBER_RISK_INSTRUCTION}`,
       'MCP servers connect/disconnect between turns',
     ),
     systemPromptSection('skills_guidance', () => {
-      const hasSkillManage = enabledTools.some(
-        t => t.name === 'SkillManage',
-      )
+      const hasSkillManage = enabledTools.has('SkillManage')
       if (!hasSkillManage) return null
       return '完成複雜任務（5+ 個工具呼叫）、修復棘手錯誤、或發現非顯而易見的 workflow 後，用 SkillManage 工具將方法保存為 skill 以便下次重用。使用 skill 時如果發現過時、不完整或錯誤，立即用 SkillManage(action=\'patch\') 修正——不要等被要求才做。不維護的 skill 會變成負擔。'
     }),
