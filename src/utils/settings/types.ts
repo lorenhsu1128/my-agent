@@ -953,6 +953,67 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Enable background memory consolidation (auto-dream). When set, overrides the server-side default.',
         ),
+      selfImproveThresholds: z
+        .object({
+          skillImprovementTurnBatch: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+              'Number of user turns between skill improvement checks (default: 5)',
+            ),
+          memoryNudgeTurnBatch: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+              'Number of user turns between memory nudge checks (default: 8)',
+            ),
+          skillCreationToolUseThreshold: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+              'Minimum tool uses to trigger skill creation nudge (default: 15)',
+            ),
+          sessionReviewMinToolUses: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+              'Minimum tool uses in a session to trigger session review (default: 15)',
+            ),
+          sessionReviewMinIntervalHours: z
+            .number()
+            .positive()
+            .optional()
+            .describe(
+              'Minimum hours between session reviews (default: 2)',
+            ),
+          autoDreamMinHours: z
+            .number()
+            .positive()
+            .optional()
+            .describe(
+              'Minimum hours since last consolidation before auto-dream triggers (default: 24)',
+            ),
+          autoDreamMinSessions: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+              'Minimum sessions since last consolidation before auto-dream triggers (default: 5)',
+            ),
+        })
+        .optional()
+        .describe(
+          'Tuning thresholds for the self-improving loop. All fields optional; unset fields use hardcoded defaults.',
+        ),
       showThinkingSummaries: z
         .boolean()
         .optional()

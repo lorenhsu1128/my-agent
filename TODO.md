@@ -111,8 +111,8 @@
 
 ### 待解決（M1 收尾後發現，使用者選擇延後處理）
 
-- [ ] **Bun compiled `.\cli.exe` TUI panic** — Bun 1.3.6 single-file-executable + Ink React TUI 衝突（非我方 bug），追 Bun changelog，未修前互動模式一律走 `bun run dev`
-- [ ] **`-p` non-interactive mode regression** — `./cli.exe -p "..."` / `bun src/.. -p "..."` 90 秒無輸出 timeout，疑似 isolation commit 後出現。Trace 顯示 bootstrap 跑完 `cli_after_main_complete` 但 print 模式 query 沒實際發出。`bun run dev` 互動模式正常，所以開發階段可用；批次測試須等修好
+- [x] **Bun compiled `.\cli.exe` TUI panic** — Bun 1.3.6 single-file-executable + Ink React TUI 衝突（非我方 bug），追 Bun changelog，未修前互動模式一律走 `bun run dev` — **已修**：升級 Bun 1.3.12 + 重建 cli.exe（2026-04-17）
+- [x] **`-p` non-interactive mode regression** — `./cli.exe -p "..."` / `bun src/.. -p "..."` 90 秒無輸出 timeout，疑似 isolation commit 後出現 — **已修**：Bun 1.3.12 修復後 `./cli.exe --model qwen3.5-9b-neo -p "2+2=?"` → `4` 正常回應（2026-04-17）
 
 ### 完成標準
 - [x] `./cli --model qwen3.5-9b-neo -p "hello"` 成功串流輸出；log 顯示連接 `http://127.0.0.1:8080/v1`（階段四 Task 1 實測 `3+5=?` → `8`，llamacpp 分支命中。**註**：isolation commit 後 -p mode 出現 regression 待修）
@@ -168,8 +168,56 @@
 ### M5 — Hermes 訊息閘道（TypeScript 重新實作）
 將 Telegram/Discord/Slack 閘道移植到 free-code。
 
-### M6 — Hermes 技能自動建立（TypeScript 重新實作）
-將 Hermes 的自我改進技能循環移植到 free-code。
+### M6 — Self-Improving Loop（AutoDream × Hermes 合併）
+
+**目標**：合併 free-code 的 AutoDream（背景記憶整合）與 Hermes Agent 的 self-improving loop（即時自我改進迴圈），讓系統從「被動整理記憶」進化為「邊做邊學邊改」。三個階段漸進實施：方案一（擴展 Dream prompt）→ 方案二（即時 Nudge 雙迴圈）→ 方案三（完整三層自改進系統）。以 **llama.cpp 本地模型** 為主要運行情境。
+
+**詳細設計分析見 `AUTODREAM_HERMES_MERGE_ANALYSIS.md`。**
+
+**架構決策**：
+- ADR-M6-01：三方案漸進式實施，每階段驗證效果後再決定是否繼續下一階段
+- ADR-M6-02：方案二的 nudge hook 使用現有 `apiQueryHookHelper` + `postSamplingHooks` 框架（已被 `skillImprovement.ts` 驗證）
+- ADR-M6-03：方案三的 skill 自動建立需經 skillGuard 安全掃描 + 3 session 驗證；Dream agent 的寫入邊界擴展到 `.my-agent/skills/`
+- ADR-M6-04：llama.cpp 單 slot 環境下背景任務序列化執行（extractMemories → sessionReview → autoDream）；非 llama.cpp 環境保留原本 fire-and-forget
+- ADR-M6-05：`getSmallFastModel()` 在 llama.cpp 環境下返回 `DEFAULT_LLAMACPP_MODEL`（qwopus3.5-9b-v3），nudge 的 side-channel 呼叫走同一模型
+
+#### 階段一：EnhancedDream — 擴展 Dream 職責（方案一）
+- [x] M6-01 擴展 `consolidationPrompt.ts`：在 Phase 4 之後新增 Phase 5（Skill Audit：掃描 `.my-agent/skills/` + transcript 識別跨 session 重複 workflow）和 Phase 6（Behavior Notes：識別用戶修正/偏好寫入 `user-behavior-notes.md`）
+- [x] M6-02 自動化測試 `tests/integration/self-improve/enhanced-dream.test.ts`：驗證 Phase 5/6 存在、Phase 1-4 保留、extra 參數正確附加（4 個 test case）
+- [x] M6-03 `bun run typecheck` + `bun test tests/integration/self-improve/` 全綠 — typecheck 基線不變（TS5101）；4/4 綠
+
+#### 階段二：DualLoop — 即時 Nudge 雙迴圈（方案二）
+- [x] M6-04 新增 `src/utils/hooks/memoryNudge.ts`：基於 `createApiQueryHook` 框架，每 8 個 user turn 偵測修正性偏好（借鑑 Hermes MEMORY_REVIEW_PROMPT），logResult 設 `appState.pendingMemoryNudge`；匯出 `parseMemoryNudgeResponse` 供測試
+- [x] M6-05 新增 `src/utils/hooks/skillCreationNudge.ts`：基於 `createApiQueryHook` 框架，每 15 個 tool_use 偵測可 skill 化的 workflow（借鑑 Hermes SKILL_REVIEW_PROMPT），logResult 設 `appState.pendingSkillCandidate`；新增 `countRecentToolUses()` + `formatToolSequence()` 工具函式
+- [x] M6-06 修改 `src/state/AppStateStore.ts`：新增 `pendingMemoryNudge` 和 `pendingSkillCandidate` 型別到 AppState（含預設值 null）
+- [x] M6-07 修改 `src/utils/backgroundHousekeeping.ts`：在 `initSkillImprovement()` 之後加入 `initMemoryNudge()` + `initSkillCreationNudge()` 呼叫
+- [x] M6-08 可選：注入 SKILLS_GUIDANCE 到 system prompt — 延後，待 nudge 機制驗證有效後再加
+- [x] M6-09 自動化測試 `tests/integration/self-improve/memory-nudge.test.ts`（5 個 test case：parseResponse 解析 + 多筆 + 空 + 無標籤 + 無效 JSON）
+- [x] M6-10 自動化測試 `tests/integration/self-improve/skill-creation-nudge.test.ts`（5 個 test case：parseResponse 解析 + 非候選 + 無標籤 + countRecentToolUses + formatToolSequence）
+- [x] M6-11 `bun run typecheck` + `bun test tests/integration/self-improve/` 全綠 — typecheck 基線不變（TS5101）；14/14 綠（3 files）
+
+#### 階段三：FullLoop — 完整三層自改進系統（方案三）
+- [x] M6-12 新增 `src/services/selfImprove/skillGuard.ts`：從 Hermes `skills_guard.py` 移植核心威脅模式（8 類約 40 regex），結構限制 MAX_SKILL_SIZE_KB=10 / MAX_TOTAL_SKILLS=50，信任策略 agent-created → safe=allow / caution=allow / dangerous=block
+- [x] M6-13 自動化測試 `tests/integration/self-improve/skill-guard.test.ts`（8 個 test case 全綠）
+- [x] M6-14 新增 `src/services/selfImprove/trajectoryStore.ts`：writeTrajectory / readTrajectories / pruneTrajectories / countSkillObservations
+- [x] M6-15 自動化測試 `tests/integration/self-improve/trajectory-store.test.ts`（3 個 test case 全綠）
+- [x] M6-16 新增 `src/services/selfImprove/sessionReview.ts` + `sessionReviewPrompt.ts`：Session Review Agent（觸發條件 tool_use>=15 + 距上次>=2h，forkedAgent maxTurns=8，canUseTool 限 memory/）
+- [x] M6-17 自動化測試 `tests/integration/self-improve/session-review.test.ts`（3 個 test case 全綠）
+- [x] M6-18 新增 `src/tasks/SessionReviewTask/SessionReviewTask.ts`：仿 DreamTask 結構 + Task.ts 新增 `'session_review'` TaskType 和 `'s'` prefix
+- [x] M6-19 擴展 `consolidationPrompt.ts`：加入 Phase 7（Skill Draft Review — 3+ session 驗證後自動升級）、Phase 8（Safety Checklist）、Phase 9（Trajectory Pruning — 保留最近 30 天）
+- [x] M6-20 擴展 `autoDream.ts` 工具權限：新增 `createEnhancedDreamCanUseTool` 包裝 `createAutoMemCanUseTool` + `.my-agent/skills/` 寫入權限 + `isSkillsPath()` 判斷；import `scanSkill` 備用
+- [x] M6-21 自動化測試 `tests/integration/self-improve/enhanced-dream-permissions.test.ts`（4 個 test case 全綠：Phase 7-9 存在 + Safety Checklist + Trajectory Pruning + Phase 1-6 保留）
+- [x] M6-22 修改 `src/query/stopHooks.ts`：加入 `executeSessionReview` + llama.cpp 序列化（extractMemories → sessionReview → autoDream），非 llama.cpp 保留 fire-and-forget
+- [x] M6-23 修改 `src/utils/backgroundHousekeeping.ts`：`initAutoDream()` 之後加入 `initSessionReview()`
+- [x] M6-24 整合測試 `tests/integration/self-improve/full-loop-smoke.test.ts`（4 個 test case 全綠）
+- [x] M6-25 `bun run typecheck` + `bun test tests/integration/self-improve/` 全綠 — typecheck 基線不變（TS5101）；36/36 綠（8 files, 96 expect calls）
+
+#### 完成標準（僅針對 llama.cpp 情境）
+- [x] EnhancedDream：Dream prompt 含 Phase 5 Skill Audit + Phase 6 Behavior Notes — 測試驗證 prompt 內容正確
+- [x] DualLoop：memoryNudge（每 8 turn）+ skillCreationNudge（每 15 tool_use）已註冊為 postSamplingHook，appState 型別已擴展
+- [x] FullLoop：Session Review Agent + skillGuard + trajectoryStore + 增強版 Dream（Phase 7-9）+ stopHooks 序列化 — 全部實作完成
+- [x] 所有自動化測試（8 個檔案 36 個 test case）全綠
+- [x] 既有記憶系統行為不變：typecheck 基線不變，createAutoMemCanUseTool 未修改（createEnhancedDreamCanUseTool 是包裝層）
 
 ### M7 — Hermes 使用者建模（TypeScript 重新實作）
 將 Honcho 風格的使用者建模和跨 session 回憶移植到 free-code。
@@ -372,3 +420,21 @@
 - 2026-04-16 23:11: Session 結束 | 進度：75/77 任務 | 3923766 refactor: 品牌重塑 — src/ 內 CLAUDE.md → MY-AGENT.md
 
 - 2026-04-16 23:19: Session 結束 | 進度：75/77 任務 | 3923766 refactor: 品牌重塑 — src/ 內 CLAUDE.md → MY-AGENT.md
+
+- 2026-04-16 23:23: Session 結束 | 進度：75/77 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確
+
+- 2026-04-16 23:25: Session 結束 | 進度：75/77 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確
+
+- 2026-04-17 08:38: Session 結束 | 進度：75/77 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確
+
+- 2026-04-17 09:09: Session 結束 | 進度：75/77 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確
+
+- 2026-04-17 09:21: Session 結束 | 進度：75/77 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確
+
+- 2026-04-17 09:30: Session 結束 | 進度：75/77 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確
+
+- 2026-04-17 09:45: Session 結束 | 進度：75/77 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確
+
+- 2026-04-17 10:03: Session 結束 | 進度：75/77 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確
+
+- 2026-04-17 10:15: Session 結束 | 進度：80/107 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確

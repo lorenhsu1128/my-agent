@@ -397,6 +397,15 @@ export type AppState = DeepImmutable<{
       updates: { section: string; change: string; reason: string }[]
     } | null
   }
+  pendingMemoryNudge: {
+    memories: { content: string; type: string; reason: string }[]
+  } | null
+  pendingSkillCandidate: {
+    isCandidate: boolean
+    name?: string
+    description?: string
+    steps?: string[]
+  } | null
   // Auth version - incremented on login/logout to trigger re-fetching of auth-dependent data
   authVersion: number
   // Initial message to process (from CLI args or plan mode exit)
@@ -560,6 +569,8 @@ export function getDefaultAppState(): AppState {
     skillImprovement: {
       suggestion: null,
     },
+    pendingMemoryNudge: null,
+    pendingSkillCandidate: null,
     authVersion: 0,
     initialMessage: null,
     effortValue: undefined,

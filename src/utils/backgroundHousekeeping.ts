@@ -2,6 +2,9 @@ import { feature } from 'bun:bundle'
 import { initAutoDream } from '../services/autoDream/autoDream.js'
 import { initMagicDocs } from '../services/MagicDocs/magicDocs.js'
 import { initSkillImprovement } from './hooks/skillImprovement.js'
+import { initMemoryNudge } from './hooks/memoryNudge.js'
+import { initSkillCreationNudge } from './hooks/skillCreationNudge.js'
+import { initSessionReview } from '../services/selfImprove/sessionReview.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const extractMemoriesModule = feature('EXTRACT_MEMORIES')
@@ -31,10 +34,13 @@ const DELAY_VERY_SLOW_OPERATIONS_THAT_HAPPEN_EVERY_SESSION = 10 * 60 * 1000
 export function startBackgroundHousekeeping(): void {
   void initMagicDocs()
   void initSkillImprovement()
+  void initMemoryNudge()
+  void initSkillCreationNudge()
   if (feature('EXTRACT_MEMORIES')) {
     extractMemoriesModule!.initExtractMemories()
   }
   initAutoDream()
+  initSessionReview()
   void autoUpdateMarketplacesAndPluginsInBackground()
   if (feature('LODESTONE') && getIsInteractive()) {
     void registerProtocolModule!.ensureDeepLinkProtocolRegistered()

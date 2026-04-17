@@ -50,6 +50,8 @@ const jobClassifierModule = feature('TEMPLATES')
 
 import type { QuerySource } from '../constants/querySource.js'
 import { executeAutoDream } from '../services/autoDream/autoDream.js'
+import { executeSessionReview } from '../services/selfImprove/sessionReview.js'
+import { getAPIProvider } from '../utils/model/providers.js'
 import { executePromptSuggestion } from '../services/PromptSuggestion/promptSuggestion.js'
 import { isBareMode, isEnvDefinedFalsy } from '../utils/envUtils.js'
 import {
@@ -152,7 +154,30 @@ export async function* handleStopHooks(
       )
     }
     if (!toolUseContext.agentId) {
-      void executeAutoDream(stopHookContext, toolUseContext.appendSystemMessage)
+      if (getAPIProvider() === 'llamacpp') {
+        // Serialize background tasks for llama.cpp single-slot environments
+        // to avoid GPU queue congestion and timeouts.
+        void (async () => {
+          await executeSessionReview(
+            stopHookContext,
+            toolUseContext.appendSystemMessage,
+          )
+          await executeAutoDream(
+            stopHookContext,
+            toolUseContext.appendSystemMessage,
+          )
+        })()
+      } else {
+        // Non-llamacpp: fire-and-forget as before
+        void executeSessionReview(
+          stopHookContext,
+          toolUseContext.appendSystemMessage,
+        )
+        void executeAutoDream(
+          stopHookContext,
+          toolUseContext.appendSystemMessage,
+        )
+      }
     }
   }
 

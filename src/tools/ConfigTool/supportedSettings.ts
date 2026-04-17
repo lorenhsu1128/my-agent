@@ -66,6 +66,41 @@ export const SUPPORTED_SETTINGS: Record<string, SettingConfig> = {
     type: 'boolean',
     description: 'Enable background memory consolidation',
   },
+  'selfImproveThresholds.skillImprovementTurnBatch': {
+    source: 'settings',
+    type: 'string',
+    description: 'User turns between skill improvement checks (default: 5)',
+  },
+  'selfImproveThresholds.memoryNudgeTurnBatch': {
+    source: 'settings',
+    type: 'string',
+    description: 'User turns between memory nudge checks (default: 8)',
+  },
+  'selfImproveThresholds.skillCreationToolUseThreshold': {
+    source: 'settings',
+    type: 'string',
+    description: 'Tool uses to trigger skill creation nudge (default: 15)',
+  },
+  'selfImproveThresholds.sessionReviewMinToolUses': {
+    source: 'settings',
+    type: 'string',
+    description: 'Tool uses to trigger session review (default: 15)',
+  },
+  'selfImproveThresholds.sessionReviewMinIntervalHours': {
+    source: 'settings',
+    type: 'string',
+    description: 'Hours between session reviews (default: 2)',
+  },
+  'selfImproveThresholds.autoDreamMinHours': {
+    source: 'settings',
+    type: 'string',
+    description: 'Hours since last consolidation for auto-dream (default: 24)',
+  },
+  'selfImproveThresholds.autoDreamMinSessions': {
+    source: 'settings',
+    type: 'string',
+    description: 'Sessions since last consolidation for auto-dream (default: 5)',
+  },
   fileCheckpointingEnabled: {
     source: 'global',
     type: 'boolean',

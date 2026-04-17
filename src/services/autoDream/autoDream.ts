@@ -23,7 +23,6 @@ import type { Message } from '../../types/message.js'
 import { logForDebugging } from '../../utils/debug.js'
 import type { ToolUseContext } from '../../Tool.js'
 import { logEvent } from '../analytics/index.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
 import { isAutoMemoryEnabled, getAutoMemPath } from '../../memdir/paths.js'
 import { isAutoDreamEnabled } from './config.js'
 import { getProjectDir } from '../../utils/sessionStorage.js'
@@ -34,6 +33,7 @@ import {
   getSessionId,
 } from '../../bootstrap/state.js'
 import { createAutoMemCanUseTool } from '../extractMemories/extractMemories.js'
+import { scanSkill } from '../selfImprove/skillGuard.js'
 import { buildConsolidationPrompt } from './consolidationPrompt.js'
 import {
   readLastConsolidatedAt,
@@ -51,46 +51,62 @@ import {
 import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js'
 import { FILE_WRITE_TOOL_NAME } from '../../tools/FileWriteTool/prompt.js'
 
+// ── Enhanced Dream permissions ───────────────────────────────────────────
+// Wraps createAutoMemCanUseTool to also allow writes to .my-agent/skills/
+// (for auto-creating skills from verified drafts in Phase 7).
+
+import { normalize, join } from 'path'
+import type { Tool } from '../../Tool.js'
+
+type CanUseToolFn = (
+  tool: Tool,
+  input: Record<string, unknown>,
+) => Promise<{
+  behavior: 'allow' | 'deny'
+  updatedInput: Record<string, unknown>
+  message?: string
+}>
+
+function isSkillsPath(absolutePath: string): boolean {
+  const normalized = normalize(absolutePath)
+  const cwd = getOriginalCwd()
+  const skillsDir = normalize(join(cwd, '.my-agent', 'skills'))
+  return normalized.startsWith(skillsDir)
+}
+
+export function createEnhancedDreamCanUseTool(
+  memoryDir: string,
+): CanUseToolFn {
+  const baseCanUseTool = createAutoMemCanUseTool(memoryDir)
+
+  return async (tool: Tool, input: Record<string, unknown>) => {
+    // First try the base permissions (memory dir writes, read-only bash, etc.)
+    const baseResult = await baseCanUseTool(tool, input)
+    if (baseResult.behavior === 'allow') return baseResult
+
+    // Additionally allow Edit/Write to .my-agent/skills/ directory
+    if (
+      (tool.name === FILE_EDIT_TOOL_NAME ||
+        tool.name === FILE_WRITE_TOOL_NAME) &&
+      'file_path' in input
+    ) {
+      const filePath = input.file_path
+      if (typeof filePath === 'string' && isSkillsPath(filePath)) {
+        return { behavior: 'allow' as const, updatedInput: input }
+      }
+    }
+
+    return baseResult
+  }
+}
+
 // Scan throttle: when time-gate passes but session-gate doesn't, the lock
 // mtime doesn't advance, so the time-gate keeps passing every turn.
 const SESSION_SCAN_INTERVAL_MS = 10 * 60 * 1000
 
-type AutoDreamConfig = {
-  minHours: number
-  minSessions: number
-}
-
-const DEFAULTS: AutoDreamConfig = {
-  minHours: 24,
-  minSessions: 5,
-}
-
-/**
- * Thresholds from tengu_onyx_plover. The enabled gate lives in config.ts
- * (isAutoDreamEnabled); this returns only the scheduling knobs. Defensive
- * per-field validation since GB cache can return stale wrong-type values.
- */
-function getConfig(): AutoDreamConfig {
-  const raw =
-    getFeatureValue_CACHED_MAY_BE_STALE<Partial<AutoDreamConfig> | null>(
-      'tengu_onyx_plover',
-      null,
-    )
-  return {
-    minHours:
-      typeof raw?.minHours === 'number' &&
-      Number.isFinite(raw.minHours) &&
-      raw.minHours > 0
-        ? raw.minHours
-        : DEFAULTS.minHours,
-    minSessions:
-      typeof raw?.minSessions === 'number' &&
-      Number.isFinite(raw.minSessions) &&
-      raw.minSessions > 0
-        ? raw.minSessions
-        : DEFAULTS.minSessions,
-  }
-}
+// AutoDream thresholds (minHours, minSessions) are now centralized in
+// src/services/selfImprove/thresholds.ts — user settings > GrowthBook > defaults.
+import { getSelfImproveThresholds } from '../selfImprove/thresholds.js'
 
 function isGateOpen(): boolean {
   if (getKairosActive()) return false // KAIROS mode uses disk-skill dream
@@ -123,7 +139,7 @@ export function initAutoDream(): void {
   let lastSessionScanAt = 0
 
   runner = async function runAutoDream(context, appendSystemMessage) {
-    const cfg = getConfig()
+    const thresholds = getSelfImproveThresholds()
     const force = isForced()
     if (!force && !isGateOpen()) return
 
@@ -138,7 +154,7 @@ export function initAutoDream(): void {
       return
     }
     const hoursSince = (Date.now() - lastAt) / 3_600_000
-    if (!force && hoursSince < cfg.minHours) return
+    if (!force && hoursSince < thresholds.autoDreamMinHours) return
 
     // --- Scan throttle ---
     const sinceScanMs = Date.now() - lastSessionScanAt
@@ -163,9 +179,9 @@ export function initAutoDream(): void {
     // Exclude the current session (its mtime is always recent).
     const currentSession = getSessionId()
     sessionIds = sessionIds.filter(id => id !== currentSession)
-    if (!force && sessionIds.length < cfg.minSessions) {
+    if (!force && sessionIds.length < thresholds.autoDreamMinSessions) {
       logForDebugging(
-        `[autoDream] skip — ${sessionIds.length} sessions since last consolidation, need ${cfg.minSessions}`,
+        `[autoDream] skip — ${sessionIds.length} sessions since last consolidation, need ${thresholds.autoDreamMinSessions}`,
       )
       return
     }
@@ -224,7 +240,7 @@ ${sessionIds.map(id => `- ${id}`).join('\n')}`
       const result = await runForkedAgent({
         promptMessages: [createUserMessage({ content: prompt })],
         cacheSafeParams: createCacheSafeParams(context),
-        canUseTool: createAutoMemCanUseTool(memoryRoot),
+        canUseTool: createEnhancedDreamCanUseTool(memoryRoot),
         querySource: 'auto_dream',
         forkLabel: 'auto_dream',
         skipTranscript: true,

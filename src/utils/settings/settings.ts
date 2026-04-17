@@ -18,7 +18,7 @@ import { writeFileSyncAndFlush_DEPRECATED } from '../file.js'
 import { readFileSync } from '../fileRead.js'
 import { getFsImplementation, safeResolvePath } from '../fsOperations.js'
 import { addFileGlobRuleToGitignore } from '../git/gitignore.js'
-import { safeParseJSON } from '../json.js'
+import { safeParseJSONC } from '../json.js'
 import { logError } from '../log.js'
 import { getPlatform } from '../platform.js'
 import { clone, jsonStringify } from '../slowOperations.js'
@@ -210,7 +210,7 @@ function parseSettingsFileUncached(path: string): {
       return { settings: {}, errors: [] }
     }
 
-    const data = safeParseJSON(content, false)
+    const data = safeParseJSONC(content)
 
     // Filter invalid permission rules before schema validation so one bad
     // rule doesn't cause the entire settings file to be rejected.
@@ -451,7 +451,7 @@ export function updateSettingsForSource(
         // File doesn't exist — fall through to merge with empty settings
       }
       if (content !== null) {
-        const rawData = safeParseJSON(content)
+        const rawData = safeParseJSONC(content)
         if (rawData === null) {
           // JSON syntax error - return validation error instead of overwriting
           // safeParseJSON will already log the error, so we'll just return the error here
@@ -1000,7 +1000,7 @@ export function rawSettingsContainsKey(key: string): boolean {
         continue
       }
 
-      const rawData = safeParseJSON(content, false)
+      const rawData = safeParseJSONC(content)
       if (rawData && typeof rawData === 'object' && key in rawData) {
         return true
       }

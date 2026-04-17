@@ -27,8 +27,7 @@ import {
   createApiQueryHook,
 } from './apiQueryHookHelper.js'
 import { registerPostSamplingHook } from './postSamplingHooks.js'
-
-const TURN_BATCH_SIZE = 5
+import { getSelfImproveThresholds } from '../../services/selfImprove/thresholds.js'
 
 export type SkillUpdate = {
   section: string
@@ -81,9 +80,9 @@ function createSkillImprovementHook() {
         return false
       }
 
-      // Only run every TURN_BATCH_SIZE user messages
+      // Only run every N user messages (configurable via selfImproveThresholds)
       const userCount = count(context.messages, m => m.type === 'user')
-      if (userCount - lastAnalyzedCount < TURN_BATCH_SIZE) {
+      if (userCount - lastAnalyzedCount < getSelfImproveThresholds().skillImprovementTurnBatch) {
         return false
       }
 
