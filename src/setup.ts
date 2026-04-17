@@ -381,7 +381,7 @@ export async function setup(
   // "process started" signal for release health monitoring.
   logEvent('tengu_started', {})
 
-  void prefetchApiKeyFromApiKeyHelperIfSafe(getIsNonInteractiveSession()) // Prefetch safely - only executes if trust already confirmed
+  // free-code: 跳過 API key prefetch（本地模型不需要）
   profileCheckpoint('setup_after_prefetch')
 
   // Pre-fetch data for Logo v2 - await to ensure it's ready before logo renders.

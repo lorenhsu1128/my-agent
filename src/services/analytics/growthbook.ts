@@ -334,7 +334,7 @@ async function processRemoteEvalPayload(
   // Empty object is truthy — without the length check, `{features: {}}`
   // (transient server bug, truncated response) would pass, clear the maps
   // below, return true, and syncRemoteEvalToDisk would wholesale-write `{}`
-  // to disk: total flag blackout for every process sharing ~/.my-agent.json.
+  // to disk: total flag blackout for every process sharing ~/.my-agent/.my-agent.json.
   if (!payload?.features || Object.keys(payload.features).length === 0) {
     return false
   }
@@ -621,45 +621,8 @@ const getGrowthBookClient = memoize(
  */
 export const initializeGrowthBook = memoize(
   async (): Promise<GrowthBook | null> => {
-    let clientWrapper = getGrowthBookClient()
-    if (!clientWrapper) {
-      return null
-    }
-
-    // Check if auth has become available since the client was created
-    // If so, we need to recreate the client with fresh auth headers
-    // Only check if trust is established to avoid triggering apiKeyHelper before trust dialog
-    if (!clientCreatedWithAuth) {
-      const hasTrust =
-        checkHasTrustDialogAccepted() ||
-        getSessionTrustAccepted() ||
-        getIsNonInteractiveSession()
-      if (hasTrust) {
-        const currentAuth = getAuthHeaders()
-        if (!currentAuth.error) {
-          if (process.env.USER_TYPE === 'ant') {
-            logForDebugging(
-              'GrowthBook: Auth became available after client creation, reinitializing',
-            )
-          }
-          // Use resetGrowthBook to properly destroy old client and stop periodic refresh
-          // This prevents double-init where old client's init promise continues running
-          resetGrowthBook()
-          clientWrapper = getGrowthBookClient()
-          if (!clientWrapper) {
-            return null
-          }
-        }
-      }
-    }
-
-    await clientWrapper.initialized
-
-    // Set up periodic refresh after successful initialization
-    // This is called here (not separately) so it's always re-established after any reinit
-    setupPeriodicGrowthBookRefresh()
-
-    return clientWrapper.client
+    // free-code: 不連遠端 GrowthBook，所有 flag 從 local config 讀取
+    return null
   },
 )
 
@@ -745,27 +708,7 @@ export function getFeatureValue_CACHED_MAY_BE_STALE<T>(
     return configOverrides[feature] as T
   }
 
-  if (!isGrowthBookEnabled()) {
-    return defaultValue
-  }
-
-  // Log experiment exposure if data is available, otherwise defer until after init
-  if (experimentDataByFeature.has(feature)) {
-    logExposureForFeature(feature)
-  } else {
-    pendingExposures.add(feature)
-  }
-
-  // In-memory payload is authoritative once processRemoteEvalPayload has run.
-  // Disk is also fresh by then (syncRemoteEvalToDisk runs synchronously inside
-  // init), so this is correctness-equivalent to the disk read below — but it
-  // skips the config JSON parse and is what onGrowthBookRefresh subscribers
-  // depend on to read fresh values the instant they're notified.
-  if (remoteEvalFeatureValues.has(feature)) {
-    return remoteEvalFeatureValues.get(feature) as T
-  }
-
-  // Fall back to disk cache (survives across process restarts)
+  // free-code: 從 disk cache 讀取，找不到就用 defaultValue
   try {
     const cached = getGlobalConfig().cachedGrowthBookFeatures?.[feature]
     return cached !== undefined ? (cached as T) : defaultValue
@@ -814,26 +757,17 @@ export function checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
     return Boolean(configOverrides[gate])
   }
 
-  if (!isGrowthBookEnabled()) {
-    return false
+  // free-code: 從 disk cache 讀取，找不到就回 true（預設解鎖）
+  try {
+    const config = getGlobalConfig()
+    const gbCached = config.cachedGrowthBookFeatures?.[gate]
+    if (gbCached !== undefined) {
+      return Boolean(gbCached)
+    }
+    return true
+  } catch {
+    return true
   }
-
-  // Log experiment exposure if data is available, otherwise defer until after init
-  if (experimentDataByFeature.has(gate)) {
-    logExposureForFeature(gate)
-  } else {
-    pendingExposures.add(gate)
-  }
-
-  // Return cached value immediately from disk
-  // First check GrowthBook cache, then fall back to Statsig cache for migration
-  const config = getGlobalConfig()
-  const gbCached = config.cachedGrowthBookFeatures?.[gate]
-  if (gbCached !== undefined) {
-    return Boolean(gbCached)
-  }
-  // Fallback to Statsig cache for migration period
-  return config.cachedStatsigGates?.[gate] ?? false
 }
 
 /**
@@ -914,24 +848,16 @@ export async function checkGate_CACHED_OR_BLOCKING(
     return Boolean(configOverrides[gate])
   }
 
-  if (!isGrowthBookEnabled()) {
-    return false
-  }
-
-  // Fast path: disk cache already says true — trust it
-  const cached = getGlobalConfig().cachedGrowthBookFeatures?.[gate]
-  if (cached === true) {
-    // Log experiment exposure if data is available, otherwise defer
-    if (experimentDataByFeature.has(gate)) {
-      logExposureForFeature(gate)
-    } else {
-      pendingExposures.add(gate)
+  // free-code: 從 disk cache 讀取，找不到就回 true（預設解鎖，不阻塞）
+  try {
+    const cached = getGlobalConfig().cachedGrowthBookFeatures?.[gate]
+    if (cached !== undefined) {
+      return Boolean(cached)
     }
     return true
+  } catch {
+    return true
   }
-
-  // Slow path: disk says false/missing — may be stale, fetch fresh
-  return getFeatureValueInternal(gate, false, true)
 }
 
 /**
@@ -941,44 +867,7 @@ export async function checkGate_CACHED_OR_BLOCKING(
  * apiHostRequestHeaders cannot be updated after client creation.
  */
 export function refreshGrowthBookAfterAuthChange(): void {
-  if (!isGrowthBookEnabled()) {
-    return
-  }
-
-  try {
-    // Reset the client completely to get fresh auth headers
-    // This is necessary because apiHostRequestHeaders can't be updated after creation
-    resetGrowthBook()
-
-    // resetGrowthBook cleared remoteEvalFeatureValues. If re-init below
-    // times out (hadFeatures=false) or short-circuits on !hasAuth (logout),
-    // the init-callback notify never fires — subscribers stay synced to the
-    // previous account's memoized state. Notify here so they re-read now
-    // (falls to disk cache). If re-init succeeds, they'll notify again with
-    // fresh values; if not, at least they're synced to the post-reset state.
-    refreshed.emit()
-
-    // Reinitialize with fresh auth headers and attributes
-    // Track this promise so security gate checks can wait for it.
-    // .catch before .finally: initializeGrowthBook can reject if its sync
-    // helpers throw (getGrowthBookClient, getAuthHeaders, resetGrowthBook —
-    // clientWrapper.initialized itself has its own .catch so never rejects),
-    // and .finally re-settles with the original rejection — the sync
-    // try/catch below cannot catch async rejections.
-    reinitializingPromise = initializeGrowthBook()
-      .catch(error => {
-        logError(toError(error))
-        return null
-      })
-      .finally(() => {
-        reinitializingPromise = null
-      })
-  } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      throw error
-    }
-    logError(toError(error))
-  }
+  // free-code: 不連遠端 GrowthBook，no-op
 }
 
 /**

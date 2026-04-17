@@ -5,6 +5,6 @@ export default {
   type: 'local-jsx',
   name: 'logout',
   description: 'Sign out from your Anthropic account',
-  isEnabled: () => !isEnvTruthy(process.env.DISABLE_LOGOUT_COMMAND),
+  isEnabled: () => false, // free-code: 本地模型不需要登出
   load: () => import('./logout.js'),
 } satisfies Command

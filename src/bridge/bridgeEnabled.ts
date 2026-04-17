@@ -26,12 +26,9 @@ import { lt } from '../utils/semver.js'
  * is only referenced when bridge mode is enabled at build time.
  */
 export function isBridgeEnabled(): boolean {
-  // Positive ternary pattern — see docs/feature-gating.md.
-  // Negative pattern (if (!feature(...)) return) does not eliminate
-  // inline string literals from external builds.
+  // free-code: bridge 功能無條件啟用（不需 Anthropic auth）
   return feature('BRIDGE_MODE')
-    ? isClaudeAISubscriber() &&
-        getFeatureValue_CACHED_MAY_BE_STALE('tengu_ccr_bridge', false)
+    ? getFeatureValue_CACHED_MAY_BE_STALE('tengu_ccr_bridge', true)
     : false
 }
 
@@ -48,9 +45,9 @@ export function isBridgeEnabled(): boolean {
  * `isBridgeEnabled()` instead.
  */
 export async function isBridgeEnabledBlocking(): Promise<boolean> {
+  // free-code: bridge 功能無條件啟用
   return feature('BRIDGE_MODE')
-    ? isClaudeAISubscriber() &&
-        (await checkGate_CACHED_OR_BLOCKING('tengu_ccr_bridge'))
+    ? await checkGate_CACHED_OR_BLOCKING('tengu_ccr_bridge')
     : false
 }
 
@@ -69,17 +66,9 @@ export async function isBridgeEnabledBlocking(): Promise<boolean> {
  */
 export async function getBridgeDisabledReason(): Promise<string | null> {
   if (feature('BRIDGE_MODE')) {
-    if (!isClaudeAISubscriber()) {
-      return 'Remote Control requires a claude.ai subscription. Run `claude auth login` to sign in with your claude.ai account.'
-    }
-    if (!hasProfileScope()) {
-      return 'Remote Control requires a full-scope login token. Long-lived tokens (from `claude setup-token` or CLAUDE_CODE_OAUTH_TOKEN) are limited to inference-only for security reasons. Run `claude auth login` to use Remote Control.'
-    }
-    if (!getOauthAccountInfo()?.organizationUuid) {
-      return 'Unable to determine your organization for Remote Control eligibility. Run `claude auth login` to refresh your account information.'
-    }
+    // free-code: 跳過 auth 檢查，只檢查 feature flag
     if (!(await checkGate_CACHED_OR_BLOCKING('tengu_ccr_bridge'))) {
-      return 'Remote Control is not yet enabled for your account.'
+      return 'Remote Control is not yet enabled.'
     }
     return null
   }

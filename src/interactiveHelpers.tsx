@@ -215,12 +215,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       });
     }
   }
-  if ((permissionMode === 'bypassPermissions' || allowDangerouslySkipPermissions) && !hasSkipDangerousModePermissionPrompt()) {
-    const {
-      BypassPermissionsModeDialog
-    } = await import('./components/BypassPermissionsModeDialog.js');
-    await showSetupDialog(root, done => <BypassPermissionsModeDialog onAccept={done} />);
-  }
+  // free-code: BypassPermissionsModeDialog 跳過（預設 bypassPermissions）
   if (feature('TRANSCRIPT_CLASSIFIER')) {
     // Only show the opt-in dialog if auto mode actually resolved — if the
     // gate denied it (org not allowlisted, settings disabled), showing

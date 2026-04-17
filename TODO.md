@@ -258,6 +258,66 @@
 - [x] skillImprovement 修改 skill 時 scanSkill 驗證：applySkillImprovement 寫入前 scanSkill，dangerous 則不寫入
 - [x] 所有自動化測試全綠：93/93（11 files）
 
+### M6c — Dev Mode 修復 + Skill 閉環補齊 + 品牌重塑 config
+
+**目標**：修復三個阻擋 `bun run dev` 運行的 runtime bug，補齊 M6b SkillCreationSurvey 的 UI 缺口，完成 config 檔名品牌重塑。
+
+#### 修復一：SendMessageTool require hang
+- [x] M6c-01 修改 `src/tools.ts`：`getSendMessageTool()` 的 `require()` 改為 ESM static import — Bun dev mode 下 `require()` 載入含 async 傳遞依賴的模組會靜默 hang，改為 static import 利用 live binding 正確處理
+
+#### 修復二：enabledTools.some() TypeError
+- [x] M6c-02 修改 `src/constants/prompts.ts`：`enabledTools.some(t => t.name === 'SkillManage')` → `enabledTools.has('SkillManage')` — M6b 新增的 skills_guidance 對 `Set<string>` 誤用 Array 方法，導致 system prompt 組裝 crash、SkillManage 指引從未注入
+
+#### 修復三：MessageSelector require crash
+- [x] M6c-03 修改 `src/QueryEngine.ts`：`require('MessageSelector')` → cached `await import()` — 同樣的 async module 問題阻擋所有 LLM query 執行
+
+#### SkillCreationSurvey 閉環補齊
+- [x] M6c-04 新增 `src/components/SkillCreationSurvey.tsx`：仿 SkillImprovementSurvey 模式，顯示候選 skill 的 name/description/steps，「1: 建立 / 0: 略過」互動
+- [x] M6c-05 修改 `src/screens/REPL.tsx`：加入 SkillCreationSurvey import + render；移除 SkillImprovementSurvey 的 `"external" === 'ant'` guard（free-code 已解鎖所有功能）
+
+#### 品牌重塑：config 檔案搬移
+- [x] M6c-06 修改 `src/utils/env.ts`：`getGlobalClaudeFile()` 的檔名 `.claude.json` → `.my-agent.json`，含自動 migration（複製舊檔到新路徑）
+- [x] M6c-07 修改 `src/utils/permissions/filesystem.ts`：DANGEROUS_FILES 清單 `.claude.json` → `.my-agent.json`
+- [x] M6c-08 修改 `src/utils/env.ts`：config 檔從 `~/.my-agent.json` 搬移至 `~/.my-agent/.my-agent.json`（config 目錄內），三層 migration 鏈（`~/.claude.json` → `~/.my-agent.json` → `~/.my-agent/.my-agent.json`）
+- [x] M6c-09 更新 12 個檔案中 16 處硬編碼的 `~/.my-agent.json` 路徑字串（註解/錯誤訊息/prompt）
+
+#### 預設 bypassPermissions 模式
+- [x] M6c-10 修改 `src/main.tsx`：`dangerouslySkipPermissions` 和 `allowDangerouslySkipPermissions` 預設值改為 `true` — 不需加 `--dangerously-skip-permissions` 即自動 bypass
+- [x] M6c-11 修改 `src/interactiveHelpers.tsx`：跳過 `BypassPermissionsModeDialog` 首次確認對話框
+
+#### 驗證
+- [x] M6c-12 typecheck 通過 + 端到端驗證 `permissionMode: bypassPermissions` 確認生效 + config 路徑 `~/.my-agent/.my-agent.json`
+
+### M6d — 移除 Auth 依賴 + GrowthBook 本地化 + 功能解鎖
+
+**目標**：free-code 完全使用本地模型，移除所有 Anthropic auth 依賴。GrowthBook 停用遠端 fetch，所有 flag 預設 true 並從 .my-agent.json 讀取。解鎖被 auth gate 擋住的功能。
+
+#### 區塊 1：GrowthBook 本地化
+- [x] M6d-01 修改 `src/services/analytics/growthbook.ts`：`initializeGrowthBook()` 直接回 null（不連遠端）
+- [x] M6d-02 修改 `growthbook.ts`：`getFeatureValue_CACHED_MAY_BE_STALE()` 只從 disk cache 讀取
+- [x] M6d-03 修改 `growthbook.ts`：`checkStatsigFeatureGate_CACHED_MAY_BE_STALE()` 從 disk cache 讀取，找不到回 true
+- [x] M6d-04 修改 `growthbook.ts`：`checkGate_CACHED_OR_BLOCKING()` 從 disk cache 讀取，找不到回 true（不阻塞）
+- [x] M6d-05 修改 `growthbook.ts`：`refreshGrowthBookAfterAuthChange()` → no-op
+- [x] M6d-06 修改 `src/utils/config.ts`：`createDefaultGlobalConfig()` 的 `cachedGrowthBookFeatures` 預填 ~100 個 flag（boolean 預設 true，反向邏輯的設 false，非 boolean 保留原值）
+
+#### 區塊 2：Auth 移除
+- [x] M6d-07 修改 `src/utils/auth.ts`：`isAnthropicAuthEnabled()` 永遠回 false — 所有 auth 檢查短路
+- [x] M6d-08 確認 `useApiKeyVerification()` 自動回 valid（被 isAnthropicAuthEnabled 短路）
+- [x] M6d-09 修改 `src/utils/preflightChecks.tsx`：`checkEndpoints()` 直接回 success（不檢查 Anthropic 連線）
+- [x] M6d-10 修改 `src/commands/login/index.ts`：`isEnabled()` 回 false
+- [x] M6d-11 修改 `src/commands/logout/index.ts`：`isEnabled()` 回 false
+- [x] M6d-12 修改 `src/setup.ts`：移除 `prefetchApiKeyFromApiKeyHelperIfSafe()` 呼叫
+- [x] M6d-13 確認 Onboarding 自動跳過 oauth/preflight/api-key steps（被 isAnthropicAuthEnabled 短路）
+- [x] M6d-14 確認 BypassPermissionsModeDialog 已在 M6c 移除
+
+#### 區塊 3：功能解鎖
+- [x] M6d-15 修改 `src/bridge/bridgeEnabled.ts`：`isBridgeEnabled()` / `isBridgeEnabledBlocking()` / `getBridgeDisabledReason()` 移除 auth gate（保留 feature flag 檢查）
+- [x] M6d-16 確認 Voice mode auth gate 被 isAnthropicAuthEnabled 短路
+- [x] M6d-17 確認 dev channels auth gate 自然降級（無 OAuth → fallback path）
+
+#### 驗證
+- [x] M6d-18 typecheck 通過 + 93/93 測試全綠 + 端到端 `bun run dev -p "hi"` 成功回應
+
 ### M7 — Hermes 使用者建模（TypeScript 重新實作）
 將 Honcho 風格的使用者建模和跨 session 回憶移植到 free-code。
 

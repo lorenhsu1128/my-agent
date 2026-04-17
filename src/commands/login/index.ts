@@ -9,6 +9,6 @@ export default () =>
     description: hasAnthropicApiKeyAuth()
       ? 'Switch Anthropic accounts'
       : 'Sign in with your Anthropic account',
-    isEnabled: () => !isEnvTruthy(process.env.DISABLE_LOGIN_COMMAND),
+    isEnabled: () => false, // free-code: 本地模型不需要登入
     load: () => import('./login.js'),
   }) satisfies Command

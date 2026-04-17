@@ -11,29 +11,36 @@ import { which } from './which.js'
 type Platform = 'win32' | 'darwin' | 'linux'
 
 // Config and data paths
+// config 檔案位於 ~/.my-agent/.my-agent.json（config 目錄內）
 export const getGlobalClaudeFile = memoize((): string => {
   const fs = getFsImplementation()
-  const configDir = process.env.CLAUDE_CONFIG_DIR || homedir()
+  const configHome = getClaudeConfigHomeDir() // ~/.my-agent/
 
   // Legacy fallback for backwards compatibility (.config.json)
-  if (fs.existsSync(join(getClaudeConfigHomeDir(), '.config.json'))) {
-    return join(getClaudeConfigHomeDir(), '.config.json')
+  if (fs.existsSync(join(configHome, '.config.json'))) {
+    return join(configHome, '.config.json')
   }
 
-  // 品牌重塑：config 檔名從 .claude.json → .my-agent.json
   const suffix = fileSuffixForOauthConfig()
-  const newFilename = `.my-agent${suffix}.json`
-  const newPath = join(configDir, newFilename)
+  const filename = `.my-agent${suffix}.json`
+  const newPath = join(configHome, filename) // ~/.my-agent/.my-agent.json
 
-  // Migration：舊 .claude.json 存在但新 .my-agent.json 不存在時，複製過去
-  const oldFilename = `.claude${suffix}.json`
-  const oldPath = join(configDir, oldFilename)
-  if (!fs.existsSync(newPath) && fs.existsSync(oldPath)) {
-    try {
-      fs.copyFileSync(oldPath, newPath)
-    } catch {
-      // 複製失敗就沿用舊路徑
-      return oldPath
+  if (!fs.existsSync(newPath)) {
+    // Migration：從舊位置（home 根下）複製到新位置（config 目錄內）
+    const homeDir = process.env.CLAUDE_CONFIG_DIR || homedir()
+    const oldPaths = [
+      join(homeDir, `.my-agent${suffix}.json`),  // M6c 版本
+      join(homeDir, `.claude${suffix}.json`),     // M6c 之前的舊品牌
+    ]
+    for (const oldPath of oldPaths) {
+      if (fs.existsSync(oldPath)) {
+        try {
+          fs.copyFileSync(oldPath, newPath)
+        } catch {
+          return oldPath // 複製失敗就沿用舊路徑
+        }
+        break
+      }
     }
   }
 
