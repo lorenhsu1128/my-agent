@@ -33,7 +33,6 @@ import {
   getSessionId,
 } from '../../bootstrap/state.js'
 import { createAutoMemCanUseTool } from '../extractMemories/extractMemories.js'
-import { scanSkill } from '../selfImprove/skillGuard.js'
 import { buildConsolidationPrompt } from './consolidationPrompt.js'
 import {
   readLastConsolidatedAt,
@@ -50,55 +49,6 @@ import {
 } from '../../tasks/DreamTask/DreamTask.js'
 import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js'
 import { FILE_WRITE_TOOL_NAME } from '../../tools/FileWriteTool/prompt.js'
-
-// ── Enhanced Dream permissions ───────────────────────────────────────────
-// Wraps createAutoMemCanUseTool to also allow writes to .my-agent/skills/
-// (for auto-creating skills from verified drafts in Phase 7).
-
-import { normalize, join } from 'path'
-import type { Tool } from '../../Tool.js'
-
-type CanUseToolFn = (
-  tool: Tool,
-  input: Record<string, unknown>,
-) => Promise<{
-  behavior: 'allow' | 'deny'
-  updatedInput: Record<string, unknown>
-  message?: string
-}>
-
-function isSkillsPath(absolutePath: string): boolean {
-  const normalized = normalize(absolutePath)
-  const cwd = getOriginalCwd()
-  const skillsDir = normalize(join(cwd, '.my-agent', 'skills'))
-  return normalized.startsWith(skillsDir)
-}
-
-export function createEnhancedDreamCanUseTool(
-  memoryDir: string,
-): CanUseToolFn {
-  const baseCanUseTool = createAutoMemCanUseTool(memoryDir)
-
-  return async (tool: Tool, input: Record<string, unknown>) => {
-    // First try the base permissions (memory dir writes, read-only bash, etc.)
-    const baseResult = await baseCanUseTool(tool, input)
-    if (baseResult.behavior === 'allow') return baseResult
-
-    // Additionally allow Edit/Write to .my-agent/skills/ directory
-    if (
-      (tool.name === FILE_EDIT_TOOL_NAME ||
-        tool.name === FILE_WRITE_TOOL_NAME) &&
-      'file_path' in input
-    ) {
-      const filePath = input.file_path
-      if (typeof filePath === 'string' && isSkillsPath(filePath)) {
-        return { behavior: 'allow' as const, updatedInput: input }
-      }
-    }
-
-    return baseResult
-  }
-}
 
 // Scan throttle: when time-gate passes but session-gate doesn't, the lock
 // mtime doesn't advance, so the time-gate keeps passing every turn.
@@ -240,7 +190,7 @@ ${sessionIds.map(id => `- ${id}`).join('\n')}`
       const result = await runForkedAgent({
         promptMessages: [createUserMessage({ content: prompt })],
         cacheSafeParams: createCacheSafeParams(context),
-        canUseTool: createEnhancedDreamCanUseTool(memoryRoot),
+        canUseTool: createAutoMemCanUseTool(memoryRoot),
         querySource: 'auto_dream',
         forkLabel: 'auto_dream',
         skipTranscript: true,

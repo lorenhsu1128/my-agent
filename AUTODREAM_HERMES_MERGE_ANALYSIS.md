@@ -955,7 +955,7 @@ Discovery 路徑 1 和 2 會互相去重：
 User Turn（每次 query 的模型回應完成後）
     │
     ├─[postSamplingHook] skillImprovement (每 5 user turn)          ← 既有
-    │   └─ 偵測已有 project skill 的改進需求 → 自動重寫 SKILL.md
+    │   └─ 改進已有 project skill → applySkillImprovement → scanSkill 驗證
     │   └─ 檔案：src/utils/hooks/skillImprovement.ts
     │
     ├─[postSamplingHook] memoryNudge (每 8 user turn)              ← M6 新增
@@ -963,8 +963,16 @@ User Turn（每次 query 的模型回應完成後）
     │   └─ 檔案：src/utils/hooks/memoryNudge.ts
     │
     ├─[postSamplingHook] skillCreationNudge (每 15 tool_use)       ← M6 新增
-    │   └─ 偵測可 skill 化的 workflow → appState.pendingSkillCandidate
+    │   └─ 偵測 workflow → appState → useSkillCreationSurvey UI ← M6b 閉環
+    │       └─ 確認 → SkillManage(create) → scanSkill
     │   └─ 檔案：src/utils/hooks/skillCreationNudge.ts
+    │         src/hooks/useSkillCreationSurvey.ts
+    │
+    ├─[對話中] agent 主動呼叫 SkillManageTool                       ← M6b 新增
+    │   └─ create/edit/patch/delete/write_file/remove_file
+    │       → 驗證 + scanSkill + 回滾
+    │   └─ 檔案：src/tools/SkillManageTool/SkillManageTool.ts
+    │   └─ 引導：SKILLS_GUIDANCE 注入 system prompt
     │
     └─[stopHooks] 每次 query 結束（不只 session 結束）
         │
@@ -976,23 +984,21 @@ User Turn（每次 query 的模型回應完成後）
         │  ┌─ llamacpp 環境：序列化（await 前一個完成再跑下一個）
         │  └─ 非 llamacpp：fire-and-forget（並行）
         │
-        ├─ sessionReview → 軌跡分析 + skill 草稿                    ← M6 新增
+        ├─ sessionReview → 呼叫 SkillManage(create) 直接建立 skill  ← M6b 改造
         │   (forkedAgent, maxTurns=8)
         │   門控：tool_use ≥ 15 + 距上次 ≥ 2h
-        │         + 非 agentId + 非 remote + auto-memory 啟用
-        │   產出：memory/skill-drafts/*.md + memory/trajectories/*.md
+        │   產出：skill 直接建立到 .my-agent/skills/ + trajectories/
+        │   完成後通知用戶 "Skill created"
         │   檔案：src/services/selfImprove/sessionReview.ts
         │
-        └─ autoDream → 跨 session 記憶整合 + skill 升級             ← 增強
+        └─ autoDream → 跨 session 記憶整合                          ← M6b 簡化
             (forkedAgent, 三重門：24h + 5 sessions + lock)
             Phase 1-4：記憶整合（原有）
-            Phase 5：Skill Audit — 掃描 .my-agent/skills/ + transcript（M6）
+            Phase 5：Skill Audit — 掃描 .my-agent/skills/（M6）
             Phase 6：Behavior Notes — 偵測用戶修正寫入記憶（M6）
-            Phase 7：Skill Draft Review — 3+ session 驗證後升級（M6）
-            Phase 8：Safety Checklist — 安全檢查清單（M6）
-            Phase 9：Trajectory Pruning — 保留最近 30 天（M6）
+            Phase 7：Skill Draft Cleanup — 清理殘留草稿（M6b 簡化）
+            Phase 8：Trajectory Pruning — 保留最近 30 天（M6b）
             檔案：src/services/autoDream/consolidationPrompt.ts
-                  src/services/autoDream/autoDream.ts
 ```
 
 ### 初始化順序（`backgroundHousekeeping.ts`）

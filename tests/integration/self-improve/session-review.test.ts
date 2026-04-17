@@ -5,7 +5,7 @@ describe('sessionReview', () => {
   test('buildSessionReviewPrompt 包含三個 Task', () => {
     const prompt = buildSessionReviewPrompt('/tmp/mem', '/tmp/transcripts')
     expect(prompt).toContain('Task 1')
-    expect(prompt).toContain('Skill Drafts')
+    expect(prompt).toContain('Create Skills')
     expect(prompt).toContain('Task 2')
     expect(prompt).toContain('Trajectory Summary')
     expect(prompt).toContain('Task 3')
@@ -18,9 +18,10 @@ describe('sessionReview', () => {
     expect(prompt).toContain('/home/user/transcripts')
   })
 
-  test('prompt 包含 skill-drafts 目錄指示', () => {
+  test('prompt 引導使用 SkillManage 工具', () => {
     const prompt = buildSessionReviewPrompt('/tmp/mem', '/tmp/transcripts')
-    expect(prompt).toContain('skill-drafts/')
+    expect(prompt).toContain('SkillManage')
+    expect(prompt).toContain("action='create'")
     expect(prompt).toContain('trajectories/')
     expect(prompt).toContain('user-behavior-notes.md')
   })

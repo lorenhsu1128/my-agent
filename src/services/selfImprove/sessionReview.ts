@@ -1,7 +1,7 @@
 // Session Review Agent — analyzes tool usage patterns at session end
-// to produce skill drafts and trajectory summaries.
+// to create skills (via SkillManageTool) and trajectory summaries.
 //
-// Triggered from stopHooks.ts after executeAutoDream.
+// Triggered from stopHooks.ts after extractMemories.
 // Runs as a forked agent with restricted tool permissions.
 
 import type { REPLHookContext } from '../../utils/hooks/postSamplingHooks.js'
@@ -9,7 +9,10 @@ import {
   createCacheSafeParams,
   runForkedAgent,
 } from '../../utils/forkedAgent.js'
-import { createUserMessage } from '../../utils/messages.js'
+import {
+  createUserMessage,
+  createMemorySavedMessage,
+} from '../../utils/messages.js'
 import { logForDebugging } from '../../utils/debug.js'
 import type { ToolUseContext } from '../../Tool.js'
 import { isAutoMemoryEnabled, getAutoMemPath } from '../../memdir/paths.js'
@@ -26,11 +29,14 @@ import type { Tool } from '../../Tool.js'
 
 // ── canUseTool for Session Review ────────────────────────────────────────
 
+const SKILL_MANAGE_TOOL_NAME = 'SkillManage'
+
 /**
- * Session Review can read anywhere but only write to memory/ directory
- * (including skill-drafts/ and trajectories/ subdirectories).
- * It CANNOT write to .my-agent/skills/ — only AutoDream does that
- * after cross-session verification.
+ * Session Review can:
+ * - Read anywhere (Read/Grep/Glob)
+ * - Run read-only Bash
+ * - Write to memory/ directory (trajectories, behavior notes)
+ * - Call SkillManageTool (which has its own internal scanSkill validation)
  */
 export function createSessionReviewCanUseTool(
   memoryDir: string,
@@ -39,10 +45,17 @@ export function createSessionReviewCanUseTool(
   updatedInput: Record<string, unknown>
   message?: string
 }> {
-  // Delegate to the standard auto-memory permission function
-  // which already handles: Read/Grep/Glob anywhere, Bash read-only,
-  // Edit/Write only in memoryDir
-  return createAutoMemCanUseTool(memoryDir)
+  const baseCanUseTool = createAutoMemCanUseTool(memoryDir)
+
+  return async (tool: Tool, input: Record<string, unknown>) => {
+    // Allow SkillManageTool — it has its own security scanning inside
+    if (tool.name === SKILL_MANAGE_TOOL_NAME) {
+      return { behavior: 'allow' as const, updatedInput: input }
+    }
+
+    // Everything else follows the standard auto-memory permissions
+    return baseCanUseTool(tool, input)
+  }
 }
 
 // ── Tool use counting ────────────────────────────────────────────────────
@@ -72,7 +85,7 @@ export function initSessionReview(): void {
 
 export async function executeSessionReview(
   context: REPLHookContext,
-  _appendSystemMessage?: AppendSystemMessageFn,
+  appendSystemMessage?: AppendSystemMessageFn,
 ): Promise<void> {
   // Gate: only main thread
   if (context.toolUseContext.agentId) return
@@ -113,7 +126,7 @@ export async function executeSessionReview(
   )
 
   try {
-    await runForkedAgent({
+    const result = await runForkedAgent({
       promptMessages: [createUserMessage({ content: prompt })],
       cacheSafeParams: createCacheSafeParams(context),
       canUseTool: createSessionReviewCanUseTool(memoryRoot),
@@ -124,6 +137,31 @@ export async function executeSessionReview(
     })
 
     logForDebugging('[sessionReview] completed')
+
+    // Notify user if skills were created
+    if (appendSystemMessage && result.messages.length > 0) {
+      // Scan forked agent output for SkillManage success indicators
+      const createdSkills: string[] = []
+      for (const msg of result.messages) {
+        if (msg.type !== 'assistant') continue
+        const content = msg.message?.content
+        if (!Array.isArray(content)) continue
+        for (const block of content) {
+          if (block.type === 'tool_result' && typeof block.content === 'string') {
+            if (block.content.includes('已建立') || block.content.includes('created')) {
+              createdSkills.push(block.content)
+            }
+          }
+        }
+      }
+
+      if (createdSkills.length > 0) {
+        appendSystemMessage({
+          ...createMemorySavedMessage(createdSkills),
+          verb: 'Skill created',
+        } as any)
+      }
+    }
   } catch (e: unknown) {
     logForDebugging(
       `[sessionReview] failed: ${(e as Error).message}`,

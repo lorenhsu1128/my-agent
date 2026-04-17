@@ -149,7 +149,7 @@ describe('M6 Self-Improving Loop — 完整端到端', () => {
   // ════════════════════════════════════════════════════════════════════════
 
   describe('1. Dream Prompt 完整性', () => {
-    test('包含全部 9 個 Phase', () => {
+    test('包含全部 8 個 Phase', () => {
       const prompt = buildConsolidationPrompt(memoryRoot, '/tmp/transcripts', '')
       const phases = [
         { n: 1, keyword: 'Orient' },
@@ -158,9 +158,8 @@ describe('M6 Self-Improving Loop — 完整端到端', () => {
         { n: 4, keyword: 'Prune and index' },
         { n: 5, keyword: 'Skill Audit' },
         { n: 6, keyword: 'Behavior Notes' },
-        { n: 7, keyword: 'Skill Draft Review' },
-        { n: 8, keyword: 'Safety Checklist' },
-        { n: 9, keyword: 'Trajectory Pruning' },
+        { n: 7, keyword: 'Skill Draft Cleanup' },
+        { n: 8, keyword: 'Trajectory Pruning' },
       ]
       for (const { n, keyword } of phases) {
         expect(prompt).toContain(`Phase ${n}`)
@@ -174,24 +173,18 @@ describe('M6 Self-Improving Loop — 完整端到端', () => {
       expect(prompt).toContain('skill-candidates.md')
     })
 
-    test('Phase 7 引導從 skill-drafts/ 升級', () => {
+    test('Phase 7 引導清理 skill-drafts/ 殘留', () => {
       const prompt = buildConsolidationPrompt(memoryRoot, '/tmp/t', '')
       expect(prompt).toContain('skill-drafts/')
-      expect(prompt).toContain('observed-sessions')
-      expect(prompt).toContain('3+')
-      expect(prompt).toContain('.my-agent/skills/')
+      expect(prompt).toContain('SkillManageTool')
     })
 
-    test('Phase 8 安全檢查清單完整', () => {
+    test('不再包含 Safety Checklist（已移至 SkillManageTool）', () => {
       const prompt = buildConsolidationPrompt(memoryRoot, '/tmp/t', '')
-      expect(prompt).toContain('rm -rf')
-      expect(prompt).toContain('credentials')
-      expect(prompt).toContain('prompt injection')
-      expect(prompt).toContain('10KB')
-      expect(prompt).toContain('50')
+      expect(prompt).not.toContain('Safety Checklist')
     })
 
-    test('Phase 9 軌跡修剪 30 天', () => {
+    test('Phase 8 軌跡修剪 30 天', () => {
       const prompt = buildConsolidationPrompt(memoryRoot, '/tmp/t', '')
       expect(prompt).toContain('30 days')
     })
@@ -199,10 +192,10 @@ describe('M6 Self-Improving Loop — 完整端到端', () => {
     test('extra 參數正確附加在所有 Phase 之後', () => {
       const prompt = buildConsolidationPrompt(memoryRoot, '/tmp/t', 'EXTRA_CONTEXT_MARKER')
       expect(prompt).toContain('EXTRA_CONTEXT_MARKER')
-      // extra 在 Phase 9 之後
-      const phase9Idx = prompt.indexOf('Phase 9')
+      // extra 在 Phase 8 之後
+      const phase8Idx = prompt.indexOf('Phase 8')
       const extraIdx = prompt.indexOf('EXTRA_CONTEXT_MARKER')
-      expect(extraIdx).toBeGreaterThan(phase9Idx)
+      expect(extraIdx).toBeGreaterThan(phase8Idx)
     })
 
     test('memoryRoot 和 transcriptDir 正確嵌入', () => {
@@ -477,24 +470,26 @@ describe('M6 Self-Improving Loop — 完整端到端', () => {
     test('包含三個 Task', () => {
       const prompt = buildSessionReviewPrompt(memoryRoot, '/tmp/transcripts')
       expect(prompt).toContain('Task 1')
-      expect(prompt).toContain('Skill Drafts')
+      expect(prompt).toContain('Create Skills')
       expect(prompt).toContain('Task 2')
       expect(prompt).toContain('Trajectory Summary')
       expect(prompt).toContain('Task 3')
       expect(prompt).toContain('Behavior Notes')
     })
 
-    test('引導寫入 skill-drafts/ 和 trajectories/', () => {
+    test('引導使用 SkillManage 工具', () => {
       const prompt = buildSessionReviewPrompt(memoryRoot, '/tmp/t')
-      expect(prompt).toContain(`${memoryRoot}/skill-drafts/`)
+      expect(prompt).toContain('SkillManage')
+      expect(prompt).toContain("action='create'")
       expect(prompt).toContain(`${memoryRoot}/trajectories/`)
       expect(prompt).toContain('user-behavior-notes.md')
     })
 
-    test('skill draft 格式含 frontmatter', () => {
+    test('SkillManage 呼叫含 frontmatter 範例', () => {
       const prompt = buildSessionReviewPrompt(memoryRoot, '/tmp/t')
-      expect(prompt).toContain('observed-sessions: 1')
-      expect(prompt).toContain('first-seen:')
+      expect(prompt).toContain('name:')
+      expect(prompt).toContain('description:')
+      expect(prompt).toContain('security scan')
     })
   })
 
@@ -556,45 +551,32 @@ describe('M6 Self-Improving Loop — 完整端到端', () => {
   // ════════════════════════════════════════════════════════════════════════
 
   describe('8. 完整管線模擬', () => {
-    test('Session Review 產出 draft → 3 session 後 Dream 驗證升級', async () => {
-      // ── Step 1: 模擬 Session Review Agent 產出 skill draft ──
-      const draftPath = join(memoryRoot, 'skill-drafts', 'deploy-check.md')
-      await writeFile(draftPath, SAFE_SKILL_DRAFT)
-
-      // 驗證 draft 存在
-      const drafts = await readdir(join(memoryRoot, 'skill-drafts'))
-      expect(drafts).toContain('deploy-check.md')
-
-      // ── Step 2: 模擬 3 個 session 的 trajectory 都提到 deploy-check ──
-      await writeTrajectory(memoryRoot, '2026-04-15', {
-        attempted: 'deploy-check workflow used for release 1.0',
-        toolSequences: ['typecheck → test → build → push'],
-      })
-      await writeTrajectory(memoryRoot, '2026-04-16', {
-        attempted: 'deploy-check workflow used for hotfix',
-        toolSequences: ['typecheck → test → build'],
-      })
-      await writeTrajectory(memoryRoot, '2026-04-17', {
-        attempted: 'deploy-check workflow used for feature branch',
-        toolSequences: ['typecheck → test → build → push'],
-      })
-
-      // ── Step 3: 驗證 3+ session 觀察次數 ──
-      const observations = await countSkillObservations(memoryRoot, 'deploy-check')
-      expect(observations).toBe(3)
-
-      // ── Step 4: SkillGuard 掃描 draft ──
-      const draftContent = await readFile(draftPath, 'utf-8')
-      const guardResult = scanSkill(draftContent)
+    test('Session Review 用 SkillManageTool 直接建立 + scanSkill 驗證', async () => {
+      // ── Step 1: 驗證安全內容通過 scanSkill ──
+      const guardResult = scanSkill(SAFE_SKILL_DRAFT)
       expect(guardResult.verdict).toBe('safe')
 
-      // ── Step 5: 驗證 Dream prompt 知道要做 draft review ──
+      // ── Step 2: 驗證 Session Review prompt 引導用 SkillManage ──
+      const reviewPrompt = buildSessionReviewPrompt(memoryRoot, '/tmp/t')
+      expect(reviewPrompt).toContain('SkillManage')
+      expect(reviewPrompt).toContain("action='create'")
+
+      // ── Step 3: 驗證 Dream prompt 知道要清理殘留 drafts ──
       const dreamPrompt = buildConsolidationPrompt(memoryRoot, '/tmp/t', '')
       expect(dreamPrompt).toContain('skill-drafts/')
-      expect(dreamPrompt).toContain('3+')
+      expect(dreamPrompt).toContain('SkillManageTool')
 
-      // ── 結論：全部條件滿足，Dream 會在 Phase 7 升級此 skill ──
-      // （實際升級由 Dream forked agent 執行，這裡驗證前置條件全部到位）
+      // ── Step 4: 軌跡仍可記錄和統計 ──
+      await writeTrajectory(memoryRoot, '2026-04-17', {
+        attempted: 'deploy-check workflow',
+        toolSequences: ['typecheck → test → build'],
+      })
+      const trajectories = await readTrajectories(memoryRoot, 30)
+      expect(trajectories).toHaveLength(1)
+      expect(trajectories[0]).toContain('deploy-check')
+
+      // ── 結論：Session Review 直接建立 skill（經 scanSkill 掃描），
+      //    Dream 只負責清理殘留和軌跡修剪 ──
     })
 
     test('危險 draft 被 SkillGuard 阻擋，不升級', async () => {

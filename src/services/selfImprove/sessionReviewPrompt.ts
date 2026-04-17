@@ -1,5 +1,6 @@
 // Session Review Prompt — used by the Session Review Agent to analyze
 // a session's tool usage patterns and extract reusable knowledge.
+// Uses SkillManage tool to directly create skills (not write draft files).
 
 export function buildSessionReviewPrompt(
   memoryRoot: string,
@@ -13,7 +14,7 @@ Session transcripts: \`${transcriptDir}\`
 
 ---
 
-## Task 1 — Skill Drafts
+## Task 1 — Create Skills from Workflows
 
 Analyze the tool usage patterns in this session by searching the most recent transcript:
 \`ls -t ${transcriptDir}/*.jsonl | head -1\` then grep for tool_use blocks.
@@ -23,24 +24,25 @@ Look for:
 - Approaches that changed mid-stream due to discoveries
 - Patterns that would be useful to repeat in future sessions
 
-For each candidate workflow, write a skill draft to \`${memoryRoot}/skill-drafts/<name>.md\`:
+For each candidate workflow, use the **SkillManage tool** to create a skill directly:
+
 \`\`\`
----
+SkillManage(action='create', name='<skill-name>', content='---
 name: <skill-name>
 description: <one-line description>
-observed-sessions: 1
-first-seen: <today's date>
+when_to_use: <trigger condition>
 ---
+
+# <Skill Title>
 
 ## Steps
 1. <step description>
 2. ...
-
-## Why
-<why this is worth becoming a skill>
+')
 \`\`\`
 
-If no candidates are found, skip — do not create empty drafts.
+The SkillManage tool will automatically validate the content and run a security scan.
+If nothing is worth saving as a skill, skip this task entirely.
 
 ## Task 2 — Trajectory Summary
 

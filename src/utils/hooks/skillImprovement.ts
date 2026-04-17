@@ -258,6 +258,18 @@ Rules:
     return
   }
 
+  // Security scan before writing
+  const { scanSkill } = await import('../../services/selfImprove/skillGuard.js')
+  const guardResult = scanSkill(updatedContent)
+  if (guardResult.verdict === 'dangerous') {
+    logError(
+      new Error(
+        `Skill improvement blocked by security scan: ${guardResult.findings[0]?.pattern}`,
+      ),
+    )
+    return
+  }
+
   try {
     await fs.writeFile(filePath, updatedContent, 'utf-8')
   } catch (e) {

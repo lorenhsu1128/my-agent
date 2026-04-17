@@ -219,6 +219,45 @@
 - [x] 所有自動化測試（8 個檔案 36 個 test case）全綠
 - [x] 既有記憶系統行為不變：typecheck 基線不變，createAutoMemCanUseTool 未修改（createEnhancedDreamCanUseTool 是包裝層）
 
+### M6b — Skill 自主建立閉環（SkillManageTool + 安全掃描整合）
+
+**目標**：修復 M6 的三個斷點——新增 SkillManageTool 讓 agent 直接建立/修改 skill，所有寫入經 scanSkill 程式碼層級安全掃描，接通 nudge → UI → 建立的完整閉環。
+
+**詳細設計分析見 `SKILL_SELF_CREATION_PLAN.md`。**
+
+#### 階段一：SkillManageTool 核心工具
+- [x] M6b-01 新增 `src/tools/SkillManageTool/SkillManageTool.ts`：6 action + scanSkill + 回滾
+- [x] M6b-02 新增 `src/tools/SkillManageTool/prompt.ts`
+- [x] M6b-03 新增 `src/tools/SkillManageTool/UI.tsx`
+- [x] M6b-04 修改 `src/tools.ts`：註冊 SkillManageTool
+- [x] M6b-05 自動化測試 `skill-manage-tool.test.ts`（13 test case）
+- [x] M6b-06 typecheck 基線不變；93/93 全綠
+
+#### 階段二：SKILLS_GUIDANCE + Session Review 改造 + Nudge UI
+- [x] M6b-07 修改 `src/constants/prompts.ts`：dynamicSections 加入 skills_guidance（SkillManageTool 可用時注入）
+- [x] M6b-08 修改 `sessionReviewPrompt.ts`：Task 1 改為引導呼叫 SkillManage(create)
+- [x] M6b-09 修改 `sessionReview.ts`：擴展 canUseTool 允許 SkillManageTool + 完成後通知
+- [x] M6b-10 新增 `src/hooks/useSkillCreationSurvey.ts`：仿 useSkillImprovementSurvey，讀取 pendingSkillCandidate
+- [x] M6b-11 修改 `src/screens/REPL.tsx`：掛載 useSkillCreationSurvey
+- [x] M6b-12 修改 `skillImprovement.ts`：applySkillImprovement 寫入前加 scanSkill 驗證
+
+#### 階段三：Dream 簡化 + 測試更新 + 文件同步
+- [x] M6b-13 修改 `consolidationPrompt.ts`：Phase 7 改為 Skill Draft Cleanup，Phase 8（原 Safety Checklist）移除，Phase 8 改為 Trajectory Pruning
+- [x] M6b-14 修改 `autoDream.ts`：移除 createEnhancedDreamCanUseTool/isSkillsPath，改回 createAutoMemCanUseTool
+- [x] M6b-15 更新 `enhanced-dream-permissions.test.ts`：Phase 7-8 斷言對齊
+- [x] M6b-16 更新 `session-review.test.ts`：prompt 斷言對齊 SkillManage
+- [x] M6b-17 更新 `m6-full-e2e.test.ts`：管線模擬對齊 SkillManage 路徑
+- [x] M6b-18 typecheck 基線不變；93/93 全綠
+- [x] M6b-19 更新 `AUTODREAM_HERMES_MERGE_ANALYSIS.md`（觸發架構圖 + Phase 清單）+ `SKILL_SELF_CREATION_PLAN.md`（狀態標記完成）
+
+#### 完成標準
+- [x] 對話中 agent 呼叫 SkillManage(create) → scanSkill 掃描 → chokidar 自動加載：SkillManageTool 已註冊，scanSkill 在 create/edit/patch/write_file 中呼叫
+- [x] 含 rm -rf 的 skill → scanSkill 阻擋 + 回滾：create 時 scanSkill verdict=dangerous 直接拒絕（不寫入）；edit/patch 時恢復備份
+- [x] Session Review 背景呼叫 SkillManage → 通知用戶 "Skill created"：sessionReviewPrompt 引導呼叫 SkillManage，canUseTool 允許，appendSystemMessage 通知
+- [x] skillCreationNudge → UI dialog → 確認 → SkillManage(create)：useSkillCreationSurvey 讀取 pendingSkillCandidate，確認後發 system message 引導建立
+- [x] skillImprovement 修改 skill 時 scanSkill 驗證：applySkillImprovement 寫入前 scanSkill，dangerous 則不寫入
+- [x] 所有自動化測試全綠：93/93（11 files）
+
 ### M7 — Hermes 使用者建模（TypeScript 重新實作）
 將 Honcho 風格的使用者建模和跨 session 回憶移植到 free-code。
 
@@ -438,3 +477,5 @@
 - 2026-04-17 10:03: Session 結束 | 進度：75/77 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確
 
 - 2026-04-17 10:15: Session 結束 | 進度：80/107 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確
+
+- 2026-04-17 14:07: Session 結束 | 進度：123/132 任務 | 09da303 feat(m6): Self-Improving Loop — AutoDream × Hermes 合併 + 閾值可配置化 + JSONC 預設設定
