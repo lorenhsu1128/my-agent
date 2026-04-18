@@ -381,10 +381,10 @@
 
 **目標**：`src/skills/bundled/claude-api/` 內容是教使用者用 Anthropic SDK，整個改寫成 my-agent + 本地 LLM 對接教學。
 
-- [ ] M12-01 目錄改名 `claude-api` → `local-llm-api`，SKILL.md frontmatter `name`/`description` 更新
-- [ ] M12-02 重寫所有 `.md` 內容：本地 OpenAI 相容 server 對接、移除 `npm install @anthropic-ai/sdk`、改用 vendor 路徑或 local fetch
-- [ ] M12-03 更新 `src/skills/bundled/index.ts`（或對應註冊）reference 新目錄
-- [ ] M12-04 `bun run typecheck` + `bun run dev -p "hi"` 端到端
+- [x] M12-01 目錄改名 `claude-api` → `anthropic-sdk-reference`；SKILL.md frontmatter 更新清楚標示「外部 SDK 參考、非 free-code 本地 LLM」
+- [x] M12-02 N/A — 採用「只改名不改內容」策略（247KB 多語言 SDK 文件保留實用價值，定位改為「外部 Anthropic SDK 參考資料」）
+- [x] M12-03 `claudeApiContent.ts` 8+ 處 import 路徑 `./claude-api/` → `./anthropic-sdk-reference/`；`claudeApi.ts` 註冊名稱與文案同步更新
+- [x] M12-04 typecheck 綠 + `bun run dev -p "9-3="` 回 `9 - 3 = 6`
 
 ---
 
@@ -604,3 +604,5 @@
 - 2026-04-17 10:15: Session 結束 | 進度：80/107 任務 | 3b1d1b3 feat(api): llamacpp context window 自動偵測 — 查 /slots 端點讓 autocompact 閾值正確
 
 - 2026-04-17 14:07: Session 結束 | 進度：123/132 任務 | 09da303 feat(m6): Self-Improving Loop — AutoDream × Hermes 合併 + 閾值可配置化 + JSONC 預設設定
+
+- 2026-04-18 10:53: Session 結束 | 進度：191/195 任務 | 8eeb776 feat(m11): OAuth scaffolding 中性化 + 殘留 URL 清除

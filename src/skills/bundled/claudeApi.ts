@@ -3,7 +3,7 @@ import { getCwd } from '../../utils/cwd.js'
 import { registerBundledSkill } from '../bundledSkills.js'
 
 // claudeApiContent.js bundles 247KB of .md strings. Lazy-load inside
-// getPromptForCommand so they only enter memory when /claude-api is invoked.
+// getPromptForCommand so they only enter memory when /anthropic-sdk-reference is invoked.
 type SkillContent = typeof import('./claudeApiContent.js')
 
 type DetectedLanguage =
@@ -100,25 +100,25 @@ The relevant documentation for your detected language is included below in \`<do
 ### Quick Task Reference
 
 **Single text classification/summarization/extraction/Q&A:**
-→ Refer to \`{lang}/claude-api/README.md\`
+→ Refer to \`{lang}/anthropic-sdk-reference/README.md\`
 
 **Chat UI or real-time response display:**
-→ Refer to \`{lang}/claude-api/README.md\` + \`{lang}/claude-api/streaming.md\`
+→ Refer to \`{lang}/anthropic-sdk-reference/README.md\` + \`{lang}/anthropic-sdk-reference/streaming.md\`
 
 **Long-running conversations (may exceed context window):**
-→ Refer to \`{lang}/claude-api/README.md\` — see Compaction section
+→ Refer to \`{lang}/anthropic-sdk-reference/README.md\` — see Compaction section
 
 **Prompt caching / optimize caching / "why is my cache hit rate low":**
-→ Refer to \`shared/prompt-caching.md\` + \`{lang}/claude-api/README.md\` (Prompt Caching section)
+→ Refer to \`shared/prompt-caching.md\` + \`{lang}/anthropic-sdk-reference/README.md\` (Prompt Caching section)
 
 **Function calling / tool use / agents:**
-→ Refer to \`{lang}/claude-api/README.md\` + \`shared/tool-use-concepts.md\` + \`{lang}/claude-api/tool-use.md\`
+→ Refer to \`{lang}/anthropic-sdk-reference/README.md\` + \`shared/tool-use-concepts.md\` + \`{lang}/anthropic-sdk-reference/tool-use.md\`
 
 **Batch processing (non-latency-sensitive):**
-→ Refer to \`{lang}/claude-api/README.md\` + \`{lang}/claude-api/batches.md\`
+→ Refer to \`{lang}/anthropic-sdk-reference/README.md\` + \`{lang}/anthropic-sdk-reference/batches.md\`
 
 **File uploads across multiple requests:**
-→ Refer to \`{lang}/claude-api/README.md\` + \`{lang}/claude-api/files-api.md\`
+→ Refer to \`{lang}/anthropic-sdk-reference/README.md\` + \`{lang}/anthropic-sdk-reference/files-api.md\`
 
 **Managed agents with built-in tools (file/web/terminal):**
 → Refer to \`{lang}/managed-agents/README.md\` + \`shared/managed-agents-overview.md\` + \`shared/agent-design.md\`
@@ -179,11 +179,11 @@ function buildPrompt(
 
 export function registerClaudeApiSkill(): void {
   registerBundledSkill({
-    name: 'claude-api',
+    name: 'anthropic-sdk-reference',
     description:
-      'Build apps with the Claude API or Anthropic SDK.\n' +
-      'TRIGGER when: code imports `anthropic`/`my-agent-ai/sdk`/`claude_agent_sdk`, or user asks to use Claude API, Anthropic SDKs, or Agent SDK.\n' +
-      'DO NOT TRIGGER when: code imports `openai`/other AI SDK, general programming, or ML/data-science tasks.',
+      'External Anthropic SDK reference material — useful when writing code that targets the Anthropic Claude API. NOT used for free-code\'s own local LLM (llama.cpp) path.\n' +
+      'TRIGGER when: user asks how to use Anthropic SDK / Claude API in their own application code.\n' +
+      'DO NOT TRIGGER when: code imports `openai`/other AI SDK, general programming, ML/data-science tasks, or anything related to free-code\'s internal llamacpp adapter.',
     allowedTools: ['Read', 'Grep', 'Glob', 'WebFetch'],
     userInvocable: true,
     async getPromptForCommand(args) {
