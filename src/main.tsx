@@ -4069,43 +4069,16 @@ async function run(): Promise<CommanderCommand> {
 
   // claude auth
 
+  // free-code: OAuth sign-in is not supported — sub-commands print a notice and exit 1.
   const auth = program.command('auth').description('Manage authentication').configureHelp(createSortedHelpConfig());
-  auth.command('login').description('Sign in (not available in this build)').option('--email <email>', 'Pre-populate email address on the login page').option('--sso', 'Force SSO login flow').option('--console', 'Use console flow').option('--claudeai', 'Use subscription flow (default)').action(async ({
-    email,
-    sso,
-    console: useConsole,
-    claudeai
-  }: {
-    email?: string;
-    sso?: boolean;
-    console?: boolean;
-    claudeai?: boolean;
-  }) => {
-    const {
-      authLogin
-    } = await import('./cli/handlers/auth.js');
-    await authLogin({
-      email,
-      sso,
-      console: useConsole,
-      claudeai
-    });
-  });
-  auth.command('status').description('Show authentication status').option('--json', 'Output as JSON (default)').option('--text', 'Output as human-readable text').action(async (opts: {
-    json?: boolean;
-    text?: boolean;
-  }) => {
-    const {
-      authStatus
-    } = await import('./cli/handlers/auth.js');
-    await authStatus(opts);
-  });
-  auth.command('logout').description('Log out (not available in this build)').action(async () => {
-    const {
-      authLogout
-    } = await import('./cli/handlers/auth.js');
-    await authLogout();
-  });
+  const notSupported = () => {
+    // biome-ignore lint/suspicious/noConsole: intentional CLI error output
+    console.error('OAuth sign-in is not supported in this build.');
+    process.exit(1);
+  };
+  auth.command('login').description('Sign in (not available in this build)').action(notSupported);
+  auth.command('status').description('Show authentication status (not available in this build)').action(notSupported);
+  auth.command('logout').description('Log out (not available in this build)').action(notSupported);
 
   /**
    * Helper function to handle marketplace command errors consistently.

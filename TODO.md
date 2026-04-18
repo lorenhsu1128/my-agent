@@ -684,8 +684,8 @@
 - [x] M15-P3-08 `bun run typecheck` 必須綠
 
 ### Phase 4 — OAuth CLI 子命令停用
-- [ ] M15-P4-01 `src/main.tsx:4132-4167` 三個 auth 子命令改為 console.error + process.exit(1)
-- [ ] M15-P4-02 `./cli auth login` 驗證輸出 not supported
+- [x] M15-P4-01 `src/main.tsx` 三個 auth 子命令改為 console.error + process.exit(1)
+- [x] M15-P4-02 typecheck 綠（smoke 留 Phase 6）
 
 ### Phase 5 — Rename（分 3 子 commit）
 #### 5a 低風險

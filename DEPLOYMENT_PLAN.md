@@ -996,7 +996,7 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 
 **清理引用**：commands.ts、keybindings/{defaultBindings,schema,validate}.ts、state/AppState.tsx、UI 元件、tools/ConfigTool/*、utils/{settings/types,config}.ts
 
-### Phase 4 — OAuth CLI 停用（方案 B：保留骨架）
+### Phase 4 — OAuth CLI 停用（方案 B：保留骨架） ✅ 完成
 - `src/main.tsx:4132-4167` — auth login/status/logout → `console.error('OAuth sign-in is not supported in this build.'); process.exit(1)`
 - 不刪 OAuth 檔案（死碼但無害，被 `isAnthropicAuthEnabled()=false` 短路）
 
