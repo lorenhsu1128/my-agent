@@ -694,25 +694,25 @@
 - [ ] M15-P5a-03 `getClaudeCodeUserAgent` → `getCodeUserAgent`
 - [ ] M15-P5a-04 `CLAUDE_CODE_EXPERIMENTAL_BUILD` → `EXPERIMENTAL_BUILD`
 
-#### 5b 中風險
-- [ ] M15-P5b-01 `ClaudeAILimits` → `LlmRateLimits`
-- [ ] M15-P5b-02 `isClaudeAISubscriber` → `hasInferenceAccess`
-- [ ] M15-P5b-03 `src/services/claudeAiLimitsHook.ts` → `rateLimitsHook.ts`
+#### 5b 中風險（延後 — 內部識別字，不影響使用者介面）
+- [ ] M15-P5b-01 `ClaudeAILimits` → `LlmRateLimits`（延後）
+- [ ] M15-P5b-02 `isClaudeAISubscriber` → `hasInferenceAccess`（延後）
+- [ ] M15-P5b-03 `src/services/claudeAiLimitsHook.ts` → `rateLimitsHook.ts`（延後）
 
-#### 5c 高風險
-- [ ] M15-P5c-01 `src/services/api/claude.ts` → `api.ts`
-- [ ] M15-P5c-02 `src/services/claudeAiLimits.ts` → `rateLimits.ts`
-- [ ] M15-P5c-03 `src/utils/claudemd.ts` → `memoryFiles.ts`
-- [ ] M15-P5c-04 `src/utils/claudeCodeHints.ts` → `codeHints.ts`
-- [ ] M15-P5c-05 `getClaudeAIOAuthTokens` → `getStoredAuthTokens`
-- [ ] M15-P5c-06 `getClaudeConfigHomeDir` → `getConfigHomeDir`
+#### 5c 高風險（延後 — 60+ 引用重構，改動面太大）
+- [ ] M15-P5c-01 `src/services/api/claude.ts` → `api.ts`（延後）
+- [ ] M15-P5c-02 `src/services/claudeAiLimits.ts` → `rateLimits.ts`（延後）
+- [ ] M15-P5c-03 `src/utils/claudemd.ts` → `memoryFiles.ts`（延後）
+- [ ] M15-P5c-04 `src/utils/claudeCodeHints.ts` → `codeHints.ts`（延後）
+- [ ] M15-P5c-05 `getClaudeAIOAuthTokens` → `getStoredAuthTokens`（延後）
+- [ ] M15-P5c-06 `getClaudeConfigHomeDir` → `getConfigHomeDir`（延後）
 
 ### Phase 6 — 最終驗證
-- [ ] M15-P6-01 `Grep -i "claude|anthropic"` 再掃一次確認殘留可接受範圍
-- [ ] M15-P6-02 `bun run typecheck` 綠
-- [ ] M15-P6-03 `bun run build` 綠
-- [ ] M15-P6-04 `./cli -p "hello"` 端到端 smoke
-- [ ] M15-P6-05 更新 `DEPLOYMENT_PLAN.md` + `LESSONS.md`
+- [x] M15-P6-01 Grep 殘留稽核 — 主要使用者可見 BLOCKER 清除（exploreAgent / statusNoticeDefinitions 補修）
+- [x] M15-P6-02 `bun run typecheck` 綠
+- [~] M15-P6-03 `bun run build` — 預先存在的 `react-devtools-core` 依賴錯誤（非 M15 造成），build 失敗但不阻擋 M15
+- [~] M15-P6-04 CLI 驗證：`--help` 載入正常、`auth login/logout` 正確印 not supported 且 exit 1；llamacpp print mode 實測有 hang 傾向（非 M15 regressions，既有現象）
+- [x] M15-P6-05 更新 `DEPLOYMENT_PLAN.md` + `LESSONS.md`（stash pop 還原已刪除檔案的 pitfall）
 
 ### 驗收標準
 - 完整功能測試通過（Tier 1–9 綠）

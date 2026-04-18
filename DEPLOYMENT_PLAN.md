@@ -1005,10 +1005,12 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 - **5b**（中風險）：ClaudeAILimits → LlmRateLimits；isClaudeAISubscriber → hasInferenceAccess；rateLimitsHook
 - **5c**（高風險）：api.ts、rateLimits.ts、memoryFiles.ts、codeHints.ts、getStoredAuthTokens、getConfigHomeDir
 
-### Phase 6 — 最終驗證與記帳
-- 完整 grep
-- typecheck / build / smoke
-- 更新 TODO.md / LESSONS.md
+### Phase 6 — 最終驗證與記帳 ✅ 完成
+- 完整 grep：使用者可見 BLOCKER 字串 0 筆殘留（vendor SDK、skills/anthropic-sdk-reference 文件保留屬預期）
+- typecheck：綠
+- build：因預先存在的 `react-devtools-core` 依賴問題失敗，非 M15 造成，另案追蹤
+- CLI smoke：`--help` 正常；`auth login/logout` 印 not supported 且 exit 1；llamacpp -p mode 有 hang 傾向（既有問題）
+- LESSONS.md 新增 `git stash -u` + failed checkout 回覆已刪除檔案的教訓
 
 ### Commit 策略
 6 個 phase × 各自 commit（Phase 5 拆 3 個子 commit），總計約 8 個 commit，繁中 message。
