@@ -731,3 +731,24 @@
 - 2026-04-18 15:58: Session 結束 | 進度：247/260 任務 | 73e1b02 test(m15): 完整測試執行報告 + 6 處漏網字串補修
 
 - 2026-04-18 16:13: Session 結束 | 進度：247/260 任務 | 73e1b02 test(m15): 完整測試執行報告 + 6 處漏網字串補修
+
+---
+
+## M16 — 移除失效的 Claude Code migration hint（2026-04-18 完成，commit `f4baa7d`）
+
+**Context**：設定目錄稽核時發現 `printFreeCodeMigrationHintOnce()` 機制已失效：
+1. `LEGACY_CLAUDE_HOME_DIR_NAME` 被 commit `8931dce` 誤改成 `.my-agent`（應為 `.claude`），偵測條件永遠 false
+2. M15 P4 後 OAuth 全停，「沿用舊登入」文案誤導
+3. Session / settings schema drift 風險
+
+### 任務清單
+- [x] M16-01 刪 `src/utils/envUtils.ts` 的 `FREE_CODE_HOME_DIR_NAME` + `LEGACY_CLAUDE_HOME_DIR_NAME` 常數、`printFreeCodeMigrationHintOnce()` 函式、`existsSync` import
+- [x] M16-02 刪 `src/main.tsx` 對應 import 與 bootstrap 呼叫
+- [x] M16-03 CLAUDE.md 新增「從官方 Claude Code 遷移設定」段落
+- [x] M16-04 `bun run typecheck` 綠
+- [x] M16-05 grep 確認 0 殘留
+
+### 驗收
+- `bun src/entrypoints/cli.tsx --help` 不再印 free-code hint stderr ✅
+- `getClaudeConfigHomeDir()` 預設 `~/.my-agent`、`CLAUDE_CONFIG_DIR` env 覆寫保留 ✅
+- 從 Claude Code 切過來的使用者可查 CLAUDE.md 遷移指南 ✅
