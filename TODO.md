@@ -321,6 +321,26 @@
 ### M7 — Hermes 使用者建模（TypeScript 重新實作）
 將 Honcho 風格的使用者建模和跨 session 回憶移植到 free-code。
 
+### M8 — 移除殘留 Anthropic 對外連線與品牌字串
+
+**目標**：稽核後發現產品本體仍有對 `api.anthropic.com` 的活路徑（MCP registry 啟動 prefetch）+ 每次 LLM 呼叫送出 "You are Claude Code, Anthropic's official CLI..." system prompt。本里程碑堵住活路徑、改寫 system prompt、刪掉已死的 telemetry/feedback POST 程式碼。
+
+#### 批次 A — 堵住啟動時對外請求
+- [x] M8-01 修改 `src/services/mcp/officialRegistry.ts`：`prefetchOfficialMcpUrls()` 直接 early-return（保留簽章不破壞 caller）
+
+#### 批次 B — System prompt 改名
+- [x] M8-02 修改 `src/constants/system.ts:9-11`：三條 prefix 改為 my-agent 品牌（`"You are my-agent, a local-first coding assistant."` 系列）— `splitSysPromptPrefix` 透過 `CLI_SYSPROMPT_PREFIXES` 自動跟著生效
+
+#### 批次 C — 刪除 dead telemetry / feedback POST 程式碼
+- [x] M8-03 刪除 `src/utils/telemetry/bigqueryExporter.ts`（無 caller，純死碼）
+- [x] M8-04 刪除 `src/services/api/metricsOptOut.ts`（唯一 caller 是上面那個 dead exporter）
+- [x] M8-05 修改 `src/services/analytics/firstPartyEventLoggingExporter.ts`：`sendBatchWithRetry` 改 no-op，整段網路送出邏輯刪除
+- [x] M8-06 修改 `src/components/Feedback.tsx`：`submitFeedback` 直接回 `{success:false}`，不對外送
+- [x] M8-07 改寫 `src/components/FeedbackSurvey/submitTranscriptShare.ts`：整檔縮為 no-op stub，移除 axios POST
+
+#### 驗證
+- [x] M8-08 `bun run typecheck` 綠燈（只剩既有的 tsconfig baseUrl 棄用警告）
+
 ---
 
 ## Session 日誌

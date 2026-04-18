@@ -527,91 +527,9 @@ export class FirstPartyEventLoggingExporter implements LogRecordExporter {
   private async sendBatchWithRetry(
     payload: FirstPartyEventLoggingPayload,
   ): Promise<void> {
-    if (this.isKilled()) {
-      // Throw so the caller short-circuits remaining batches and queues
-      // everything to disk. Zero network traffic while killed; the backoff
-      // timer keeps ticking and will resume POSTs as soon as the GrowthBook
-      // cache picks up the cleared flag.
-      throw new Error('firstParty sink killswitch active')
-    }
-
-    const baseHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'User-Agent': getClaudeCodeUserAgent(),
-      'x-service-name': 'claude-code',
-    }
-
-    // Skip auth if trust hasn't been established yet
-    // This prevents executing apiKeyHelper commands before the trust dialog
-    // Non-interactive sessions implicitly have workspace trust
-    const hasTrust =
-      checkHasTrustDialogAccepted() || getIsNonInteractiveSession()
-    if (process.env.USER_TYPE === 'ant' && !hasTrust) {
-      logForDebugging('1P event logging: Trust not accepted')
-    }
-
-    // Skip auth when the OAuth token is expired or lacks user:profile
-    // scope (service key sessions). Falls through to unauthenticated send.
-    let shouldSkipAuth = this.skipAuth || !hasTrust
-    if (!shouldSkipAuth && isClaudeAISubscriber()) {
-      const tokens = getClaudeAIOAuthTokens()
-      if (!hasProfileScope()) {
-        shouldSkipAuth = true
-      } else if (tokens && isOAuthTokenExpired(tokens.expiresAt)) {
-        shouldSkipAuth = true
-        if (process.env.USER_TYPE === 'ant') {
-          logForDebugging(
-            '1P event logging: OAuth token expired, skipping auth to avoid 401',
-          )
-        }
-      }
-    }
-
-    // Try with auth headers first (unless trust not established or token is known to be expired)
-    const authResult = shouldSkipAuth
-      ? { headers: {}, error: 'trust not established or Oauth token expired' }
-      : getAuthHeaders()
-    const useAuth = !authResult.error
-
-    if (!useAuth && process.env.USER_TYPE === 'ant') {
-      logForDebugging(
-        `1P event logging: auth not available, sending without auth`,
-      )
-    }
-
-    const headers = useAuth
-      ? { ...baseHeaders, ...authResult.headers }
-      : baseHeaders
-
-    try {
-      const response = await axios.post(this.endpoint, payload, {
-        timeout: this.timeout,
-        headers,
-      })
-      this.logSuccess(payload.events.length, useAuth, response.data)
-      return
-    } catch (error) {
-      // Handle 401 by retrying without auth
-      if (
-        useAuth &&
-        axios.isAxiosError(error) &&
-        error.response?.status === 401
-      ) {
-        if (process.env.USER_TYPE === 'ant') {
-          logForDebugging(
-            '1P event logging: 401 auth error, retrying without auth',
-          )
-        }
-        const response = await axios.post(this.endpoint, payload, {
-          timeout: this.timeout,
-          headers: baseHeaders,
-        })
-        this.logSuccess(payload.events.length, false, response.data)
-        return
-      }
-
-      throw error
-    }
+    // free-code: 不對 api.anthropic.com 送 first-party 事件 — 視為已成功 drain
+    void payload
+    return
   }
 
   private logSuccess(

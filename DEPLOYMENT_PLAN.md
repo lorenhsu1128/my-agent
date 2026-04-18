@@ -903,3 +903,41 @@ async function summarizeSessions(
 ## 不在本任務範圍
 
 常數調整、結構化輸出 / tool_use、摘要快取、M2-07 的註冊
+
+---
+
+## M8 — 移除殘留 Anthropic 對外連線與品牌字串（2026-04-18）
+
+**Context**：M6d 後雖宣告 Anthropic auth 移除，稽核發現產品本體仍有：
+1. **活路徑**：`src/services/mcp/officialRegistry.ts` 在每次 `bun run dev` 啟動時 fire-and-forget GET `https://api.anthropic.com/mcp-registry/v0/servers`
+2. **品牌字串**：`src/constants/system.ts` 三條 prefix 仍寫 "You are Claude Code, Anthropic's official CLI for Claude."，每次 LLM request 都送進 llama.cpp
+3. **死碼但仍存在**：`bigqueryExporter.ts` / `metricsOptOut.ts` / `firstPartyEventLoggingExporter.ts` / `Feedback.tsx` / `submitTranscriptShare.ts` 內 hardcoded `api.anthropic.com` 端點，路徑被 `isAnthropicAuthEnabled()=false` 短路但程式碼還在
+
+### 任務清單
+
+#### 批次 A — 堵啟動時對外請求
+- [x] M8-01 `src/services/mcp/officialRegistry.ts` `prefetchOfficialMcpUrls()` early-return
+
+#### 批次 B — System prompt 改名
+- [x] M8-02 `src/constants/system.ts:9-11` 三條 prefix → my-agent 品牌
+
+#### 批次 C — 刪除 dead telemetry/feedback POST
+- [x] M8-03 刪 `src/utils/telemetry/bigqueryExporter.ts`
+- [x] M8-04 刪 `src/services/api/metricsOptOut.ts`
+- [x] M8-05 `src/services/analytics/firstPartyEventLoggingExporter.ts` `sendBatchWithRetry` → no-op
+- [x] M8-06 `src/components/Feedback.tsx` `submitFeedback` → no-op
+- [x] M8-07 `src/components/FeedbackSurvey/submitTranscriptShare.ts` 整檔縮為 stub
+
+#### 驗證
+- [x] M8-08 `bun run typecheck` 綠燈（只剩既有 baseUrl 棄用警告）
+
+### 範圍外（延後）
+
+OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/ConsoleOAuthFlow.tsx`、`src/services/oauth/client.ts`、`src/constants/oauth.ts`、`src/commands/install-github-app/`）— 涉及多處 CLI handler import cascade，需要獨立里程碑處理。
+
+### 驗收方式
+
+1. `bun run typecheck` 綠
+2. `bun run dev -p "hi"` 端到端能回應
+3. 手動：啟動到回完話不對 `*.anthropic.com` 發出任何 request（看 log）
+4. system prompt 開頭不再含 "Anthropic" 字樣
