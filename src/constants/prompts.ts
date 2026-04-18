@@ -58,6 +58,7 @@ import { SLEEP_TOOL_NAME } from '../tools/SleepTool/prompt.js'
 import { TICK_TAG } from './xml.js'
 import { logForDebugging } from '../utils/debug.js'
 import { loadMemoryPrompt } from '../memdir/memdir.js'
+import { loadUserProfilePrompt } from '../userModel/prompt.js'
 import { isUndercover } from '../utils/undercover.js'
 import { isMcpInstructionsDeltaEnabled } from '../utils/mcpInstructionsDelta.js'
 
@@ -473,6 +474,7 @@ export async function getSystemPrompt(
 
 ${CYBER_RISK_INSTRUCTION}`,
       getSystemRemindersSection(),
+      await loadUserProfilePrompt(),
       await loadMemoryPrompt(),
       envInfo,
       getLanguageSection(settings.language),
@@ -492,6 +494,7 @@ ${CYBER_RISK_INSTRUCTION}`,
     systemPromptSection('session_guidance', () =>
       getSessionSpecificGuidanceSection(enabledTools, skillToolCommands),
     ),
+    systemPromptSection('user_profile', () => loadUserProfilePrompt()),
     systemPromptSection('memory', () => loadMemoryPrompt()),
     systemPromptSection('ant_model_override', () =>
       getAntModelOverrideSection(),

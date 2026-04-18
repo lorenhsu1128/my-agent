@@ -939,6 +939,12 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Custom directory path for auto-memory storage. Supports ~/ prefix for home directory expansion. Ignored if set in projectSettings (checked-in .my-agent/settings.json) for security. When unset, defaults to ~/.my-agent/projects/<sanitized-cwd>/memory/.',
         ),
+      userModelEnabled: z
+        .boolean()
+        .optional()
+        .describe(
+          'Enable user modeling (USER.md persona block injected into system prompt). Defaults to true. Disable via FREECODE_DISABLE_USER_MODEL=1 env var or --no-user-model CLI flag.',
+        ),
       autoDreamEnabled: z
         .boolean()
         .optional()

@@ -27,6 +27,10 @@ import {
 } from '../../memdir/memdir.js'
 import { MEMORY_TYPES } from '../../memdir/memoryTypes.js'
 import { getAutoMemPath, isAutoMemoryEnabled } from '../../memdir/paths.js'
+import {
+  isUserModelEnabled,
+} from '../../userModel/paths.js'
+import { writeUserModel } from '../../userModel/userModel.js'
 import { parseFrontmatter } from '../../utils/frontmatterParser.js'
 import { getFsImplementation } from '../../utils/fsOperations.js'
 import { lazySchema } from '../../utils/lazySchema.js'
@@ -50,29 +54,44 @@ const inputSchema = lazySchema(() =>
     action: z
       .enum(['add', 'replace', 'remove'])
       .describe('Action to perform: add (create new), replace (update existing), remove (delete)'),
+    target: z
+      .enum(['file', 'user_profile'])
+      .optional()
+      .describe(
+        'Target type. "file" (default) writes a typed memdir file; "user_profile" writes to USER.md (persona block injected into system prompt).',
+      ),
+    scope: z
+      .enum(['global', 'project'])
+      .optional()
+      .describe(
+        'Only for target="user_profile". "global" (default) writes ~/.my-agent/USER.md; "project" writes ~/.my-agent/projects/<slug>/USER.md.',
+      ),
     filename: z
       .string()
+      .optional()
       .describe(
-        'Memory file name, e.g. "user_role.md". Must end with .md. No path separators.',
+        'Memory file name for target="file", e.g. "user_role.md". Must end with .md. No path separators. Ignored for target="user_profile".',
       ),
     type: z
       .enum(['user', 'feedback', 'project', 'reference'])
       .optional()
-      .describe('Memory type. Required for add. For replace, updates the type if provided.'),
+      .describe('Memory type. Required for add (target="file"). For replace, updates the type if provided.'),
     name: z
       .string()
       .optional()
-      .describe('Memory name for YAML frontmatter. Required for add.'),
+      .describe('Memory name for YAML frontmatter. Required for add (target="file").'),
     description: z
       .string()
       .optional()
       .describe(
-        'One-line description for frontmatter and MEMORY.md index. Required for add.',
+        'One-line description for frontmatter and MEMORY.md index. Required for add (target="file").',
       ),
     content: z
       .string()
       .optional()
-      .describe('Memory body content (after frontmatter). Required for add.'),
+      .describe(
+        'Memory body content (for target="file": file body after frontmatter, required for add). For target="user_profile": the entry text (add), full replacement (replace), or substring to locate entry for removal (remove, empty = clear file).',
+      ),
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>
@@ -421,10 +440,43 @@ export const MemoryTool = buildTool({
     return false
   },
   toAutoClassifierInput(input) {
-    return `${input.action} ${input.filename}`
+    const target = input.target ?? 'file'
+    if (target === 'user_profile') {
+      return `${input.action} user_profile (${input.scope ?? 'global'})`
+    }
+    return `${input.action} ${input.filename ?? ''}`
   },
 
   async validateInput(input): Promise<ValidationResult> {
+    const target = input.target ?? 'file'
+
+    if (target === 'user_profile') {
+      if (!isUserModelEnabled()) {
+        return {
+          result: false,
+          message:
+            '使用者建模已停用（FREECODE_DISABLE_USER_MODEL 或 settings.userModelEnabled=false）',
+          errorCode: 1,
+        }
+      }
+      const { action } = input
+      if (action === 'add' && !input.content?.trim()) {
+        return {
+          result: false,
+          message: 'add user_profile 必須提供 content',
+          errorCode: 1,
+        }
+      }
+      if (action === 'replace' && input.content === undefined) {
+        return {
+          result: false,
+          message: 'replace user_profile 必須提供 content（可為空字串清空）',
+          errorCode: 1,
+        }
+      }
+      return { result: true }
+    }
+
     if (!isAutoMemoryEnabled()) {
       return {
         result: false,
@@ -494,7 +546,47 @@ export const MemoryTool = buildTool({
   renderToolResultMessage,
 
   async call(input) {
-    const { action, filename } = input
+    const { action } = input
+    const target = input.target ?? 'file'
+
+    // ---------------------------------------------------------------------
+    // user_profile 路徑：USER.md（global 或 project scope）
+    // ---------------------------------------------------------------------
+    if (target === 'user_profile') {
+      const scope = input.scope ?? 'global'
+      const rawContent = input.content ?? ''
+
+      // Injection scan（add / replace 才掃；remove 用 content 定位條目不需掃）
+      if (action === 'add' || action === 'replace') {
+        const hit = scanForInjection(rawContent)
+        if (hit) {
+          return {
+            data: {
+              success: false,
+              action,
+              filename: `USER.md (${scope})`,
+              filePath: '',
+              message: `寫入被拒：偵測到可疑內容 — ${hit}`,
+              indexUpdated: false,
+            } satisfies Output,
+          }
+        }
+      }
+
+      const res = await writeUserModel({ action, scope, content: rawContent })
+      return {
+        data: {
+          success: res.success,
+          action,
+          filename: `USER.md (${scope})`,
+          filePath: res.filePath,
+          message: res.message,
+          indexUpdated: false,
+        } satisfies Output,
+      }
+    }
+
+    const filename = input.filename!
     const memDir = getAutoMemPath()
 
     const validation = validateMemoryFilename(filename, memDir)

@@ -63,6 +63,37 @@
 
 ---
 
+## 當前里程碑：M-UM — 使用者建模（User Modeling）
+
+**目標**：移植 Hermes Agent 的 USER.md 概念，建立獨立於現有 typed memories 的 persona block，session 啟動凍結快照注入 system prompt。三路開關（CLI 留待後續、env、settings）預設啟用。**不**破壞現有 M2 memory。
+
+**架構決策**（已與 user 對齊）：
+- ADR-UM-01：雙層儲存 — global (`~/.my-agent/USER.md`) + per-project (`~/.my-agent/projects/<slug>/USER.md`)，注入時 global + project 合併，project 以 `### Project-specific` 分隔
+- ADR-UM-02：寫入介面延伸現有 `MemoryTool`，新增 `target='user_profile'` + 可選 `scope='global'|'project'`（預設 global）；不新建工具
+- ADR-UM-03：注入機制為獨立 `<user-profile>` fence，透過 `systemPromptSection('user_profile', ...)` 放在 `memory` section 之前
+- ADR-UM-04：大小 soft limit 1500 chars（global + project 合計），超出告警不截斷
+- ADR-UM-05：Session 啟動凍結快照 (Hermes 作法)；mid-session 寫入 MemoryTool 看到 live，但 system prompt 用 snapshot（prefix cache 友善）
+- ADR-UM-06：開關優先序 env (`FREECODE_DISABLE_USER_MODEL`) > `CLAUDE_CODE_SIMPLE` > settings (`userModelEnabled`) > 預設啟用；CLI flag 暫不做（env var 前綴已夠用）
+
+**詳細設計見 `USER_MODELING_PLAN.md`（根目錄）。**
+
+### 任務
+- [x] M-UM-1 建立 `src/userModel/` 骨架：`paths.ts`（雙層路徑 + 開關）/ `userModel.ts`（讀寫 / snapshot / 雙層合併）/ `prompt.ts`（fence 格式化 + `loadUserProfilePrompt`）
+- [x] M-UM-2 擴充 `src/tools/MemoryTool/MemoryTool.ts`：schema 加 `target: 'file'|'user_profile'` + `scope`；`call()` 路由到 `writeUserModel`；injection scan 覆蓋 user_profile add/replace；`toAutoClassifierInput` 分支
+- [x] M-UM-3 `src/utils/settings/types.ts` 加 `userModelEnabled` 欄位 + `src/constants/prompts.ts` 在 simple-proactive 路徑與 dynamicSections 注入 `loadUserProfilePrompt` 為獨立 section（`memory` 之前）
+- [x] M-UM-4 整合測試 `tests/integration/user-model/user-model-smoke.ts` — 27/27 綠，覆蓋：開關三路、add/replace/remove、snapshot 凍結 vs live、雙層合併、字元告警、`loadUserProfilePrompt` 整合
+- [x] M-UM-5 `bun run typecheck` baseline 綠（僅 TS5101 pre-existing）；TODO.md 更新；commit
+
+### 完成標準
+- [x] USER.md 能被 MemoryTool 寫入（global + project 兩個 scope）
+- [x] Session 啟動 snapshot 凍結；mid-session 寫入不影響 system prompt 當前注入
+- [x] `<user-profile>` fence 自動注入 system prompt 頂部；`<memory>` section 仍獨立運作
+- [x] 三路開關（env / SIMPLE / settings）正確各自停用
+- [x] Injection scan 對 user_profile add/replace 生效
+- [x] typecheck baseline 不破壞
+
+---
+
 ## 已完成里程碑：M1 — 透過 llama.cpp 支援本地模型（封存）
 
 **目標**：free-code 能直接連接專案內跑的 llama.cpp server（`http://127.0.0.1:8080/v1`，model alias `qwen3.5-9b-neo`），支援串流和全部 39 個工具的 tool calling。**不再**經過 LiteLLM proxy（ADR-001 已推翻，見 CLAUDE.md）。
@@ -762,3 +793,11 @@
 - 2026-04-18 19:02: Session 結束 | 進度：252/265 任務 | 737f2b4 refactor(tui): 中性化 TUI 使用者可見的 Claude Code 字串（~30 處跨 25 檔）
 
 - 2026-04-18 19:22: Session 結束 | 進度：252/265 任務 | 7777a85 refactor(tui): 清掉所有 Claude Code 殘留字串（comments + 死功能 UI + skill 教材除外）
+
+- 2026-04-18 19:25: Session 結束 | 進度：252/265 任務 | f179f2b chore: session log
+
+- 2026-04-18 19:37: Session 結束 | 進度：252/265 任務 | f179f2b chore: session log
+
+- 2026-04-18 19:44: Session 結束 | 進度：252/265 任務 | f179f2b chore: session log
+
+- 2026-04-18 19:47: Session 結束 | 進度：252/265 任務 | f179f2b chore: session log
