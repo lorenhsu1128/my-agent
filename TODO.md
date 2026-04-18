@@ -410,6 +410,18 @@
 #### 收尾
 - [x] M13-99 `tests/integration/test-run-2026-04-18.md` 已產出
 
+### M14 — 強制預設 llamacpp provider（修 /model 顯示 Anthropic 模型 + 連帶 banner / status）
+
+**目標**：`getAPIProvider()` 預設改 `llamacpp`（不再 fallback `firstParty`）→ /model 只列本地模型、banner 顯示「llama.cpp (local)」、/status 顯示 llamacpp provider。配合補 `getModelOptionsBase` / `getDefaultOptionForUser` / `buildAPIProviderProperties` 三處 llamacpp 分支。無 opt-back env（Anthropic 路徑因 auth 移除無實際用途）。
+
+- [x] M14-01 `getAPIProvider()` 預設改 `'llamacpp'`；`CLAUDE_CODE_USE_LLAMACPP` env 移除（無作用）
+- [x] M14-02 `getModelOptionsBase()` 加 llamacpp 分支 → 只回 default 選項
+- [x] M14-03 `getDefaultOptionForUser()` 加 llamacpp 分支 → `Local llama.cpp (qwopus3.5-9b-v3)`
+- [x] M14-04 `buildAPIProviderProperties()` 加 llamacpp 分支
+- [x] M14-05 額外修補：`getBuiltinModelStrings('llamacpp'|'openai')` 全部映射到 DEFAULT_LLAMACPP_MODEL（避免 undefined cascade hang 下游）
+- [x] M14-06 typecheck 綠 + `bun run dev -p "請說一句話"` 回「你好！有什麼我可以幫忙的嗎？」
+- [x] M14-99 教訓存 memory：template literal undefined → print mode hang（typecheck 漏抓）
+
 ---
 
 ## Session 日誌

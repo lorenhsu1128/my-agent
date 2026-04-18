@@ -11,7 +11,7 @@ import { getDisplayPath } from './file.js';
 import { formatNumber } from './format.js';
 import { getIdeClientName, type IDEExtensionInstallationStatus, isJetBrainsIde, toIDEDisplayName } from './ide.js';
 import { getClaudeAiUserDefaultModelDescription, modelDisplayString } from './model/model.js';
-import { getAPIProvider } from './model/providers.js';
+import { DEFAULT_LLAMACPP_BASE_URL, getAPIProvider } from './model/providers.js';
 import { getMTLSConfig } from './mtls.js';
 import { checkInstall } from './nativeInstaller/index.js';
 import { getProxyUrl } from './proxy.js';
@@ -240,11 +240,22 @@ export function buildAccountProperties(): Property[] {
 export function buildAPIProviderProperties(): Property[] {
   const apiProvider = getAPIProvider();
   const properties: Property[] = [];
+  // free-code: llamacpp 預設 provider，顯示本地 server URL
+  if (apiProvider === 'llamacpp') {
+    const baseUrl = process.env.LLAMA_BASE_URL || DEFAULT_LLAMACPP_BASE_URL;
+    properties.push({
+      label: 'API provider',
+      value: `llama.cpp (${baseUrl})`
+    });
+    return properties;
+  }
   if (apiProvider !== 'firstParty') {
     const providerLabel = {
       bedrock: 'AWS Bedrock',
       vertex: 'Google Vertex AI',
-      foundry: 'Microsoft Foundry'
+      foundry: 'Microsoft Foundry',
+      openai: 'OpenAI',
+      llamacpp: 'llama.cpp (local)'
     }[apiProvider];
     properties.push({
       label: 'API provider',

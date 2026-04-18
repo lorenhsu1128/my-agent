@@ -10,12 +10,12 @@ export type APIProvider =
   | 'llamacpp'
 
 export function getAPIProvider(): APIProvider {
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_LLAMACPP)) return 'llamacpp'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) return 'bedrock'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)) return 'vertex'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)) return 'foundry'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) return 'openai'
-  return 'firstParty'
+  // free-code: 預設強制走 llamacpp（不再回 'firstParty'）。
+  return 'llamacpp'
 }
 
 /** 預設連到 scripts/llama/serve.sh 啟動的本地 llama.cpp server。 */

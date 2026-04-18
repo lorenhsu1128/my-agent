@@ -17,6 +17,7 @@ import { getSettings_DEPRECATED } from '../settings/settings.js'
 import { checkOpus1mAccess, checkSonnet1mAccess } from './check1mAccess.js'
 import {
   DEFAULT_LLAMACPP_BASE_URL,
+  DEFAULT_LLAMACPP_MODEL,
   getAPIProvider,
   LLAMACPP_MODEL_ALIASES,
 } from './providers.js'
@@ -48,6 +49,14 @@ export type ModelOption = {
 }
 
 export function getDefaultOptionForUser(fastMode = false): ModelOption {
+  // free-code: llamacpp 為預設 provider，避免後段顯示 Sonnet 4.6 字樣
+  if (getAPIProvider() === 'llamacpp') {
+    return {
+      value: null,
+      label: 'Default (recommended)',
+      description: `Local llama.cpp (${DEFAULT_LLAMACPP_MODEL})`,
+    }
+  }
   if (process.env.USER_TYPE === 'ant') {
     const currentModel = renderDefaultModelSetting(
       getDefaultMainLoopModelSetting(),
@@ -302,6 +311,13 @@ function getOpusPlanOption(): ModelOption {
 // @[MODEL LAUNCH]: Update the model picker lists below to include/reorder options for the new model.
 // Each user tier (ant, Max/Team Premium, Pro/Team Standard/Enterprise, PAYG 1P, PAYG 3P) has its own list.
 function getModelOptionsBase(fastMode = false): ModelOption[] {
+  // free-code: llamacpp 為預設 provider 時，只回傳 Default 選項，
+  // getModelOptions() 後續會自動追加 LLAMACPP_MODEL_ALIASES（行 509），
+  // 不要混入任何 Anthropic / Codex 模型。
+  if (getAPIProvider() === 'llamacpp') {
+    return [getDefaultOptionForUser(fastMode)]
+  }
+
   if (process.env.USER_TYPE === 'ant') {
     // Build options from antModels config
     const antModelOptions: ModelOption[] = getAntModels().map(m => ({
