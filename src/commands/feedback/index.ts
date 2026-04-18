@@ -4,7 +4,7 @@ const feedback = {
   aliases: ['bug'],
   type: 'local-jsx',
   name: 'feedback',
-  description: `Submit feedback about Claude Code`,
+  description: `Submit feedback about my-agent`,
   argumentHint: '[report]',
   // free-code: 不對外送回饋，整個 /feedback 指令停用
   isEnabled: () => false,

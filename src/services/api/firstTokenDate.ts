@@ -6,8 +6,8 @@ import { logError } from '../../utils/log.js'
 import { getCodeUserAgent } from '../../utils/userAgent.js'
 
 /**
- * Fetch the user's first Claude Code token date and store in config.
- * This is called after successful login to cache when they started using Claude Code.
+ * Fetch the user's first my-agent token date and store in config.
+ * This is called after successful login to cache when they started using my-agent.
  */
 export async function fetchAndStoreClaudeCodeFirstTokenDate(): Promise<void> {
   try {

@@ -146,7 +146,7 @@ export async function checkRemoteAgentEligibility({
 export function formatPreconditionError(error: BackgroundRemoteSessionPrecondition): string {
   switch (error.type) {
     case 'not_logged_in':
-      return 'Please run /login and sign in with your Claude.ai account (not Console).';
+      return 'Please run /login and sign in (not Console).';
     case 'no_remote_environment':
       return 'No cloud environment available. Set one up at https://claude.ai/code/onboarding?magic=env-setup';
     case 'not_in_git_repo':
@@ -799,7 +799,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
 }
 
 /**
- * RemoteAgentTask - Handles remote Claude.ai session execution.
+ * RemoteAgentTask - Handles remote session execution.
  *
  * Replaces the BackgroundRemoteSession implementation from:
  * - src/utils/background/remote/remoteSession.ts

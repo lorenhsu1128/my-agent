@@ -1,5 +1,5 @@
 /**
- * free-code: Anthropic OAuth 流程已停用。
+ * free-code: OAuth 流程已停用。
  * 保留 ConsoleOAuthFlow export + Props 介面供 cli/handlers/util.tsx、
  * commands/login/login.tsx、components/Onboarding.tsx、components/TeleportError.tsx
  * import 不破，但實際 mount 時直接呼叫 onDone 後渲染 null。

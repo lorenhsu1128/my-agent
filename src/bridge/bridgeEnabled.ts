@@ -26,7 +26,7 @@ import { lt } from '../utils/semver.js'
  * is only referenced when bridge mode is enabled at build time.
  */
 export function isBridgeEnabled(): boolean {
-  // free-code: bridge 功能無條件啟用（不需 Anthropic auth）
+  // free-code: bridge 功能無條件啟用（不需 OAuth auth）
   return feature('BRIDGE_MODE')
     ? getFeatureValue_CACHED_MAY_BE_STALE('tengu_ccr_bridge', true)
     : false
@@ -155,7 +155,7 @@ export function checkBridgeMinVersion(): string | null {
       minVersion: string
     }>('tengu_bridge_min_version', { minVersion: '0.0.0' })
     if (config.minVersion && lt(MACRO.VERSION, config.minVersion)) {
-      return `Your version of Claude Code (${MACRO.VERSION}) is too old for Remote Control.\nVersion ${config.minVersion} or higher is required. Run \`claude update\` to update.`
+      return `Your version of my-agent (${MACRO.VERSION}) is too old for Remote Control.\nVersion ${config.minVersion} or higher is required. Run \`claude update\` to update.`
     }
   }
   return null
