@@ -752,3 +752,13 @@
 - `bun src/entrypoints/cli.tsx --help` 不再印 free-code hint stderr ✅
 - `getClaudeConfigHomeDir()` 預設 `~/.my-agent`、`CLAUDE_CONFIG_DIR` env 覆寫保留 ✅
 - 從 Claude Code 切過來的使用者可查 CLAUDE.md 遷移指南 ✅
+
+- 2026-04-18 16:32: Session 結束 | 進度：252/265 任務 | 10fed0a test(m16): 完整測試執行報告 + 2 處漏網字串補修
+
+- 2026-04-18 16:50: Session 結束 | 進度：252/265 任務 | 737f2b4 refactor(tui): 中性化 TUI 使用者可見的 Claude Code 字串（~30 處跨 25 檔）
+
+- 2026-04-18 17:04: Session 結束 | 進度：252/265 任務 | 737f2b4 refactor(tui): 中性化 TUI 使用者可見的 Claude Code 字串（~30 處跨 25 檔）
+
+- 2026-04-18 19:02: Session 結束 | 進度：252/265 任務 | 737f2b4 refactor(tui): 中性化 TUI 使用者可見的 Claude Code 字串（~30 處跨 25 檔）
+
+- 2026-04-18 19:22: Session 結束 | 進度：252/265 任務 | 7777a85 refactor(tui): 清掉所有 Claude Code 殘留字串（comments + 死功能 UI + skill 教材除外）
