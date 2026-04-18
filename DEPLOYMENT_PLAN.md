@@ -941,3 +941,30 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 2. `bun run dev -p "hi"` 端到端能回應
 3. 手動：啟動到回完話不對 `*.anthropic.com` 發出任何 request（看 log）
 4. system prompt 開頭不再含 "Anthropic" 字樣
+
+---
+
+## M13 — 完整測試計畫執行（2026-04-18）
+
+**Context**：M8–M12 大量重構（移除 Anthropic 對外連線、改寫 system prompt、刪 OAuth、改名 skill）後執行完整測試確保未破壞既有功能、改動如預期生效、建構綠燈。
+
+**測試分層** —
+1. Tier 1 — 靜態 + 建構（typecheck / build / build:dev）
+2. Tier 2 — 品牌與網路洩漏稽核（grep）
+3. Tier 3 — 既有單元測試（11 個 self-improve `.test.ts`）
+4. Tier 4 — Memory 系統 PoC 煙測
+5. Tier 5 — Llama-server 部署 smoke
+6. Tier 6 — Llamacpp adapter PoC 6 個
+7. Tier 7 — CLI print mode 6 個 prompt 端到端
+8. Tier 8 — CLI 互動 mode 手動煙測（人工）
+9. Tier 9 — 網路洩漏觀察（DNS / netstat）
+10. Tier 10 — Skill loop E2E
+11. Tier 11 — 配置與權限驗證
+
+**判準**：
+- 全綠 → ship-ready
+- T1 / T2 / T3 / T9 任一紅 → 不可發
+- T6 / T7 個別紅 → 可暫忍
+
+**產出物**：`tests/integration/test-run-2026-04-18.md`
+

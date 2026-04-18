@@ -13,7 +13,7 @@
  * 執行：bun run scripts/poc/llamacpp-tool-streaming-poc.ts
  */
 
-import Anthropic from '@anthropic-ai/sdk'
+import Anthropic from 'my-agent-ai/sdk'
 import { createLlamaCppFetch } from '../../src/services/api/llamacpp-fetch-adapter.js'
 
 async function main() {

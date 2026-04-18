@@ -6,7 +6,7 @@
  *
  * Usage: bun run scripts/poc/adapter-sdk-e2e-test.ts
  */
-import Anthropic from '@anthropic-ai/sdk'
+import Anthropic from 'my-agent-ai/sdk'
 import { createLlamaCppFetch } from '../../src/services/api/llamacpp-fetch-adapter.js'
 
 const config = {

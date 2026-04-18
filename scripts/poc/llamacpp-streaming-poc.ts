@@ -16,7 +16,7 @@
  *   message_stop
  */
 
-import Anthropic from '@anthropic-ai/sdk'
+import Anthropic from 'my-agent-ai/sdk'
 import { createLlamaCppFetch } from '../../src/services/api/llamacpp-fetch-adapter.js'
 
 async function main() {

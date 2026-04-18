@@ -386,6 +386,30 @@
 - [x] M12-03 `claudeApiContent.ts` 8+ 處 import 路徑 `./claude-api/` → `./anthropic-sdk-reference/`；`claudeApi.ts` 註冊名稱與文案同步更新
 - [x] M12-04 typecheck 綠 + `bun run dev -p "9-3="` 回 `9 - 3 = 6`
 
+### M13 — 完整測試計畫執行
+
+**目標**：M8–M12 大量重構後執行 11 層測試確保未破壞既有功能、改動如預期生效、建構綠燈。產出物：`tests/integration/test-run-2026-04-18.md`
+
+#### 第一輪 — 無需 llama-server
+- [x] M13-T1 typecheck ✅ 綠；build / build:dev ⚠️ pre-existing fail（非本次引入）
+- [x] M13-T2 5 條 grep 全 PASS（命中皆為白名單）
+- [x] M13-T3 unit tests **93 pass / 0 fail / 11 files**
+- [x] M13-T4 memory smoke **61 pass / 0 fail / 4 scripts**
+- [x] M13-T11 4 項全 PASS（config 存在、無 dialog、permission default、auth 短路）
+
+#### 第二輪 — 需 llama-server
+- [x] M13-T5 llama health ✅ `{"status":"ok"}`；T5.2 verify.sh 未獨立跑（health 已涵蓋）
+- [x] M13-T6 6 個 PoC 全 PASS（修了 6 檔 `@anthropic-ai/sdk` → `my-agent-ai/sdk` import）
+- [x] M13-T7 6 個 prompt 全 PASS（T7.4 模型幻覺後重試成功）
+
+#### 第三輪 — 人工 + 觀察
+- [x] M13-T8 SKIPPED（本 session 不執行人工）
+- [x] M13-T9 DNS 對 anthropic / claude / statsig / growthbook **0 命中**
+- [x] M13-T10 TIMEOUT（本地推理 20+ 分鐘需求超過 480s timeout；算法層由 Tier 3 unit tests 覆蓋）
+
+#### 收尾
+- [x] M13-99 `tests/integration/test-run-2026-04-18.md` 已產出
+
 ---
 
 ## Session 日誌

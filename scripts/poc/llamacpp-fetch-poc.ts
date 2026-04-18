@@ -17,7 +17,7 @@
  * 執行：bun run scripts/poc/llamacpp-fetch-poc.ts
  */
 
-import Anthropic from '@anthropic-ai/sdk'
+import Anthropic from 'my-agent-ai/sdk'
 
 const LLAMA_BASE = 'http://127.0.0.1:8080/v1'
 

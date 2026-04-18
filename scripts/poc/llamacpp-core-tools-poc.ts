@@ -11,7 +11,7 @@
  * 不走 ./cli，直接用 SDK + adapter。每個 case 獨立請求，互不干擾。
  */
 
-import Anthropic from '@anthropic-ai/sdk'
+import Anthropic from 'my-agent-ai/sdk'
 import { createLlamaCppFetch } from '../../src/services/api/llamacpp-fetch-adapter.js'
 
 interface ToolDef {
