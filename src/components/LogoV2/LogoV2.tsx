@@ -23,15 +23,13 @@ import { getDumpPromptsPath } from 'src/services/api/dumpPrompts.js';
 import { isEnvTruthy } from 'src/utils/envUtils.js';
 import { getStartupPerfLogPath, isDetailedProfilingEnabled } from 'src/utils/startupProfiler.js';
 import { EmergencyTip } from './EmergencyTip.js';
-import { VoiceModeNotice } from './VoiceModeNotice.js';
 import { Opus1mMergeNotice } from './Opus1mMergeNotice.js';
 import { feature } from 'bun:bundle';
 
 // Conditional require so ChannelsNotice.tsx tree-shakes when both flags are
 // false. A module-scope helper component inside a feature() ternary does NOT
 // tree-shake (docs/feature-gating.md); the require pattern eliminates the
-// whole file. VoiceModeNotice uses the unsafe helper pattern but VOICE_MODE
-// is external: true so it's moot there.
+// whole file.
 /* eslint-disable @typescript-eslint/no-require-imports */
 const ChannelsNoticeModule = feature('KAIROS') || feature('KAIROS_CHANNELS') ? require('./ChannelsNotice.js') as typeof import('./ChannelsNotice.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -186,7 +184,7 @@ export function LogoV2() {
     let t17;
     if ($[15] === Symbol.for("react.memo_cache_sentinel")) {
       t11 = <CondensedLogo />;
-      t12 = <VoiceModeNotice />;
+      t12 = null;
       t13 = <Opus1mMergeNotice />;
       t14 = ChannelsNoticeModule && <ChannelsNoticeModule.ChannelsNotice />;
       t15 = isDebugMode() && <Box paddingLeft={2} flexDirection="column"><Text color="warning">Debug mode enabled</Text><Text dimColor={true}>Logging to: {isDebugToStdErr() ? "stderr" : getDebugLogPath()}</Text></Box>;
@@ -296,7 +294,7 @@ export function LogoV2() {
     let t15;
     let t16;
     if ($[37] === Symbol.for("react.memo_cache_sentinel")) {
-      t14 = <VoiceModeNotice />;
+      t14 = null;
       t15 = <Opus1mMergeNotice />;
       t16 = ChannelsNoticeModule && <ChannelsNoticeModule.ChannelsNotice />;
       $[37] = t14;
@@ -457,7 +455,7 @@ export function LogoV2() {
   let t33;
   let t34;
   if ($[75] === Symbol.for("react.memo_cache_sentinel")) {
-    t29 = <VoiceModeNotice />;
+    t29 = null;
     t30 = <Opus1mMergeNotice />;
     t31 = ChannelsNoticeModule && <ChannelsNoticeModule.ChannelsNotice />;
     t32 = isDebugMode() && <Box paddingLeft={2} flexDirection="column"><Text color="warning">Debug mode enabled</Text><Text dimColor={true}>Logging to: {isDebugToStdErr() ? "stderr" : getDebugLogPath()}</Text></Box>;

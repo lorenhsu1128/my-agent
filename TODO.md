@@ -674,14 +674,14 @@
 - [x] M15-P2-10 `bun run typecheck` 必須綠
 
 ### Phase 3 — Voice 功能整塊移除
-- [ ] M15-P3-01 刪 `src/voice/` + `src/commands/voice/`
-- [ ] M15-P3-02 刪 `src/services/voice*.ts` (3 個)
-- [ ] M15-P3-03 刪 `src/hooks/useVoice*.{ts,tsx}` (3 個)
-- [ ] M15-P3-04 刪 `src/components/PromptInput/VoiceIndicator.tsx` + `src/components/LogoV2/VoiceModeNotice.tsx` + `src/context/voice.tsx`
-- [ ] M15-P3-05 清 `src/commands.ts` + `src/keybindings/*` + `src/state/AppState.tsx`
-- [ ] M15-P3-06 清 UI 引用（Notifications / PromptInputFooterLeftSide / TextInput / LogoV2）
-- [ ] M15-P3-07 清 `src/tools/ConfigTool/*` + `src/utils/settings/types.ts` + `src/utils/config.ts`
-- [ ] M15-P3-08 `bun run typecheck` 必須綠
+- [x] M15-P3-01 刪 `src/voice/` + `src/commands/voice/`
+- [x] M15-P3-02 刪 `src/services/voice*.ts` (3 個)
+- [x] M15-P3-03 刪 `src/hooks/useVoice*.{ts,tsx}` (3 個)
+- [x] M15-P3-04 刪 `src/components/PromptInput/VoiceIndicator.tsx` + `src/components/LogoV2/VoiceModeNotice.tsx` + `src/context/voice.tsx`
+- [x] M15-P3-05 清 `src/commands.ts` + `src/keybindings/*` + `src/state/AppState.tsx` + `scripts/build.ts` VOICE_MODE flag
+- [x] M15-P3-06 清 UI 引用（Notifications / PromptInputFooterLeftSide / TextInput / LogoV2 / REPL.tsx）
+- [x] M15-P3-07 清 `src/tools/ConfigTool/*` + `src/utils/settings/types.ts` + `src/utils/config.ts` + `src/entrypoints/sdk/coreSchemas.ts`
+- [x] M15-P3-08 `bun run typecheck` 必須綠
 
 ### Phase 4 — OAuth CLI 子命令停用
 - [ ] M15-P4-01 `src/main.tsx:4132-4167` 三個 auth 子命令改為 console.error + process.exit(1)

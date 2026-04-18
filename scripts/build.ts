@@ -46,7 +46,6 @@ const fullExperimentalFeatures = [
   'ULTRATHINK',
   'UNATTENDED_RETRY',
   'VERIFICATION_AGENT',
-  'VOICE_MODE',
 ] as const
 
 function runCommand(cmd: string[]): string | null {
@@ -79,7 +78,7 @@ function getVersionChangelog(): string {
   )
 }
 
-const defaultFeatures = ['VOICE_MODE']
+const defaultFeatures: string[] = []
 const featureSet = new Set(defaultFeatures)
 for (let i = 0; i < args.length; i += 1) {
   const arg = args[i]

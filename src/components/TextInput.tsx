@@ -1,7 +1,6 @@
 import { feature } from 'bun:bundle';
 import chalk from 'chalk';
 import React, { useMemo, useRef } from 'react';
-import { useVoiceState } from '../context/voice.js';
 import { useClipboardImageHint } from '../hooks/useClipboardImageHint.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useTextInput } from '../hooks/useTextInput.js';
@@ -41,18 +40,11 @@ export default function TextInput(props: Props): React.ReactNode {
   const accessibilityEnabled = useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_ACCESSIBILITY), []);
   const settings = useSettings();
   const reducedMotion = settings.prefersReducedMotion ?? false;
-  const voiceState = feature('VOICE_MODE') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useVoiceState(s => s.voiceState) : 'idle' as const;
-  const isVoiceRecording = voiceState === 'recording';
-  const audioLevels = feature('VOICE_MODE') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useVoiceState(s_0 => s_0.voiceAudioLevels) : [];
+  const isVoiceRecording = false;
+  const audioLevels: number[] = [];
   const smoothedRef = useRef<number[]>(new Array(CURSOR_WAVEFORM_WIDTH).fill(0));
-  const needsAnimation = isVoiceRecording && !reducedMotion;
-  const [animRef, animTime] = feature('VOICE_MODE') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useAnimationFrame(needsAnimation ? 50 : null) : [() => {}, 0];
+  const needsAnimation = false;
+  const [animRef, animTime]: [() => void, number] = [() => {}, 0];
 
   // Show hint when terminal regains focus and clipboard has an image
   useClipboardImageHint(isTerminalFocused, !!props.onImagePaste);

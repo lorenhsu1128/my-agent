@@ -9,15 +9,6 @@ import { applySettingsChange } from '../utils/settings/applySettingsChange.js';
 import type { SettingSource } from '../utils/settings/constants.js';
 import { createStore } from './store.js';
 
-// DCE: voice context is ant-only. External builds get a passthrough.
-/* eslint-disable @typescript-eslint/no-require-imports */
-const VoiceProvider: (props: {
-  children: React.ReactNode;
-}) => React.ReactNode = feature('VOICE_MODE') ? require('../context/voice.js').VoiceProvider : ({
-  children
-}) => children;
-
-/* eslint-enable @typescript-eslint/no-require-imports */
 import { type AppState, type AppStateStore, getDefaultAppState } from './AppStateStore.js';
 
 // TODO: Remove these re-exports once all callers import directly from
@@ -91,7 +82,7 @@ export function AppStateProvider(t0) {
   useSettingsChange(onSettingsChange);
   let t5;
   if ($[8] !== children) {
-    t5 = <MailboxProvider><VoiceProvider>{children}</VoiceProvider></MailboxProvider>;
+    t5 = <MailboxProvider>{children}</MailboxProvider>;
     $[8] = children;
     $[9] = t5;
   } else {

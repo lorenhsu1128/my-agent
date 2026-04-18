@@ -167,8 +167,6 @@ export const KEYBINDING_ACTIONS = [
   'settings:search',
   'settings:retry',
   'settings:close',
-  // Voice actions
-  'voice:pushToTalk',
 ] as const
 
 /**

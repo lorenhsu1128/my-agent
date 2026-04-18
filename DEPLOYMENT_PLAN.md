@@ -991,7 +991,7 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 
 **清理引用**：commands.ts、main.tsx、skills/bundled/index.ts、services/mcp/{config,client}.ts、services/api/claude.ts、entrypoints/cli.tsx、utils/attachments.ts、utils/config.ts
 
-### Phase 3 — Voice 功能整塊移除
+### Phase 3 — Voice 功能整塊移除 ✅ 完成
 **刪除**：voice/、commands/voice/、services/voice*.ts、hooks/useVoice*.{ts,tsx}、components/PromptInput/VoiceIndicator.tsx、components/LogoV2/VoiceModeNotice.tsx、context/voice.tsx
 
 **清理引用**：commands.ts、keybindings/{defaultBindings,schema,validate}.ts、state/AppState.tsx、UI 元件、tools/ConfigTool/*、utils/{settings/types,config}.ts
