@@ -970,6 +970,19 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 
 ---
 
+## M16 — 移除失效的 Claude Code migration hint（2026-04-18 完成）
+
+設定目錄稽核副產品：`printFreeCodeMigrationHintOnce()` 因 `8931dce` 誤改 LEGACY 常數已是死碼，且 M15 P4 停用 OAuth 後文案誤導，整塊移除。
+
+**變更**：
+- `src/utils/envUtils.ts` — 刪 `FREE_CODE_HOME_DIR_NAME` / `LEGACY_CLAUDE_HOME_DIR_NAME` 常數、`printFreeCodeMigrationHintOnce()` 函式、`existsSync` import
+- `src/main.tsx` — 刪 bootstrap 呼叫與 import
+- `CLAUDE.md` — 新增「從官方 Claude Code 遷移設定」段落，以文件取代 runtime hint
+
+**不變**：`getClaudeConfigHomeDir()` 預設 `~/.my-agent`，`CLAUDE_CONFIG_DIR` env 覆寫保留。
+
+---
+
 ## M15 — 品牌徹底中性化 + Chrome/Voice 移除 + OAuth CLI 停用（2026-04-18 批准）
 
 **Context**：M11/M14 後仍有大量 Claude/Anthropic 字樣殘留於使用者可見介面。本里程碑為最終品牌清理戰。

@@ -18,11 +18,6 @@ import { ensureKeychainPrefetchCompleted, startKeychainPrefetch } from './utils/
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 startKeychainPrefetch();
-// free-code 首次啟動 migration hint（偵測 ~/.my-agent/ 存在但 ~/.my-agent/ 不存在）
-import { printFreeCodeMigrationHintOnce } from './utils/envUtils.js';
-// eslint-disable-next-line custom-rules/no-top-level-side-effects
-printFreeCodeMigrationHintOnce();
-
 // free-code 首次啟動時產生全域 settings.json（JSONC 帶繁中註解）+ 補完目錄結構
 import { getClaudeConfigHomeDir } from './utils/envUtils.js';
 import { generateDefaultSettingsContent } from './utils/settings/defaultSettingsGenerator.js';

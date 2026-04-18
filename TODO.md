@@ -727,3 +727,7 @@
 - `ANTHROPIC_API_KEY` 等環境變數名（外部契約）
 
 - 2026-04-18 14:30: Session 結束 | 進度：247/260 任務 | cb05a66 docs(lessons): 記錄 git stash -u + failed checkout 讓已刪除檔案復活的 pitfall
+
+- 2026-04-18 15:58: Session 結束 | 進度：247/260 任務 | 73e1b02 test(m15): 完整測試執行報告 + 6 處漏網字串補修
+
+- 2026-04-18 16:13: Session 結束 | 進度：247/260 任務 | 73e1b02 test(m15): 完整測試執行報告 + 6 處漏網字串補修

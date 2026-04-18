@@ -1,79 +1,19 @@
-import { existsSync } from 'fs'
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import { join } from 'path'
 
-/**
- * Free-code 專屬的家目錄設定資料夾名稱（取代官方 Claude Code 的 .claude）。
- * 目的：避免 fork 與官方共用 ~/.my-agent/，污染官方 OAuth / 登入狀態。
- * 使用者仍可用 CLAUDE_CONFIG_DIR env var 手動覆蓋到任意路徑（向下相容）。
- */
-export const FREE_CODE_HOME_DIR_NAME = '.my-agent'
-
-/**
- * 官方 Claude Code 的舊家目錄名稱。保留常數用於 migration 提示與疑難排解。
- */
-export const LEGACY_CLAUDE_HOME_DIR_NAME = '.my-agent'
-
 // Memoized: 150+ callers, many on hot paths. Keyed off CLAUDE_CONFIG_DIR so
 // tests that change the env var get a fresh value without explicit cache.clear.
+// 預設家目錄 ~/.my-agent（與官方 Claude Code 的 ~/.claude 完全隔離）；
+// 使用者可用 CLAUDE_CONFIG_DIR env var 手動覆蓋到任意路徑。
 export const getClaudeConfigHomeDir = memoize(
   (): string => {
     return (
-      process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), FREE_CODE_HOME_DIR_NAME)
+      process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.my-agent')
     ).normalize('NFC')
   },
   () => process.env.CLAUDE_CONFIG_DIR,
 )
-
-/**
- * 首次啟動提示：若使用者沒設 CLAUDE_CONFIG_DIR、新家目錄不存在、但舊的
- * ~/.my-agent/ 存在，代表很可能是從官方 Claude Code 切過來。印一次 hint
- * 說明 free-code 現在獨立用 ~/.my-agent/。
- *
- * 設計：只印到 stderr**一次**、只在首次偵測到切換需求時，之後自動建
- * `.migration-acknowledged` marker 後不再印。避免 PowerShell + bun.ps1
- * wrapper 對 stderr 訊息過度反應卡住 TUI 的問題（2026-04-15 使用者回報）。
- *
- * 使用者若要永久關閉：設 CLAUDE_CODE_SKIP_MIGRATION_HINT=1 或建立檔案
- * ~/.my-agent/.migration-acknowledged。
- */
-let freeCodeMigrationHintPrinted = false
-export function printFreeCodeMigrationHintOnce(): void {
-  if (freeCodeMigrationHintPrinted) return
-  freeCodeMigrationHintPrinted = true // 同一程序內只嘗試一次，不論是否實際印出
-  try {
-    if (process.env.CLAUDE_CODE_SKIP_MIGRATION_HINT) return
-    if (process.env.CLAUDE_CONFIG_DIR) return
-    const newDir = join(homedir(), FREE_CODE_HOME_DIR_NAME)
-    const legacyDir = join(homedir(), LEGACY_CLAUDE_HOME_DIR_NAME)
-    const ackFile = join(newDir, '.migration-acknowledged')
-    if (existsSync(ackFile)) return // 已印過並記錄
-    if (!existsSync(legacyDir)) return // 新使用者，沒有 Claude Code 歷史
-    // hint 只寫一次到 stderr；同時在 newDir 建 ack marker 避免下次再印
-    // 這也繞過 PS bun.ps1 wrapper 對多行 stderr 敏感的問題
-    try {
-      if (!existsSync(newDir)) {
-        // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-        require('fs').mkdirSync(newDir, { recursive: true })
-      }
-      // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-      require('fs').writeFileSync(
-        ackFile,
-        `printed at ${new Date().toISOString()}\n`,
-      )
-    } catch {
-      // 建 marker 失敗就算了；下次還是會再印一次（邊界情境）
-    }
-    // biome-ignore lint/suspicious/noConsole:: 告知 user 的 stderr 訊息
-    console.error(
-      `[free-code] 家目錄改為 ${newDir}（原 ~/.my-agent/ 不動）。` +
-        `沿用舊登入：CLAUDE_CONFIG_DIR="${legacyDir}"。此訊息只顯示一次。`,
-    )
-  } catch {
-    // 任何錯誤都靜默吞掉 — 避免 bootstrap 被 hint 阻斷
-  }
-}
 
 export function getTeamsDir(): string {
   return join(getClaudeConfigHomeDir(), 'teams')
