@@ -112,6 +112,11 @@
 - [x] 模型於下一輪知道 skill 已建立、可選擇用 SkillManage(edit) 補強而非重複 create
 - [x] 失敗路徑（重名、frontmatter 不合法、scanSkill dangerous）有明確錯誤訊息
 
+### M-SN-Brand — Resume hint 等使用者可見字串移除 `claude` 殘留
+- [x] M-SN-04 `package.json` bin 新增 `my-agent`（保留 `claude` / `claude-source` 為向後相容 alias）
+- [x] M-SN-05 替換 8 處使用者可見 `claude` 字串為 `my-agent`：`gracefulShutdown.ts`（resume hint）、`tipRegistry.ts`（continue tip）、`crossProjectResume.ts` x2（cross-project 命令）、`bridgeMain.ts` x3（unknown arg / help / no-session）、`bridgeApi.ts` x2（session expired 410/403）、`TeleportRepoMismatchDialog.tsx`（teleport hint）、`MCPListPanel.tsx`（debug hint）、`doctorDiagnostic.ts`（install fix）
+- [x] M-SN-06 typecheck baseline 不變；comment 內的 `claude remote-control` 不動（非使用者可見）
+
 ---
 
 ## 已完成里程碑：M1 — 透過 llama.cpp 支援本地模型（封存）

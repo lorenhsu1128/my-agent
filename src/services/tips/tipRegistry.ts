@@ -370,7 +370,7 @@ const externalTips: Tip[] = [
   {
     id: 'continue',
     content: async () =>
-      'Run claude --continue or claude --resume to resume a conversation',
+      'Run my-agent --continue or my-agent --resume to resume a conversation',
     cooldownSessions: 10,
     isRelevant: async () => true,
   },
