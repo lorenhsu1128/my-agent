@@ -725,3 +725,5 @@
 - `src/vendor/my-agent-ai/` 內 SDK 原始碼（vendored，保留 Anthropic 字樣）
 - `src/types/generated/` protobuf 自動產生（保留）
 - `ANTHROPIC_API_KEY` 等環境變數名（外部契約）
+
+- 2026-04-18 14:30: Session 結束 | 進度：247/260 任務 | cb05a66 docs(lessons): 記錄 git stash -u + failed checkout 讓已刪除檔案復活的 pitfall
