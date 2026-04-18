@@ -358,10 +358,10 @@
 
 **目標**：每次 LLM request 還在送 `x-anthropic-billing-header` 和 `claude-cli/x.y.z` UA，把它們對 llamacpp provider 中性化。
 
-- [ ] M10-01 `src/constants/system.ts:68 getAttributionHeader()` 當 provider 是 llamacpp 時回 `''`
-- [ ] M10-02 `src/utils/userAgent.ts getClaudeCodeUserAgent()` UA 改 `my-agent/x.y.z`
-- [ ] M10-03 `src/utils/api.ts` 三處 `'x-anthropic-billing-header'` magic string 抽 const
-- [ ] M10-04 `bun run typecheck` + `bun run dev -p "hi"` 端到端
+- [x] M10-01 `getAttributionHeader()` 加 llamacpp 短路條件回 `''`
+- [x] M10-02 `getClaudeCodeUserAgent()` UA 改 `my-agent/${MACRO.VERSION}`
+- [x] M10-03 抽 `ATTRIBUTION_HEADER_PREFIX` const 到 `src/constants/system.ts`，`utils/api.ts` 三處 magic string 改 import
+- [x] M10-04 typecheck 綠 + `bun run dev -p "4*3="` 回 `4 * 3 = 12`
 
 ### M11 — OAuth scaffolding 完整下架
 
