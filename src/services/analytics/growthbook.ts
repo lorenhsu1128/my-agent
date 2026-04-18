@@ -500,10 +500,8 @@ const getGrowthBookClient = memoize(
         `GrowthBook: Creating client with clientKey=${clientKey}, attributes: ${jsonStringify(attributes)}`,
       )
     }
-    const baseUrl =
-      process.env.USER_TYPE === 'ant'
-        ? process.env.CLAUDE_CODE_GB_BASE_URL || 'https://api.anthropic.com/'
-        : 'https://api.anthropic.com/'
+    // free-code: GrowthBook 不連遠端（initializeGrowthBook 已回 null）；保留變數讓後段編譯通過
+    const baseUrl = ''
 
     // Skip auth if trust hasn't been established yet
     // This prevents executing apiKeyHelper commands before the trust dialog

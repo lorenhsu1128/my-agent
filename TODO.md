@@ -341,6 +341,50 @@
 #### 驗證
 - [x] M8-08 `bun run typecheck` 綠燈（只剩既有的 tsconfig baseUrl 棄用警告）
 
+### M9 — Dead code 清理 + Feedback/Survey UX 收尾
+
+**目標**：刪掉 M8 後仍殘留的死碼（FirstParty exporter 整家族、filesApi、Sessions WebSocket）、把已 silently fail 的 /feedback + transcript share 改為明確「停用」訊息或從 UI 移除。
+
+- [x] M9-01 刪 `firstPartyEventLoggingExporter.ts` + `sinkKillswitch.ts`（`firstPartyEventLogger.ts` 是 OSS stub，6 個 caller 仰賴，保留）
+- [x] M9-02 N/A — `/feedback` 整個指令停用後 Feedback 元件不會 render，UI 改寫不必要
+- [x] M9-03 `src/commands/feedback/index.ts`：`isEnabled: () => false` 永久停用
+- [x] M9-04 N/A — survey 流程深度整合 transcript share UI；M8 stub 已斷網路面，UX 失敗罕見容忍
+- [x] M9-05 `growthbook.ts:505-506` hardcoded URL 改 `''`
+- [x] M9-06 `filesApi.ts:32-38` `getDefaultApiBaseUrl()` 拿掉預設 `api.anthropic.com`，改回 `''`
+- [x] M9-07 延後到 M11 — SessionsWebSocket URL 來自 `getOauthConfig().BASE_API_URL`，會在 M11 oauth.ts 下架時一併處理
+- [x] M9-08 typecheck 綠 + `bun run dev -p "1+1="` 回 `1+1=2`
+
+### M10 — Attribution Header + UA 中性化
+
+**目標**：每次 LLM request 還在送 `x-anthropic-billing-header` 和 `claude-cli/x.y.z` UA，把它們對 llamacpp provider 中性化。
+
+- [ ] M10-01 `src/constants/system.ts:68 getAttributionHeader()` 當 provider 是 llamacpp 時回 `''`
+- [ ] M10-02 `src/utils/userAgent.ts getClaudeCodeUserAgent()` UA 改 `my-agent/x.y.z`
+- [ ] M10-03 `src/utils/api.ts` 三處 `'x-anthropic-billing-header'` magic string 抽 const
+- [ ] M10-04 `bun run typecheck` + `bun run dev -p "hi"` 端到端
+
+### M11 — OAuth scaffolding 完整下架
+
+**目標**：M6d 已把 `isAnthropicAuthEnabled()` 永遠 false，但 30+ 處還 import `*OAuth*`、`getClaudeAIOAuthTokens` 等。本里程碑徹底移除 OAuth 相關檔案與分支。
+
+- [ ] M11-01 列出 `isAnthropicAuthEnabled` 所有 caller，每個分支固定走 false 那條，移除 import
+- [ ] M11-02 刪 `src/services/oauth/` 整目錄
+- [ ] M11-03 刪 `src/cli/handlers/auth.ts` + `src/components/ConsoleOAuthFlow.tsx` + `src/commands/install-github-app/` 整目錄
+- [ ] M11-04 移除 `src/cli/print.ts` 兩處 OAuthService 使用
+- [ ] M11-05 刪 `src/constants/oauth.ts` 整檔 + 移除 `getOauthConfig()` caller（含 `src/services/mcp/client.ts:880` claude.ai proxy 分支）
+- [ ] M11-06 移除 `src/utils/auth.ts` 內所有 `*OAuth*`、`getClaudeAIOAuthTokens`、`hasProfileScope` 等函式（保留 `isAnthropicAuthEnabled` 簽章）
+- [ ] M11-07 移除 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_CUSTOM_HEADERS` 環境變數讀取
+- [ ] M11-08 `bun run typecheck` + `bun run dev -p "hi"` 端到端
+
+### M12 — Bundled skill `claude-api` 改名 + 完整改寫
+
+**目標**：`src/skills/bundled/claude-api/` 內容是教使用者用 Anthropic SDK，整個改寫成 my-agent + 本地 LLM 對接教學。
+
+- [ ] M12-01 目錄改名 `claude-api` → `local-llm-api`，SKILL.md frontmatter `name`/`description` 更新
+- [ ] M12-02 重寫所有 `.md` 內容：本地 OpenAI 相容 server 對接、移除 `npm install @anthropic-ai/sdk`、改用 vendor 路徑或 local fetch
+- [ ] M12-03 更新 `src/skills/bundled/index.ts`（或對應註冊）reference 新目錄
+- [ ] M12-04 `bun run typecheck` + `bun run dev -p "hi"` 端到端
+
 ---
 
 ## Session 日誌

@@ -7,12 +7,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SERVER="$ROOT_DIR/llama/llama-server.exe"
-MODEL="$ROOT_DIR/models/Qwopus3.5-9B-v3.Q5_K_S.gguf"
+MODEL="$ROOT_DIR/models/Jackrong_Qwen3.5-9B-Neo-Q5_K_M.gguf"
 
 # --- 可調參數（環境變數覆蓋）-------------------------------------------
 HOST="${LLAMA_HOST:-127.0.0.1}"
 PORT="${LLAMA_PORT:-8080}"
-CTX_SIZE="${LLAMA_CTX:-114688}"
+CTX_SIZE="${LLAMA_CTX:-131072}"
 NGL="${LLAMA_NGL:-99}"
 ALIAS="${LLAMA_ALIAS:-qwopus3.5-9b-v3}"
 

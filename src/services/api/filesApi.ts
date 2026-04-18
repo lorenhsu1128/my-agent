@@ -1,10 +1,9 @@
 /**
  * Files API client for managing files
  *
- * This module provides functionality to download and upload files to Anthropic Public Files API.
- * Used by the Claude Code agent to download file attachments at session startup.
- *
- * API Reference: https://docs.anthropic.com/en/api/files-content
+ * free-code: Anthropic Public Files API 在無 OAuth 的情況下無法使用。
+ * 保留型別/函式簽章供 main.tsx / filePersistence / teleport 編譯通過，
+ * 但所有網路呼叫實際被 auth gate 阻擋（FilesApiConfig 需要 oauthToken）。
  */
 
 import axios from 'axios'
@@ -27,13 +26,12 @@ import {
 const FILES_API_BETA_HEADER = 'files-api-2025-04-14,oauth-2025-04-20'
 const ANTHROPIC_VERSION = '2023-06-01'
 
-// API base URL - uses ANTHROPIC_BASE_URL set by env-manager for the appropriate environment
-// Falls back to public API for standalone usage
+// free-code: 不再預設指向 api.anthropic.com；callers 必須透過 FilesApiConfig.baseUrl 顯式指定
 function getDefaultApiBaseUrl(): string {
   return (
     process.env.ANTHROPIC_BASE_URL ||
     process.env.CLAUDE_CODE_API_BASE_URL ||
-    'https://api.anthropic.com'
+    ''
   )
 }
 
