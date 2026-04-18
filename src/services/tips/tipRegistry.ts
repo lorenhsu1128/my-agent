@@ -322,13 +322,7 @@ const externalTips: Tip[] = [
       return runningIDEs.length > 0
     },
   },
-  {
-    id: 'install-github-app',
-    content: async () =>
-      'Run /install-github-app to tag @claude right from your Github issues and PRs',
-    cooldownSessions: 10,
-    isRelevant: async () => !getGlobalConfig().githubActionSetupCount,
-  },
+  // free-code: 移除 install-github-app tip
   {
     id: 'install-slack-app',
     content: async () => 'Run /install-slack-app to use Claude in Slack',

@@ -115,10 +115,11 @@ export async function initUpstreamProxy(opts?: {
   // sessionHandler.ts). getOauthConfig() is wrong here: it keys off
   // USER_TYPE + USE_{LOCAL,STAGING}_OAUTH, none of which the container sets,
   // so it always returned the prod URL and the CA fetch 404'd.
+  // free-code: 拿掉 api.anthropic.com 預設，必須由 ccrBaseUrl 或 ANTHROPIC_BASE_URL 顯式指定
   const baseUrl =
     opts?.ccrBaseUrl ??
     process.env.ANTHROPIC_BASE_URL ??
-    'https://api.anthropic.com'
+    ''
   const caBundlePath =
     opts?.caBundlePath ?? join(homedir(), '.ccr', 'ca-bundle.crt')
 

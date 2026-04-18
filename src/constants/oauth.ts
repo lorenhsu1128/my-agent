@@ -95,33 +95,28 @@ type OauthConfig = {
   MCP_PROXY_PATH: string
 }
 
-// Production OAuth configuration - Used in normal operation
+// free-code: PROD OAuth 已下架，所有 URL 清為空字串。
+// 任何嘗試發 OAuth request 的程式碼會自然失敗（URL 為空），
+// 但 isAnthropicAuthEnabled() 永遠 false 已先短路所有 caller。
 const PROD_OAUTH_CONFIG = {
-  BASE_API_URL: 'https://api.anthropic.com',
-  CONSOLE_AUTHORIZE_URL: 'https://platform.claude.com/oauth/authorize',
-  // Bounces through claude.com/cai/* so CLI sign-ins connect to claude.com
-  // visits for attribution. 307s to claude.ai/oauth/authorize in two hops.
-  CLAUDE_AI_AUTHORIZE_URL: 'https://claude.com/cai/oauth/authorize',
-  CLAUDE_AI_ORIGIN: 'https://claude.ai',
-  // OpenAI OAuth URLs
-  OPENAI_AUTHORIZE_URL: 'https://openai.com/oauth/authorize',
-  OPENAI_TOKEN_URL: 'https://openai.com/oauth/token',
-  OPENAI_CLIENT_ID: 'claude-code-client',
-  TOKEN_URL: 'https://platform.claude.com/v1/oauth/token',
-  API_KEY_URL: 'https://api.anthropic.com/api/oauth/claude_cli/create_api_key',
-  ROLES_URL: 'https://api.anthropic.com/api/oauth/claude_cli/roles',
-  CONSOLE_SUCCESS_URL:
-    'https://platform.claude.com/buy_credits?returnUrl=/oauth/code/success%3Fapp%3Dclaude-code',
-  CLAUDEAI_SUCCESS_URL:
-    'https://platform.claude.com/oauth/code/success?app=claude-code',
-  OPENAI_SUCCESS_URL:
-    'https://openai.com/oauth/success?app=claude-code',
-  MANUAL_REDIRECT_URL: 'https://platform.claude.com/oauth/code/callback',
-  CLIENT_ID: '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
-  // No suffix for production config
+  BASE_API_URL: '',
+  CONSOLE_AUTHORIZE_URL: '',
+  CLAUDE_AI_AUTHORIZE_URL: '',
+  CLAUDE_AI_ORIGIN: '',
+  OPENAI_AUTHORIZE_URL: '',
+  OPENAI_TOKEN_URL: '',
+  OPENAI_CLIENT_ID: '',
+  TOKEN_URL: '',
+  API_KEY_URL: '',
+  ROLES_URL: '',
+  CONSOLE_SUCCESS_URL: '',
+  CLAUDEAI_SUCCESS_URL: '',
+  OPENAI_SUCCESS_URL: '',
+  MANUAL_REDIRECT_URL: '',
+  CLIENT_ID: '',
   OAUTH_FILE_SUFFIX: '',
-  MCP_PROXY_URL: 'https://mcp-proxy.anthropic.com',
-  MCP_PROXY_PATH: '/v1/mcp/{server_id}',
+  MCP_PROXY_URL: '',
+  MCP_PROXY_PATH: '',
 } as const
 
 /**
@@ -131,8 +126,8 @@ const PROD_OAUTH_CONFIG = {
  * The URL must point to a JSON document hosted by Anthropic.
  * See: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00
  */
-export const MCP_CLIENT_METADATA_URL =
-  'https://claude.ai/oauth/claude-code-client-metadata'
+// free-code: MCP CIMD URL 已停用
+export const MCP_CLIENT_METADATA_URL = ''
 
 // Staging OAuth configuration - only included in ant builds with staging flag
 // Uses literal check for dead code elimination

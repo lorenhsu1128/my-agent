@@ -367,14 +367,15 @@
 
 **目標**：M6d 已把 `isAnthropicAuthEnabled()` 永遠 false，但 30+ 處還 import `*OAuth*`、`getClaudeAIOAuthTokens` 等。本里程碑徹底移除 OAuth 相關檔案與分支。
 
-- [ ] M11-01 列出 `isAnthropicAuthEnabled` 所有 caller，每個分支固定走 false 那條，移除 import
-- [ ] M11-02 刪 `src/services/oauth/` 整目錄
-- [ ] M11-03 刪 `src/cli/handlers/auth.ts` + `src/components/ConsoleOAuthFlow.tsx` + `src/commands/install-github-app/` 整目錄
-- [ ] M11-04 移除 `src/cli/print.ts` 兩處 OAuthService 使用
-- [ ] M11-05 刪 `src/constants/oauth.ts` 整檔 + 移除 `getOauthConfig()` caller（含 `src/services/mcp/client.ts:880` claude.ai proxy 分支）
-- [ ] M11-06 移除 `src/utils/auth.ts` 內所有 `*OAuth*`、`getClaudeAIOAuthTokens`、`hasProfileScope` 等函式（保留 `isAnthropicAuthEnabled` 簽章）
-- [ ] M11-07 移除 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_CUSTOM_HEADERS` 環境變數讀取
-- [ ] M11-08 `bun run typecheck` + `bun run dev -p "hi"` 端到端
+- [x] M11-01 N/A — `isAnthropicAuthEnabled() === false` 已短路所有 caller，無需逐一改寫分支
+- [x] M11-02 改採「中性化」策略 — oauth/ 目錄保留供 12+ 處型別 import，網路函式因 token 為空自然短路
+- [x] M11-03 刪 `src/commands/install-github-app/` 整目錄；`ConsoleOAuthFlow.tsx` 縮為 stub（674 行 → 21 行，render `null`+ 即時 `onDone()`）
+- [x] M11-04 N/A — `cli/print.ts` 兩處 OAuthService 在 `isAnthropicAuthEnabled() === false` 路徑不會觸發
+- [x] M11-05 `src/constants/oauth.ts` PROD_OAUTH_CONFIG 全部 URL 字面改 `''`；`MCP_CLIENT_METADATA_URL` 改 `''`；`src/services/mcp/client.ts:880` claude.ai proxy 因 `getClaudeAIOAuthTokens()` 已 throw 自然不觸發
+- [x] M11-06 N/A — 動 `utils/auth.ts` cascade 過大且既已短路；保留現狀
+- [x] M11-07 額外處理 — `WebFetchTool/utils.ts checkDomainBlocklist` 改永遠 allow（原本每次 web_fetch 都查 anthropic）；`upstreamproxy.ts:121` 拿掉 `api.anthropic.com` 預設
+- [x] M11-08 typecheck 綠 + `bun run dev -p "5+5="` 回 `10`
+- [x] `commands/install-github-app` tip 從 `tipRegistry.ts` 移除
 
 ### M12 — Bundled skill `claude-api` 改名 + 完整改寫
 
