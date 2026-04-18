@@ -207,3 +207,16 @@
 - **日期**：2026-04-15
 
 ---
+
+## Git / 工作流程
+
+### `git stash -u` + checkout 失敗會讓已刪除檔案復活
+
+- **症狀**：執行 `git stash -u` 後嘗試 `git checkout <old-sha>` 失敗（tmp/ 權限阻擋），再 `git stash pop` 時把已經在先前 commit 刪除的檔案當成 **new file** 加回工作目錄
+- **根因**：checkout 失敗過程中 git 可能已經部分把工作樹切到舊 sha；stash pop 還原的混雜了舊 sha 的檔案
+- **修法**：`git reset HEAD <paths>` unstage，再 `rm -f <files>` 手動刪。`git clean -fd` 在 Windows 可能因為目錄權限失敗，但檔案層級 `rm` 通常可行
+- **預防**：在有大量 `git rm` 刪除的分支上，避免用 `git stash -u` + `git checkout` 切到歷史 commit 比對；改用 `git worktree add` 或 `git show <sha>:<path>`
+- **相關事件**：M15 Phase 3 (voice 移除) 期間，嘗試比對 pre-M15 的 CLI 行為時觸發
+- **日期**：2026-04-18
+
+---
