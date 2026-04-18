@@ -96,6 +96,24 @@
 
 ---
 
+## M-SkillNudge-Fix — Skill 建立 nudge 批准後實際落盤（2026-04-19）
+
+**問題**：`790d9d3 fix(skill-creation): 批准後把完整候選資訊注入對話` 用 `createSystemMessage(body, 'suggestion')` 注入指示，但 `src/utils/messages.ts:2068` 的 API payload 過濾器把所有非 `local_command` 的 system 訊息丟掉——模型根本沒看到指示，SKILL.md 從未被建立。
+
+**修復**：批准時繞過 LLM，於 hook 內直接呼叫 `SkillManageTool` 的 `createSkill()` 落盤；同時補一條 `createUserMessage({ isMeta: true })` 讓模型知情可後續用 `SkillManage(edit)` 補強。
+
+### 任務
+- [x] M-SN-01 `src/tools/SkillManageTool/SkillManageTool.ts:101` 將 `createSkill()` 改為 `export`，重用既有 frontmatter 驗證 + scanSkill + atomic write
+- [x] M-SN-02 重寫 `src/hooks/useSkillCreationSurvey.ts` 批准分支：從 candidate 組 SKILL.md 雛形（frontmatter `name`/`description`/`when_to_use` + body `# title` + `## Steps`）→ 直接 `createSkill()` 落盤 → 成功注入 info 系統訊息 + isMeta user message；失敗/例外注入 error 系統訊息
+- [x] M-SN-03 `bun run typecheck` baseline 綠（僅 TS5101 pre-existing）
+
+### 完成標準
+- [x] 批准 nudge → `.my-agent/skills/<name>/SKILL.md` 立即出現（不依賴 LLM）
+- [x] 模型於下一輪知道 skill 已建立、可選擇用 SkillManage(edit) 補強而非重複 create
+- [x] 失敗路徑（重名、frontmatter 不合法、scanSkill dangerous）有明確錯誤訊息
+
+---
+
 ## 已完成里程碑：M1 — 透過 llama.cpp 支援本地模型（封存）
 
 **目標**：free-code 能直接連接專案內跑的 llama.cpp server（`http://127.0.0.1:8080/v1`，model alias `qwen3.5-9b-neo`），支援串流和全部 39 個工具的 tool calling。**不再**經過 LiteLLM proxy（ADR-001 已推翻，見 CLAUDE.md）。
@@ -815,3 +833,9 @@
 - 2026-04-18 21:14: Session 結束 | 進度：265/278 任務 | 790d9d3 fix(skill-creation): 批准後把完整候選資訊注入對話
 
 - 2026-04-18 21:26: Session 結束 | 進度：265/278 任務 | 790d9d3 fix(skill-creation): 批准後把完整候選資訊注入對話
+
+- 2026-04-18 22:13: Session 結束 | 進度：265/278 任務 | b7bacd1 docs(context): 記錄 free-code 上下文組成詳解（M-UM + M2）
+
+- 2026-04-18 22:18: Session 結束 | 進度：265/278 任務 | b7bacd1 docs(context): 記錄 free-code 上下文組成詳解（M-UM + M2）
+
+- 2026-04-19 07:10: Session 結束 | 進度：265/278 任務 | b7bacd1 docs(context): 記錄 free-code 上下文組成詳解（M-UM + M2）

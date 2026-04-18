@@ -98,7 +98,7 @@ async function atomicWrite(targetPath: string, content: string): Promise<void> {
 
 // ── Action implementations ───────────────────────────────────────────────
 
-async function createSkill(name: string, content: string): Promise<SkillManageResult> {
+export async function createSkill(name: string, content: string): Promise<SkillManageResult> {
   const nameErr = validateName(name)
   if (nameErr) return { success: false, error: nameErr }
 
