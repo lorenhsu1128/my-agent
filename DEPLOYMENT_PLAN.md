@@ -968,3 +968,53 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 
 **產出物**：`tests/integration/test-run-2026-04-18.md`
 
+---
+
+## M15 — 品牌徹底中性化 + Chrome/Voice 移除 + OAuth CLI 停用（2026-04-18 批准）
+
+**Context**：M11/M14 後仍有大量 Claude/Anthropic 字樣殘留於使用者可見介面。本里程碑為最終品牌清理戰。
+
+### Phase 1 — BLOCKER 字串中性化（低風險）✅ 完成
+修改檔案（~10 處）：
+- `src/constants/prompts.ts:452, 763` — system prompt 自我介紹
+- `src/coordinator/coordinatorMode.ts:116` — coordinator 系統 prompt
+- `src/tools/AgentTool/built-in/generalPurposeAgent.ts:3` — agent prefix
+- `src/main.tsx:4132, 4153, 4162` — CLI auth 子命令 description
+- `src/commands/{login,logout}/index.ts` — description
+- `src/commands/logout/logout.tsx:76` — 登出訊息
+- `src/services/api/errors.ts:198, 202, 208` — 三條錯誤訊息
+- `install.sh:36, 173-174` — banner
+- `package.json` — bin 保留 `claude` + `claude-source`（使用者決策：不動 bin）
+
+### Phase 2 — Chrome 功能整塊移除
+**刪除**：commands/chrome/、utils/claudeInChrome/、components/ClaudeInChromeOnboarding.tsx、hooks/useChromeExtensionNotification.tsx、hooks/usePromptsFromClaudeInChrome.tsx、skills/bundled/claudeInChrome.ts
+
+**清理引用**：commands.ts、main.tsx、skills/bundled/index.ts、services/mcp/{config,client}.ts、services/api/claude.ts、entrypoints/cli.tsx、utils/attachments.ts、utils/config.ts
+
+### Phase 3 — Voice 功能整塊移除
+**刪除**：voice/、commands/voice/、services/voice*.ts、hooks/useVoice*.{ts,tsx}、components/PromptInput/VoiceIndicator.tsx、components/LogoV2/VoiceModeNotice.tsx、context/voice.tsx
+
+**清理引用**：commands.ts、keybindings/{defaultBindings,schema,validate}.ts、state/AppState.tsx、UI 元件、tools/ConfigTool/*、utils/{settings/types,config}.ts
+
+### Phase 4 — OAuth CLI 停用（方案 B：保留骨架）
+- `src/main.tsx:4132-4167` — auth login/status/logout → `console.error('OAuth sign-in is not supported in this build.'); process.exit(1)`
+- 不刪 OAuth 檔案（死碼但無害，被 `isAnthropicAuthEnabled()=false` 短路）
+
+### Phase 5 — Rename（分 3 子 commit）
+- **5a**（低風險）：claudeDesktop → desktopConfig；skills 命名對齊；getCodeUserAgent；EXPERIMENTAL_BUILD
+- **5b**（中風險）：ClaudeAILimits → LlmRateLimits；isClaudeAISubscriber → hasInferenceAccess；rateLimitsHook
+- **5c**（高風險）：api.ts、rateLimits.ts、memoryFiles.ts、codeHints.ts、getStoredAuthTokens、getConfigHomeDir
+
+### Phase 6 — 最終驗證與記帳
+- 完整 grep
+- typecheck / build / smoke
+- 更新 TODO.md / LESSONS.md
+
+### Commit 策略
+6 個 phase × 各自 commit（Phase 5 拆 3 個子 commit），總計約 8 個 commit，繁中 message。
+
+### 驗收標準
+- 使用者可見介面無 "Claude" / "Anthropic"（排除 vendor SDK / protobuf / env var name）
+- `bun run typecheck` / `bun run build` 綠
+- `./cli -p "hello"` 端到端 smoke 通過
+- `./cli auth login` 印 not supported 且 exit 1

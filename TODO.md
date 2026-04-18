@@ -642,3 +642,86 @@
 - 2026-04-17 14:07: Session 結束 | 進度：123/132 任務 | 09da303 feat(m6): Self-Improving Loop — AutoDream × Hermes 合併 + 閾值可配置化 + JSONC 預設設定
 
 - 2026-04-18 10:53: Session 結束 | 進度：191/195 任務 | 8eeb776 feat(m11): OAuth scaffolding 中性化 + 殘留 URL 清除
+
+---
+
+## M15 — 品牌徹底中性化 + Chrome/Voice 移除 + OAuth CLI 停用（2026-04-18）
+
+**Context**：M8–M14 後仍有大量 `Claude` / `Anthropic` 字樣殘留在使用者可見介面（system prompt、CLI 描述、錯誤訊息、install.sh 等）。本里程碑徹底清除品牌殘留，移除不再可用的 Chrome / Voice 功能，並將 OAuth CLI 子命令改為印「not supported」退出。
+
+### Phase 1 — BLOCKER 字串中性化
+- [x] M15-P1-01 `src/constants/prompts.ts:452` system prompt 簡化模式自我介紹
+- [x] M15-P1-02 `src/constants/prompts.ts:763` DEFAULT_AGENT_PROMPT
+- [x] M15-P1-03 `src/coordinator/coordinatorMode.ts:116` coordinator 系統 prompt
+- [x] M15-P1-04 `src/tools/AgentTool/built-in/generalPurposeAgent.ts:3` general agent prefix
+- [x] M15-P1-05 `src/main.tsx:4132,4153,4162` CLI `auth login/status/logout` description
+- [x] M15-P1-06 `src/commands/login/index.ts:9-11` + `src/commands/logout/index.ts:7` description
+- [x] M15-P1-07 `src/commands/logout/logout.tsx:76` 登出訊息
+- [x] M15-P1-08 `src/services/api/errors.ts:198,202,208` 三條錯誤訊息
+- [x] M15-P1-09 `install.sh:36,173-174` banner + 登入引導
+- [x] M15-P1-10 `bun run typecheck` + smoke 驗證
+
+### Phase 2 — Chrome 功能整塊移除
+- [ ] M15-P2-01 刪 `src/commands/chrome/`（2 檔）
+- [ ] M15-P2-02 刪 `src/utils/claudeInChrome/`（8 檔）
+- [ ] M15-P2-03 刪 `src/components/ClaudeInChromeOnboarding.tsx`
+- [ ] M15-P2-04 刪 `src/hooks/useChromeExtensionNotification.tsx` + `usePromptsFromClaudeInChrome.tsx`
+- [ ] M15-P2-05 刪 `src/skills/bundled/claudeInChrome.ts`
+- [ ] M15-P2-06 清 `src/commands.ts:150,263` registry
+- [ ] M15-P2-07 清 `src/main.tsx` Chrome import / CLI flag / setup 區塊
+- [ ] M15-P2-08 清 `src/skills/bundled/index.ts` + `src/services/mcp/{config,client}.ts` + `src/services/api/claude.ts` import
+- [ ] M15-P2-09 清 `src/entrypoints/cli.tsx:82-95` + `src/utils/attachments.ts` + `src/utils/config.ts`
+- [ ] M15-P2-10 `bun run typecheck` 必須綠
+
+### Phase 3 — Voice 功能整塊移除
+- [ ] M15-P3-01 刪 `src/voice/` + `src/commands/voice/`
+- [ ] M15-P3-02 刪 `src/services/voice*.ts` (3 個)
+- [ ] M15-P3-03 刪 `src/hooks/useVoice*.{ts,tsx}` (3 個)
+- [ ] M15-P3-04 刪 `src/components/PromptInput/VoiceIndicator.tsx` + `src/components/LogoV2/VoiceModeNotice.tsx` + `src/context/voice.tsx`
+- [ ] M15-P3-05 清 `src/commands.ts` + `src/keybindings/*` + `src/state/AppState.tsx`
+- [ ] M15-P3-06 清 UI 引用（Notifications / PromptInputFooterLeftSide / TextInput / LogoV2）
+- [ ] M15-P3-07 清 `src/tools/ConfigTool/*` + `src/utils/settings/types.ts` + `src/utils/config.ts`
+- [ ] M15-P3-08 `bun run typecheck` 必須綠
+
+### Phase 4 — OAuth CLI 子命令停用
+- [ ] M15-P4-01 `src/main.tsx:4132-4167` 三個 auth 子命令改為 console.error + process.exit(1)
+- [ ] M15-P4-02 `./cli auth login` 驗證輸出 not supported
+
+### Phase 5 — Rename（分 3 子 commit）
+#### 5a 低風險
+- [ ] M15-P5a-01 `src/utils/claudeDesktop.ts` → `desktopConfig.ts`
+- [ ] M15-P5a-02 `src/skills/bundled/claudeApi*.ts` 對齊 M12 命名
+- [ ] M15-P5a-03 `getClaudeCodeUserAgent` → `getCodeUserAgent`
+- [ ] M15-P5a-04 `CLAUDE_CODE_EXPERIMENTAL_BUILD` → `EXPERIMENTAL_BUILD`
+
+#### 5b 中風險
+- [ ] M15-P5b-01 `ClaudeAILimits` → `LlmRateLimits`
+- [ ] M15-P5b-02 `isClaudeAISubscriber` → `hasInferenceAccess`
+- [ ] M15-P5b-03 `src/services/claudeAiLimitsHook.ts` → `rateLimitsHook.ts`
+
+#### 5c 高風險
+- [ ] M15-P5c-01 `src/services/api/claude.ts` → `api.ts`
+- [ ] M15-P5c-02 `src/services/claudeAiLimits.ts` → `rateLimits.ts`
+- [ ] M15-P5c-03 `src/utils/claudemd.ts` → `memoryFiles.ts`
+- [ ] M15-P5c-04 `src/utils/claudeCodeHints.ts` → `codeHints.ts`
+- [ ] M15-P5c-05 `getClaudeAIOAuthTokens` → `getStoredAuthTokens`
+- [ ] M15-P5c-06 `getClaudeConfigHomeDir` → `getConfigHomeDir`
+
+### Phase 6 — 最終驗證
+- [ ] M15-P6-01 `Grep -i "claude|anthropic"` 再掃一次確認殘留可接受範圍
+- [ ] M15-P6-02 `bun run typecheck` 綠
+- [ ] M15-P6-03 `bun run build` 綠
+- [ ] M15-P6-04 `./cli -p "hello"` 端到端 smoke
+- [ ] M15-P6-05 更新 `DEPLOYMENT_PLAN.md` + `LESSONS.md`
+
+### 驗收標準
+- 完整功能測試通過（Tier 1–9 綠）
+- 使用者可見介面無 "Claude" / "Anthropic" 字樣
+- Chrome / Voice 相關 import 全清乾淨
+- `./cli auth login/logout/status` 印 not supported 並 exit 1
+- Anthropic API header（`anthropic-version`）保留（API 契約必要）
+
+### 不在範圍
+- `src/vendor/my-agent-ai/` 內 SDK 原始碼（vendored，保留 Anthropic 字樣）
+- `src/types/generated/` protobuf 自動產生（保留）
+- `ANTHROPIC_API_KEY` 等環境變數名（外部契約）
