@@ -16,12 +16,44 @@ import {
   TYPES_SECTION_INDIVIDUAL,
   WHAT_NOT_TO_SAVE_SECTION,
 } from '../../memdir/memoryTypes.js'
+import {
+  getUserModelGlobalPath,
+  getUserModelProjectPath,
+} from '../../userModel/paths.js'
 import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
 import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js'
 import { FILE_READ_TOOL_NAME } from '../../tools/FileReadTool/prompt.js'
 import { FILE_WRITE_TOOL_NAME } from '../../tools/FileWriteTool/prompt.js'
 import { GLOB_TOOL_NAME } from '../../tools/GlobTool/prompt.js'
 import { GREP_TOOL_NAME } from '../../tools/GrepTool/prompt.js'
+
+/**
+ * Persona-bullet guidance: short, durable facts about who the user is go into
+ * USER.md (injected into the system prompt each turn as a frozen snapshot),
+ * separate from typed memdir files. This agent writes USER.md directly via
+ * FileEdit/FileWrite (it doesn't call the MemoryTool).
+ */
+function personaSection(): string[] {
+  return [
+    '## Persona bullets (USER.md)',
+    '',
+    'Short, durable, one-line facts about WHO the user is go into USER.md — a persona block injected into every system prompt. These are DIFFERENT from typed user_*.md files:',
+    '',
+    '- **USER.md**: 1-line bullets, ≤80 chars each, ≤1500 chars total. Loaded every turn. Example lines: "Primary shell: PowerShell", "Reply in 繁體中文", "Role: PM in this project".',
+    '- **user_*.md typed file**: multi-line, has frontmatter, loaded on-demand. Example: a detailed user_collaboration_style.md explaining preferences.',
+    '',
+    'Rule: if the fact is a one-liner that should shape EVERY response (language, shell, OS, role, core preference) → write to USER.md. Otherwise use user_*.md.',
+    '',
+    'File locations (write via FileEdit/FileWrite directly):',
+    `- **Global** (cross-project traits): \`${getUserModelGlobalPath()}\``,
+    `- **Project** (this-project-only override): \`${getUserModelProjectPath()}\``,
+    '',
+    'Default to global. Only use the project path when the fact contradicts or narrows the global persona for this specific project.',
+    '',
+    'When appending, read the file first, add a new `- bullet` line, and write back. Keep the total under 1500 chars — consolidate if it grows.',
+    '',
+  ]
+}
 
 /**
  * Shared opener for both extract-prompt variants.
@@ -89,6 +121,7 @@ export function buildExtractAutoOnlyPrompt(
     ...TYPES_SECTION_INDIVIDUAL,
     ...WHAT_NOT_TO_SAVE_SECTION,
     '',
+    ...personaSection(),
     ...howToSave,
   ].join('\n')
 }
@@ -149,6 +182,7 @@ export function buildExtractCombinedPrompt(
     ...WHAT_NOT_TO_SAVE_SECTION,
     '- You MUST avoid saving sensitive data within shared team memories. For example, never save API keys or user credentials.',
     '',
+    ...personaSection(),
     ...howToSave,
   ].join('\n')
 }

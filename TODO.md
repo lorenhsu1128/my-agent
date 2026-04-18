@@ -84,6 +84,7 @@
 - [x] M-UM-4 整合測試 `tests/integration/user-model/user-model-smoke.ts` — 27/27 綠，覆蓋：開關三路、add/replace/remove、snapshot 凍結 vs live、雙層合併、字元告警、`loadUserProfilePrompt` 整合
 - [x] M-UM-5 `bun run typecheck` baseline 綠（僅 TS5101 pre-existing）；TODO.md 更新；commit
 - [x] M-UM-6 重寫 `src/tools/MemoryTool/prompt.ts` DESCRIPTION：明確指引 LLM 何時用 `target='user_profile'` vs `target='file'`、global vs project scope 判定、決策規則（短 bullet 跨對話 → user_profile；需 Why/How → feedback_*.md）、6 組具體情境範例含 remove 語法
+- [x] M-UM-7 prompt 強化套件 E1–E8：E1 頭部 ASCII 決策樹、E2 3 組 anti-pattern bad→good、E3 Disambiguation 表格（user_*.md vs user_profile）、E4 Consolidation 4 步驟範本、E5 Scope 邊界規則（預設 global）、E6 `extractMemories/prompts.ts` 加 `personaSection()` 含 USER.md 路徑、E7 qwen-style 陷阱（JSON dump、長文）列入 anti-pattern、E8 `memdir.ts buildMemoryLines` 加 user_profile cross-reference。27/27 smoke 綠、typecheck baseline 不變
 
 ### 完成標準
 - [x] USER.md 能被 MemoryTool 寫入（global + project 兩個 scope）
@@ -804,3 +805,5 @@
 - 2026-04-18 19:47: Session 結束 | 進度：252/265 任務 | f179f2b chore: session log
 
 - 2026-04-18 20:33: Session 結束 | 進度：263/276 任務 | aabb653 feat(user-model): M-UM 移植 Hermes USER.md 使用者建模（雙層 + 三路開關）
+
+- 2026-04-18 20:49: Session 結束 | 進度：264/277 任務 | 3aa98b5 docs(user-model): M-UM-6 重寫 MemoryTool prompt 指引 user_profile 使用時機

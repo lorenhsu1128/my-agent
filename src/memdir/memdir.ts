@@ -242,6 +242,8 @@ export function buildMemoryLines(
     '',
     'If the user explicitly asks you to remember something, save it immediately as whichever type fits best. If they ask you to forget something, find and remove the relevant entry.',
     '',
+    'Short, durable 1-line persona facts (language preference, shell, OS, role, core communication style) belong in the **USER.md persona block** — write them via the Memory tool with `target="user_profile"`. See the Memory tool description for the decision tree. Typed memdir files (below) are for multi-line entries with context.',
+    '',
     ...TYPES_SECTION_INDIVIDUAL,
     ...WHAT_NOT_TO_SAVE_SECTION,
     '',
