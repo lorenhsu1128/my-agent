@@ -507,17 +507,6 @@ export type GlobalConfig = {
   officialMarketplaceAutoInstallLastAttemptTime?: number // Timestamp of last attempt
   officialMarketplaceAutoInstallNextRetryTime?: number // Earliest time to retry again
 
-  // Claude in Chrome settings
-  hasCompletedClaudeInChromeOnboarding?: boolean // Whether Claude in Chrome onboarding has been shown
-  claudeInChromeDefaultEnabled?: boolean // Whether Claude in Chrome is enabled by default (undefined means platform default)
-  cachedChromeExtensionInstalled?: boolean // Cached result of whether Chrome extension is installed
-
-  // Chrome extension pairing state (persisted across sessions)
-  chromeExtension?: {
-    pairedDeviceId?: string
-    pairedDeviceName?: string
-  }
-
   // LSP plugin recommendation preferences
   lspRecommendationDisabled?: boolean // Disable all LSP plugin recommendations
   lspRecommendationNeverPlugins?: string[] // Plugin IDs to never suggest
@@ -736,7 +725,6 @@ function createDefaultGlobalConfig(): GlobalConfig {
       tengu_destructive_command_warning: true,
       tengu_compact_cache_prefix: true,
       tengu_compact_streaming_retry: true,
-      tengu_chrome_auto_enable: true,
       tengu_anti_distill_fake_tool_injection: true,
       tengu_copper_bridge: true,
       tengu_lodestone_enabled: true,
@@ -778,8 +766,6 @@ export const GLOBAL_CONFIG_KEYS = [
   'inputNeededNotifEnabled',
   'agentPushNotifEnabled',
   'respectGitignore',
-  'claudeInChromeDefaultEnabled',
-  'hasCompletedClaudeInChromeOnboarding',
   'lspRecommendationDisabled',
   'lspRecommendationNeverPlugins',
   'lspRecommendationIgnoredCount',

@@ -986,7 +986,7 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 - `install.sh:36, 173-174` — banner
 - `package.json` — bin 保留 `claude` + `claude-source`（使用者決策：不動 bin）
 
-### Phase 2 — Chrome 功能整塊移除
+### Phase 2 — Chrome 功能整塊移除 ✅ 完成
 **刪除**：commands/chrome/、utils/claudeInChrome/、components/ClaudeInChromeOnboarding.tsx、hooks/useChromeExtensionNotification.tsx、hooks/usePromptsFromClaudeInChrome.tsx、skills/bundled/claudeInChrome.ts
 
 **清理引用**：commands.ts、main.tsx、skills/bundled/index.ts、services/mcp/{config,client}.ts、services/api/claude.ts、entrypoints/cli.tsx、utils/attachments.ts、utils/config.ts

@@ -662,16 +662,16 @@
 - [x] M15-P1-10 `bun run typecheck` + smoke 驗證
 
 ### Phase 2 — Chrome 功能整塊移除
-- [ ] M15-P2-01 刪 `src/commands/chrome/`（2 檔）
-- [ ] M15-P2-02 刪 `src/utils/claudeInChrome/`（8 檔）
-- [ ] M15-P2-03 刪 `src/components/ClaudeInChromeOnboarding.tsx`
-- [ ] M15-P2-04 刪 `src/hooks/useChromeExtensionNotification.tsx` + `usePromptsFromClaudeInChrome.tsx`
-- [ ] M15-P2-05 刪 `src/skills/bundled/claudeInChrome.ts`
-- [ ] M15-P2-06 清 `src/commands.ts:150,263` registry
-- [ ] M15-P2-07 清 `src/main.tsx` Chrome import / CLI flag / setup 區塊
-- [ ] M15-P2-08 清 `src/skills/bundled/index.ts` + `src/services/mcp/{config,client}.ts` + `src/services/api/claude.ts` import
-- [ ] M15-P2-09 清 `src/entrypoints/cli.tsx:82-95` + `src/utils/attachments.ts` + `src/utils/config.ts`
-- [ ] M15-P2-10 `bun run typecheck` 必須綠
+- [x] M15-P2-01 刪 `src/commands/chrome/`（2 檔）
+- [x] M15-P2-02 刪 `src/utils/claudeInChrome/`（8 檔）
+- [x] M15-P2-03 刪 `src/components/ClaudeInChromeOnboarding.tsx`
+- [x] M15-P2-04 刪 `src/hooks/useChromeExtensionNotification.tsx` + `usePromptsFromClaudeInChrome.tsx`
+- [x] M15-P2-05 刪 `src/skills/bundled/claudeInChrome.ts`
+- [x] M15-P2-06 清 `src/commands.ts:150,263` registry
+- [x] M15-P2-07 清 `src/main.tsx` Chrome import / CLI flag / setup 區塊
+- [x] M15-P2-08 清 `src/skills/bundled/index.ts` + `src/services/mcp/{config,client}.ts` + `src/services/api/claude.ts` import
+- [x] M15-P2-09 清 `src/entrypoints/cli.tsx` + `src/utils/attachments.ts` + `src/utils/config.ts` + `src/bootstrap/state.ts` + `src/interactiveHelpers.tsx` + `src/screens/REPL.tsx` + `src/components/Settings/Config.tsx` + `src/tools/shared/spawnMultiAgent.ts` + `src/utils/swarm/spawnUtils.ts` + `src/utils/computerUse/*` 註解
+- [x] M15-P2-10 `bun run typecheck` 必須綠
 
 ### Phase 3 — Voice 功能整塊移除
 - [ ] M15-P3-01 刪 `src/voice/` + `src/commands/voice/`

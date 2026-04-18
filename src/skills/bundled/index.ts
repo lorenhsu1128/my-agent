@@ -1,5 +1,4 @@
 import { feature } from 'bun:bundle'
-import { shouldAutoEnableClaudeInChrome } from 'src/utils/claudeInChrome/setup.js'
 import { registerBatchSkill } from './batch.js'
 import { registerAlgorithmicArtSkill } from './algorithmicArt.js'
 import { registerBrandGuidelinesSkill } from './brandGuidelines.js'
@@ -17,7 +16,6 @@ import { registerThemeFactorySkill } from './themeFactory.js'
 import { registerWebArtifactsBuilderSkill } from './webArtifactsBuilder.js'
 import { registerWebappTestingSkill } from './webappTesting.js'
 import { registerXlsxSkill } from './xlsxSkill.js'
-import { registerClaudeInChromeSkill } from './claudeInChrome.js'
 import { registerDebugSkill } from './debug.js'
 import { registerKeybindingsSkill } from './keybindings.js'
 import { registerLoremIpsumSkill } from './loremIpsum.js'
@@ -100,9 +98,6 @@ export function initBundledSkills(): void {
     const { registerClaudeApiSkill } = require('./claudeApi.js')
     /* eslint-enable @typescript-eslint/no-require-imports */
     registerClaudeApiSkill()
-  }
-  if (shouldAutoEnableClaudeInChrome()) {
-    registerClaudeInChromeSkill()
   }
   if (feature('RUN_SKILL_GENERATOR')) {
     /* eslint-disable @typescript-eslint/no-require-imports */

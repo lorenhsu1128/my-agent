@@ -9,10 +9,10 @@ import { CLI_CU_CAPABILITIES, COMPUTER_USE_MCP_SERVER_NAME } from './common.js'
 import { getChicagoCoordinateMode } from './gates.js'
 
 /**
- * Build the dynamic MCP config + allowed tool names. Mirror of
- * `setupClaudeInChrome`. The `mcp__computer-use__*` tools are added to
- * `allowedTools` so they bypass the normal permission prompt — the package's
- * `request_access` handles approval for the whole session.
+ * Build the dynamic MCP config + allowed tool names. The
+ * `mcp__computer-use__*` tools are added to `allowedTools` so they bypass the
+ * normal permission prompt — the package's `request_access` handles approval
+ * for the whole session.
  *
  * The MCP layer isn't ceremony: the API backend detects `mcp__computer-use__*`
  * tool names and emits a CU availability hint into the system prompt
