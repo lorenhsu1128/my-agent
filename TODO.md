@@ -807,3 +807,11 @@
 - 2026-04-18 20:33: Session 結束 | 進度：263/276 任務 | aabb653 feat(user-model): M-UM 移植 Hermes USER.md 使用者建模（雙層 + 三路開關）
 
 - 2026-04-18 20:49: Session 結束 | 進度：264/277 任務 | 3aa98b5 docs(user-model): M-UM-6 重寫 MemoryTool prompt 指引 user_profile 使用時機
+
+- 2026-04-18 20:57: Session 結束 | 進度：265/278 任務 | f740f3c docs(user-model): M-UM-7 強化 persona 指引套件（E1–E8）
+
+- 2026-04-18 21:11: Session 結束 | 進度：265/278 任務 | f740f3c docs(user-model): M-UM-7 強化 persona 指引套件（E1–E8）
+
+- 2026-04-18 21:14: Session 結束 | 進度：265/278 任務 | 790d9d3 fix(skill-creation): 批准後把完整候選資訊注入對話
+
+- 2026-04-18 21:26: Session 結束 | 進度：265/278 任務 | 790d9d3 fix(skill-creation): 批准後把完整候選資訊注入對話

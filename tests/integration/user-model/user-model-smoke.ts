@@ -115,6 +115,8 @@ async function main() {
   // -------------------------------------------------------------------------
   // project USER.md 直接寫檔（不走 getUserModelProjectPath，改用 env 假裝）
   // 這裡測 buildCombined 邏輯：手動建一個 snapshot
+  // 先清空 project 檔案
+  await um.writeUserModel({ action: 'replace', scope: 'project', content: '' })
   const combined = await um.readLive()
   assert(!combined.combined.includes('### Project-specific'), 'project 空時不加分隔')
 
