@@ -59,7 +59,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'intro.md',
     purpose: 'system prompt 開頭的身份宣告 + 網安聲明',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -67,7 +67,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'system.md',
     purpose: '# System 規則段（工具、tags、injection、hooks）',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {

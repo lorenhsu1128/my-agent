@@ -174,18 +174,44 @@ export function prependBullets(items: Array<string | string[]>): string[] {
   )
 }
 
+// M-SP-1: 預設路徑已外部化至 ~/.my-agent/system-prompt/intro.md
+// outputStyle 啟用時走原組裝（字面不同，需動態組 "according to your Output Style below..."）
 function getSimpleIntroSection(
   outputStyleConfig: OutputStyleConfig | null,
 ): string {
+  if (outputStyleConfig !== null) {
+    // eslint-disable-next-line custom-rules/prompt-spacing
+    return `
+You are an interactive agent that helps users according to your "Output Style" below, which describes how you should respond to user queries. Use the instructions below and the tools available to you to assist the user.
+
+${CYBER_RISK_INSTRUCTION}
+IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.`
+  }
+  const external = getExternalSection('intro')
+  if (external !== null) {
+    // CYBER_RISK_INSTRUCTION 由程式注入（外部化到獨立 cyber-risk.md 段在 M-SP-3 進行）。
+    // 目前預設為空字串，插回 intro 中 IMPORTANT 行之前。
+    if (CYBER_RISK_INSTRUCTION && CYBER_RISK_INSTRUCTION.trim().length > 0) {
+      return external.replace(
+        /(\nIMPORTANT: You must NEVER)/,
+        `\n${CYBER_RISK_INSTRUCTION}$1`,
+      )
+    }
+    return external
+  }
   // eslint-disable-next-line custom-rules/prompt-spacing
   return `
-You are an interactive agent that helps users ${outputStyleConfig !== null ? 'according to your "Output Style" below, which describes how you should respond to user queries.' : 'with software engineering tasks.'} Use the instructions below and the tools available to you to assist the user.
+You are an interactive agent that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
 
 ${CYBER_RISK_INSTRUCTION}
 IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.`
 }
 
+// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/system.md
+// 缺檔回 fallback 組裝。
 function getSimpleSystemSection(): string {
+  const external = getExternalSection('system')
+  if (external !== null) return external
   const items = [
     `All text you output outside of tool use is displayed to the user. Output text to communicate with the user. You can use Github-flavored markdown for formatting, and will be rendered in a monospace font using the CommonMark specification.`,
     `Tools are executed in a user-selected permission mode. When you attempt to call a tool that is not automatically allowed by the user's permission mode or permission settings, the user will be prompted so that they can approve or deny the execution. If the user denies a tool you call, do not re-attempt the exact same tool call. Instead, think about why the user has denied the tool call and adjust your approach.`,

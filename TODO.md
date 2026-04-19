@@ -129,10 +129,10 @@
 
 #### M-SP-1：基礎設施 + 8 大靜態段 + Seed 機制（~3.5 天）
 - [x] M-SP-1.1 建 `src/systemPromptFiles/` 模組骨架：`paths.ts` / `loader.ts` / `bundledDefaults.ts` / `sections.ts` / `seed.ts` / `snapshot.ts` / `index.ts`
-- [ ] M-SP-1.2 搬 `prompts.ts` 8 大靜態段字串到 `bundledDefaults.ts`（**3/8 完成**：actions / tone-style / output-efficiency；待搬：intro / system / doing-tasks / using-tools / proactive）
+- [ ] M-SP-1.2 搬 `prompts.ts` 8 大靜態段字串到 `bundledDefaults.ts`（**5/8 完成**：intro / system / actions / tone-style / output-efficiency；待搬：doing-tasks / using-tools / proactive — 含 MACRO build-time replacement + USER_TYPE/REPL/embedded-search 多分支，需 pre-render 策略）
 - [x] M-SP-1.3 撰寫 README.md 模板（表格列檔名 → 影響區塊 → 時機 → 可否刪除）
 - [x] M-SP-1.4 實作 `seedSystemPromptDirIfMissing()` + `setup.ts` 啟動鉤子（背景非阻塞）
-- [ ] M-SP-1.5 `prompts.ts` 8 個 `getXxxSection()` 改為讀 snapshot（**3/8 完成**：actions / tone-style / output-efficiency）
+- [ ] M-SP-1.5 `prompts.ts` 8 個 `getXxxSection()` 改為讀 snapshot（**5/8 完成**：intro / system / actions / tone-style / output-efficiency）
 - [ ] M-SP-1.6 寫 `scripts/dump-system-prompt.ts` 產出當前 system prompt 供 byte-level diff 比對
 - [ ] M-SP-1.7 單元測試：seed / fallback 鏈 / per-project 覆蓋 / 權限失敗 warn
 - [ ] M-SP-1.8 整合測試：`./cli -p "hi"` 首次啟動 seed + byte-level diff = 0
@@ -911,3 +911,5 @@
 - 2026-04-19 07:58: Session 結束 | 進度：274/287 任務 | 3129f2c refactor(brand): 使用者可見字串改為 my-agent，新增 my-agent bin alias
 
 - 2026-04-19 08:02: Session 結束 | 進度：274/287 任務 | 3129f2c refactor(brand): 使用者可見字串改為 my-agent，新增 my-agent bin alias
+
+- 2026-04-19 08:19: Session 結束 | 進度：278/318 任務 | 1df413e feat(m-sp-1): 建立 systemPromptFiles 模組 + seed 機制，外部化 3 個靜態段
