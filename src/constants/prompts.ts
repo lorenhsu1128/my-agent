@@ -224,7 +224,13 @@ function getSimpleSystemSection(): string {
   return ['# System', ...prependBullets(items)].join(`\n`)
 }
 
+// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/doing-tasks.md（非-ant 版）
+// USER_TYPE=ant 有額外 bullets（commenting、false-claims、my-agent bug report），走原組裝。
 function getSimpleDoingTasksSection(): string {
+  if (process.env.USER_TYPE !== 'ant') {
+    const external = getExternalSection('doing-tasks')
+    if (external !== null) return external
+  }
   const codeStyleSubitems = [
     `Don't add features, refactor code, or make "improvements" beyond what was asked. A bug fix doesn't need surrounding code cleaned up. A simple feature doesn't need extra configurability. Don't add docstrings, comments, or type annotations to code you didn't change. Only add comments where the logic isn't self-evident.`,
     `Don't add error handling, fallbacks, or validation for scenarios that can't happen. Trust internal code and framework guarantees. Only validate at system boundaries (user input, external APIs). Don't use feature flags or backwards-compatibility shims when you can just change the code.`,
@@ -298,10 +304,22 @@ function getActionsSection(): string {
   return getExternalSection('actions') ?? ACTIONS_SECTION_FALLBACK
 }
 
+// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/using-tools.md
+// 預設情境：非 REPL、非 embedded search、TaskCreate 啟用 → 讀檔
+// REPL / embedded / TaskCreate 缺席 → 走原組裝
 function getUsingYourToolsSection(enabledTools: Set<string>): string {
   const taskToolName = [TASK_CREATE_TOOL_NAME, TODO_WRITE_TOOL_NAME].find(n =>
     enabledTools.has(n),
   )
+
+  const isStandardCase =
+    !isReplModeEnabled() &&
+    !hasEmbeddedSearchTools() &&
+    taskToolName === TASK_CREATE_TOOL_NAME
+  if (isStandardCase) {
+    const external = getExternalSection('using-tools')
+    if (external !== null) return external
+  }
 
   // In REPL mode, Read/Write/Edit/Glob/Grep/Bash/Agent are hidden from direct
   // use (REPL_ONLY_TOOLS). The "prefer dedicated tools over Bash" guidance is

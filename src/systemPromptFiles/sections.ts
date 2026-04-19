@@ -75,7 +75,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'doing-tasks.md',
     purpose: '# Doing tasks 任務執行準則與程式碼風格',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -91,7 +91,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'using-tools.md',
     purpose: '# Using your tools 工具選擇守則',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {

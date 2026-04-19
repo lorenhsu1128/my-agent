@@ -129,11 +129,11 @@
 
 #### M-SP-1：基礎設施 + 8 大靜態段 + Seed 機制（~3.5 天）
 - [x] M-SP-1.1 建 `src/systemPromptFiles/` 模組骨架：`paths.ts` / `loader.ts` / `bundledDefaults.ts` / `sections.ts` / `seed.ts` / `snapshot.ts` / `index.ts`
-- [ ] M-SP-1.2 搬 `prompts.ts` 8 大靜態段字串到 `bundledDefaults.ts`（**5/8 完成**：intro / system / actions / tone-style / output-efficiency；待搬：doing-tasks / using-tools / proactive — 含 MACRO build-time replacement + USER_TYPE/REPL/embedded-search 多分支，需 pre-render 策略）
+- [ ] M-SP-1.2 搬 `prompts.ts` 8 大靜態段字串到 `bundledDefaults.ts`（**7/8 完成**：intro / system / doing-tasks / actions / using-tools / tone-style / output-efficiency；待搬：proactive — feature flag 路徑）
 - [x] M-SP-1.3 撰寫 README.md 模板（表格列檔名 → 影響區塊 → 時機 → 可否刪除）
 - [x] M-SP-1.4 實作 `seedSystemPromptDirIfMissing()` + `setup.ts` 啟動鉤子（背景非阻塞）
-- [ ] M-SP-1.5 `prompts.ts` 8 個 `getXxxSection()` 改為讀 snapshot（**5/8 完成**：intro / system / actions / tone-style / output-efficiency）
-- [ ] M-SP-1.6 寫 `scripts/dump-system-prompt.ts` 產出當前 system prompt 供 byte-level diff 比對
+- [ ] M-SP-1.5 `prompts.ts` 8 個 `getXxxSection()` 改為讀 snapshot（**7/8 完成**：intro / system / doing-tasks / actions / using-tools / tone-style / output-efficiency）
+- [x] M-SP-1.6 `scripts/dump-system-prompt.ts`：產出 bundled 版 vs 實際載入版兩種模式，供 byte-level diff
 - [ ] M-SP-1.7 單元測試：seed / fallback 鏈 / per-project 覆蓋 / 權限失敗 warn
 - [ ] M-SP-1.8 整合測試：`./cli -p "hi"` 首次啟動 seed + byte-level diff = 0
 - [x] M-SP-1.9 typecheck 綠（baseline 僅 TS5101 pre-existing），commit
