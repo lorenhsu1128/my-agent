@@ -7,9 +7,9 @@
 import { crawl } from '../../../src/tools/WebCrawlTool/crawler'
 
 async function main() {
-  console.log('[smoke] WebCrawl against https://example.com ...')
+  console.log('[smoke] WebCrawl against https://github.com/lorenhsu1128 ...')
   const result = await crawl({
-    url: 'https://example.com',
+    url: 'https://github.com/lorenhsu1128',
     maxDepth: 0,
     maxPages: 1,
     sameOrigin: true,
@@ -32,8 +32,8 @@ async function main() {
     process.exit(1)
   }
 
-  if (!result.pages[0]!.text.toLowerCase().includes('example domain')) {
-    console.error('\n[smoke] FAIL: expected "example domain" in body text')
+  if (!result.pages[0]!.text.toLowerCase().includes('lorenhsu1128')) {
+    console.error('\n[smoke] FAIL: expected "lorenhsu1128" in body text')
     process.exit(1)
   }
 
