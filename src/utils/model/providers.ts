@@ -91,7 +91,7 @@ export function isLlamaCppActive(): boolean {
  */
 export function getLlamaCppConfig(
   model?: string | null,
-): { baseUrl: string; model: string } | null {
+): { baseUrl: string; model: string; vision: boolean } | null {
   const envActivated = getAPIProvider() === 'llamacpp'
   const modelActivated = isLlamaCppModel(model)
   if (!envActivated && !modelActivated) return null
@@ -102,6 +102,8 @@ export function getLlamaCppConfig(
     model:
       process.env.LLAMA_MODEL ||
       (modelActivated ? (model as string) : cfg.model || DEFAULT_LLAMACPP_MODEL),
+    // M-VISION: 由 `~/.my-agent/llamacpp.json` 的 `vision.enabled` 宣告
+    vision: cfg.vision.enabled,
   }
 }
 

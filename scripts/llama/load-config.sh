@@ -57,6 +57,30 @@ if [[ -f "$CONFIG_PATH" ]] && command -v jq >/dev/null 2>&1; then
 else
   LLAMA_EXTRA_ARGS_SHELL="'--flash-attn' 'auto' '--jinja'"
 fi
+
+# M-VISION: 若設定了 server.vision.mmprojPath，追加 `--mmproj <path>`。
+#   - 相對路徑相對 repo root 補全（serve.sh 的 resolve_path 只處理 model/binary）
+#   - jq / 檔案 / 路徑欄位任何一缺都視為未啟用 vision
+if [[ -f "$CONFIG_PATH" ]] && command -v jq >/dev/null 2>&1; then
+  _cfg_mmproj=$(jq -r '.server.vision.mmprojPath // empty' "$CONFIG_PATH" 2>/dev/null || echo "")
+  if [[ -n "$_cfg_mmproj" ]]; then
+    # 補全相對路徑：若不是絕對路徑（/... 或 X:/... / X:\...）則接到 repo root
+    _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    _root_dir="$(cd "$_script_dir/../.." && pwd)"
+    if [[ "$_cfg_mmproj" = /* || "$_cfg_mmproj" =~ ^[A-Za-z]:[\\/] ]]; then
+      _mmproj_abs="$_cfg_mmproj"
+    else
+      _mmproj_abs="$_root_dir/$_cfg_mmproj"
+    fi
+    # 附加到 extraArgs 尾端；若兩者都空就用單一 --mmproj 段
+    if [[ -n "$LLAMA_EXTRA_ARGS_SHELL" ]]; then
+      LLAMA_EXTRA_ARGS_SHELL="$LLAMA_EXTRA_ARGS_SHELL '--mmproj' $(printf %q "$_mmproj_abs")"
+    else
+      LLAMA_EXTRA_ARGS_SHELL="'--mmproj' $(printf %q "$_mmproj_abs")"
+    fi
+  fi
+fi
+
 # 允許呼叫端用 LLAMA_EXTRA_ARGS_SHELL 展開；舊腳本可繼續 hard-code 若沒改
 export LLAMA_EXTRA_ARGS_SHELL
 

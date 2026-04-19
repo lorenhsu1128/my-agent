@@ -11,6 +11,15 @@
  */
 import { z } from 'zod'
 
+export const LlamaCppServerVisionSchema = z.object({
+  /**
+   * mmproj（vision projector）GGUF 檔路徑。
+   * 相對 repo root 會被 serve.sh 補全；絕對路徑照用。
+   * 有值時 load-config.sh 會把 `--mmproj <path>` 塞進 LLAMA_EXTRA_ARGS_SHELL。
+   */
+  mmprojPath: z.string().optional(),
+})
+
 export const LlamaCppServerSchema = z.object({
   /** llama-server 綁定的 IP（serve.sh --host） */
   host: z.string().default('127.0.0.1'),
@@ -30,6 +39,21 @@ export const LlamaCppServerSchema = z.object({
   binaryPath: z.string().default('llama/llama-server.exe'),
   /** 要額外帶的 flag（例 --jinja、--slots、--cache-reuse 1） */
   extraArgs: z.array(z.string()).default(['--flash-attn', 'auto', '--jinja']),
+  /**
+   * Vision 相關設定（M-VISION）：僅 shell 端使用。
+   * 有 mmprojPath 才會對 llama-server 加 `--mmproj`。
+   */
+  vision: LlamaCppServerVisionSchema.default({}),
+})
+
+export const LlamaCppVisionSchema = z.object({
+  /**
+   * 是否啟用 vision 翻譯（M-VISION）。
+   * true  → adapter 把 Anthropic image block 翻成 OpenAI `image_url`（data URL / URL）
+   * false → adapter 走舊行為：image block 轉成 `[Image attachment]` 佔位符字串
+   * 預設 false，保證純文字模型（Qwen3.5-9B-Neo 等）零迴歸。
+   */
+  enabled: z.boolean().default(false),
 })
 
 export const LlamaCppConfigSchema = z.object({
@@ -51,10 +75,17 @@ export const LlamaCppConfigSchema = z.object({
     .default(['qwen3.5-9b-neo', 'qwopus3.5-9b-v3']),
   /** llama-server 啟動相關參數（scripts/llama/serve.sh 讀） */
   server: LlamaCppServerSchema.default({}),
+  /**
+   * Vision 支援（M-VISION）。僅 TS client 端使用；shell 端看 `server.vision.mmprojPath`。
+   * 詳見 M_VISION_PLAN.md。
+   */
+  vision: LlamaCppVisionSchema.default({}),
 })
 
 export type LlamaCppConfig = z.infer<typeof LlamaCppConfigSchema>
 export type LlamaCppServerConfig = z.infer<typeof LlamaCppServerSchema>
+export type LlamaCppServerVisionConfig = z.infer<typeof LlamaCppServerVisionSchema>
+export type LlamaCppVisionConfig = z.infer<typeof LlamaCppVisionSchema>
 
 /** 完整預設值（所有欄位）。供 seed 寫檔 + fallback 使用。 */
 export const DEFAULT_LLAMACPP_CONFIG: LlamaCppConfig =

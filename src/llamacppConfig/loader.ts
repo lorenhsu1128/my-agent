@@ -66,6 +66,14 @@ export function getLlamaCppConfigSnapshot(): LlamaCppConfig {
   return cached ?? DEFAULT_LLAMACPP_CONFIG
 }
 
+/**
+ * 是否啟用 vision 翻譯（M-VISION）。
+ * adapter 依此決定 image block → OpenAI `image_url` 還是 `[Image attachment]` 字串佔位符。
+ */
+export function isVisionEnabled(): boolean {
+  return getLlamaCppConfigSnapshot().vision.enabled
+}
+
 export function _resetLlamaCppConfigForTests(): void {
   cached = null
   loadInFlight = null

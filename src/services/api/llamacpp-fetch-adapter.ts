@@ -57,9 +57,18 @@ interface AnthropicRequestBody {
   [key: string]: unknown
 }
 
+/**
+ * M-VISION：當 vision 啟用且 user message 含 image block 時，
+ * content 會是 multi-part array（OpenAI vision API 格式）。
+ * 純文字路徑仍用 string | null。
+ */
+type OpenAIContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
 interface OpenAIMessage {
   role: string
-  content: string | null
+  content: string | null | OpenAIContentPart[]
   tool_call_id?: string
   tool_calls?: Array<{
     id: string
@@ -175,12 +184,42 @@ function flattenSystemPrompt(
 // ── 請求翻譯：Anthropic → OpenAI ──────────────────────────────────────────
 
 /**
- * 把 Anthropic messages 陣列轉成 OpenAI chat messages 陣列。
- * 本階段處理 text / tool_use / tool_result；image 視為 [Image] 佔位。
+ * M-VISION: Anthropic image block → OpenAI image_url content part。
+ * Base64 source 組成 data URL；URL source 直接 pass-through。
+ * 不認識的 source 型別回傳 null，呼叫端改塞文字佔位符。
  */
-function translateMessagesToOpenAI(
+export function imageBlockToOpenAIPart(
+  block: AnthropicContentBlock,
+): OpenAIContentPart | null {
+  const src = block.source
+  if (!src || typeof src !== 'object') return null
+  if (src.type === 'base64' && typeof src.data === 'string' && src.data) {
+    const mediaType = src.media_type || 'image/png'
+    return {
+      type: 'image_url',
+      image_url: { url: `data:${mediaType};base64,${src.data}` },
+    }
+  }
+  const url = (src as { url?: unknown }).url
+  if (src.type === 'url' && typeof url === 'string' && url) {
+    return { type: 'image_url', image_url: { url } }
+  }
+  return null
+}
+
+/**
+ * 把 Anthropic messages 陣列轉成 OpenAI chat messages 陣列。
+ * 處理 text / tool_use / tool_result / image。
+ *
+ * options.vision（M-VISION）：
+ *   false（預設）→ image block 以 `[Image attachment]` 字串佔位（純文字模型 fallback）
+ *   true         → image block 翻成 OpenAI `image_url` multi-part content
+ */
+export function translateMessagesToOpenAI(
   anthropicMessages: AnthropicMessage[],
+  options: { vision?: boolean } = {},
 ): OpenAIMessage[] {
+  const vision = options.vision === true
   const out: OpenAIMessage[] = []
 
   for (const msg of anthropicMessages) {
@@ -192,6 +231,7 @@ function translateMessagesToOpenAI(
 
     if (msg.role === 'user') {
       const textParts: string[] = []
+      const imageParts: OpenAIContentPart[] = []
       for (const block of msg.content) {
         if (block.type === 'tool_result') {
           // Anthropic tool_result → OpenAI role:'tool' message
@@ -211,10 +251,25 @@ function translateMessagesToOpenAI(
         } else if (block.type === 'text' && typeof block.text === 'string') {
           textParts.push(block.text)
         } else if (block.type === 'image') {
+          if (vision) {
+            const part = imageBlockToOpenAIPart(block)
+            if (part) {
+              imageParts.push(part)
+              continue
+            }
+          }
           textParts.push('[Image attachment]')
         }
       }
-      if (textParts.length > 0) {
+      if (imageParts.length > 0) {
+        // Vision 路徑：多部分 content（text + image_url parts）
+        const parts: OpenAIContentPart[] = []
+        if (textParts.length > 0) {
+          parts.push({ type: 'text', text: textParts.join('\n') })
+        }
+        parts.push(...imageParts)
+        out.push({ role: 'user', content: parts })
+      } else if (textParts.length > 0) {
         out.push({ role: 'user', content: textParts.join('\n') })
       }
     } else {
@@ -271,17 +326,25 @@ function translateToolsToOpenAI(
 
 /**
  * 組裝完整 OpenAI 請求 body。
+ *
+ * options.vision（M-VISION）：true 時 image block 翻成 OpenAI `image_url`；
+ * 否則（預設）走 `[Image attachment]` 字串佔位符路徑，對純文字模型無縫 fallback。
  */
 function translateRequestToOpenAI(
   anthropic: AnthropicRequestBody,
   defaultModel: string,
+  options: { vision?: boolean } = {},
 ): OpenAIRequestBody {
   const systemPrompt = flattenSystemPrompt(anthropic.system)
   const messages: OpenAIMessage[] = []
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt })
   }
-  messages.push(...translateMessagesToOpenAI(anthropic.messages ?? []))
+  messages.push(
+    ...translateMessagesToOpenAI(anthropic.messages ?? [], {
+      vision: options.vision,
+    }),
+  )
 
   const body: OpenAIRequestBody = {
     model: anthropic.model || defaultModel,
@@ -715,6 +778,8 @@ async function sseGeneratorToStream(
 export interface LlamaCppConfig {
   baseUrl: string
   model: string
+  /** M-VISION: 啟用 image block → OpenAI image_url 翻譯 */
+  vision?: boolean
 }
 
 export function createLlamaCppFetch(
@@ -747,7 +812,9 @@ export function createLlamaCppFetch(
       anthropicBody = {}
     }
 
-    const openaiBody = translateRequestToOpenAI(anthropicBody, config.model)
+    const openaiBody = translateRequestToOpenAI(anthropicBody, config.model, {
+      vision: config.vision === true,
+    })
     const endpoint = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`
     const reportedModel = anthropicBody.model ?? config.model
 

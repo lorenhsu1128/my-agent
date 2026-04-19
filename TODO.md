@@ -26,6 +26,29 @@
 
 ---
 
+## 當前里程碑：M-VISION — llamacpp 路徑多模態（Vision）支援 + 文字模型 fallback（2026-04-19 啟動）
+
+**目標**：讓 llamacpp 路徑能真實接收圖片（目標後端 Gemopus-4-E4B-it，基於 Gemma-4-E4B-it 多模態 GGUF）；同時當後端是純文字模型（Qwen3.5-9B-Neo）時走 graceful fallback（保留現行 `[Image attachment]` 佔位符行為）。詳見 `M_VISION_PLAN.md`。
+
+**決策**：capability 由 `~/.my-agent/llamacpp.json` 的 `vision.enabled` 宣告（不 runtime probe）；adapter 依旗標分支；serve.sh 透過 load-config.sh 的 extraArgs 機制追加 `--mmproj`。
+
+### 任務
+- [x] M-VISION-1 schema 擴充：新增 `LlamaCppVisionSchema`（`vision.enabled`）與 `LlamaCppServerVisionSchema`（`server.vision.mmprojPath?`）
+- [x] M-VISION-2 loader 暴露 `isVisionEnabled()`；`src/llamacppConfig/index.ts` re-export；`getLlamaCppConfig()`（providers.ts）回傳加 `vision: boolean`
+- [x] M-VISION-3 adapter 翻譯：`translateMessagesToOpenAI(messages, {vision})` 與 `imageBlockToOpenAIPart()` helper；`createLlamaCppFetch` 讀 `config.vision` 傳入 `translateRequestToOpenAI`；`OpenAIMessage.content` 型別擴成 `string | null | OpenAIContentPart[]`
+- [x] M-VISION-4 `scripts/llama/load-config.sh` 讀 `.server.vision.mmprojPath`；相對路徑相對 repo root 補全；透過 `printf %q` 安全引用後追加 `--mmproj <path>` 到 `LLAMA_EXTRA_ARGS_SHELL`；serve.sh 不動
+- [x] M-VISION-5 單元測試 `tests/integration/llamacpp/vision-adapter-smoke.ts`（27/27 綠）涵蓋 6 case
+- [x] M-VISION-6 E2E scaffold `tests/integration/llamacpp/vision-e2e.ts`（opt-in `MYAGENT_VISION_E2E=1`；1x1 紅色 PNG inline，無需 fixture 檔案）；skip mode 正常
+- [x] M-VISION-7 文字模型回歸 smoke `tests/integration/llamacpp/text-model-fallback-smoke.ts`（9/9 綠）；直接 curl Neo server 確認 text path 未壞
+
+### 完成標準
+- [x] `bun run typecheck` 綠
+- [x] 單元測試全綠（adapter smoke 27/27 + fallback smoke 9/9）
+- [x] Neo 模型回歸：image block 仍以 `[Image attachment]` 字串傳達，不報錯
+- [ ] Gemopus-4-E4B-it 模型能實際識別圖片內容（**待使用者下載模型 + mmproj 後跑 E2E 或 TUI 驗證**）
+
+---
+
 ## 當前里程碑：M2 — Session Recall & Dynamic Memory
 
 **目標情境**：以 **llama.cpp 本地模型（`qwen3.5-9b-neo`）** 為主要運行情境設計。補齊 my-agent 既有記憶系統（`src/memdir/` 四型分類 + `SessionMemory` + `extractMemories` + `autoDream` 已存在）尚缺的三塊：(1) 跨 session 歷史對話搜尋、(2) query-driven 動態 prefetch 注入、(3) 受控的 MemoryTool 寫入（含 prompt injection 掃描）。**不**移植 Hermes 的 provider plugin 抽象層，**不**改 `src/memdir/` 四型分類，**不**動 `QueryEngine.ts` / `Tool.ts` / `StreamingToolExecutor.ts`（deny list）。Anthropic 既有 code path 保留（黃金規則 #2）但**不作為**設計目標與驗收依據。
@@ -1013,3 +1036,17 @@
 - 2026-04-19 11:18: Session 結束 | 進度：334/352 任務 | 45ab801 feat(rename): Phase 7 收尾 — POC scripts slug 更新 + TODO 勾選
 
 - 2026-04-19 11:24: Session 結束 | 進度：334/352 任務 | 45ab801 feat(rename): Phase 7 收尾 — POC scripts slug 更新 + TODO 勾選
+
+- 2026-04-19 11:28: Session 結束 | 進度：334/352 任務 | 08ca2a9 fix(ripgrep): 補上 Windows ripgrep binary 修復 Grep/Glob 工具失敗
+
+- 2026-04-19 11:34: Session 結束 | 進度：334/352 任務 | 08ca2a9 fix(ripgrep): 補上 Windows ripgrep binary 修復 Grep/Glob 工具失敗
+
+- 2026-04-19 11:38: Session 結束 | 進度：334/352 任務 | 08ca2a9 fix(ripgrep): 補上 Windows ripgrep binary 修復 Grep/Glob 工具失敗
+
+- 2026-04-19 11:42: Session 結束 | 進度：334/352 任務 | 08ca2a9 fix(ripgrep): 補上 Windows ripgrep binary 修復 Grep/Glob 工具失敗
+
+- 2026-04-19 11:45: Session 結束 | 進度：334/352 任務 | 08ca2a9 fix(ripgrep): 補上 Windows ripgrep binary 修復 Grep/Glob 工具失敗
+
+- 2026-04-19 11:50: Session 結束 | 進度：334/352 任務 | 08ca2a9 fix(ripgrep): 補上 Windows ripgrep binary 修復 Grep/Glob 工具失敗
+
+- 2026-04-19 12:03: Session 結束 | 進度：344/363 任務 | 08ca2a9 fix(ripgrep): 補上 Windows ripgrep binary 修復 Grep/Glob 工具失敗
