@@ -1,5 +1,5 @@
 import React from 'react'
-import { Text } from 'ink'
+import { Text } from '../../ink.js'
 
 type SkillManageInput = {
   action: string

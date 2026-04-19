@@ -129,6 +129,9 @@ const externals = [
   'image-processor-napi',
   'modifiers-napi',
   'url-handler-napi',
+  // ink pulls in react-devtools-core only when the DEV=true env flag is set
+  // at runtime; we never enable it. Mark external to skip the resolve.
+  'react-devtools-core',
 ]
 
 const defines = {

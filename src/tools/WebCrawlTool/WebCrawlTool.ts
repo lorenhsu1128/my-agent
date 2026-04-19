@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Text } from 'ink'
+import { Box, Text } from '../../ink.js'
 import { z } from 'zod/v4'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import type { PermissionUpdate } from '../../types/permissions.js'

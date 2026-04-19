@@ -1,9 +1,11 @@
 /* eslint-disable custom-rules/no-process-exit -- CLI subcommand handler intentionally exits */
 
-import {
-  clearAuthRelatedCaches,
-  performLogout,
-} from '../../commands/logout/logout.js'
+// /login and /logout commands were removed in m-deanthro stage 3-c.
+// The auth handlers below reference performLogout/clearAuthRelatedCaches
+// from unreachable code paths — stubbed as no-ops to keep auth.ts buildable
+// until the file itself is cleaned up.
+async function performLogout(_opts: { clearOnboarding?: boolean }): Promise<void> {}
+async function clearAuthRelatedCaches(): Promise<void> {}
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
