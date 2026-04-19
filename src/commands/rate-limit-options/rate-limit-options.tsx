@@ -8,7 +8,7 @@ import { logEvent } from '../../services/analytics/index.js';
 import { useClaudeAiLimits } from '../../services/claudeAiLimitsHook.js';
 import type { ToolUseContext } from '../../Tool.js';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
-import { getOauthAccountInfo, getRateLimitTier, getSubscriptionType } from '../../utils/auth.js';
+import { getOauthAccountInfo, getSubscriptionType } from '../../utils/auth.js';
 import { hasClaudeAiBillingAccess } from '../../utils/billing.js';
 import { call as extraUsageCall } from '../extra-usage/extra-usage.js';
 import { extraUsage } from '../extra-usage/index.js';
@@ -37,14 +37,7 @@ function RateLimitOptionsMenu(t0) {
     t1 = $[0];
   }
   const subscriptionType = t1;
-  let t2;
-  if ($[1] === Symbol.for("react.memo_cache_sentinel")) {
-    t2 = getRateLimitTier();
-    $[1] = t2;
-  } else {
-    t2 = $[1];
-  }
-  const rateLimitTier = t2;
+  const rateLimitTier = null;
   const hasExtraUsageEnabled = getOauthAccountInfo()?.hasExtraUsageEnabled === true;
   const isMax = subscriptionType === "max";
   const isMax20x = isMax && rateLimitTier === "default_claude_max_20x";

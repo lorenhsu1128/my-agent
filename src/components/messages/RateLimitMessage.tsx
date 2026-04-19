@@ -4,7 +4,7 @@ import { extraUsage } from 'src/commands/extra-usage/index.js';
 import { Box, Text } from 'src/ink.js';
 import { useClaudeAiLimits } from 'src/services/claudeAiLimitsHook.js';
 import { shouldProcessMockLimits } from 'src/services/rateLimitMocking.js'; // Used for /mock-limits command
-import { getRateLimitTier, getSubscriptionType, isClaudeAISubscriber } from 'src/utils/auth.js';
+import { getSubscriptionType, isClaudeAISubscriber } from 'src/utils/auth.js';
 import { hasClaudeAiBillingAccess } from 'src/utils/billing.js';
 import { MessageResponse } from '../MessageResponse.js';
 type UpsellParams = {
@@ -63,14 +63,7 @@ export function RateLimitMessage(t0) {
     t1 = $[0];
   }
   const subscriptionType = t1;
-  let t2;
-  if ($[1] === Symbol.for("react.memo_cache_sentinel")) {
-    t2 = getRateLimitTier();
-    $[1] = t2;
-  } else {
-    t2 = $[1];
-  }
-  const rateLimitTier = t2;
+  const rateLimitTier = null;
   const isTeamOrEnterprise = subscriptionType === "team" || subscriptionType === "enterprise";
   const isMax20x = rateLimitTier === "default_claude_max_20x";
   let t3;

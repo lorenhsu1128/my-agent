@@ -1,11 +1,7 @@
 import { execa } from 'execa'
 import memoize from 'lodash-es/memoize.js'
 import { getSessionId } from '../bootstrap/state.js'
-import {
-  getOauthAccountInfo,
-  getRateLimitTier,
-  getSubscriptionType,
-} from './auth.js'
+import { getOauthAccountInfo, getSubscriptionType } from './auth.js'
 import { getGlobalConfig, getOrCreateUserID } from './config.js'
 import { getCwd } from './cwd.js'
 import { type env, getHostPlatformForAnalytics } from './env.js'
@@ -41,7 +37,6 @@ export type CoreUserData = {
   accountUuid?: string
   userType?: string
   subscriptionType?: string
-  rateLimitTier?: string
   firstTokenTime?: number
   githubActionsMetadata?: GitHubActionsMetadata
 }
@@ -81,11 +76,9 @@ export const getCoreUserData = memoize(
     const config = getGlobalConfig()
 
     let subscriptionType: string | undefined
-    let rateLimitTier: string | undefined
     let firstTokenTime: number | undefined
     if (includeAnalyticsMetadata) {
       subscriptionType = getSubscriptionType() ?? undefined
-      rateLimitTier = getRateLimitTier() ?? undefined
       if (subscriptionType && config.claudeCodeFirstTokenDate) {
         const configFirstTokenTime = new Date(
           config.claudeCodeFirstTokenDate,
@@ -111,7 +104,6 @@ export const getCoreUserData = memoize(
       accountUuid,
       userType: process.env.USER_TYPE,
       subscriptionType,
-      rateLimitTier,
       firstTokenTime,
       ...(isEnvTruthy(process.env.GITHUB_ACTIONS) && {
         githubActionsMetadata: {

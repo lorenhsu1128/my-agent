@@ -1753,10 +1753,8 @@ export function isTeamSubscriber(): boolean {
 }
 
 export function isTeamPremiumSubscriber(): boolean {
-  return (
-    getSubscriptionType() === 'team' &&
-    getRateLimitTier() === 'default_claude_max_5x'
-  )
+  // my-agent: rate-limit-tier 由 Anthropic OAuth 決定，本地無此概念 → 永遠 false
+  return false
 }
 
 export function isEnterpriseSubscriber(): boolean {
@@ -1765,18 +1763,6 @@ export function isEnterpriseSubscriber(): boolean {
 
 export function isProSubscriber(): boolean {
   return getSubscriptionType() === 'pro'
-}
-
-export function getRateLimitTier(): string | null {
-  if (!isAnthropicAuthEnabled()) {
-    return null
-  }
-  const oauthTokens = getClaudeAIOAuthTokens()
-  if (!oauthTokens) {
-    return null
-  }
-
-  return oauthTokens.rateLimitTier ?? null
 }
 
 export function getSubscriptionName(): string {
