@@ -13,6 +13,10 @@ import axios, { AxiosError, type AxiosInstance } from 'axios'
 import * as cheerio from 'cheerio'
 import { ssrfGuardedLookup } from '../../utils/hooks/ssrfGuard.js'
 import { checkBlocklist } from '../../utils/web/blocklist.js'
+import {
+  firecrawlScrape,
+  isFirecrawlBackendActive,
+} from '../../utils/web/firecrawl.js'
 import { redactSecrets, urlContainsSecret } from '../../utils/web/secretScan.js'
 
 export interface CrawledPage {
@@ -227,16 +231,24 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     let body: string
     let status: number
     let contentType: string
+    const useFirecrawl = isFirecrawlBackendActive()
     try {
-      const res = await client.get(urlStr, { signal: opts.signal })
-      status = res.status
-      contentType = String(res.headers['content-type'] ?? '')
-      body = typeof res.data === 'string' ? res.data : ''
+      if (useFirecrawl) {
+        const fc = await firecrawlScrape(urlStr, opts.signal)
+        status = fc.status
+        body = fc.html
+        contentType = 'text/html'
+      } else {
+        const res = await client.get(urlStr, { signal: opts.signal })
+        status = res.status
+        contentType = String(res.headers['content-type'] ?? '')
+        body = typeof res.data === 'string' ? res.data : ''
+      }
     } catch (err) {
       const axErr = err as AxiosError
       skipped.push({
         url: urlStr,
-        reason: `Fetch failed: ${axErr.message || 'unknown error'}`,
+        reason: `Fetch failed: ${axErr.message || (err as Error).message || 'unknown error'}`,
       })
       continue
     }
@@ -246,7 +258,7 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
       continue
     }
 
-    if (!/text\/html|application\/xhtml/i.test(contentType)) {
+    if (!useFirecrawl && !/text\/html|application\/xhtml/i.test(contentType)) {
       skipped.push({
         url: urlStr,
         reason: `Unsupported content-type: ${contentType || 'unknown'}`,

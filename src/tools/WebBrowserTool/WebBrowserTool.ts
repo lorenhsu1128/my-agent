@@ -12,11 +12,14 @@ import {
   closeBrowser,
   consoleLogs,
   evaluate,
+  getImages,
   navigate,
   press,
+  screenshot,
   scroll,
   snapshot,
   type_,
+  vision,
 } from './actions.js'
 import { DESCRIPTION, WEB_BROWSER_TOOL_NAME } from './prompt.js'
 
@@ -59,6 +62,19 @@ const inputSchema = lazySchema(() =>
     }),
     z.strictObject({
       action: z.literal('close'),
+    }),
+    z.strictObject({
+      action: z.literal('screenshot'),
+      full_page: z.boolean().default(false),
+    }),
+    z.strictObject({
+      action: z.literal('vision'),
+      question: z
+        .string()
+        .describe('Question about the current page for the vision model'),
+    }),
+    z.strictObject({
+      action: z.literal('get_images'),
     }),
   ]),
 )
@@ -110,6 +126,12 @@ async function dispatch(input: InputUnion): Promise<unknown> {
       return evaluate(input.expression)
     case 'close':
       return closeBrowser()
+    case 'screenshot':
+      return screenshot(input.full_page)
+    case 'vision':
+      return vision(input.question)
+    case 'get_images':
+      return getImages()
   }
 }
 
@@ -143,7 +165,13 @@ export const WebBrowserTool = buildTool({
   },
   isReadOnly(input) {
     const action = (input as { action?: string })?.action
-    return action === 'snapshot' || action === 'console'
+    return (
+      action === 'snapshot' ||
+      action === 'console' ||
+      action === 'screenshot' ||
+      action === 'vision' ||
+      action === 'get_images'
+    )
   },
   async checkPermissions(input, context): Promise<PermissionDecision> {
     const permissionContext = context.getAppState().toolPermissionContext

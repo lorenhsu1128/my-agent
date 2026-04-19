@@ -12,6 +12,7 @@ import type { ConsoleMessage } from 'puppeteer-core'
 import { isBlockedAddress } from '../../utils/hooks/ssrfGuard.js'
 import { checkBlocklist } from '../../utils/web/blocklist.js'
 import { redactSecrets, urlContainsSecret } from '../../utils/web/secretScan.js'
+import { getDefaultVisionClient } from '../../utils/vision/VisionClient.js'
 import { refToElement, takeSnapshot } from './a11y.js'
 import { closeSession, getSession } from './session.js'
 
@@ -163,6 +164,62 @@ export async function evaluate(expression: string): Promise<object> {
   const raw = await s.page.evaluate(expression)
   const serialised = typeof raw === 'string' ? raw : JSON.stringify(raw)
   return { result: redactSecrets(serialised ?? 'undefined') }
+}
+
+export async function screenshot(fullPage: boolean): Promise<object> {
+  const s = await getSession()
+  const bytes = await s.page.screenshot({
+    type: 'png',
+    fullPage,
+  })
+  // Return base64 so the tool output is JSON-safe; caller can decode.
+  const base64 = Buffer.from(bytes).toString('base64')
+  return {
+    bytes: bytes.length,
+    mime: 'image/png',
+    data_base64: base64,
+    full_page: fullPage,
+  }
+}
+
+export async function vision(question: string): Promise<object> {
+  const s = await getSession()
+  const client = getDefaultVisionClient()
+  if (!client.isConfigured()) {
+    throw new Error(
+      `Vision backend (${client.backendName}) not configured. Set ANTHROPIC_API_KEY.`,
+    )
+  }
+  const bytes = await s.page.screenshot({ type: 'png', fullPage: false })
+  const description = await client.describe(
+    new Uint8Array(bytes),
+    question,
+  )
+  return {
+    backend: client.backendName,
+    description: redactSecrets(description),
+  }
+}
+
+export async function getImages(): Promise<object> {
+  const s = await getSession()
+  const images = await s.page.evaluate(() => {
+    const seen = new Set<string>()
+    const out: { src: string; alt: string; width: number; height: number }[] = []
+    for (const img of Array.from(document.images)) {
+      const src = img.currentSrc || img.src
+      if (!src || seen.has(src)) continue
+      seen.add(src)
+      out.push({
+        src,
+        alt: img.alt || '',
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      })
+    }
+    return out
+  })
+  return { count: images.length, images: images.slice(0, 200) }
 }
 
 export async function closeBrowser(): Promise<object> {

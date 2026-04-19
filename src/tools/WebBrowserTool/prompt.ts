@@ -23,6 +23,9 @@ Actions:
 - press(key)                     e.g. "Enter", "Tab", "Escape"
 - console(clear?)                Read page console logs
 - evaluate(expression)           Run JS in page context (requires allow rule)
+- screenshot(full_page?)         Capture page as PNG (returns base64)
+- vision(question)               Screenshot + ask a vision model about it
+- get_images()                   List <img> elements on the page
 - close()                        Tear down the session
 
 Security: URLs embedding API keys are blocked; website blocklist is honored; private/internal addresses (SSRF) are refused; results are scanned and any detected secrets redacted before returning.`

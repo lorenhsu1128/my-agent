@@ -9,7 +9,7 @@
 import type { Page } from 'puppeteer-core'
 import type { RefEntry } from './a11y.js'
 import type { BrowserProvider } from './providers/BrowserProvider.js'
-import { LocalProvider } from './providers/LocalProvider.js'
+import { selectProvider as pickProvider } from './providers/selectProvider.js'
 
 export const SESSION_IDLE_MS = 5 * 60 * 1000
 
@@ -55,9 +55,9 @@ function resetIdleTimer(): void {
 }
 
 function selectProvider(): BrowserProvider {
-  // M6 adds cloud providers (Browserbase / Browser Use / Firecrawl) here,
-  // gated by env var presence. For M5 we always use local Chromium.
-  return new LocalProvider()
+  // Delegated to providers/selectProvider.ts — picks Browserbase /
+  // Browser Use / local Chromium based on env vars.
+  return pickProvider()
 }
 
 export async function getSession(): Promise<SessionState> {
