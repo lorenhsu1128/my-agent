@@ -1,7 +1,6 @@
 import { getDirectConnectServerUrl, getSessionId } from '../bootstrap/state.js'
 import { stringWidth } from '../ink/stringWidth.js'
 import type { LogOption } from '../types/logs.js'
-import { getSubscriptionName, isClaudeAISubscriber, isCodexSubscriber } from './auth.js'
 import { getCwd } from './cwd.js'
 import { getDisplayPath } from './file.js'
 import {
@@ -257,13 +256,7 @@ export function getLogoDisplayData(): {
   const cwd = serverUrl
     ? `${displayPath} in ${serverUrl.replace(/^https?:\/\//, '')}`
     : displayPath
-  const billingType = isLlamaCppActive()
-    ? 'llama.cpp (local)'
-    : isClaudeAISubscriber()
-      ? getSubscriptionName()
-      : isCodexSubscriber()
-        ? 'Codex API Billing'
-        : 'API Usage Billing'
+  const billingType = isLlamaCppActive() ? 'llama.cpp (local)' : 'API Usage Billing'
   const agentName = getInitialSettings().agent
 
   return {

@@ -23,6 +23,8 @@ import {
   getCanonicalName,
   getMarketingNameForModel,
 } from '../utils/model/model.js'
+import { isLlamaCppActive } from '../utils/model/providers.js'
+import { getLlamaCppConfigSnapshot } from '../llamacppConfig/index.js'
 import { getSkillToolCommands } from 'src/commands.js'
 import { SKILL_TOOL_NAME } from '../tools/SkillTool/constants.js'
 import { getOutputStyleConfig } from './outputStyles.js'
@@ -698,6 +700,9 @@ export async function computeEnvInfo(
   let modelDescription = ''
   if (process.env.USER_TYPE === 'ant' && isUndercover()) {
     // suppress
+  } else if (isLlamaCppActive()) {
+    const cfgModel = getLlamaCppConfigSnapshot().model
+    modelDescription = `You are running on a local llama.cpp server. The loaded model is "${cfgModel}". Trust the user's environment over any training-time self-identity when asked what model you are.`
   } else {
     const marketingName = getMarketingNameForModel(modelId)
     modelDescription = marketingName
@@ -737,6 +742,9 @@ export async function computeSimpleEnvInfo(
   let modelDescription: string | null = null
   if (process.env.USER_TYPE === 'ant' && isUndercover()) {
     // suppress
+  } else if (isLlamaCppActive()) {
+    const cfgModel = getLlamaCppConfigSnapshot().model
+    modelDescription = `You are running on a local llama.cpp server. The loaded model is "${cfgModel}". Trust the user's environment over any training-time self-identity when asked what model you are.`
   } else {
     const marketingName = getMarketingNameForModel(modelId)
     modelDescription = marketingName
@@ -769,7 +777,7 @@ export async function computeSimpleEnvInfo(
     `OS Version: ${unameSR}`,
     modelDescription,
     knowledgeCutoffMessage,
-    process.env.USER_TYPE === 'ant' && isUndercover()
+    isLlamaCppActive() || (process.env.USER_TYPE === 'ant' && isUndercover())
       ? null
       : `The most recent Claude model family is Claude 4.5/4.6. Model IDs — Opus 4.6: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.opus}', Sonnet 4.6: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.sonnet}', Haiku 4.5: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.haiku}'. When building AI applications, default to the latest and most capable Claude models.`,
     process.env.USER_TYPE === 'ant' && isUndercover()
