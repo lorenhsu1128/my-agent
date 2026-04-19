@@ -26,7 +26,12 @@ import { getModelStrings, resolveOverriddenModel } from './modelStrings.js'
 import { formatModelPricing, getOpus46CostTier } from '../modelCost.js'
 import { getSettings_DEPRECATED } from '../settings/settings.js'
 import type { PermissionMode } from '../permissions/PermissionMode.js'
-import { DEFAULT_LLAMACPP_MODEL, getAPIProvider } from './providers.js'
+import {
+  DEFAULT_LLAMACPP_MODEL,
+  getAPIProvider,
+  isLlamaCppActive,
+} from './providers.js'
+import { getLlamaCppConfigSnapshot } from '../../llamacppConfig/index.js'
 import { LIGHTNING_BOLT } from '../../constants/figures.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { type ModelAlias, isModelAlias } from './aliases.js'
@@ -363,6 +368,13 @@ export function isOpus1mMergeEnabled(): boolean {
 }
 
 export function renderModelSetting(setting: ModelName | ModelAlias): string {
+  // 走 llamacpp 路徑時，TUI 應顯示實際 local 模型名而非 Anthropic 預設。
+  // llamacpp 收到請求時只用 server 已載入的模型；requestBody.model 字串僅做 label。
+  // 顯示 config.model（使用者在 ~/.my-agent/llamacpp.json 宣告者），回退 `setting` 本身。
+  if (isLlamaCppActive()) {
+    const cfgModel = getLlamaCppConfigSnapshot().model
+    if (cfgModel) return cfgModel
+  }
   if (setting === 'opusplan') {
     return 'Opus Plan'
   }
