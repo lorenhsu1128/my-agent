@@ -76,7 +76,7 @@
 ### 階段二：Session 整合
 - [ ] M-DAEMON-4 `src/daemon/sessionRunner.ts` + 補完 `sessionBroker.ts`：把 REPL 的 QueryEngine 呼叫路徑抽出讓 daemon 也能跑（用 composition 包，不改 `QueryEngine.ts` deny-list 檔）；Session JSONL 獨占寫入（`lockfile`）；WS 協議 ↔ QueryEngine stream_event 對接。測試：WS client 送 input → daemon 跑 LLM → stream 回 client → session.jsonl 寫入正確
 - [ ] M-DAEMON-4.5 Cron scheduler 搬進 daemon：`src/utils/cronScheduler.ts` 初始化點從 REPL 搬到 daemon；REPL 獨立模式下跳過 cron init；cron 觸發結果透過 daemon broadcast 給 attached clients。測試：daemon 跑 cron → attached REPL 看到觸發訊息；REPL 獨立模式 cron 不跑
-- [ ] M-DAEMON-5 `src/daemon/inputQueue.ts` 狀態機（IDLE / RUNNING / INTERRUPTING）+ 混合 interrupt/queue 策略：input 元資料標 `source`（repl / discord / cron / slash）；互動訊息 = interrupt（cancel QueryEngine + flush 部分輸出 + 開始新 turn）；cron = queue；slash = 立即。測試：送 input A → 不等完成送 B → 確認 A 被 interrupt、B 接上；cron input 走 queue
+- [x] M-DAEMON-5 `src/daemon/{sessionRunner,inputQueue}.ts`：SessionRunner interface（run(input, signal) → AsyncIterable<RunnerEvent>）+ echoRunner / createDelayedEchoRunner 假實作（M-DAEMON-4 會用 QueryEngineRunner 取代）+ InputQueue 狀態機（IDLE/RUNNING/INTERRUPTING）+ 混合策略（interactive 搶占 / background FIFO / slash priority queue-head）+ interruptGraceMs force-clear（防 runner 卡死）+ EventEmitter 事件（state / runnerEvent / turnStart / turnEnd，帶 reason: done/error/aborted）+ defaultIntentForSource helper。測試 `input-queue.test.ts` 19 case（defaultIntent 5 + happy 4 + FIFO 2 + interrupt 3 + slash 1 + dispose 2 + runner 2），全套 77/77 綠。InputQueue 和 WS broker 解耦；M-DAEMON-4 把 QueryEngine 包成 SessionRunner 後即完成 pipeline
 
 ### 階段三：REPL thin-client
 - [ ] M-DAEMON-6 `src/repl/thinClient/{detectDaemon,thinClientMode,fallbackManager}.ts`：讀 pid.json + heartbeat check（`now - lastHeartbeat > 30s` → stale）+ token load；attach 後 REPL 不跑 QueryEngine 只 subscribe WS stream；daemon 掛了透明切獨立模式；狀態列 badge。修改 `src/screens/REPL.tsx` 加 mode prop（`standalone | attached`）；`src/utils/status.tsx` 加 daemon badge。測試：無 daemon → REPL 獨立；啟動 daemon → 新 REPL attach；kill daemon → REPL 切獨立不當機
@@ -1211,3 +1211,5 @@
 - 2026-04-19 19:58: Session 結束 | 進度：349/368 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
 
 - 2026-04-19 20:06: Session 結束 | 進度：349/383 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
+
+- 2026-04-19 20:30: Session 結束 | 進度：352/383 任務 | 6eebfae feat(daemon): CLI subcommand start/stop/status/restart/logs (M-DAEMON-3)
