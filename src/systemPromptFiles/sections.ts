@@ -195,7 +195,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'errors/max-turns.md',
     purpose: '達到最大 turn 數時注入 LLM 的錯誤訊息（支援 {maxTurns} 變數）',
     timing: 'conditional',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -203,7 +203,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'errors/max-budget.md',
     purpose: '達到最大預算時的錯誤訊息（支援 {maxBudgetUsd}）',
     timing: 'conditional',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -211,7 +211,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'errors/max-structured-output-retries.md',
     purpose: 'structured output 重試失敗訊息（支援 {maxRetries}）',
     timing: 'conditional',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -219,7 +219,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'errors/ede-diagnostic.md',
     purpose: '查詢執行失敗時的診斷訊息',
     timing: 'conditional',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {

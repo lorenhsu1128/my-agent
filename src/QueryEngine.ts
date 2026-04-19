@@ -1,4 +1,8 @@
 import { feature } from 'bun:bundle'
+import {
+  getSection as getExternalSection,
+  interpolate,
+} from './systemPromptFiles/index.js'
 import type { ContentBlockParam } from 'my-agent-ai/sdk/resources/messages'
 import { randomUUID } from 'crypto'
 import last from 'lodash-es/last.js'
@@ -871,7 +875,11 @@ export class QueryEngine {
               ),
               uuid: randomUUID(),
               errors: [
-                `Reached maximum number of turns (${message.attachment.maxTurns})`,
+                interpolate(
+                  getExternalSection('errors/max-turns') ??
+                    `Reached maximum number of turns ({maxTurns})`,
+                  { maxTurns: message.attachment.maxTurns },
+                ),
               ],
             }
             return
@@ -1000,7 +1008,13 @@ export class QueryEngine {
             initialAppState.fastMode,
           ),
           uuid: randomUUID(),
-          errors: [`Reached maximum budget ($${maxBudgetUsd})`],
+          errors: [
+            interpolate(
+              getExternalSection('errors/max-budget') ??
+                `Reached maximum budget ($\{maxBudgetUsd})`,
+              { maxBudgetUsd },
+            ),
+          ],
         }
         return
       }
@@ -1044,7 +1058,13 @@ export class QueryEngine {
             ),
             uuid: randomUUID(),
             errors: [
-              `Failed to provide valid structured output after ${maxRetries} attempts`,
+              interpolate(
+                getExternalSection(
+                  'errors/max-structured-output-retries',
+                ) ??
+                  `Failed to provide valid structured output after {maxRetries} attempts`,
+                { maxRetries },
+              ),
             ],
           }
           return
@@ -1113,7 +1133,15 @@ export class QueryEngine {
             ? all.lastIndexOf(errorLogWatermark) + 1
             : 0
           return [
-            `[ede_diagnostic] result_type=${edeResultType} last_content_type=${edeLastContentType} stop_reason=${lastStopReason}`,
+            interpolate(
+              getExternalSection('errors/ede-diagnostic') ??
+                `[ede_diagnostic] result_type={edeResultType} last_content_type={edeLastContentType} stop_reason={lastStopReason}`,
+              {
+                edeResultType: String(edeResultType),
+                edeLastContentType: String(edeLastContentType),
+                lastStopReason: String(lastStopReason),
+              },
+            ),
             ...all.slice(start).map(_ => _.error),
           ]
         })(),

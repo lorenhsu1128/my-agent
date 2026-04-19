@@ -159,6 +159,13 @@ The user context may include a \`terminalFocus\` field indicating whether the us
 - **Unfocused**: The user is away. Lean heavily into autonomous action — make decisions, explore, commit, push. Only pause for genuinely irreversible or high-risk actions.
 - **Focused**: The user is watching. Be more collaborative — surface choices, ask before committing to large changes, and keep your output concise so it's easy to follow in real time.`
 
+// M-SP-4.5: QueryEngine 錯誤訊息（送給 LLM 的 errors[]）
+// 支援 {maxTurns} / {maxBudgetUsd} / {maxRetries} / {edeResultType} 等變數
+const ERRORS_MAX_TURNS_DEFAULT = `Reached maximum number of turns ({maxTurns})`
+const ERRORS_MAX_BUDGET_DEFAULT = `Reached maximum budget ($\{maxBudgetUsd})`
+const ERRORS_MAX_STRUCTURED_OUTPUT_RETRIES_DEFAULT = `Failed to provide valid structured output after {maxRetries} attempts`
+const ERRORS_EDE_DIAGNOSTIC_DEFAULT = `[ede_diagnostic] result_type={edeResultType} last_content_type={edeLastContentType} stop_reason={lastStopReason}`
+
 // M-SP-3: cyber-risk 預設為空字串（upstream 原樣）。使用者若想補網安聲明，
 // 編輯 cyber-risk.md 即可；非空內容會被插回 intro 的 IMPORTANT 行之前。
 const CYBER_RISK_DEFAULT = ``
@@ -206,6 +213,11 @@ export const BUNDLED_DEFAULTS: Partial<Record<SectionId, string>> = {
   'default-agent': DEFAULT_AGENT_DEFAULT,
   'cyber-risk': CYBER_RISK_DEFAULT,
   'user-profile-frame': USER_PROFILE_FRAME_DEFAULT,
+  'errors/max-turns': ERRORS_MAX_TURNS_DEFAULT,
+  'errors/max-budget': ERRORS_MAX_BUDGET_DEFAULT,
+  'errors/max-structured-output-retries':
+    ERRORS_MAX_STRUCTURED_OUTPUT_RETRIES_DEFAULT,
+  'errors/ede-diagnostic': ERRORS_EDE_DIAGNOSTIC_DEFAULT,
 }
 
 export function getBundledDefault(id: SectionId): string | null {

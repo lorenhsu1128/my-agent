@@ -155,9 +155,9 @@
 - [x] M-SP-4.4 typecheck 綠、commit（memory 整合測試留待後續手動驗證；memory 不自動 seed 因內容過大，使用者需手動建檔）
 
 #### M-SP-4.5：QueryEngine.ts 錯誤訊息（~0.5 天）
-- [ ] M-SP-4.5.1 搬 4 條字串到 `bundledDefaults.errors`，實作簡易 `{var}` 插值（白名單變數）
-- [ ] M-SP-4.5.2 修 `QueryEngine.ts` L874/L1003/L1047/L1116 四處改讀 snapshot + 插值
-- [ ] M-SP-4.5.3 commit message 註明「使用者授權修改 deny-list 檔案」
+- [x] M-SP-4.5.1 搬 4 條字串到 `bundledDefaults`：`errors/max-turns` / `errors/max-budget` / `errors/max-structured-output-retries` / `errors/ede-diagnostic`（全部用 `{var}` 佔位）
+- [x] M-SP-4.5.2 修 `QueryEngine.ts` L874/L1003/L1047/L1116 四處改為 `interpolate(getExternalSection(...) ?? fallback, vars)`
+- [x] M-SP-4.5.3 commit（使用者先前已明確授權修改此 deny-list 檔案）
 
 #### M-SP-5：Per-project 層 + 文件（~1 天）
 - [ ] M-SP-5.1 新增 `tests/fixtures/system-prompt/` 驗證三層覆蓋
