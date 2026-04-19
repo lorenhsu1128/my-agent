@@ -3987,6 +3987,101 @@ async function run(): Promise<CommanderCommand> {
     });
   }
 
+  // my-agent daemon — local daemon + direct-connect server (M-DAEMON).
+  // 長駐 session runner；REPL thin-client 會自動 attach（M-DAEMON-6）。
+  // 詳見 CLAUDE.md 開發日誌 M-DAEMON 段 + src/daemon/daemonCli.ts。
+  {
+    const daemon = program
+      .command('daemon')
+      .description(
+        'Local daemon + direct-connect server. `start` runs in foreground; ' +
+          'use `stop` from another shell or send SIGINT. REPL auto-attaches ' +
+          'when a daemon is live.',
+      )
+      .configureHelp(createSortedHelpConfig())
+      .enablePositionalOptions()
+
+    daemon
+      .command('start')
+      .description('Start daemon in foreground (Ctrl+C or `daemon stop` to quit)')
+      .option('--port <n>', 'WebSocket port (0 = OS-assigned)', '0')
+      .option('--host <h>', 'Bind address (loopback only recommended)', '127.0.0.1')
+      .action(async (opts: { port: string; host: string }) => {
+        const { runDaemonStart } = await import('./daemon/daemonCli.js')
+        try {
+          await runDaemonStart(
+            { agentVersion: MACRO.VERSION as string },
+            {
+              port: parseInt(opts.port, 10),
+              host: opts.host,
+            },
+          )
+          process.exit(0)
+        } catch {
+          process.exit(1)
+        }
+      })
+
+    daemon
+      .command('stop')
+      .description('Stop the running daemon (SIGTERM then SIGKILL)')
+      .option('--graceful-ms <n>', 'Graceful stop timeout before SIGKILL', '5000')
+      .action(async (opts: { gracefulMs: string }) => {
+        const { runDaemonStop } = await import('./daemon/daemonCli.js')
+        const result = await runDaemonStop(
+          { agentVersion: MACRO.VERSION as string },
+          { gracefulMs: parseInt(opts.gracefulMs, 10) },
+        )
+        process.exit(result.stopped ? 0 : result.found ? 1 : 0)
+      })
+
+    daemon
+      .command('status')
+      .description('Show whether a daemon is running and its state')
+      .action(async () => {
+        const { runDaemonStatus } = await import('./daemon/daemonCli.js')
+        const s = await runDaemonStatus({ agentVersion: MACRO.VERSION as string })
+        process.exit(s.running ? 0 : 1)
+      })
+
+    daemon
+      .command('restart')
+      .description('Stop the running daemon then start a new one (foreground)')
+      .option('--port <n>', 'WebSocket port (0 = OS-assigned)', '0')
+      .option('--host <h>', 'Bind address', '127.0.0.1')
+      .action(async (opts: { port: string; host: string }) => {
+        const { runDaemonRestart } = await import('./daemon/daemonCli.js')
+        try {
+          await runDaemonRestart(
+            { agentVersion: MACRO.VERSION as string },
+            {
+              port: parseInt(opts.port, 10),
+              host: opts.host,
+            },
+          )
+          process.exit(0)
+        } catch {
+          process.exit(1)
+        }
+      })
+
+    daemon
+      .command('logs')
+      .description('Print daemon.log (add -f to follow)')
+      .option('-f, --follow', 'Follow new log lines')
+      .action(async (opts: { follow?: boolean }) => {
+        const { runDaemonLogs } = await import('./daemon/daemonCli.js')
+        const controller = new AbortController()
+        process.once('SIGINT', () => controller.abort())
+        process.once('SIGTERM', () => controller.abort())
+        await runDaemonLogs(
+          { agentVersion: MACRO.VERSION as string },
+          { follow: opts.follow, signal: controller.signal },
+        )
+        process.exit(0)
+      })
+  }
+
   // `claude ssh <host> [dir]` — registered here only so --help shows it.
   // The actual interactive flow is handled by early argv rewriting in main()
   // (parallels the DIRECT_CONNECT/cc:// pattern above). If commander reaches
