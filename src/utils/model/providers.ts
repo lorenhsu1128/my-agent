@@ -84,6 +84,8 @@ let _cachedLlamaCppCtxSize: number | null = null
  * 結果快取在 module scope，後續 `getLlamaCppContextSize()` 同步讀取。
  * 3 秒 timeout — server 未啟動時不阻塞。
  */
+let _warnedLlamaCppCtxSizeMissing = false
+
 export async function queryLlamaCppContextSize(
   baseUrl?: string,
 ): Promise<number | null> {
@@ -93,17 +95,34 @@ export async function queryLlamaCppContextSize(
     const res = await globalThis.fetch(`${root}/slots`, {
       signal: AbortSignal.timeout(3000),
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      warnOnceCtxSizeMissing(
+        `llama-server /slots HTTP ${res.status}; 若模型非 200K 請設 LLAMACPP_CTX_SIZE=<tokens>`,
+      )
+      return null
+    }
     const slots = (await res.json()) as Array<{ n_ctx?: number }>
     const n_ctx = slots?.[0]?.n_ctx
     if (typeof n_ctx === 'number' && n_ctx > 0) {
       _cachedLlamaCppCtxSize = n_ctx
       return n_ctx
     }
-  } catch {
-    /* server 未啟動或不支援 /slots — 靜默 fallback */
+    warnOnceCtxSizeMissing(
+      `llama-server /slots 未回傳 n_ctx；若模型非 200K 請設 LLAMACPP_CTX_SIZE=<tokens>`,
+    )
+  } catch (e) {
+    warnOnceCtxSizeMissing(
+      `llama-server /slots 查詢失敗（${e instanceof Error ? e.message : String(e)}）；若模型非 200K 請設 LLAMACPP_CTX_SIZE=<tokens>，否則 auto-compact 閾值會落在 200K 造成溢出`,
+    )
   }
   return null
+}
+
+function warnOnceCtxSizeMissing(reason: string): void {
+  if (_warnedLlamaCppCtxSizeMissing) return
+  _warnedLlamaCppCtxSizeMissing = true
+  // biome-ignore lint/suspicious/noConsole: startup diagnostic
+  console.error(`[llamacpp] ${reason}`)
 }
 
 /**

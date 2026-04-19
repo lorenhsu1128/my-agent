@@ -653,6 +653,15 @@ async function* translateOpenAIStreamToAnthropic(
   openToolBlocks.clear()
   toolArgBuffers.clear()
 
+  // M-LLAMACPP-CTX: finish_reason=length + 0 output 是典型上下文溢出徵兆
+  // （server 吃掉 prompt 但沒空間產 token）。寫一條 stderr 警示協助診斷。
+  if (finalFinishReason === 'length' && accUsage.output_tokens === 0) {
+    // biome-ignore lint/suspicious/noConsole: diagnostic only
+    console.error(
+      '[llamacpp] finish_reason=length 且 output_tokens=0；可能為上下文已滿或 n_ctx 不足。' +
+        '若情況持續，確認 LLAMACPP_CTX_SIZE 與實際 /slots n_ctx 一致，或手動 /compact',
+    )
+  }
   yield formatSSE('message_delta', {
     type: 'message_delta',
     delta: {
@@ -793,16 +802,28 @@ export function createLlamaCppFetch(
 
     if (!openaiRes.ok) {
       const errText = await openaiRes.text()
+      // M-LLAMACPP-CTX: 偵測 llama.cpp 的上下文溢出錯誤訊息（不同版本措辭不一）
+      // 若命中則改寫成 Anthropic 的 "Prompt is too long" 格式，讓
+      // src/services/api/errors.ts:isPromptTooLongMessage 能識別，
+      // 觸發 reactive compaction 自動復原而非卡住。
+      const isContextOverflow =
+        openaiRes.status === 400 &&
+        /(context|n_ctx|prompt|token)[^a-z]*(length|exceed|too (long|large|many)|out of)/i.test(
+          errText,
+        )
+      const message = isContextOverflow
+        ? `Prompt is too long (llama.cpp): ${errText}`
+        : `llama.cpp error (${openaiRes.status}): ${errText}`
       return new Response(
         JSON.stringify({
           type: 'error',
           error: {
-            type: 'api_error',
-            message: `llama.cpp error (${openaiRes.status}): ${errText}`,
+            type: isContextOverflow ? 'invalid_request_error' : 'api_error',
+            message,
           },
         }),
         {
-          status: openaiRes.status,
+          status: isContextOverflow ? 400 : openaiRes.status,
           headers: { 'Content-Type': 'application/json' },
         },
       )
