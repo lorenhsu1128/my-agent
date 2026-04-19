@@ -79,7 +79,15 @@ explicitly called out as default-on.
 - `AGENT_MEMORY_SNAPSHOT`
   Stores extra custom-agent memory snapshot state in the app.
 - `AGENT_TRIGGERS`
-  Enables local cron/trigger tools and bundled trigger-related skills.
+  Enables the local cron subsystem. Exposes 7 agent tools (CronCreate /
+  CronDelete / CronList / CronPause / CronResume / CronUpdate / CronRunNow),
+  a human-friendly schedule DSL (duration "30m", interval "every 2h",
+  ISO timestamp, 5-field cron), per-job model override (dispatched via
+  in-process teammate), pre-run shell scripts with stdout redaction, audit
+  logs under <project>/.my-agent/cron/output/, at-most-once advance-before-
+  fire, stale-run fast-forward with grace window, and injection defense
+  (rejects prompts with live secrets or shell exfil patterns). See
+  docs/cron.md and src/tools/ScheduleCronTool/README.md.
 - `AGENT_TRIGGERS_REMOTE`
   Enables the remote trigger tool path.
 - `BUILTIN_EXPLORE_PLAN_AGENTS`

@@ -2,7 +2,7 @@
 
 ## 📋 System Prompt 注入架構
 
-Free-code 的 system prompt 採用**模組化、可快取的設計**，透過 `src/constants/prompts.ts` 的 `getSystemPrompt()` 函式組裝。
+My Agent 的 system prompt 採用**模組化、可快取的設計**，透過 `src/constants/prompts.ts` 的 `getSystemPrompt()` 函式組裝。**29 段內容全部外部化到 markdown 檔，可以不改程式直接覆寫**（詳見下方第 8 節 M-SP 與 `docs/customizing-system-prompt.md`）。
 
 ### 架構圖
 
