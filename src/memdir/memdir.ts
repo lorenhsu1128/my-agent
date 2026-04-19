@@ -24,11 +24,11 @@ import { formatFileSize } from '../utils/format.js'
 import { getProjectDir } from '../utils/sessionStorage.js'
 import { getInitialSettings } from '../utils/settings/settings.js'
 import {
-  MEMORY_FRONTMATTER_EXAMPLE,
-  TRUSTING_RECALL_SECTION,
-  TYPES_SECTION_INDIVIDUAL,
-  WHAT_NOT_TO_SAVE_SECTION,
-  WHEN_TO_ACCESS_SECTION,
+  getMemoryFrontmatterExample,
+  getTrustingRecallSection,
+  getTypesSectionIndividual,
+  getWhatNotToSaveSection,
+  getWhenToAccessSection,
 } from './memoryTypes.js'
 
 export const ENTRYPOINT_NAME = 'MEMORY.md'
@@ -208,7 +208,7 @@ export function buildMemoryLines(
         '',
         'Write each memory to its own file (e.g., `user_role.md`, `feedback_testing.md`) using this frontmatter format:',
         '',
-        ...MEMORY_FRONTMATTER_EXAMPLE,
+        ...getMemoryFrontmatterExample(),
         '',
         '- Keep the name, description, and type fields in memory files up-to-date with the content',
         '- Organize memory semantically by topic, not chronologically',
@@ -222,7 +222,7 @@ export function buildMemoryLines(
         '',
         '**Step 1** — write the memory to its own file (e.g., `user_role.md`, `feedback_testing.md`) using this frontmatter format:',
         '',
-        ...MEMORY_FRONTMATTER_EXAMPLE,
+        ...getMemoryFrontmatterExample(),
         '',
         `**Step 2** — add a pointer to that file in \`${ENTRYPOINT_NAME}\`. \`${ENTRYPOINT_NAME}\` is an index, not a memory — each entry should be one line, under ~150 characters: \`- [Title](file.md) — one-line hook\`. It has no frontmatter. Never write memory content directly into \`${ENTRYPOINT_NAME}\`.`,
         '',
@@ -244,14 +244,14 @@ export function buildMemoryLines(
     '',
     'Short, durable 1-line persona facts (language preference, shell, OS, role, core communication style) belong in the **USER.md persona block** — write them via the Memory tool with `target="user_profile"`. See the Memory tool description for the decision tree. Typed memdir files (below) are for multi-line entries with context.',
     '',
-    ...TYPES_SECTION_INDIVIDUAL,
-    ...WHAT_NOT_TO_SAVE_SECTION,
+    ...getTypesSectionIndividual(),
+    ...getWhatNotToSaveSection(),
     '',
     ...howToSave,
     '',
-    ...WHEN_TO_ACCESS_SECTION,
+    ...getWhenToAccessSection(),
     '',
-    ...TRUSTING_RECALL_SECTION,
+    ...getTrustingRecallSection(),
     '',
     '## Memory and other forms of persistence',
     'Memory is one of several persistence mechanisms available to you as you assist the user in a given conversation. The distinction is often that memory can be recalled in future conversations and should not be used for persisting information that is only useful within the scope of the current conversation.',
@@ -356,7 +356,7 @@ function buildAssistantDailyLogPrompt(skipIndex = false): string {
     '- Pointers to external systems (dashboards, Linear projects, Slack channels)',
     '- Anything the user explicitly asks you to remember',
     '',
-    ...WHAT_NOT_TO_SAVE_SECTION,
+    ...getWhatNotToSaveSection(),
     '',
     ...(skipIndex
       ? []

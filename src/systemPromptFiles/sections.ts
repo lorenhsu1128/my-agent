@@ -225,9 +225,9 @@ export const SECTIONS: SectionMeta[] = [
   {
     id: 'memory/types-combined',
     filename: 'memory/types-combined.md',
-    purpose: 'memory 系統 combined mode 的類型分類說明',
+    purpose: 'memory 系統 combined mode 的類型分類說明（不自動 seed；手動建立）',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -235,7 +235,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'memory/types-individual.md',
     purpose: 'memory 系統 individual mode 的類型分類說明',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -243,7 +243,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'memory/what-not-to-save.md',
     purpose: 'memory 禁止保存的項目說明',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -251,7 +251,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'memory/drift-caveat.md',
     purpose: 'memory 可能過期的警告',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -259,7 +259,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'memory/when-to-access.md',
     purpose: '何時讀取 memory 的指引',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -267,7 +267,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'memory/trusting-recall.md',
     purpose: '驗證 recalled memory 的指引',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -275,7 +275,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'memory/frontmatter-example.md',
     purpose: 'memory 檔案 frontmatter 範例',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -283,7 +283,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'memory/combined-template.md',
     purpose: 'memory combined prompt 完整模板',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
 ]

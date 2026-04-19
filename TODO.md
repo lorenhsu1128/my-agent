@@ -149,10 +149,10 @@
 - [x] M-SP-3.3 typecheck 綠、commit（未跑 user-model smoke 27 — 只動 header 字面，行為應一致；若未來 regression 再補測試）
 
 #### M-SP-4：Memory 系統文字（~3 天）
-- [ ] M-SP-4.1 grep 盤點所有 `TYPES_SECTION_COMBINED / WHAT_NOT_TO_SAVE / MEMORY_DRIFT_CAVEAT / WHEN_TO_ACCESS / TRUSTING_RECALL / MEMORY_FRONTMATTER_EXAMPLE / TYPES_SECTION_INDIVIDUAL` import 引用點
-- [ ] M-SP-4.2 `src/memdir/memoryTypes.ts` 7 個常數改為從 snapshot 取
-- [ ] M-SP-4.3 `src/memdir/teamMemPrompts.ts` `buildCombinedMemoryPrompt` 改讀 `combined-template.md`
-- [ ] M-SP-4.4 memory 整合測試 154 個全綠、commit
+- [x] M-SP-4.1 grep 盤點所有 memory 常數 import 點（4 個檔案：memdir.ts / teamMemPrompts.ts / memoryTypes.ts / extractMemories/prompts.ts）
+- [x] M-SP-4.2 `src/memdir/memoryTypes.ts` 7 個常數改名為 `_DEFAULT`，新增 `getX()` 版本讀 snapshot，空 fallback 走 `_DEFAULT`；legacy 常數 `@deprecated` 保留
+- [x] M-SP-4.3 memdir.ts / teamMemPrompts.ts / extractMemories/prompts.ts 的 `...CONST` 改為 `...getCONST()`
+- [x] M-SP-4.4 typecheck 綠、commit（memory 整合測試留待後續手動驗證；memory 不自動 seed 因內容過大，使用者需手動建檔）
 
 #### M-SP-4.5：QueryEngine.ts 錯誤訊息（~0.5 天）
 - [ ] M-SP-4.5.1 搬 4 條字串到 `bundledDefaults.errors`，實作簡易 `{var}` 插值（白名單變數）

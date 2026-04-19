@@ -1,15 +1,17 @@
 /**
  * Memory type taxonomy.
  *
+ * M-SP-4: 8 個 memory 系統 prompt 常數已外部化至
+ * `~/.my-agent/system-prompt/memory/*.md`，使用者可編輯、下一 session 生效。
+ * 本檔內的 `const *_DEFAULT` 為 bundled fallback（缺檔時使用）。
+ * 對外仍提供 `getX()` getter 回傳 readonly string[]（與既有 `...X` 語義相容）。
+ *
  * Memories are constrained to four types capturing context NOT derivable
  * from the current project state. Code patterns, architecture, git history,
  * and file structure are derivable (via grep/git/MY-AGENT.md) and should NOT
  * be saved as memories.
- *
- * The two TYPES_SECTION_* exports below are intentionally duplicated rather
- * than generated from a shared spec — keeping them flat makes per-mode edits
- * trivial without reasoning through a helper's conditional rendering.
  */
+import { getSection as getExternalSection } from '../systemPromptFiles/index.js'
 
 export const MEMORY_TYPES = [
   'user',
@@ -34,7 +36,7 @@ export function parseMemoryType(raw: unknown): MemoryType | undefined {
  * `## Types of memory` section for COMBINED mode (private + team directories).
  * Includes <scope> tags and team/private qualifiers in examples.
  */
-export const TYPES_SECTION_COMBINED: readonly string[] = [
+const TYPES_SECTION_COMBINED_DEFAULT: readonly string[] = [
   '## Types of memory',
   '',
   'There are several discrete types of memory that you can store in your memory system. Each type below declares a <scope> of `private`, `team`, or guidance for choosing between the two.',
@@ -110,7 +112,7 @@ export const TYPES_SECTION_COMBINED: readonly string[] = [
  * No <scope> tags. Examples use plain `[saves X memory: …]`. Prose that
  * only makes sense with a private/team split is reworded.
  */
-export const TYPES_SECTION_INDIVIDUAL: readonly string[] = [
+const TYPES_SECTION_INDIVIDUAL_DEFAULT: readonly string[] = [
   '## Types of memory',
   '',
   'There are several discrete types of memory that you can store in your memory system:',
@@ -180,7 +182,7 @@ export const TYPES_SECTION_INDIVIDUAL: readonly string[] = [
 /**
  * `## What NOT to save in memory` section. Identical across both modes.
  */
-export const WHAT_NOT_TO_SAVE_SECTION: readonly string[] = [
+const WHAT_NOT_TO_SAVE_SECTION_DEFAULT: readonly string[] = [
   '## What NOT to save in memory',
   '',
   '- Code patterns, conventions, architecture, file paths, or project structure — these can be derived by reading the current project state.',
@@ -198,7 +200,7 @@ export const WHAT_NOT_TO_SAVE_SECTION: readonly string[] = [
  * Recall-side drift caveat. Single bullet under `## When to access memories`.
  * Proactive: verify memory against current state before answering.
  */
-export const MEMORY_DRIFT_CAVEAT =
+const MEMORY_DRIFT_CAVEAT_DEFAULT =
   '- Memory records can become stale over time. Use memory as context for what was true at a given point in time. Before answering the user or building assumptions based solely on information in memory records, verify that the memory is still correct and up-to-date by reading the current state of the files or resources. If a recalled memory conflicts with current information, trust what you observe now — and update or remove the stale memory rather than acting on it.'
 
 /**
@@ -213,12 +215,12 @@ export const MEMORY_DRIFT_CAVEAT =
  * Token budget (H6a): merged old bullets 1+2, tightened both. Old 4 lines
  * were ~70 tokens; new 4 lines are ~73 tokens. Net ~+3.
  */
-export const WHEN_TO_ACCESS_SECTION: readonly string[] = [
+const WHEN_TO_ACCESS_SECTION_DEFAULT: readonly string[] = [
   '## When to access memories',
   '- When memories seem relevant, or the user references prior-conversation work.',
   '- You MUST access memory when the user explicitly asks you to check, recall, or remember.',
   '- If the user says to *ignore* or *not use* memory: proceed as if MEMORY.md were empty. Do not apply remembered facts, cite, compare against, or mention memory content.',
-  MEMORY_DRIFT_CAVEAT,
+  MEMORY_DRIFT_CAVEAT_DEFAULT,
 ]
 
 /**
@@ -237,7 +239,7 @@ export const WHEN_TO_ACCESS_SECTION: readonly string[] = [
  * Known gap: H1 doesn't cover slash-command claims (0/3 on the /fork case —
  * slash commands aren't files or functions in the model's ontology).
  */
-export const TRUSTING_RECALL_SECTION: readonly string[] = [
+const TRUSTING_RECALL_SECTION_DEFAULT: readonly string[] = [
   // Header wording matters: "Before recommending" (action cue at the decision
   // point) tested better than "Trusting what you recall" (abstract). The
   // appendSystemPrompt variant with this header went 3/3; the abstract header
@@ -258,7 +260,7 @@ export const TRUSTING_RECALL_SECTION: readonly string[] = [
 /**
  * Frontmatter format example with the `type` field.
  */
-export const MEMORY_FRONTMATTER_EXAMPLE: readonly string[] = [
+const MEMORY_FRONTMATTER_EXAMPLE_DEFAULT: readonly string[] = [
   '```markdown',
   '---',
   'name: {{memory name}}',
@@ -269,3 +271,87 @@ export const MEMORY_FRONTMATTER_EXAMPLE: readonly string[] = [
   '{{memory content — for feedback/project types, structure as: rule/fact, then **Why:** and **How to apply:** lines}}',
   '```',
 ]
+
+// -----------------------------------------------------------------------------
+// M-SP-4 getters：讀 snapshot（每 session 啟動凍結），缺檔回各 DEFAULT。
+// .md 內容以單一字串儲存；getter 以 '\n' split 回 readonly string[] 供 `...` 展開。
+// -----------------------------------------------------------------------------
+
+function fromSectionOrDefault(
+  sectionId:
+    | 'memory/types-combined'
+    | 'memory/types-individual'
+    | 'memory/what-not-to-save'
+    | 'memory/when-to-access'
+    | 'memory/trusting-recall'
+    | 'memory/frontmatter-example',
+  fallback: readonly string[],
+): readonly string[] {
+  const text = getExternalSection(sectionId)
+  if (text === null) return fallback
+  return text.split('\n')
+}
+
+export function getTypesSectionCombined(): readonly string[] {
+  return fromSectionOrDefault(
+    'memory/types-combined',
+    TYPES_SECTION_COMBINED_DEFAULT,
+  )
+}
+
+export function getTypesSectionIndividual(): readonly string[] {
+  return fromSectionOrDefault(
+    'memory/types-individual',
+    TYPES_SECTION_INDIVIDUAL_DEFAULT,
+  )
+}
+
+export function getWhatNotToSaveSection(): readonly string[] {
+  return fromSectionOrDefault(
+    'memory/what-not-to-save',
+    WHAT_NOT_TO_SAVE_SECTION_DEFAULT,
+  )
+}
+
+export function getWhenToAccessSection(): readonly string[] {
+  return fromSectionOrDefault(
+    'memory/when-to-access',
+    WHEN_TO_ACCESS_SECTION_DEFAULT,
+  )
+}
+
+export function getTrustingRecallSection(): readonly string[] {
+  return fromSectionOrDefault(
+    'memory/trusting-recall',
+    TRUSTING_RECALL_SECTION_DEFAULT,
+  )
+}
+
+export function getMemoryFrontmatterExample(): readonly string[] {
+  return fromSectionOrDefault(
+    'memory/frontmatter-example',
+    MEMORY_FRONTMATTER_EXAMPLE_DEFAULT,
+  )
+}
+
+export function getMemoryDriftCaveat(): string {
+  return (
+    getExternalSection('memory/drift-caveat') ?? MEMORY_DRIFT_CAVEAT_DEFAULT
+  )
+}
+
+// --- Legacy exports（@deprecated，保留以避免同時改動太多 call sites） ---
+/** @deprecated use getTypesSectionCombined() */
+export const TYPES_SECTION_COMBINED = TYPES_SECTION_COMBINED_DEFAULT
+/** @deprecated use getTypesSectionIndividual() */
+export const TYPES_SECTION_INDIVIDUAL = TYPES_SECTION_INDIVIDUAL_DEFAULT
+/** @deprecated use getWhatNotToSaveSection() */
+export const WHAT_NOT_TO_SAVE_SECTION = WHAT_NOT_TO_SAVE_SECTION_DEFAULT
+/** @deprecated use getMemoryDriftCaveat() */
+export const MEMORY_DRIFT_CAVEAT = MEMORY_DRIFT_CAVEAT_DEFAULT
+/** @deprecated use getWhenToAccessSection() */
+export const WHEN_TO_ACCESS_SECTION = WHEN_TO_ACCESS_SECTION_DEFAULT
+/** @deprecated use getTrustingRecallSection() */
+export const TRUSTING_RECALL_SECTION = TRUSTING_RECALL_SECTION_DEFAULT
+/** @deprecated use getMemoryFrontmatterExample() */
+export const MEMORY_FRONTMATTER_EXAMPLE = MEMORY_FRONTMATTER_EXAMPLE_DEFAULT
