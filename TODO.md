@@ -119,6 +119,61 @@
 
 ---
 
+## 當前里程碑：M-SP — System Prompt Externalization（2026-04-19 啟動）
+
+**目標**：把約 15–16K tokens 寫死在 TS 的 system prompt 文字外部化到 `~/.my-agent/system-prompt/` 下的 `.md` 檔，使用者可直接編輯、下一 session 生效。雙層（global + per-project）+ 首次啟動自動 seed + README.md 指引。
+
+**詳細計畫**：見 `M_SP_PLAN.md`
+
+### 任務
+
+#### M-SP-1：基礎設施 + 8 大靜態段 + Seed 機制（~3.5 天）
+- [x] M-SP-1.1 建 `src/systemPromptFiles/` 模組骨架：`paths.ts` / `loader.ts` / `bundledDefaults.ts` / `sections.ts` / `seed.ts` / `snapshot.ts` / `index.ts`
+- [ ] M-SP-1.2 搬 `prompts.ts` 8 大靜態段字串到 `bundledDefaults.ts`（**3/8 完成**：actions / tone-style / output-efficiency；待搬：intro / system / doing-tasks / using-tools / proactive）
+- [x] M-SP-1.3 撰寫 README.md 模板（表格列檔名 → 影響區塊 → 時機 → 可否刪除）
+- [x] M-SP-1.4 實作 `seedSystemPromptDirIfMissing()` + `setup.ts` 啟動鉤子（背景非阻塞）
+- [ ] M-SP-1.5 `prompts.ts` 8 個 `getXxxSection()` 改為讀 snapshot（**3/8 完成**：actions / tone-style / output-efficiency）
+- [ ] M-SP-1.6 寫 `scripts/dump-system-prompt.ts` 產出當前 system prompt 供 byte-level diff 比對
+- [ ] M-SP-1.7 單元測試：seed / fallback 鏈 / per-project 覆蓋 / 權限失敗 warn
+- [ ] M-SP-1.8 整合測試：`./cli -p "hi"` 首次啟動 seed + byte-level diff = 0
+- [x] M-SP-1.9 typecheck 綠（baseline 僅 TS5101 pre-existing），commit
+
+#### M-SP-2：動態段 fallback 字串（~1 天）
+- [ ] M-SP-2.1 搬 skills_guidance / numeric_length_anchors / token_budget / scratchpad / frc / summarize_tool_results / default_agent / proactive 到 .md
+- [ ] M-SP-2.2 驗證各 feature flag 組合下行為一致
+- [ ] M-SP-2.3 typecheck 綠、commit
+
+#### M-SP-3：User Profile 外框 + cyber-risk（~0.5 天）
+- [ ] M-SP-3.1 `src/userModel/prompt.ts` 外框改讀 `user-profile-frame.md`
+- [ ] M-SP-3.2 `cyberRiskInstruction.ts` 改為 `getCyberRiskInstruction()` 函式讀 snapshot；`prompts.ts:183,475` 兩處同步改
+- [ ] M-SP-3.3 user-model smoke 27 測試通過、commit
+
+#### M-SP-4：Memory 系統文字（~3 天）
+- [ ] M-SP-4.1 grep 盤點所有 `TYPES_SECTION_COMBINED / WHAT_NOT_TO_SAVE / MEMORY_DRIFT_CAVEAT / WHEN_TO_ACCESS / TRUSTING_RECALL / MEMORY_FRONTMATTER_EXAMPLE / TYPES_SECTION_INDIVIDUAL` import 引用點
+- [ ] M-SP-4.2 `src/memdir/memoryTypes.ts` 7 個常數改為從 snapshot 取
+- [ ] M-SP-4.3 `src/memdir/teamMemPrompts.ts` `buildCombinedMemoryPrompt` 改讀 `combined-template.md`
+- [ ] M-SP-4.4 memory 整合測試 154 個全綠、commit
+
+#### M-SP-4.5：QueryEngine.ts 錯誤訊息（~0.5 天）
+- [ ] M-SP-4.5.1 搬 4 條字串到 `bundledDefaults.errors`，實作簡易 `{var}` 插值（白名單變數）
+- [ ] M-SP-4.5.2 修 `QueryEngine.ts` L874/L1003/L1047/L1116 四處改讀 snapshot + 插值
+- [ ] M-SP-4.5.3 commit message 註明「使用者授權修改 deny-list 檔案」
+
+#### M-SP-5：Per-project 層 + 文件（~1 天）
+- [ ] M-SP-5.1 新增 `tests/fixtures/system-prompt/` 驗證三層覆蓋
+- [ ] M-SP-5.2 更新 `CLAUDE.md` + `docs/context-architecture.md`
+- [ ] M-SP-5.3 寫 `docs/customizing-system-prompt.md` 使用者指南
+- [ ] M-SP-5.4 M-SP 整體 e2e smoke + commit
+
+### 完成標準
+- [ ] 首次啟動自動 seed `~/.my-agent/system-prompt/` 含 README.md
+- [ ] byte-level diff（seed 後 vs 重構前）= 0
+- [ ] 所有既有整合測試通過（memory 154 + user-model 27）
+- [ ] 使用者改檔案後開新 session 生效
+- [ ] per-project 覆蓋優先於 global，global 優先於 bundled
+
+---
+
 ## 已完成里程碑：M1 — 透過 llama.cpp 支援本地模型（封存）
 
 **目標**：free-code 能直接連接專案內跑的 llama.cpp server（`http://127.0.0.1:8080/v1`，model alias `qwen3.5-9b-neo`），支援串流和全部 39 個工具的 tool calling。**不再**經過 LiteLLM proxy（ADR-001 已推翻，見 CLAUDE.md）。
@@ -844,3 +899,15 @@
 - 2026-04-18 22:18: Session 結束 | 進度：265/278 任務 | b7bacd1 docs(context): 記錄 free-code 上下文組成詳解（M-UM + M2）
 
 - 2026-04-19 07:10: Session 結束 | 進度：265/278 任務 | b7bacd1 docs(context): 記錄 free-code 上下文組成詳解（M-UM + M2）
+
+- 2026-04-19 07:40: Session 結束 | 進度：274/287 任務 | 3129f2c refactor(brand): 使用者可見字串改為 my-agent，新增 my-agent bin alias
+
+- 2026-04-19 07:43: Session 結束 | 進度：274/287 任務 | 3129f2c refactor(brand): 使用者可見字串改為 my-agent，新增 my-agent bin alias
+
+- 2026-04-19 07:51: Session 結束 | 進度：274/287 任務 | 3129f2c refactor(brand): 使用者可見字串改為 my-agent，新增 my-agent bin alias
+
+- 2026-04-19 07:55: Session 結束 | 進度：274/287 任務 | 3129f2c refactor(brand): 使用者可見字串改為 my-agent，新增 my-agent bin alias
+
+- 2026-04-19 07:58: Session 結束 | 進度：274/287 任務 | 3129f2c refactor(brand): 使用者可見字串改為 my-agent，新增 my-agent bin alias
+
+- 2026-04-19 08:02: Session 結束 | 進度：274/287 任務 | 3129f2c refactor(brand): 使用者可見字串改為 my-agent，新增 my-agent bin alias

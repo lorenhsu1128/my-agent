@@ -99,6 +99,7 @@ const skillSearchFeatureCheck = feature('EXPERIMENTAL_SKILL_SEARCH')
 /* eslint-enable @typescript-eslint/no-require-imports */
 import type { OutputStyleConfig } from './outputStyles.js'
 import { CYBER_RISK_INSTRUCTION } from './cyberRiskInstruction.js'
+import { getSection as getExternalSection } from '../systemPromptFiles/index.js'
 
 export const CLAUDE_CODE_DOCS_MAP_URL =
   'https://code.claude.com/docs/en/claude_code_docs_map.md'
@@ -253,8 +254,9 @@ function getSimpleDoingTasksSection(): string {
   return [`# Doing tasks`, ...prependBullets(items)].join(`\n`)
 }
 
-function getActionsSection(): string {
-  return `# Executing actions with care
+// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/actions.md
+// 使用者可編輯該檔、下次 session 生效；缺檔回本 fallback。
+const ACTIONS_SECTION_FALLBACK = `# Executing actions with care
 
 Carefully consider the reversibility and blast radius of actions. Generally you can freely take local, reversible actions like editing files or running tests. But for actions that are hard to reverse, affect shared systems beyond your local environment, or could otherwise be risky or destructive, check with the user before proceeding. The cost of pausing to confirm is low, while the cost of an unwanted action (lost work, unintended messages sent, deleted branches) can be very high. For actions like these, consider the context, the action, and user instructions, and by default transparently communicate the action and ask for confirmation before proceeding. This default can be changed by user instructions - if explicitly asked to operate more autonomously, then you may proceed without confirmation, but still attend to the risks and consequences when taking actions. A user approving an action (like a git push) once does NOT mean that they approve it in all contexts, so unless actions are authorized in advance in durable instructions like MY-AGENT.md files, always confirm first. Authorization stands for the scope specified, not beyond. Match the scope of your actions to what was actually requested.
 
@@ -265,6 +267,9 @@ Examples of the kind of risky actions that warrant user confirmation:
 - Uploading content to third-party web tools (diagram renderers, pastebins, gists) publishes it - consider whether it could be sensitive before sending, since it may be cached or indexed even if later deleted.
 
 When you encounter an obstacle, do not use destructive actions as a shortcut to simply make it go away. For instance, try to identify root causes and fix underlying issues rather than bypassing safety checks (e.g. --no-verify). If you discover unexpected state like unfamiliar files, branches, or configuration, investigate before deleting or overwriting, as it may represent the user's in-progress work. For example, typically resolve merge conflicts rather than discarding changes; similarly, if a lock file exists, investigate what process holds it rather than deleting it. In short: only take risky actions carefully, and when in doubt, ask before acting. Follow both the spirit and letter of these instructions - measure twice, cut once.`
+
+function getActionsSection(): string {
+  return getExternalSection('actions') ?? ACTIONS_SECTION_FALLBACK
 }
 
 function getUsingYourToolsSection(enabledTools: Set<string>): string {
@@ -400,21 +405,9 @@ function getSessionSpecificGuidanceSection(
   return ['# Session-specific guidance', ...prependBullets(items)].join('\n')
 }
 
-// @[MODEL LAUNCH]: Remove this section when we launch numbat.
-function getOutputEfficiencySection(): string {
-  if (process.env.USER_TYPE === 'ant') {
-    return `# Communicating with the user
-When sending user-facing text, you're writing for a person, not logging to a console. Assume users can't see most tool calls or thinking - only your text output. Before your first tool call, briefly state what you're about to do. While working, give short updates at key moments: when you find something load-bearing (a bug, a root cause), when changing direction, when you've made progress without an update.
-
-When making updates, assume the person has stepped away and lost the thread. They don't know codenames, abbreviations, or shorthand you created along the way, and didn't track your process. Write so they can pick back up cold: use complete, grammatically correct sentences without unexplained jargon. Expand technical terms. Err on the side of more explanation. Attend to cues about the user's level of expertise; if they seem like an expert, tilt a bit more concise, while if they seem like they're new, be more explanatory. 
-
-Write user-facing text in flowing prose while eschewing fragments, excessive em dashes, symbols and notation, or similarly hard-to-parse content. Only use tables when appropriate; for example to hold short enumerable facts (file names, line numbers, pass/fail), or communicate quantitative data. Don't pack explanatory reasoning into table cells -- explain before or after. Avoid semantic backtracking: structure each sentence so a person can read it linearly, building up meaning without having to re-parse what came before. 
-
-What's most important is the reader understanding your output without mental overhead or follow-ups, not how terse you are. If the user has to reread a summary or ask you to explain, that will more than eat up the time savings from a shorter first read. Match responses to the task: a simple question gets a direct answer in prose, not headers and numbered sections. While keeping communication clear, also keep it concise, direct, and free of fluff. Avoid filler or stating the obvious. Get straight to the point. Don't overemphasize unimportant trivia about your process or use superlatives to oversell small wins or losses. Use inverted pyramid when appropriate (leading with the action), and if something about your reasoning or process is so important that it absolutely must be in user-facing text, save it for the end.
-
-These user-facing text instructions do not apply to code or tool calls.`
-  }
-  return `# Output efficiency
+// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/output-efficiency.md（非-ant 版）
+// USER_TYPE=ant 分支仍保留在 TS，外部化僅覆蓋預設路徑。
+const OUTPUT_EFFICIENCY_FALLBACK = `# Output efficiency
 
 IMPORTANT: Go straight to the point. Try the simplest approach first without going in circles. Do not overdo it. Be extra concise.
 
@@ -426,19 +419,45 @@ Focus text output on:
 - Errors or blockers that change the plan
 
 If you can say it in one sentence, don't use three. Prefer short, direct sentences over long explanations. This does not apply to code or tool calls.`
+
+// @[MODEL LAUNCH]: Remove this section when we launch numbat.
+function getOutputEfficiencySection(): string {
+  if (process.env.USER_TYPE === 'ant') {
+    return `# Communicating with the user
+When sending user-facing text, you're writing for a person, not logging to a console. Assume users can't see most tool calls or thinking - only your text output. Before your first tool call, briefly state what you're about to do. While working, give short updates at key moments: when you find something load-bearing (a bug, a root cause), when changing direction, when you've made progress without an update.
+
+When making updates, assume the person has stepped away and lost the thread. They don't know codenames, abbreviations, or shorthand you created along the way, and didn't track your process. Write so they can pick back up cold: use complete, grammatically correct sentences without unexplained jargon. Expand technical terms. Err on the side of more explanation. Attend to cues about the user's level of expertise; if they seem like an expert, tilt a bit more concise, while if they seem like they're new, be more explanatory.
+
+Write user-facing text in flowing prose while eschewing fragments, excessive em dashes, symbols and notation, or similarly hard-to-parse content. Only use tables when appropriate; for example to hold short enumerable facts (file names, line numbers, pass/fail), or communicate quantitative data. Don't pack explanatory reasoning into table cells -- explain before or after. Avoid semantic backtracking: structure each sentence so a person can read it linearly, building up meaning without having to re-parse what came before.
+
+What's most important is the reader understanding your output without mental overhead or follow-ups, not how terse you are. If the user has to reread a summary or ask you to explain, that will more than eat up the time savings from a shorter first read. Match responses to the task: a simple question gets a direct answer in prose, not headers and numbered sections. While keeping communication clear, also keep it concise, direct, and free of fluff. Avoid filler or stating the obvious. Get straight to the point. Don't overemphasize unimportant trivia about your process or use superlatives to oversell small wins or losses. Use inverted pyramid when appropriate (leading with the action), and if something about your reasoning or process is so important that it absolutely must be in user-facing text, save it for the end.
+
+These user-facing text instructions do not apply to code or tool calls.`
+  }
+  return getExternalSection('output-efficiency') ?? OUTPUT_EFFICIENCY_FALLBACK
 }
 
+// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/tone-style.md（非-ant 版）
+// USER_TYPE=ant 走原組裝邏輯（省略一個 bullet）；其他情況讀檔或 fallback。
 function getSimpleToneAndStyleSection(): string {
+  if (process.env.USER_TYPE === 'ant') {
+    const items = [
+      `Only use emojis if the user explicitly requests it. Avoid using emojis in all communication unless asked.`,
+      `When referencing specific functions or pieces of code include the pattern file_path:line_number to allow the user to easily navigate to the source code location.`,
+      `When referencing GitHub issues or pull requests, use the owner/repo#123 format (e.g. anthropics/claude-code#100) so they render as clickable links.`,
+      `Do not use a colon before tool calls. Your tool calls may not be shown directly in the output, so text like "Let me read the file:" followed by a read tool call should just be "Let me read the file." with a period.`,
+    ]
+    return [`# Tone and style`, ...prependBullets(items)].join(`\n`)
+  }
+  const external = getExternalSection('tone-style')
+  if (external !== null) return external
   const items = [
     `Only use emojis if the user explicitly requests it. Avoid using emojis in all communication unless asked.`,
-    process.env.USER_TYPE === 'ant'
-      ? null
-      : `Your responses should be short and concise.`,
+    `Your responses should be short and concise.`,
     `When referencing specific functions or pieces of code include the pattern file_path:line_number to allow the user to easily navigate to the source code location.`,
     `When referencing GitHub issues or pull requests, use the owner/repo#123 format (e.g. anthropics/claude-code#100) so they render as clickable links.`,
     `Do not use a colon before tool calls. Your tool calls may not be shown directly in the output, so text like "Let me read the file:" followed by a read tool call should just be "Let me read the file." with a period.`,
-  ].filter(item => item !== null)
-
+  ]
   return [`# Tone and style`, ...prependBullets(items)].join(`\n`)
 }
 

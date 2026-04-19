@@ -1033,3 +1033,23 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 - `bun run typecheck` / `bun run build` 綠
 - `./cli -p "hello"` 端到端 smoke 通過
 - `./cli auth login` 印 not supported 且 exit 1
+
+---
+
+## M-SP — System Prompt Externalization（2026-04-19 啟動）
+
+詳細計畫見 `M_SP_PLAN.md`。
+
+**目標**：把約 15–16K tokens 的寫死 system prompt 文字外部化到 `~/.my-agent/system-prompt/` 下的 `.md` 檔，讓使用者可直接編輯並在下一 session 生效。採雙層架構（global + per-project）+ 首次啟動自動 seed + README.md 使用者指引。
+
+**範圍**：
+- `src/constants/prompts.ts` 8 大靜態段 + 8 個動態段 fallback 字串
+- `src/constants/cyberRiskInstruction.ts` CYBER_RISK_INSTRUCTION
+- `src/userModel/prompt.ts` user-profile 外框
+- `src/memdir/memoryTypes.ts` + `teamMemPrompts.ts` memory 系統 8 個常數
+- `src/QueryEngine.ts` 4 條錯誤訊息（支援 `{var}` 插值）
+- `src/Tool.ts` 不動（type 定義檔）
+
+**Phase**：M-SP-1（基礎設施 + seed） → M-SP-2（動態段） → M-SP-3（user-profile + cyber-risk） → M-SP-4（memory） → M-SP-4.5（QueryEngine errors） → M-SP-5（per-project + 文件）
+
+**總工程量**：~9–10 個工作天
