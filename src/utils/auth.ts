@@ -1672,7 +1672,8 @@ export function is1PApiCustomer(): boolean {
  * Returns undefined when using external API keys or third-party services.
  */
 export function getOauthAccountInfo(): AccountInfo | undefined {
-  return isAnthropicAuthEnabled() ? getGlobalConfig().oauthAccount : undefined
+  // my-agent: 不從 globalConfig/keychain 讀 Anthropic OAuth 帳戶資訊
+  return undefined
 }
 
 /**
