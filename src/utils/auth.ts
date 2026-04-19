@@ -1728,20 +1728,12 @@ export function hasOpusAccess(): boolean {
 }
 
 export function getSubscriptionType(): SubscriptionType | null {
-  // Check for mock subscription type first (ANT-only testing)
+  // my-agent: Anthropic 訂閱不存在於本地模式，永遠回 null。
+  // ANT-only mock subscription 保留給上游測試流程。
   if (shouldUseMockSubscription()) {
     return getMockSubscriptionType()
   }
-
-  if (!isAnthropicAuthEnabled()) {
-    return null
-  }
-  const oauthTokens = getClaudeAIOAuthTokens()
-  if (!oauthTokens) {
-    return null
-  }
-
-  return oauthTokens.subscriptionType ?? null
+  return null
 }
 
 export function isMaxSubscriber(): boolean {
@@ -1766,9 +1758,8 @@ export function isProSubscriber(): boolean {
 }
 
 export function getSubscriptionName(): string {
-  const subscriptionType = getSubscriptionType()
-
-  switch (subscriptionType) {
+  // my-agent: 只在 ANT-only mock 路徑回對應名稱，其他情境（本地模式）一律空字串。
+  switch (getSubscriptionType()) {
     case 'enterprise':
       return 'Claude Enterprise'
     case 'team':
@@ -1778,7 +1769,7 @@ export function getSubscriptionName(): string {
     case 'pro':
       return 'Claude Pro'
     default:
-      return 'Claude API'
+      return ''
   }
 }
 
