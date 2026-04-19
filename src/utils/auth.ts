@@ -106,60 +106,11 @@ export function isAnthropicAuthEnabled(): boolean {
   return false
 }
 
-/** Where the auth token is being sourced from, if any. */
-// this code is closely related to isAnthropicAuthEnabled
+/**
+ * my-agent: 本地模型不持有 Anthropic auth token，永遠 source='none'。
+ * 保留函式簽名給下游 caller（isUsingEnvVarOAuthToken 等）使用。
+ */
 export function getAuthTokenSource() {
-  // --bare: API-key-only. apiKeyHelper (from --settings) is the only
-  // bearer-token-shaped source allowed. OAuth env vars, FD tokens, and
-  // keychain are ignored.
-  if (isBareMode()) {
-    if (getConfiguredApiKeyHelper()) {
-      return { source: 'apiKeyHelper' as const, hasToken: true }
-    }
-    return { source: 'none' as const, hasToken: false }
-  }
-
-  if (process.env.ANTHROPIC_AUTH_TOKEN && !isManagedOAuthContext()) {
-    return { source: 'ANTHROPIC_AUTH_TOKEN' as const, hasToken: true }
-  }
-
-  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    return { source: 'CLAUDE_CODE_OAUTH_TOKEN' as const, hasToken: true }
-  }
-
-  // Check for OAuth token from file descriptor (or its CCR disk fallback)
-  const oauthTokenFromFd = getOAuthTokenFromFileDescriptor()
-  if (oauthTokenFromFd) {
-    // getOAuthTokenFromFileDescriptor has a disk fallback for CCR subprocesses
-    // that can't inherit the pipe FD. Distinguish by env var presence so the
-    // org-mismatch message doesn't tell the user to unset a variable that
-    // doesn't exist. Call sites fall through correctly — the new source is
-    // !== 'none' (cli/handlers/auth.ts → oauth_token) and not in the
-    // isEnvVarToken set (auth.ts:1844 → generic re-login message).
-    if (process.env.CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR) {
-      return {
-        source: 'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR' as const,
-        hasToken: true,
-      }
-    }
-    return {
-      source: 'CCR_OAUTH_TOKEN_FILE' as const,
-      hasToken: true,
-    }
-  }
-
-  // Check if apiKeyHelper is configured without executing it
-  // This prevents security issues where arbitrary code could execute before trust is established
-  const apiKeyHelper = getConfiguredApiKeyHelper()
-  if (apiKeyHelper && !isManagedOAuthContext()) {
-    return { source: 'apiKeyHelper' as const, hasToken: true }
-  }
-
-  const oauthTokens = getClaudeAIOAuthTokens()
-  if (shouldUseClaudeAIAuth(oauthTokens?.scopes) && oauthTokens?.accessToken) {
-    return { source: 'claude.ai' as const, hasToken: true }
-  }
-
   return { source: 'none' as const, hasToken: false }
 }
 
@@ -181,128 +132,20 @@ export function hasAnthropicApiKeyAuth(): boolean {
   return key !== null && source !== 'none'
 }
 
+/**
+ * my-agent: 本地模型不需 Anthropic API key。
+ * - 不讀 ANTHROPIC_API_KEY env
+ * - 不執行 apiKeyHelper（會是 shell-spawn 安全風險）
+ * - 不碰 file descriptor auth / keychain / customApiKeyResponses
+ * 簽名保留給 caller，永遠回 (null, 'none')。
+ */
 export function getAnthropicApiKeyWithSource(
-  opts: { skipRetrievingKeyFromApiKeyHelper?: boolean } = {},
+  _opts: { skipRetrievingKeyFromApiKeyHelper?: boolean } = {},
 ): {
   key: null | string
   source: ApiKeySource
 } {
-  // --bare: hermetic auth. Only ANTHROPIC_API_KEY env or apiKeyHelper from
-  // the --settings flag. Never touches keychain, config file, or approval
-  // lists. 3P (Bedrock/Vertex/Foundry) uses provider creds, not this path.
-  if (isBareMode()) {
-    if (process.env.ANTHROPIC_API_KEY) {
-      return { key: process.env.ANTHROPIC_API_KEY, source: 'ANTHROPIC_API_KEY' }
-    }
-    if (getConfiguredApiKeyHelper()) {
-      return {
-        key: opts.skipRetrievingKeyFromApiKeyHelper
-          ? null
-          : getApiKeyFromApiKeyHelperCached(),
-        source: 'apiKeyHelper',
-      }
-    }
-    return { key: null, source: 'none' }
-  }
-
-  // On homespace, don't use ANTHROPIC_API_KEY (use Console key instead)
-  // https://anthropic.slack.com/archives/C08428WSLKV/p1747331773214779
-  const apiKeyEnv = isRunningOnHomespace()
-    ? undefined
-    : process.env.ANTHROPIC_API_KEY
-
-  // Always check for direct environment variable when the user ran claude --print.
-  // This is useful for CI, etc.
-  if (preferThirdPartyAuthentication() && apiKeyEnv) {
-    return {
-      key: apiKeyEnv,
-      source: 'ANTHROPIC_API_KEY',
-    }
-  }
-
-  if (isEnvTruthy(process.env.CI) || process.env.NODE_ENV === 'test') {
-    // Check for API key from file descriptor first
-    const apiKeyFromFd = getApiKeyFromFileDescriptor()
-    if (apiKeyFromFd) {
-      return {
-        key: apiKeyFromFd,
-        source: 'ANTHROPIC_API_KEY',
-      }
-    }
-
-    if (
-      !apiKeyEnv &&
-      !process.env.CLAUDE_CODE_OAUTH_TOKEN &&
-      !process.env.CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR
-    ) {
-      throw new Error(
-        'ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN env var is required',
-      )
-    }
-
-    if (apiKeyEnv) {
-      return {
-        key: apiKeyEnv,
-        source: 'ANTHROPIC_API_KEY',
-      }
-    }
-
-    // OAuth token is present but this function returns API keys only
-    return {
-      key: null,
-      source: 'none',
-    }
-  }
-  // Check for ANTHROPIC_API_KEY before checking the apiKeyHelper or /login-managed key
-  if (
-    apiKeyEnv &&
-    getGlobalConfig().customApiKeyResponses?.approved?.includes(
-      normalizeApiKeyForConfig(apiKeyEnv),
-    )
-  ) {
-    return {
-      key: apiKeyEnv,
-      source: 'ANTHROPIC_API_KEY',
-    }
-  }
-
-  // Check for API key from file descriptor
-  const apiKeyFromFd = getApiKeyFromFileDescriptor()
-  if (apiKeyFromFd) {
-    return {
-      key: apiKeyFromFd,
-      source: 'ANTHROPIC_API_KEY',
-    }
-  }
-
-  // Check for apiKeyHelper — use sync cache, never block
-  const apiKeyHelperCommand = getConfiguredApiKeyHelper()
-  if (apiKeyHelperCommand) {
-    if (opts.skipRetrievingKeyFromApiKeyHelper) {
-      return {
-        key: null,
-        source: 'apiKeyHelper',
-      }
-    }
-    // Cache may be cold (helper hasn't finished yet). Return null with
-    // source='apiKeyHelper' rather than falling through to keychain —
-    // apiKeyHelper must win. Callers needing a real key must await
-    // getApiKeyFromApiKeyHelper() first (client.ts, useApiKeyVerification do).
-    return {
-      key: getApiKeyFromApiKeyHelperCached(),
-      source: 'apiKeyHelper',
-    }
-  }
-
-  const apiKeyFromConfigOrMacOSKeychain = getApiKeyFromConfigOrMacOSKeychain()
-  if (apiKeyFromConfigOrMacOSKeychain) {
-    return apiKeyFromConfigOrMacOSKeychain
-  }
-
-  return {
-    key: null,
-    source: 'none',
-  }
+  return { key: null, source: 'none' }
 }
 
 /**
