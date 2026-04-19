@@ -254,6 +254,13 @@ export function createCronScheduler(
     // through the async removeCronTasks + chokidar reload.
     function process(t: CronTask, isSession: boolean) {
       if (filter && !filter(t)) return
+      // Paused tasks stay visible (so getNextFireTime doesn't keep the
+      // daemon warm for a never-firing task, they're also omitted from the
+      // schedule map) but never fire. CronResume clears the state.
+      if (t.state === 'paused') {
+        nextFireAt.delete(t.id)
+        return
+      }
       seen.add(t.id)
       if (inFlight.has(t.id)) return
 

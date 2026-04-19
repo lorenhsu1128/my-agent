@@ -64,6 +64,19 @@ export function isDurableCronEnabled(): boolean {
 export const CRON_CREATE_TOOL_NAME = 'CronCreate'
 export const CRON_DELETE_TOOL_NAME = 'CronDelete'
 export const CRON_LIST_TOOL_NAME = 'CronList'
+export const CRON_PAUSE_TOOL_NAME = 'CronPause'
+export const CRON_RESUME_TOOL_NAME = 'CronResume'
+export const CRON_UPDATE_TOOL_NAME = 'CronUpdate'
+export const CRON_RUN_NOW_TOOL_NAME = 'CronRunNow'
+
+export const CRON_PAUSE_DESCRIPTION =
+  'Temporarily pause a scheduled cron job — the task stays in the list but does not fire until CronResume.'
+export const CRON_RESUME_DESCRIPTION =
+  'Resume a previously paused cron job. Next fire is computed from now, not the paused schedule.'
+export const CRON_UPDATE_DESCRIPTION =
+  'Edit fields of an existing cron job (name, prompt, schedule, repeat cap, model override, pre-run script).'
+export const CRON_RUN_NOW_DESCRIPTION =
+  'Fire a cron job immediately (outside its schedule) — useful for testing or "do the thing now" requests. Does not change the next scheduled fire.'
 
 export function buildCronCreateDescription(durableEnabled: boolean): string {
   return durableEnabled

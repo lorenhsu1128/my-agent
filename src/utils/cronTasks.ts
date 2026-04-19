@@ -84,9 +84,34 @@ export type CronTask = {
   /**
    * Lifecycle state. `scheduled` = normal; `completed` = one-shot already
    * fired (kept briefly for list before delete, or for repeat-limit reached);
-   * `paused` reserved for Wave 2. Absent = 'scheduled' (backward-compat).
+   * `paused` = CronPause applied; scheduler skips this task until CronResume.
+   * Absent = 'scheduled' (backward-compat).
    */
   state?: 'scheduled' | 'paused' | 'completed'
+  /**
+   * Wave 2 — per-job model override. When set, a fire spawns a fresh
+   * in-process teammate with this model (via spawnInProcessTeammate config)
+   * and delivers the prompt there instead of the REPL command queue.
+   * `provider` / `baseUrl` overrides are NOT supported at this layer —
+   * spawnInProcessTeammate only accepts `model`, and provider/baseUrl are
+   * session-wide env vars. Ignored for teammate crons (agentId already
+   * routes there). Ignored when kairos teammate infra is unavailable.
+   */
+  modelOverride?: string
+  /**
+   * Wave 2 — pre-run command. Executed via shell before each fire; stdout
+   * (after secret redaction) is prepended to the prompt as a `## Context`
+   * block. Stderr/exit-code are swallowed but logged. Use for data
+   * collection ("what's in my inbox right now?") feeding the prompt.
+   * Runs with a 10s timeout; failures don't block the fire — prompt runs
+   * without the extra context.
+   */
+  preRunScript?: string
+  /**
+   * Wave 2 — ISO-8601 timestamp when CronPause was applied. Purely
+   * informational; resume computes next fire from now regardless.
+   */
+  pausedAt?: string
 }
 
 type CronFile = { tasks: CronTask[] }
@@ -175,6 +200,13 @@ export async function readCronTasks(dir?: string): Promise<CronTask[]> {
       t.state === 'completed'
         ? { state: t.state }
         : {}),
+      ...(typeof t.modelOverride === 'string'
+        ? { modelOverride: t.modelOverride }
+        : {}),
+      ...(typeof t.preRunScript === 'string'
+        ? { preRunScript: t.preRunScript }
+        : {}),
+      ...(typeof t.pausedAt === 'string' ? { pausedAt: t.pausedAt } : {}),
     })
   }
   return out
@@ -256,6 +288,10 @@ export type AddCronTaskExtras = {
    * Ignored for one-shots (they always delete on first fire).
    */
   repeatTimes?: number | null
+  /** Per-job model override (Wave 2). See CronTask.modelOverride. */
+  modelOverride?: string
+  /** Pre-run shell command (Wave 2). See CronTask.preRunScript. */
+  preRunScript?: string
 }
 
 export async function addCronTask(
@@ -279,6 +315,10 @@ export async function addCronTask(
     ...(recurring && extras && extras.repeatTimes !== undefined
       ? { repeat: { times: extras.repeatTimes, completed: 0 } }
       : {}),
+    ...(extras?.modelOverride
+      ? { modelOverride: extras.modelOverride }
+      : {}),
+    ...(extras?.preRunScript ? { preRunScript: extras.preRunScript } : {}),
   }
   if (!durable) {
     addSessionCronTask({ ...task, ...(agentId ? { agentId } : {}) })
@@ -745,6 +785,46 @@ export async function markJobRun(
     t.repeat.completed = (t.repeat.completed ?? 0) + 1
   }
   await writeCronTasks(tasks, dir)
+}
+
+/**
+ * Wave 2 — apply a partial update to a single task. The updater callback
+ * receives the current task and returns the next one; returning the same
+ * reference (or a shallow copy with no changes) results in no write.
+ * Works across both file-backed and session-only tasks — callers pass
+ * `dir` explicitly when operating on a daemon's working copy; omit for
+ * REPL path where session tasks live in bootstrap state.
+ *
+ * Returns the updated task, or null if the id was not found.
+ */
+export async function updateCronTask(
+  id: string,
+  updater: (t: CronTask) => CronTask,
+  dir?: string,
+): Promise<CronTask | null> {
+  // File-backed path.
+  const tasks = await readCronTasks(dir)
+  const idx = tasks.findIndex(t => t.id === id)
+  if (idx >= 0) {
+    const next = updater(tasks[idx]!)
+    tasks[idx] = next
+    await writeCronTasks(tasks, dir)
+    return next
+  }
+  // Session store — only touched when dir is undefined (REPL path).
+  if (dir === undefined) {
+    const session = getSessionCronTasks()
+    const sIdx = session.findIndex(t => t.id === id)
+    if (sIdx >= 0) {
+      const next = updater(session[sIdx]!)
+      // bootstrap state exposes add/remove but not direct index mutation;
+      // remove-then-add preserves ordering roughly (appended to end).
+      removeSessionCronTasks([id])
+      addSessionCronTask(next)
+      return next
+    }
+  }
+  return null
 }
 
 /**

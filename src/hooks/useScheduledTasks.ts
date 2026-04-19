@@ -7,12 +7,17 @@ import {
 } from '../tasks/InProcessTeammateTask/InProcessTeammateTask.js'
 import { isKairosCronEnabled } from '../tools/ScheduleCronTool/prompt.js'
 import type { Message } from '../types/message.js'
+import {
+  augmentPromptWithPreRun,
+  runPreRunScript,
+} from '../utils/cronPreRunScript.js'
 import { getCronJitterConfig } from '../utils/cronJitterConfig.js'
 import { createCronScheduler } from '../utils/cronScheduler.js'
-import { removeCronTasks } from '../utils/cronTasks.js'
+import { type CronTask, removeCronTasks } from '../utils/cronTasks.js'
 import { logForDebugging } from '../utils/debug.js'
 import { enqueuePendingNotification } from '../utils/messageQueueManager.js'
 import { createScheduledTaskFireMessage } from '../utils/messages.js'
+import { spawnInProcessTeammate } from '../utils/swarm/spawnInProcess.js'
 import { WORKLOAD_CRON } from '../utils/workloadContext.js'
 
 type Props = {
@@ -81,38 +86,100 @@ export function useScheduledTasks({
         workload: WORKLOAD_CRON,
       })
 
+    // Wave 2: session-local map of cron-id → teammate-task-id, used only
+    // when a cron has modelOverride. First fire spawns a teammate; later
+    // fires inject into it. Cleared on unmount (Map dies with closure).
+    const modelOverrideTeammates = new Map<string, string>()
+
+    // Promise chain per cron id so two fires of the same task can't race
+    // (fires are rare but preRunScript is async and a long second fire
+    // could overtake a short first). Not global — each id gets its own
+    // ordered lane.
+    const fireLanes = new Map<string, Promise<void>>()
+    function runLane(id: string, job: () => Promise<void>): void {
+      const prev = fireLanes.get(id) ?? Promise.resolve()
+      const next = prev.catch(() => undefined).then(job)
+      fireLanes.set(id, next)
+      void next.finally(() => {
+        if (fireLanes.get(id) === next) fireLanes.delete(id)
+      })
+    }
+
+    async function deliver(task: CronTask, prompt: string): Promise<void> {
+      // 1) Existing teammate-routed cron (session-only, set at CronCreate
+      //    by a teammate context). Pre-existing path, preserved intact.
+      if (task.agentId) {
+        const teammate = findTeammateTaskByAgentId(
+          task.agentId,
+          store.getState().tasks,
+        )
+        if (teammate && !isTerminalTaskStatus(teammate.status)) {
+          injectUserMessageToTeammate(teammate.id, prompt, setAppState)
+          return
+        }
+        logForDebugging(
+          `[ScheduledTasks] teammate ${task.agentId} gone, removing orphaned cron ${task.id}`,
+        )
+        void removeCronTasks([task.id])
+        return
+      }
+      // 2) modelOverride: first fire spawns a dedicated teammate with the
+      //    requested model; later fires reuse it. spawnInProcessTeammate
+      //    accepts `model` but not provider/baseUrl — those are session-wide.
+      if (task.modelOverride) {
+        const existingId = modelOverrideTeammates.get(task.id)
+        const existing = existingId
+          ? store.getState().tasks[existingId]
+          : undefined
+        if (existing && !isTerminalTaskStatus(existing.status)) {
+          injectUserMessageToTeammate(existing.id, prompt, setAppState)
+          return
+        }
+        const result = await spawnInProcessTeammate(
+          {
+            name: `cron-${task.id}`,
+            teamName: 'cron',
+            prompt,
+            planModeRequired: false,
+            model: task.modelOverride,
+          },
+          { setAppState },
+        )
+        if (result.success && result.taskId) {
+          modelOverrideTeammates.set(task.id, result.taskId)
+          return
+        }
+        logForDebugging(
+          `[ScheduledTasks] spawnInProcessTeammate failed for ${task.id}: ${result.error}; falling back to REPL queue`,
+        )
+        // Fallthrough to default REPL path.
+      }
+      // 3) Default: announce in transcript and enqueue to REPL.
+      const msg = createScheduledTaskFireMessage(
+        `Running scheduled task (${formatCronFireTime(new Date())})`,
+      )
+      setMessages(prev => [...prev, msg])
+      enqueueForLead(prompt)
+    }
+
+    async function handleFire(task: CronTask): Promise<void> {
+      let prompt = task.prompt
+      if (task.preRunScript) {
+        const result = await runPreRunScript(task.preRunScript)
+        prompt = augmentPromptWithPreRun(prompt, result)
+      }
+      await deliver(task, prompt)
+    }
+
     const scheduler = createCronScheduler({
       // Missed-task surfacing (onFire fallback). Teammate crons are always
       // session-only (durable:false) so they never appear in the missed list,
       // which is populated from disk at scheduler startup — this path only
       // handles team-lead durable crons.
       onFire: enqueueForLead,
-      // Normal fires receive the full CronTask so we can route by agentId.
-      onFireTask: task => {
-        if (task.agentId) {
-          const teammate = findTeammateTaskByAgentId(
-            task.agentId,
-            store.getState().tasks,
-          )
-          if (teammate && !isTerminalTaskStatus(teammate.status)) {
-            injectUserMessageToTeammate(teammate.id, task.prompt, setAppState)
-            return
-          }
-          // Teammate is gone — clean up the orphaned cron so it doesn't keep
-          // firing into nowhere every tick. One-shots would auto-delete on
-          // fire anyway, but recurring crons would loop until auto-expiry.
-          logForDebugging(
-            `[ScheduledTasks] teammate ${task.agentId} gone, removing orphaned cron ${task.id}`,
-          )
-          void removeCronTasks([task.id])
-          return
-        }
-        const msg = createScheduledTaskFireMessage(
-          `Running scheduled task (${formatCronFireTime(new Date())})`,
-        )
-        setMessages(prev => [...prev, msg])
-        enqueueForLead(task.prompt)
-      },
+      // Normal fires receive the full CronTask so we can route by agentId,
+      // apply preRunScript, or spawn a modelOverride teammate.
+      onFireTask: task => runLane(task.id, () => handleFire(task)),
       isLoading: () => isLoadingRef.current,
       assistantMode,
       getJitterConfig: getCronJitterConfig,
