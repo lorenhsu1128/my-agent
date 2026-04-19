@@ -206,6 +206,13 @@
 - **相關檔案**：scripts/llama/serve.sh
 - **日期**：2026-04-15
 
+### Windows 上 Grep/Glob 工具失敗：`src/vendor/ripgrep/` 缺 Windows binary
+- **發生什麼事**：my-agent 執行時 Grep 工具 ENOENT，模型只好 fallback 到 Bash 手動 grep。使用者以為是 ripgrep 裝壞，實際是 my-agent 找不到 rg.exe。
+- **根本原因**：`src/utils/ripgrep.ts:31-65` 的解析鏈為 system → bundled → vendor。(1) `Bun.which('rg')` 只查 Windows 原生 PATH；使用者的 rg 只裝在 git-bash MSYS2 env，Windows PATH 沒有 → 回 null；(2) 非 compiled binary 時 `isInBundledMode()` false；(3) 落到 vendor 路徑 `src/vendor/ripgrep/x64-win32/rg.exe` — repo 只 commit 了 `x64-linux/rg`，Windows 版本缺失 → ENOENT。
+- **正確做法**：vendor 資料夾一定要 **同時包含 linux + windows** 兩個 binary，兩者都 commit（linux 已是這個做法）。從 BurntSushi/ripgrep GitHub releases 拉 `ripgrep-14.1.1-x86_64-pc-windows-msvc.zip` 解出 rg.exe，放 `src/vendor/ripgrep/x64-win32/rg.exe`。升 ripgrep 版本時 **兩個平台一起升**，避免版本漂移。未來若加 darwin 支援，也一併補 `x64-darwin` / `arm64-darwin`。
+- **相關檔案**：src/utils/ripgrep.ts、src/vendor/ripgrep/x64-win32/rg.exe
+- **日期**：2026-04-19
+
 ---
 
 ## Git / 工作流程
