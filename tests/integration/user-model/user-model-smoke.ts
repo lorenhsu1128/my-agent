@@ -42,9 +42,9 @@ async function main() {
   const projectPath = join(projectDir, 'USER.md')
 
   // 透過 env 指派 global 路徑
-  process.env.FREECODE_USER_MODEL_PATH = globalPath
+  process.env.MYAGENT_USER_MODEL_PATH = globalPath
   // 確保開關預設 ON
-  delete process.env.FREECODE_DISABLE_USER_MODEL
+  delete process.env.MYAGENT_DISABLE_USER_MODEL
   delete process.env.CLAUDE_CODE_SIMPLE
 
   // 動態 import（env 設好後再載入）
@@ -57,20 +57,20 @@ async function main() {
   // -------------------------------------------------------------------------
   assert(paths.isUserModelEnabled() === true, '預設啟用')
 
-  process.env.FREECODE_DISABLE_USER_MODEL = '1'
+  process.env.MYAGENT_DISABLE_USER_MODEL = '1'
   assert(paths.isUserModelEnabled() === false, 'env=1 → 停用')
 
-  process.env.FREECODE_DISABLE_USER_MODEL = 'false'
+  process.env.MYAGENT_DISABLE_USER_MODEL = 'false'
   assert(paths.isUserModelEnabled() === true, 'env=false → 啟用')
 
-  delete process.env.FREECODE_DISABLE_USER_MODEL
+  delete process.env.MYAGENT_DISABLE_USER_MODEL
   process.env.CLAUDE_CODE_SIMPLE = '1'
   assert(paths.isUserModelEnabled() === false, 'SIMPLE/bare → 停用')
   delete process.env.CLAUDE_CODE_SIMPLE
 
   assert(
     paths.getUserModelGlobalPath() === globalPath,
-    'global path 由 FREECODE_USER_MODEL_PATH 覆寫',
+    'global path 由 MYAGENT_USER_MODEL_PATH 覆寫',
   )
 
   // -------------------------------------------------------------------------
@@ -164,10 +164,10 @@ async function main() {
   const out = await prompt.loadUserProfilePrompt()
   assert(out !== null && out.includes('<user-profile>'), 'loadUserProfilePrompt 回傳 fence')
 
-  process.env.FREECODE_DISABLE_USER_MODEL = '1'
+  process.env.MYAGENT_DISABLE_USER_MODEL = '1'
   const disabled = await prompt.loadUserProfilePrompt()
   assert(disabled === null, '停用時回 null')
-  delete process.env.FREECODE_DISABLE_USER_MODEL
+  delete process.env.MYAGENT_DISABLE_USER_MODEL
 
   // -------------------------------------------------------------------------
   section('7. Injection 仍可被 MemoryTool 擋掉（單元層次驗證）')
@@ -184,7 +184,7 @@ async function main() {
   // -------------------------------------------------------------------------
   // 清理
   // -------------------------------------------------------------------------
-  delete process.env.FREECODE_USER_MODEL_PATH
+  delete process.env.MYAGENT_USER_MODEL_PATH
   await rm(tmp, { recursive: true, force: true })
 
   console.log(`\n總計：${passed} 通過 / ${failed} 失敗`)

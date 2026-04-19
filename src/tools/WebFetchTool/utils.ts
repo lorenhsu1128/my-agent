@@ -176,7 +176,7 @@ type DomainCheckResult =
 export async function checkDomainBlocklist(
   domain: string,
 ): Promise<DomainCheckResult> {
-  // free-code: 不查 Anthropic 的 domain blocklist，所有 domain 預設允許
+  // my-agent: 不查 Anthropic 的 domain blocklist，所有 domain 預設允許
   DOMAIN_CHECK_CACHE.set(domain, true)
   return { status: 'allowed' }
   // eslint-disable-next-line no-unreachable

@@ -2,17 +2,17 @@
 
 ## 專案概述
 
-本專案是 free-code — Claude Code（TypeScript/Bun）的可建構 fork 版本，已移除遙測、移除安全護欄、解鎖所有實驗功能。我們正在擴充它，加入多 provider 支援、本地模型能力，以及從 Hermes Agent（Nous Research）移植的功能。
+本專案是 my-agent — Claude Code（TypeScript/Bun）的可建構 fork 版本，已移除遙測、移除安全護欄、解鎖所有實驗功能。我們正在擴充它，加入多 provider 支援、本地模型能力，以及從 Hermes Agent（Nous Research）移植的功能。
 
-Hermes Agent 的原始碼作為唯讀參考資料放在 `reference/hermes-agent/`。它是 Python — 閱讀它以理解設計和邏輯，然後用 TypeScript 在 free-code 的既有架構內重新實作。
+Hermes Agent 的原始碼作為唯讀參考資料放在 `reference/hermes-agent/`。它是 Python — 閱讀它以理解設計和邏輯，然後用 TypeScript 在 my-agent 的既有架構內重新實作。
 
 ## 黃金規則
 
 1. **永遠先啟動 conda 環境。** 在執行任何指令之前 — 建構、測試、安裝或腳本執行 — 都要先執行 `conda activate aiagent`。這適用於每個 session 的每一條終端指令。如果開了新的 shell 或不確定環境是否啟用，在繼續之前再次執行 `conda activate aiagent`。
 
-2. **保留 free-code 的既有程式碼。** 不要刪除或重寫現有檔案。透過擴充來新增功能，而非替換。當你需要修改現有檔案時，做最小必要的更改，並確保在新 provider 未啟用時原始行為完全不變。
+2. **保留 my-agent 的既有程式碼。** 不要刪除或重寫現有檔案。透過擴充來新增功能，而非替換。當你需要修改現有檔案時，做最小必要的更改，並確保在新 provider 未啟用時原始行為完全不變。
 
-3. **Hermes 程式碼僅供參考。** 絕不直接複製 Python 程式碼。閱讀 `reference/hermes-agent/` 以理解功能的設計和運作方式，然後撰寫符合 free-code 架構（React/Ink UI、Tool 基礎類別、services 模式等）的道地 TypeScript 程式碼。
+3. **Hermes 程式碼僅供參考。** 絕不直接複製 Python 程式碼。閱讀 `reference/hermes-agent/` 以理解功能的設計和運作方式，然後撰寫符合 my-agent 架構（React/Ink UI、Tool 基礎類別、services 模式等）的道地 TypeScript 程式碼。
 
 4. **本地模型透過 fetch adapter 整合。** M1 已實作 `src/services/api/llamacpp-fetch-adapter.ts`，在 `src/services/api/` 內用 adapter 模式支援 llama.cpp，不另建 `src/services/providers/` 目錄。既有的 Anthropic 路徑完全不受影響。
 
@@ -40,7 +40,7 @@ Hermes Agent 的原始碼作為唯讀參考資料放在 `reference/hermes-agent/
 ## 倉庫結構
 
 ```
-free-code/
+my-agent/
 ├── CLAUDE.md              ← 你正在讀的這份文件
 ├── TODO.md                ← 任務追蹤 — 你負責讀寫此文件
 ├── LESSONS.md             ← 教訓記錄 — 你和人類都可以讀寫
@@ -78,9 +78,9 @@ free-code/
     └── settings.json      # 權限與 hooks 設定
 ```
 
-## 需要理解的關鍵檔案（free-code）
+## 需要理解的關鍵檔案（my-agent）
 
-在修改任何東西之前，先閱讀這些以理解 free-code 的運作方式：
+在修改任何東西之前，先閱讀這些以理解 my-agent 的運作方式：
 
 - `src/tools.ts` — 工具註冊表。所有 39 個工具在此註冊。使用 `feature()` 做 flag 控制。
 - `src/Tool.ts` — 工具基礎介面（792 行）。所有工具都實作此介面。
@@ -184,7 +184,7 @@ bun test                         # 執行測試
 
 ## 若從官方 Claude Code 遷移設定
 
-free-code 使用獨立的 `~/.my-agent/` 設定目錄，與官方 Claude Code 的 `~/.claude/` 完全隔離。
+my-agent 使用獨立的 `~/.my-agent/` 設定目錄，與官方 Claude Code 的 `~/.claude/` 完全隔離。
 
 ### 推薦作法（選擇性複製）
 
@@ -209,7 +209,7 @@ export CLAUDE_CONFIG_DIR=~/.claude
 
 ### 注意事項
 
-- **OAuth tokens 無法使用** — free-code 用本地 llama.cpp 或第三方 API key（`ANTHROPIC_API_KEY` / `CLAUDE_CODE_USE_BEDROCK` 等）
+- **OAuth tokens 無法使用** — my-agent 用本地 llama.cpp 或第三方 API key（`ANTHROPIC_API_KEY` / `CLAUDE_CODE_USE_BEDROCK` 等）
 - **Chrome / Voice 設定無效** — 這兩個功能在 M15 已移除
 - **Session JSONL 可讀** — 但 SQLite FTS 索引會在首次 reconcile 時重建
 - **Settings schema 可能 drift** — 不建議直接沿用整個 `config.json`；只複製需要的部分比較安全

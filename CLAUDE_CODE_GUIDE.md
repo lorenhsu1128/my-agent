@@ -23,12 +23,12 @@ Claude Code 不需要讀這份文件 — 它讀的是 CLAUDE.md。
 
 ## 初次設定
 
-### 步驟一：準備 free-code 專案
+### 步驟一：準備 my-agent 專案
 
 ```bash
-# 複製 free-code 倉庫
-git clone https://github.com/paoloanzn/free-code.git
-cd free-code
+# 複製 my-agent 倉庫
+git clone https://github.com/paoloanzn/my-agent.git
+cd my-agent
 bun install
 
 # 驗證可以建構
@@ -39,7 +39,7 @@ bun run build
 ### 步驟二：複製 Hermes Agent 作為參考
 
 ```bash
-# 在 free-code 目錄內
+# 在 my-agent 目錄內
 mkdir reference
 git clone https://github.com/NousResearch/hermes-agent.git reference/hermes-agent
 
@@ -117,7 +117,7 @@ ollama serve &                    # 如果還沒啟動
 litellm --model ollama/qwen3.5:9b --port 4000 --drop_params &  # 如果還沒啟動
 
 # 2. 進入專案目錄，啟動 Claude Code
-cd /path/to/free-code
+cd /path/to/my-agent
 claude
 ```
 
@@ -160,7 +160,7 @@ Claude Code 會自動：
 | `/project-next` | 開始工作或繼續工作 | 找下一個任務 → 讀教訓 → 載入 skill → 執行 → 測試 → commit |
 | `/project-status` | 想看現在進度 | 報告 TODO 完成率、最近 commit、typecheck、服務狀態 |
 | `/project-test` | 想跑完整測試 | typecheck → 單元測試 → 整合測試 → 建構檢查 |
-| `/project-review-hermes` | 想了解 Hermes 某個功能 | 分析 Hermes 原始碼 → 比對 free-code → 提出實作方案 |
+| `/project-review-hermes` | 想了解 Hermes 某個功能 | 分析 Hermes 原始碼 → 比對 my-agent → 提出實作方案 |
 | `/project-create-skill` | 想手動建立 skill | 在 skills/ 下建立新的 SKILL.md |
 
 ### 使用範例
@@ -387,7 +387,7 @@ litellm --model ollama/qwen3.5:9b --port 4000 --drop_params &
 
 ```bash
 git clone [你的 repo]
-cd free-code
+cd my-agent
 bun install
 
 # 重新 clone Hermes 參考
@@ -412,7 +412,7 @@ claude
 
 ### Claude Code 啟動時沒有讀取 CLAUDE.md
 
-確認 `CLAUDE.md` 在專案根目錄（`free-code/CLAUDE.md`），且你是在這個目錄中啟動 `claude` 的。
+確認 `CLAUDE.md` 在專案根目錄（`my-agent/CLAUDE.md`），且你是在這個目錄中啟動 `claude` 的。
 
 ### Hooks 沒有觸發
 
@@ -467,7 +467,7 @@ pip install litellm
 ## 附錄：完整檔案清單
 
 ```
-free-code/
+my-agent/
 ├── CLAUDE.md                              # 專案規範（Claude Code 讀取）
 ├── CLAUDE_CODE_GUIDE.md                   # 本使用指南（你讀取）
 ├── TODO.md                                # 任務追蹤
@@ -488,7 +488,7 @@ free-code/
 │       ├── post-tool-use-typecheck.sh     # 自動 typecheck
 │       └── notification-session-end.sh    # Session 結束通知
 ├── skills/
-│   ├── freecode-architecture/SKILL.md     # free-code 架構導覽
+│   ├── freecode-architecture/SKILL.md     # my-agent 架構導覽
 │   ├── hermes-architecture/SKILL.md       # Hermes 架構參考
 │   ├── provider-system/SKILL.md           # Provider 系統設計
 │   ├── tool-call-adapter/SKILL.md         # 工具呼叫轉譯
@@ -497,6 +497,6 @@ free-code/
 │   └── (Claude Code 會在此自動建立新 skills)
 ├── reference/
 │   └── hermes-agent/                      # Hermes 原始碼（唯讀、.gitignore）
-├── src/                                   # free-code 原始碼
+├── src/                                   # my-agent 原始碼
 └── tests/                                 # 測試
 ```

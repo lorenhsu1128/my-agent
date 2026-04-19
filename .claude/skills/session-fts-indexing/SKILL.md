@@ -2,7 +2,7 @@
 
 ## 說明
 
-free-code 用 SQLite FTS5 建對話歷史索引，支援跨 session recall 與 query-driven prefetch。本 skill 記錄 M2-01～M2-03 建基時踩到的坑與必守的規則。M2-05（SessionSearchTool）、M2-09（memoryPrefetch）及未來任何「索引既有檔案進 SQLite」類型任務都應先讀。
+my-agent 用 SQLite FTS5 建對話歷史索引，支援跨 session recall 與 query-driven prefetch。本 skill 記錄 M2-01～M2-03 建基時踩到的坑與必守的規則。M2-05（SessionSearchTool）、M2-09（memoryPrefetch）及未來任何「索引既有檔案進 SQLite」類型任務都應先讀。
 
 相關檔案：`src/services/sessionIndex/`（paths / schema / db / indexWriter / reconciler / index）、`scripts/poc/session-index-smoke.ts`（62 個測試覆蓋）。
 

@@ -623,7 +623,7 @@ function createDefaultGlobalConfig(): GlobalConfig {
     terminalProgressBarEnabled: true,
     cachedStatsigGates: {},
     cachedDynamicConfigs: {},
-    // free-code: 所有 GrowthBook flag 預設 true（反向邏輯的除外）
+    // my-agent: 所有 GrowthBook flag 預設 true（反向邏輯的除外）
     cachedGrowthBookFeatures: {
       // --- 反向邏輯（true = 停用），必須設 false ---
       tengu_disable_bypass_permissions_mode: false,

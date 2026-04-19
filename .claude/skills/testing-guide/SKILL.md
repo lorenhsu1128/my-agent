@@ -149,7 +149,7 @@ LiteLLM 版本：X.Y.Z
 ## 前置條件
 - [ ] Ollama 執行中且已拉取 qwen3.5:9b
 - [ ] LiteLLM 在 port 4000 執行中
-- [ ] free-code 已建構並包含 provider 支援
+- [ ] my-agent 已建構並包含 provider 支援
 
 ## 基本功能
 - [ ] `./cli --model qwen3.5:9b` 啟動無錯誤
@@ -211,5 +211,5 @@ bun test
 **不該測試**：
 - LiteLLM 的內部行為（那是他們的責任）
 - Ollama 的推論品質（那是模型的能力）
-- free-code 既有的工具實作（已有測試）
+- my-agent 既有的工具實作（已有測試）
 - 本地模型是否做出好的決策（不在範圍內）

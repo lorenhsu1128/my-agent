@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/screenshot.png" alt="free-code" width="720" />
+  <img src="assets/screenshot.png" alt="my-agent" width="720" />
 </p>
 
-<h1 align="center">free-code</h1>
+<h1 align="center">my-agent</h1>
 
 <p align="center">
   <strong>The free build of Claude Code.</strong><br>
@@ -12,9 +12,9 @@
 
 <p align="center">
   <a href="#quick-install"><img src="https://img.shields.io/badge/install-one--liner-blue?style=flat-square" alt="Install" /></a>
-  <a href="https://github.com/paoloanzn/free-code/stargazers"><img src="https://img.shields.io/github/stars/paoloanzn/free-code?style=flat-square" alt="Stars" /></a>
-  <a href="https://github.com/paoloanzn/free-code/issues"><img src="https://img.shields.io/github/issues/paoloanzn/free-code?style=flat-square" alt="Issues" /></a>
-  <a href="https://github.com/paoloanzn/free-code/blob/main/FEATURES.md"><img src="https://img.shields.io/badge/features-88%20flags-orange?style=flat-square" alt="Feature Flags" /></a>
+  <a href="https://github.com/paoloanzn/my-agent/stargazers"><img src="https://img.shields.io/github/stars/paoloanzn/my-agent?style=flat-square" alt="Stars" /></a>
+  <a href="https://github.com/paoloanzn/my-agent/issues"><img src="https://img.shields.io/github/issues/paoloanzn/my-agent?style=flat-square" alt="Issues" /></a>
+  <a href="https://github.com/paoloanzn/my-agent/blob/main/FEATURES.md"><img src="https://img.shields.io/badge/features-88%20flags-orange?style=flat-square" alt="Feature Flags" /></a>
   <a href="#ipfs-mirror"><img src="https://img.shields.io/badge/IPFS-mirrored-teal?style=flat-square" alt="IPFS" /></a>
 </p>
 
@@ -23,12 +23,12 @@
 ## Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/paoloanzn/free-code/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/paoloanzn/my-agent/main/install.sh | bash
 ```
 
-Checks your system, installs Bun if needed, clones the repo, builds with all experimental features enabled, and symlinks `free-code` on your PATH.
+Checks your system, installs Bun if needed, clones the repo, builds with all experimental features enabled, and symlinks `my-agent` on your PATH.
 
-Then run `free-code` and use the `/login` command to authenticate with your preferred model provider.
+Then run `my-agent` and use the `/login` command to authenticate with your preferred model provider.
 
 ---
 
@@ -77,7 +77,7 @@ Claude Code ships with 88 feature flags gated behind `bun:bundle` compile-time s
 
 ## Model Providers
 
-free-code supports **five API providers** out of the box. Set the corresponding environment variable to switch providers -- no code changes needed.
+my-agent supports **five API providers** out of the box. Set the corresponding environment variable to switch providers -- no code changes needed.
 
 ### Anthropic (Direct API) -- Default
 
@@ -101,7 +101,7 @@ Use OpenAI's Codex models for code generation. Requires a Codex subscription.
 
 ```bash
 export CLAUDE_CODE_USE_OPENAI=1
-free-code
+my-agent
 ```
 
 ### AWS Bedrock
@@ -111,7 +111,7 @@ Route requests through your AWS account via Amazon Bedrock.
 ```bash
 export CLAUDE_CODE_USE_BEDROCK=1
 export AWS_REGION="us-east-1"   # or AWS_DEFAULT_REGION
-free-code
+my-agent
 ```
 
 Uses your standard AWS credentials (environment variables, `~/.aws/config`, or IAM role). Models are mapped to Bedrock ARN format automatically (e.g., `us.anthropic.claude-opus-4-6-v1`).
@@ -130,7 +130,7 @@ Route requests through your GCP project via Vertex AI.
 
 ```bash
 export CLAUDE_CODE_USE_VERTEX=1
-free-code
+my-agent
 ```
 
 Uses Google Cloud Application Default Credentials (`gcloud auth application-default login`). Models are mapped to Vertex format automatically (e.g., `claude-opus-4-6@latest`).
@@ -142,7 +142,7 @@ Use Anthropic Foundry for dedicated deployments.
 ```bash
 export CLAUDE_CODE_USE_FOUNDRY=1
 export ANTHROPIC_FOUNDRY_API_KEY="..."
-free-code
+my-agent
 ```
 
 Supports custom deployment IDs as model names.
@@ -175,8 +175,8 @@ curl -fsSL https://bun.sh/install | bash
 ## Build
 
 ```bash
-git clone https://github.com/paoloanzn/free-code.git
-cd free-code
+git clone https://github.com/paoloanzn/my-agent.git
+cd my-agent
 bun build
 ./cli
 ```

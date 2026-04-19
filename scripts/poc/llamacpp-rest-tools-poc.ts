@@ -1,7 +1,7 @@
 /**
  * 階段三第 3 任務（後續）：其餘 34 個工具的 Part A（翻譯正確性）批次測試
  *
- * 策略：對每個工具用合理的 schema（不一定完全符合 free-code 實際 tool
+ * 策略：對每個工具用合理的 schema（不一定完全符合 my-agent 實際 tool
  * 定義，但足以驗證 adapter 能正確翻譯不同 shape 的 schema）+ 誘導
  * prompt，觀察：
  *   (a) 模型是否選中該工具

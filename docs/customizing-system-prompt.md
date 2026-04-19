@@ -89,7 +89,7 @@ cat ~/.my-agent/system-prompt/README.md   # 讀完整清單 + 時機說明
 
 ```bash
 # Slug 是專案 git root 的 sanitized 路徑（與 memdir / USER.md 同一套規則）
-SLUG="C--Users-LOREN-Documents--projects-free-code"
+SLUG="C--Users-LOREN-Documents--projects-my-agent"
 
 mkdir -p ~/.my-agent/projects/$SLUG/system-prompt
 cp ~/.my-agent/system-prompt/tone-style.md \
@@ -139,7 +139,7 @@ Session 啟動時凍結快照（與 USER.md / MEMORY.md 同一心智模型）。
 | using-tools | REPL 模式 / embedded search tools / 無 TaskCreate（工具集異於預設） |
 | proactive | `BRIEF_PROACTIVE_SECTION` 尾段仍由程式條件 append（KAIROS-only） |
 
-這些例外主要影響 Anthropic 內部 `ant` 模式與特殊 feature flag，在一般 free-code 使用情境下都不會觸發。
+這些例外主要影響 Anthropic 內部 `ant` 模式與特殊 feature flag，在一般 my-agent 使用情境下都不會觸發。
 
 ---
 

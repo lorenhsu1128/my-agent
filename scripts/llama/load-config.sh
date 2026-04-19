@@ -9,7 +9,7 @@
 #
 # 失敗情境：
 #   - 缺 jq：印提示，沿用硬編碼 fallback（不 exit）
-#   - 缺檔：沿用硬編碼 fallback（使用者首次啟動 free-code 後會自動 seed）
+#   - 缺檔：沿用硬編碼 fallback（使用者首次啟動 my-agent 後會自動 seed）
 #   - JSON 壞：jq 會報錯，本腳本吞掉錯誤走 fallback
 
 CONFIG_PATH="${LLAMACPP_CONFIG_PATH:-$HOME/.my-agent/llamacpp.json}"
@@ -62,7 +62,7 @@ export LLAMA_EXTRA_ARGS_SHELL
 
 # 友善訊息（只在首次 source 有用）
 if [[ ! -f "$CONFIG_PATH" && -z "${_LLAMACPP_CFG_WARNED:-}" ]]; then
-  echo "[llamacpp config] $CONFIG_PATH 不存在；使用內建預設。跑一次 free-code 即會自動 seed。" >&2
+  echo "[llamacpp config] $CONFIG_PATH 不存在；使用內建預設。跑一次 my-agent 即會自動 seed。" >&2
   export _LLAMACPP_CFG_WARNED=1
 elif ! command -v jq >/dev/null 2>&1 && [[ -z "${_LLAMACPP_CFG_WARNED:-}" ]]; then
   echo "[llamacpp config] 系統缺 jq；使用內建預設。要讀 ${CONFIG_PATH} 請安裝 jq。" >&2

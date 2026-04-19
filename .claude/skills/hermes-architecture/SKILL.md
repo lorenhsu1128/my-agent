@@ -123,7 +123,7 @@ ProviderConfig(
 3. **辨識資料結構** — 什麼物件被傳遞
 4. **注意外部依賴** — 它使用了什麼 API、資料庫或服務
 5. **提取核心邏輯** — 把「它做了什麼」和「Python 怎麼做的」分開
-6. **設計 TypeScript 等價物** — 對應到 free-code 的模式：
+6. **設計 TypeScript 等價物** — 對應到 my-agent 的模式：
    - Python class → TypeScript class 或 module
    - Python dict → TypeScript interface + object
    - Python async/await → TypeScript 中相同

@@ -27,7 +27,7 @@
 ## 新 M1 任務結構
 
 ### 階段一：摸底與可行性驗證
-- [x] 閱讀並記錄 free-code 現有 API 架構的實測事實 — 寫入 `skills/freecode-architecture/SKILL.md`。【2026-04-15 commit `e5ea9f2`；關鍵發現：`codex-fetch-adapter.ts` 是現成範本】
+- [x] 閱讀並記錄 my-agent 現有 API 架構的實測事實 — 寫入 `skills/freecode-architecture/SKILL.md`。【2026-04-15 commit `e5ea9f2`；關鍵發現：`codex-fetch-adapter.ts` 是現成範本】
 - [x] 閱讀 Hermes `auth.py` + `auxiliary_client.py`，取 ProviderConfig / apiMode / env 優先鏈設計概念 — 寫入 `skills/provider-system/SKILL.md`。【2026-04-15 commit `fa03174`】
 - [x] PoC：路徑 B 可行性驗證 — `scripts/poc/llamacpp-fetch-poc.ts` 端到端測試通過。【2026-04-15 commit `b2af143`】
 - [x] 架構決策：確定走路徑 B，棄路徑 A。
@@ -359,11 +359,11 @@ Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
 
 ## Credential 共享待解
 
-free-code 沿用官方 Claude Code 的 `~/.claude/` 路徑，bootstrap 會讀到真實 credentials。暫時隔離法：
+my-agent 沿用官方 Claude Code 的 `~/.claude/` 路徑，bootstrap 會讀到真實 credentials。暫時隔離法：
 ```powershell
 $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.my-agent-profile"
 ```
-未來可能改為 free-code 預設用 `~/.my-agent/`，由使用者決定後實作。
+未來可能改為 my-agent 預設用 `~/.my-agent/`，由使用者決定後實作。
 
 ---
 
@@ -376,18 +376,18 @@ $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.my-agent-profile"
 
 ## Context
 
-讀完 Hermes Agent `tools/memory_tool.py` + `hermes_state.py` + `agent/memory_manager.py` + `agent/context_compressor.py`，對照 free-code 既有 `src/memdir/` + `src/services/SessionMemory/` + `src/services/extractMemories/` + `src/services/compact/` + `src/services/autoDream/`，發現 free-code 已具備 Hermes 大部分功能：
+讀完 Hermes Agent `tools/memory_tool.py` + `hermes_state.py` + `agent/memory_manager.py` + `agent/context_compressor.py`，對照 my-agent 既有 `src/memdir/` + `src/services/SessionMemory/` + `src/services/extractMemories/` + `src/services/compact/` + `src/services/autoDream/`，發現 my-agent 已具備 Hermes 大部分功能：
 
-| Hermes | free-code 對應 | 評估 |
+| Hermes | my-agent 對應 | 評估 |
 |---|---|---|
-| MEMORY.md + USER.md | `src/memdir/` 四型分類，各型獨立檔案 + MEMORY.md 索引 | free-code 較優，不倒退 |
+| MEMORY.md + USER.md | `src/memdir/` 四型分類，各型獨立檔案 + MEMORY.md 索引 | my-agent 較優，不倒退 |
 | Session-start 凍結 snapshot | `systemPromptSection('memory', ...)` 快取 | 已有 |
 | Session 抽取 | `SessionMemory/` + `extractMemories/` | 已有 |
 | Context compaction | `services/compact/` pipeline | 已有 |
 | 日誌蒸餾 | `services/autoDream/` | 已有 |
 | JSONL transcripts | `.claude/projects/{slug}/conversations/*.jsonl` | 已有 |
 
-**Hermes 有、free-code 沒有**只四件：(1) 跨 session 對話搜尋（FTS5 + session_search tool）、(2) query-driven pre-turn prefetch、(3) Provider plugin 抽象層、(4) 專用 MemoryTool。M2 做 (1)(2)(4)；(3) 棄（違反黃金規則 #2，且目前無外部後端需求）。
+**Hermes 有、my-agent 沒有**只四件：(1) 跨 session 對話搜尋（FTS5 + session_search tool）、(2) query-driven pre-turn prefetch、(3) Provider plugin 抽象層、(4) 專用 MemoryTool。M2 做 (1)(2)(4)；(3) 棄（違反黃金規則 #2，且目前無外部後端需求）。
 
 ## 架構決策
 
@@ -450,7 +450,7 @@ $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.my-agent-profile"
 
 ### ADR-M2-07：SQLite 路徑 `~/.my-agent/projects/{slug}/session-index.db`，用 `bun:sqlite`
 
-走 `~/.my-agent/` 而非 `~/.claude/`，與 free-code 既有 profile 隔離方向一致。
+走 `~/.my-agent/` 而非 `~/.claude/`，與 my-agent 既有 profile 隔離方向一致。
 
 ### ADR-M2-08：FTS schema 多存欄位
 
@@ -474,7 +474,7 @@ $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.my-agent-profile"
 | 風險 | 緩解 |
 |---|---|
 | JSONL append 點不只一個，tee hook 漏 | M2-02 先 grep 盤點所有 append call site |
-| SQLite 被其他 free-code 實例鎖 | WAL mode（Hermes 做法） |
+| SQLite 被其他 my-agent 實例鎖 | WAL mode（Hermes 做法） |
 | Prefetch 注入點得改 QueryEngine | 先 spike；若真必須碰 QueryEngine 停下來問使用者 |
 | MemoryTool 鎖與 forked agent 的 Edit/Write 衝突 | advisory lock（`.lock` 哨兵檔），Edit/Write 不查 lock 但會被 MemoryTool 短暫阻擋 |
 | injection scanner 誤殺 | 只拒絕不靜默改寫；寫 false positive test case |
@@ -496,7 +496,7 @@ $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.my-agent-profile"
 
 - Memory provider plugin 抽象層（未來若要接 Mem0 / vector DB 再開里程碑）
 - 跨 project 全域索引（未來）
-- 壓縮鏈 `parent_session_id` tracking（free-code 已有 compact）
+- 壓縮鏈 `parent_session_id` tracking（my-agent 已有 compact）
 - Prompt-injection 靜默改寫 / 自動清洗（只拒絕）
 - **Anthropic 路徑下的 M2 功能驗收**（ADR-M2-10：未來另開任務）
 # M2-02 計畫 — 將 JSONL 寫入同步 tee 到 session FTS 索引

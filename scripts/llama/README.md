@@ -66,9 +66,9 @@ bash scripts/llama/verify.sh
 
 會呼叫 `/v1/models` 並送一個 `"2+2=?"` 的 chat completion，驗證整條鏈路正常。
 
-## 與 free-code 整合（之後）
+## 與 my-agent 整合（之後）
 
-這個 server 是純本地的 OpenAI 相容端點。M1 完成後，在 free-code 的 provider 設定
+這個 server 是純本地的 OpenAI 相容端點。M1 完成後，在 my-agent 的 provider 設定
 指向 `http://127.0.0.1:8080/v1`，模型名用 `qwen3.5-9b-neo`（或 `LLAMA_ALIAS`）。
 
 ## 疑難排解

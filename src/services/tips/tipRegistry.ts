@@ -322,7 +322,7 @@ const externalTips: Tip[] = [
       return runningIDEs.length > 0
     },
   },
-  // free-code: 移除 install-github-app tip
+  // my-agent: 移除 install-github-app tip
   {
     id: 'install-slack-app',
     content: async () => 'Run /install-slack-app to use Claude in Slack',

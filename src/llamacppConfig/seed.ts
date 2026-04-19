@@ -16,9 +16,9 @@ const README_FILENAME = 'llamacpp.README.md'
 
 const README_CONTENT = `# ~/.my-agent/llamacpp.json
 
-本檔為 free-code 與 \`scripts/llama/serve.sh\` **共用**的本地 LLM server 設定來源。
+本檔為 my-agent 與 \`scripts/llama/serve.sh\` **共用**的本地 LLM server 設定來源。
 
-- free-code TS 端透過 \`src/llamacppConfig/loader.ts\` 讀取，session 啟動時凍結快照。
+- my-agent TS 端透過 \`src/llamacppConfig/loader.ts\` 讀取，session 啟動時凍結快照。
 - shell 端透過 \`scripts/llama/load-config.sh\` 以 \`jq\` 抽出 env vars，再由 \`serve.sh\` 啟動 llama-server 時使用。
 
 編輯後：
@@ -27,7 +27,7 @@ const README_CONTENT = `# ~/.my-agent/llamacpp.json
 
 ## 欄位說明
 
-### Client 層（free-code 連線）
+### Client 層（my-agent 連線）
 
 | 欄位 | 用途 | 預設 |
 |------|------|------|
@@ -71,7 +71,7 @@ const README_CONTENT = `# ~/.my-agent/llamacpp.json
 ## 注意
 
 - \`server.ctxSize\` 與 client 的 \`contextSize\` 若不一致可能觸發 auto-compact 時機錯誤；一般應設相同值。
-- 編輯 JSON 若壞掉（語法錯或 schema 不符），free-code 會 stderr 警告並走內建預設，不 crash。
+- 編輯 JSON 若壞掉（語法錯或 schema 不符），my-agent 會 stderr 警告並走內建預設，不 crash。
 `
 
 export async function seedLlamaCppConfigIfMissing(): Promise<void> {

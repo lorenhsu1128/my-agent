@@ -6,7 +6,7 @@ const feedback = {
   name: 'feedback',
   description: `Submit feedback about my-agent`,
   argumentHint: '[report]',
-  // free-code: 不對外送回饋，整個 /feedback 指令停用
+  // my-agent: 不對外送回饋，整個 /feedback 指令停用
   isEnabled: () => false,
   load: () => import('./feedback.js'),
 } satisfies Command

@@ -95,7 +95,7 @@ type OauthConfig = {
   MCP_PROXY_PATH: string
 }
 
-// free-code: PROD OAuth 已下架，所有 URL 清為空字串。
+// my-agent: PROD OAuth 已下架，所有 URL 清為空字串。
 // 任何嘗試發 OAuth request 的程式碼會自然失敗（URL 為空），
 // 但 isAnthropicAuthEnabled() 永遠 false 已先短路所有 caller。
 const PROD_OAUTH_CONFIG = {
@@ -126,7 +126,7 @@ const PROD_OAUTH_CONFIG = {
  * The URL must point to a JSON document hosted by Anthropic.
  * See: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00
  */
-// free-code: MCP CIMD URL 已停用
+// my-agent: MCP CIMD URL 已停用
 export const MCP_CLIENT_METADATA_URL = ''
 
 // Staging OAuth configuration - only included in ant builds with staging flag

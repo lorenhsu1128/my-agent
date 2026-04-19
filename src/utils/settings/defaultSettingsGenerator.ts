@@ -4,9 +4,9 @@
 export function generateDefaultSettingsContent(): string {
   return `{
   // ═══════════════════════════════════════════════════════════════
-  //  free-code 全域設定檔
+  //  my-agent 全域設定檔
   //  此檔案在首次執行時自動產生，所有值皆為預設值。
-  //  修改後重新啟動 free-code 即可生效。
+  //  修改後重新啟動 my-agent 即可生效。
   //  檔案格式：JSONC（支援 // 註解）
   //
   //  設定優先級（低→高）：

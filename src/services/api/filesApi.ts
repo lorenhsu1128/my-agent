@@ -1,7 +1,7 @@
 /**
  * Files API client for managing files
  *
- * free-code: Anthropic Public Files API 在無 OAuth 的情況下無法使用。
+ * my-agent: Anthropic Public Files API 在無 OAuth 的情況下無法使用。
  * 保留型別/函式簽章供 main.tsx / filePersistence / teleport 編譯通過，
  * 但所有網路呼叫實際被 auth gate 阻擋（FilesApiConfig 需要 oauthToken）。
  */
@@ -26,7 +26,7 @@ import {
 const FILES_API_BETA_HEADER = 'files-api-2025-04-14,oauth-2025-04-20'
 const ANTHROPIC_VERSION = '2023-06-01'
 
-// free-code: 不再預設指向 api.anthropic.com；callers 必須透過 FilesApiConfig.baseUrl 顯式指定
+// my-agent: 不再預設指向 api.anthropic.com；callers 必須透過 FilesApiConfig.baseUrl 顯式指定
 function getDefaultApiBaseUrl(): string {
   return (
     process.env.ANTHROPIC_BASE_URL ||

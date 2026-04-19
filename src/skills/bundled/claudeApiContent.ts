@@ -1,8 +1,8 @@
 // Content for the anthropic-sdk-reference bundled skill.
 // Each .md file is inlined as a string at build time via Bun's text loader.
 // 來源：https://github.com/anthropics/skills/tree/main/skills/claude-api
-// free-code: 此 skill 為「外部 Anthropic SDK 參考資料」— 使用者若要寫
-// 對接 Anthropic API 的程式碼可參考；不適用於 free-code 自己的本地 LLM 路徑。
+// my-agent: 此 skill 為「外部 Anthropic SDK 參考資料」— 使用者若要寫
+// 對接 Anthropic API 的程式碼可參考；不適用於 my-agent 自己的本地 LLM 路徑。
 
 import csharpClaudeApi from './anthropic-sdk-reference/csharp/claude-api.md'
 import curlExamples from './anthropic-sdk-reference/curl/examples.md'

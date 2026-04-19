@@ -27,7 +27,7 @@ export type ModelStrings = Record<ModelKey, string>
 const MODEL_KEYS = Object.keys(ALL_MODEL_CONFIGS) as ModelKey[]
 
 function getBuiltinModelStrings(provider: APIProvider): ModelStrings {
-  // free-code: ALL_MODEL_CONFIGS 沒有 'llamacpp' / 'openai' 欄位，
+  // my-agent: ALL_MODEL_CONFIGS 沒有 'llamacpp' / 'openai' 欄位，
   // 全部 key 映射到 DEFAULT_LLAMACPP_MODEL 避免下游讀到 undefined 而 hang/crash
   if (provider === 'llamacpp' || provider === 'openai') {
     const out = {} as ModelStrings

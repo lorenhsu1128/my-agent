@@ -1,4 +1,4 @@
-# free-code 上下文組成詳解
+# my-agent 上下文組成詳解
 
 ## 📋 System Prompt 注入架構
 
@@ -199,7 +199,7 @@ IMPORTANT: You must NEVER generate or guess URLs for the user unless you are con
 # Environment
 
 You have been invoked in the following environment:
-Primary working directory: C:\Users\LOREN\Documents\_projects\free-code
+Primary working directory: C:\Users\LOREN\Documents\_projects\my-agent
 Is a git repository: true
 Platform: win32
 Shell: bash (use Unix shell syntax, not Windows...)
@@ -307,7 +307,7 @@ export const USER_PROFILE_SOFT_LIMIT = 1500
 ## 檔案位置
 
 本文檔已保存至：
-- `C:\Users\LOREN\Documents\_projects\free-code\docs\context-architecture.md`
+- `C:\Users\LOREN\Documents\_projects\my-agent\docs\context-architecture.md`
 
 相關源檔案：
 - `src/constants/prompts.ts` - 主組裝邏輯

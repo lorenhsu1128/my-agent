@@ -520,7 +520,7 @@ async function submitFeedback(data: FeedbackData, signal?: AbortSignal): Promise
   feedbackId?: string;
   isZdrOrg?: boolean;
 }> {
-  // free-code: 不對 api.anthropic.com 送回饋；本地僅 log，不對外送
+  // my-agent: 不對 api.anthropic.com 送回饋；本地僅 log，不對外送
   void data;
   void signal;
   return { success: false };

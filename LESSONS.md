@@ -28,7 +28,7 @@
 ## Provider 整合相關
 
 ### 新增 APIProvider enum 值時必須補全所有「provider-aware lookup」fallback
-- **發生什麼事**：M1 新增 `'llamacpp'` 到 `APIProvider` 聯集後，沒下 `--model` 的情境下 CLI bootstrap 在 `WebSearchTool.isEnabled()` 卡死約 600ms 後。FREECODE_TRACE 逐層追蹤到：`getMainLoopModel()` → `getDefaultMainLoopModel()` → `getDefaultSonnetModel()` → `getModelStrings().sonnet45` → `undefined` → `parseUserSpecifiedModel(undefined)` 進入死迴圈。
+- **發生什麼事**：M1 新增 `'llamacpp'` 到 `APIProvider` 聯集後，沒下 `--model` 的情境下 CLI bootstrap 在 `WebSearchTool.isEnabled()` 卡死約 600ms 後。MYAGENT_TRACE 逐層追蹤到：`getMainLoopModel()` → `getDefaultMainLoopModel()` → `getDefaultSonnetModel()` → `getModelStrings().sonnet45` → `undefined` → `parseUserSpecifiedModel(undefined)` 進入死迴圈。
 - **根本原因**：`src/utils/model/modelStrings.ts:25-31` 的 `getBuiltinModelStrings(provider)` 用 `ALL_MODEL_CONFIGS[key][provider]` 查表，但 `ALL_MODEL_CONFIGS`（`configs.ts`）每個 key 只有 `firstParty / bedrock / vertex / foundry / openai / codex` 的欄位，**沒有 `llamacpp`**。lookup 全 undefined → `sonnet45` / `opus46` / 等全 undefined → 預設模型解析路徑壞掉。
 - **為何隱藏**：`--model qwen3.5-9b-neo` 會讓 `getUserSpecifiedModelSetting()` 直接回傳 flag 值，**完全繞過** `getDefaultMainLoopModel()`。之前所有 M1 的 `./cli -p --model qwen...` 測試都沒踩到。真正進 TUI 互動模式（`bun run dev`、沒 `--model`）才會踩。
 - **正確做法**：
@@ -37,9 +37,9 @@
 - **相關檔案**：`src/utils/model/model.ts`（修法位置）、`src/utils/model/modelStrings.ts:25-31`（lookup 根源）、`src/utils/model/configs.ts`（`ALL_MODEL_CONFIGS` 資料結構）、`src/utils/model/providers.ts`（APIProvider enum）。
 - **日期**：2026-04-15
 
-### `ANTHROPIC_API_KEY=dummy` 會讓 free-code bootstrap 無限阻塞
+### `ANTHROPIC_API_KEY=dummy` 會讓 my-agent bootstrap 無限阻塞
 - **發生什麼事**：V4 測試時設 `ANTHROPIC_API_KEY=dummy CLAUDE_CODE_USE_LLAMACPP=true ./cli -p "hi"`，CLI 掛住 60 秒 + 無任何 stdout/stderr，連 `getAnthropicClient()` 都沒被呼叫。把 `ANTHROPIC_API_KEY=dummy` 拿掉（只保留 `CLAUDE_CODE_USE_LLAMACPP=true`）馬上解開。
-- **根本原因**：free-code 的 bootstrap（`src/bootstrap/state.ts` + `src/main.tsx` 初始化鏈）偵測到 `ANTHROPIC_API_KEY` 存在時會觸發同步 / 網路驗證，dummy key 讓這步卡住。具體哪一步目前未追到，但行為可重現。
+- **根本原因**：my-agent 的 bootstrap（`src/bootstrap/state.ts` + `src/main.tsx` 初始化鏈）偵測到 `ANTHROPIC_API_KEY` 存在時會觸發同步 / 網路驗證，dummy key 讓這步卡住。具體哪一步目前未追到，但行為可重現。
 - **正確做法**：llamacpp 路徑完全不需要 Anthropic key。**不要**設 `ANTHROPIC_API_KEY`（即使設成假值也不行）。只設 `CLAUDE_CODE_USE_LLAMACPP=true` + 可選的 `LLAMA_BASE_URL` / `LLAMA_MODEL`。
 - **相關檔案**：`src/services/api/client.ts`（getAnthropicClient 的 llamacpp 分支已放最前面，但上游還有別的阻塞）；`scripts/llama/DEPLOYMENT_PLAN.md` 與 `scripts/llama/README.md` 的範例指令需移除 `ANTHROPIC_API_KEY=dummy`。
 - **日期**：2026-04-15
@@ -51,8 +51,8 @@
 - **相關檔案**：所有會跟 `./cli` + 檔案路徑互動的測試腳本
 - **日期**：2026-04-15
 
-### free-code 的 CLI system prompt 遠大於 16K token
-- **發生什麼事**：第一次跑 V4 時 llama-server 回 `request (18485 tokens) exceeds the available context size (16384 tokens)`。實測 free-code 光系統 prompt 就 18K+，加 user prompt 更大。
+### my-agent 的 CLI system prompt 遠大於 16K token
+- **發生什麼事**：第一次跑 V4 時 llama-server 回 `request (18485 tokens) exceeds the available context size (16384 tokens)`。實測 my-agent 光系統 prompt 就 18K+，加 user prompt 更大。
 - **根本原因**：`scripts/llama/serve.sh` 預設 `LLAMA_CTX=16384` 是給一般對話準備的，對 Claude Code 類的 agent 系統 prompt 太小。
 - **正確做法**：`serve.sh` 預設改成 `LLAMA_CTX=32768`。RTX 5070 12GB VRAM + Q5_K_M 模型（6.85GB）仍有約 5GB 給 KV cache，32K context 綽綽有餘。若使用者 OOM 再往下降。
 - **相關檔案**：`scripts/llama/serve.sh`
@@ -146,9 +146,9 @@
 
 ---
 
-## free-code 既有程式碼的陷阱
+## my-agent 既有程式碼的陷阱
 
-> 這個分類記錄 free-code 原始碼中發現的「不明顯的行為」或「容易誤解的設計」，
+> 這個分類記錄 my-agent 原始碼中發現的「不明顯的行為」或「容易誤解的設計」，
 > 不一定是 bug，但如果不知道就容易踩坑。
 
 ### FTS5 trigram tokenizer 的最小查詢長度 = 3

@@ -1,8 +1,8 @@
-# free-code 架構導覽
+# my-agent 架構導覽
 
 ## 說明
 
-free-code（Claude Code fork）核心程式碼地圖，重點是 **API/provider 層**與**串流/工具呼叫主幹**。M1 實作 llama.cpp provider 時必讀。本文件的所有「事實」都註明行號，2026-04-15 在 commit `536e56a` 之後實測。
+my-agent（Claude Code fork）核心程式碼地圖，重點是 **API/provider 層**與**串流/工具呼叫主幹**。M1 實作 llama.cpp provider 時必讀。本文件的所有「事實」都註明行號，2026-04-15 在 commit `536e56a` 之後實測。
 
 ## 工具集
 

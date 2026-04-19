@@ -1,6 +1,6 @@
 ---
 name: anthropic-sdk-reference
-description: "External Anthropic SDK reference material — for writing user code that targets api.anthropic.com. NOT used for free-code's own local LLM (llama.cpp) path. TRIGGER when: user asks how to use Anthropic SDK / Claude API in their own application. DO NOT TRIGGER when: code imports openai/other AI SDK, general programming, ML/data-science tasks, or anything related to free-code's internal llamacpp adapter."
+description: "External Anthropic SDK reference material — for writing user code that targets api.anthropic.com. NOT used for my-agent's own local LLM (llama.cpp) path. TRIGGER when: user asks how to use Anthropic SDK / Claude API in their own application. DO NOT TRIGGER when: code imports openai/other AI SDK, general programming, ML/data-science tasks, or anything related to my-agent's internal llamacpp adapter."
 license: Complete terms in LICENSE.txt
 ---
 

@@ -26,7 +26,7 @@ import { lt } from '../utils/semver.js'
  * is only referenced when bridge mode is enabled at build time.
  */
 export function isBridgeEnabled(): boolean {
-  // free-code: bridge 功能無條件啟用（不需 OAuth auth）
+  // my-agent: bridge 功能無條件啟用（不需 OAuth auth）
   return feature('BRIDGE_MODE')
     ? getFeatureValue_CACHED_MAY_BE_STALE('tengu_ccr_bridge', true)
     : false
@@ -45,7 +45,7 @@ export function isBridgeEnabled(): boolean {
  * `isBridgeEnabled()` instead.
  */
 export async function isBridgeEnabledBlocking(): Promise<boolean> {
-  // free-code: bridge 功能無條件啟用
+  // my-agent: bridge 功能無條件啟用
   return feature('BRIDGE_MODE')
     ? await checkGate_CACHED_OR_BLOCKING('tengu_ccr_bridge')
     : false
@@ -66,7 +66,7 @@ export async function isBridgeEnabledBlocking(): Promise<boolean> {
  */
 export async function getBridgeDisabledReason(): Promise<string | null> {
   if (feature('BRIDGE_MODE')) {
-    // free-code: 跳過 auth 檢查，只檢查 feature flag
+    // my-agent: 跳過 auth 檢查，只檢查 feature flag
     if (!(await checkGate_CACHED_OR_BLOCKING('tengu_ccr_bridge'))) {
       return 'Remote Control is not yet enabled.'
     }

@@ -15,7 +15,7 @@ export function getAPIProvider(): APIProvider {
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)) return 'vertex'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)) return 'foundry'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) return 'openai'
-  // free-code: 預設強制走 llamacpp（不再回 'firstParty'）。
+  // my-agent: 預設強制走 llamacpp（不再回 'firstParty'）。
   return 'llamacpp'
 }
 

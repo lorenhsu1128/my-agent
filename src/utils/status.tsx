@@ -240,7 +240,7 @@ export function buildAccountProperties(): Property[] {
 export function buildAPIProviderProperties(): Property[] {
   const apiProvider = getAPIProvider();
   const properties: Property[] = [];
-  // free-code: llamacpp 預設 provider，顯示本地 server URL
+  // my-agent: llamacpp 預設 provider，顯示本地 server URL
   if (apiProvider === 'llamacpp') {
     const baseUrl = process.env.LLAMA_BASE_URL || DEFAULT_LLAMACPP_BASE_URL;
     properties.push({

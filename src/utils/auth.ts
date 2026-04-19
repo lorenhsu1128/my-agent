@@ -99,7 +99,7 @@ function isManagedOAuthContext(): boolean {
 /** Whether we are supporting direct 1P auth. */
 // this code is closely related to getAuthTokenSource
 export function isAnthropicAuthEnabled(): boolean {
-  // free-code: 使用本地模型，不需要 Anthropic auth
+  // my-agent: 使用本地模型，不需要 Anthropic auth
   return false
 
   // `claude ssh` remote: ANTHROPIC_UNIX_SOCKET tunnels API calls through a

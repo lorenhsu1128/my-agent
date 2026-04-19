@@ -2,7 +2,7 @@
 
 ## Context
 
-在 free-code 專案根目錄部署本地推理環境，作為未來多 provider 支援（CLAUDE.md ADR-001 規劃以 LiteLLM 作 proxy）的後端 LLM。目標是「開啟專案→跑一次 setup→即可啟動本地 OpenAI 相容 API」，所有檔案都收納在專案目錄內，不污染系統。
+在 my-agent 專案根目錄部署本地推理環境，作為未來多 provider 支援（CLAUDE.md ADR-001 規劃以 LiteLLM 作 proxy）的後端 LLM。目標是「開啟專案→跑一次 setup→即可啟動本地 OpenAI 相容 API」，所有檔案都收納在專案目錄內，不污染系統。
 
 **環境假設**：
 - Windows 11 + Git Bash
@@ -12,7 +12,7 @@
 ## 目錄結構（新增）
 
 ```
-free-code/
+my-agent/
 ├── llama/                              ← gitignore；b8457 CUDA 13.1 執行檔 + cudart DLL
 │   ├── llama-server.exe
 │   ├── llama-cli.exe
@@ -95,7 +95,7 @@ models/
 - **首次部署**：`bash scripts/llama/setup.sh` （約 5–15 分鐘，視網速）
 - **啟動服務**：`bash scripts/llama/serve.sh`（前景執行；或 `scripts/llama/serve.sh &` 後景）
 - **煙測**：另開終端 `bash scripts/llama/verify.sh`
-- **與 free-code 整合**：待 M1 完成後，設定 `LITELLM_URL` 或未來的 `src/services/providers/` 指向 `http://127.0.0.1:8080/v1`
+- **與 my-agent 整合**：待 M1 完成後，設定 `LITELLM_URL` 或未來的 `src/services/providers/` 指向 `http://127.0.0.1:8080/v1`
 - **調參提示**：12GB VRAM 的 context 上限約 32K（實測為準）；若 OOM 先降 `--ctx-size`，再考慮降到 Q4_K_M
 - **疑難排解**：
   - RTX 5070 跑 cuda-12.4 版會失敗 → 本專案固定用 13.1

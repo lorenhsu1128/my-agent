@@ -4,13 +4,13 @@
 
 ## Context
 
-本文分析 free-code 現有的 AutoDream（背景記憶整合）與 Hermes Agent 的 self-improving loop（即時自我改進迴圈）合併的可行方案、效果差異，以及與原本 AutoDream 的對比。
+本文分析 my-agent 現有的 AutoDream（背景記憶整合）與 Hermes Agent 的 self-improving loop（即時自我改進迴圈）合併的可行方案、效果差異，以及與原本 AutoDream 的對比。
 
 ---
 
 ## 第一部分：現有系統深度剖析
 
-### 1.1 AutoDream — free-code 的記憶整合系統
+### 1.1 AutoDream — my-agent 的記憶整合系統
 
 #### 觸發機制（三重門，cheapest-first）
 
@@ -268,7 +268,7 @@ Tier 3 (skill_view):  支援檔案（references/, templates/, scripts/）
 
 ---
 
-### 1.3 free-code 已有的 Skill 生態系統
+### 1.3 my-agent 已有的 Skill 生態系統
 
 #### Skill 建立機制
 
@@ -367,7 +367,7 @@ createApiQueryHook({
 
 ### 兩個機制的本質差異
 
-| 維度 | AutoDream（free-code） | Self-Improving Loop（Hermes） |
+| 維度 | AutoDream（my-agent） | Self-Improving Loop（Hermes） |
 |------|----------------------|------------------------------|
 | **觸發頻率** | 低頻（24h + 5 sessions） | 高頻（每 10 回合/迭代） |
 | **改進範圍** | 僅記憶整合 | 記憶 + Skill + Prompt |
@@ -379,9 +379,9 @@ createApiQueryHook({
 
 簡單來說：**AutoDream 是「睡覺時整理記憶」，Hermes Loop 是「邊做邊學邊改」**。
 
-### free-code 已覆蓋 vs 真正差距
+### my-agent 已覆蓋 vs 真正差距
 
-| Hermes Loop 功能 | free-code 現狀 | 差距 |
+| Hermes Loop 功能 | my-agent 現狀 | 差距 |
 |-----------------|---------------|------|
 | 記憶 nudge（每 10 回合提醒保存偏好） | extractMemories 在 session 結束自動提取 | **缺 session 內即時 nudge** |
 | Skill 建立 nudge（每 10 迭代提醒建 skill） | Skillify 需手動 `/skillify` | **缺自動偵測「該建 skill」的時機** |

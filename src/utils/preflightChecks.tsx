@@ -15,7 +15,7 @@ export interface PreflightCheckResult {
   sslHint?: string;
 }
 async function checkEndpoints(): Promise<PreflightCheckResult> {
-  // free-code: 使用本地模型，不檢查外部端點連線
+  // my-agent: 使用本地模型，不檢查外部端點連線
   return { success: true }
   try {
     const oauthConfig = getOauthConfig();

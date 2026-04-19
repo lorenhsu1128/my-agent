@@ -5,7 +5,7 @@
 `src/services/providers/` 中多 provider 抽象層的設計指南。M1 里程碑實作時載入此 skill。
 
 本 skill 整合兩份摸底：
-- `skills/freecode-architecture/SKILL.md` — free-code 現有 API 層的實測事實
+- `skills/freecode-architecture/SKILL.md` — my-agent 現有 API 層的實測事實
 - 下方「Hermes 借鑑」段 — 對 `reference/hermes-agent/hermes_cli/auth.py` 與 `agent/auxiliary_client.py` 的設計概念摘要
 
 ## 工具集
@@ -175,8 +175,8 @@ export function resolveProviderFromModel(modelName: string): Provider { ... }
 
 ## 參考
 
-- free-code API 層：`skills/freecode-architecture/SKILL.md`
+- my-agent API 層：`skills/freecode-architecture/SKILL.md`
 - Hermes 原始碼：`reference/hermes-agent/hermes_cli/auth.py`（ProviderConfig dataclass 模板）、`agent/auxiliary_client.py`（`resolve_provider_client()` + adapter pattern）、`agent/anthropic_adapter.py`（OpenAI → Anthropic 翻譯）
-- free-code 既有翻譯器範例：`src/services/api/codex-fetch-adapter.ts`（812 行）
+- my-agent 既有翻譯器範例：`src/services/api/codex-fetch-adapter.ts`（812 行）
 - ADR：CLAUDE.md 的 ADR-001（推翻）、ADR-002、ADR-005、ADR-006
 - TODO.md 當前 M1 階段一剩餘任務

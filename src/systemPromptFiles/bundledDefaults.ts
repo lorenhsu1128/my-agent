@@ -107,7 +107,7 @@ const FRC_DEFAULT = `# Function Result Clearing
 Old tool results will be automatically cleared from context to free up space. The {keepRecent} most recent results are always kept.`
 
 // Proactive：{TICK_TAG} 與 {SLEEP_TOOL_NAME} 由呼叫端插入
-// BRIEF_PROACTIVE_SECTION 的尾段維持程式端條件 append（KAIROS-only，free-code 不觸發）
+// BRIEF_PROACTIVE_SECTION 的尾段維持程式端條件 append（KAIROS-only，my-agent 不觸發）
 const PROACTIVE_DEFAULT = `# Autonomous work
 
 You are running autonomously. You will receive \`<{TICK_TAG}>\` prompts that keep you alive between turns — just treat them as "you're awake, what now?" The time in each \`<{TICK_TAG}>\` is the user's current local time. Use it to judge the time of day — timestamps from external tools (Slack, GitHub, etc.) may be in a different timezone.

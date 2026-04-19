@@ -3,9 +3,32 @@
 > Claude Code 在每次 session 開始時讀取此檔案，在工作過程中更新任務狀態。
 > 里程碑結構由人類維護。Claude Code 負責管理任務狀態的勾選。
 
+## 當前里程碑：M-RENAME — 專案改名 free-code → My Agent（2026-04-19 啟動）
+
+**目標**：全倉庫 84 檔、265 處字串（free-code / freecode / Free Code）改名為 my-agent / My Agent。
+
+**決策**：直接改名不留 alias；keychain prefix 改；install.sh repo 指 `lorenhsu1128/my-agent`；專案根目錄最後一步改名。
+
+### 任務
+- [x] M-RENAME-1 Phase 1：UI 品牌字串（LogoV2/REPL/Welcome 等 13 處）+ env vars MYAGENT_*（5 個）+ 識別字串（keychain prefix、OAuth originator）+ seed 內容（llamacpp seed/schema、bundledDefaults、defaultSettings）+ bundled skills
+- [x] M-RENAME-2 Phase 2：程式碼註解 `// my-agent:`（24 檔，sed 批次）+ theme.ts 4 處
+- [x] M-RENAME-3 Phase 3：install.sh（repo URL → lorenhsu1128/my-agent、INSTALL_DIR、symlink、ASCII 標題）+ scripts/llama/load-config.sh
+- [x] M-RENAME-4 Phase 4：根目錄 11 個 *.md + docs/ + scripts/llama/*.md（test-run-*.md 略過）+ tests/integration/user-model/user-model-smoke.ts 的 env var
+- [x] M-RENAME-5 Phase 5：`.claude/` 下 6 個 SKILL.md + reviewer.md + project-review-hermes.md；目錄 freecode-architecture → myagent-architecture（git mv）
+- [x] M-RENAME-6 Phase 6：`bun run typecheck` 過；`bun run dev --help` 已顯示 "my-agent"；TUI logo 待人工確認
+- [ ] M-RENAME-7 Phase 7：commit/push 後手動 rename 根目錄 free-code → my-agent；重開 session 後修正 POC scripts 中 session slug（`scripts/poc/query-session-index.ts:13`、`scripts/poc/session-search-e2e.ts:44`）
+
+### 完成標準
+- [x] `grep -rni "free[- ]?code\|freecode" src/ scripts/ install.sh` 僅剩 2 個 POC slug（待 Phase 7）
+- [x] `bun run dev --help` 顯示 my-agent
+- [ ] TUI logo 顯示「My Agent」（人工驗證）
+- [ ] 根目錄已改為 `_projects\my-agent`（Phase 7 手動）
+
+---
+
 ## 當前里程碑：M2 — Session Recall & Dynamic Memory
 
-**目標情境**：以 **llama.cpp 本地模型（`qwen3.5-9b-neo`）** 為主要運行情境設計。補齊 free-code 既有記憶系統（`src/memdir/` 四型分類 + `SessionMemory` + `extractMemories` + `autoDream` 已存在）尚缺的三塊：(1) 跨 session 歷史對話搜尋、(2) query-driven 動態 prefetch 注入、(3) 受控的 MemoryTool 寫入（含 prompt injection 掃描）。**不**移植 Hermes 的 provider plugin 抽象層，**不**改 `src/memdir/` 四型分類，**不**動 `QueryEngine.ts` / `Tool.ts` / `StreamingToolExecutor.ts`（deny list）。Anthropic 既有 code path 保留（黃金規則 #2）但**不作為**設計目標與驗收依據。
+**目標情境**：以 **llama.cpp 本地模型（`qwen3.5-9b-neo`）** 為主要運行情境設計。補齊 my-agent 既有記憶系統（`src/memdir/` 四型分類 + `SessionMemory` + `extractMemories` + `autoDream` 已存在）尚缺的三塊：(1) 跨 session 歷史對話搜尋、(2) query-driven 動態 prefetch 注入、(3) 受控的 MemoryTool 寫入（含 prompt injection 掃描）。**不**移植 Hermes 的 provider plugin 抽象層，**不**改 `src/memdir/` 四型分類，**不**動 `QueryEngine.ts` / `Tool.ts` / `StreamingToolExecutor.ts`（deny list）。Anthropic 既有 code path 保留（黃金規則 #2）但**不作為**設計目標與驗收依據。
 
 **架構決策**（2026-04-15 敲定，與使用者逐題對齊 Q1–Q7，並於同日依 llamacpp-primary 原則修訂）：
 - ADR-M2-01：JSONL 為對話 source of truth，SQLite 僅作 FTS5 索引，可隨時刪重建
@@ -73,7 +96,7 @@
 - ADR-UM-03：注入機制為獨立 `<user-profile>` fence，透過 `systemPromptSection('user_profile', ...)` 放在 `memory` section 之前
 - ADR-UM-04：大小 soft limit 1500 chars（global + project 合計），超出告警不截斷
 - ADR-UM-05：Session 啟動凍結快照 (Hermes 作法)；mid-session 寫入 MemoryTool 看到 live，但 system prompt 用 snapshot（prefix cache 友善）
-- ADR-UM-06：開關優先序 env (`FREECODE_DISABLE_USER_MODEL`) > `CLAUDE_CODE_SIMPLE` > settings (`userModelEnabled`) > 預設啟用；CLI flag 暫不做（env var 前綴已夠用）
+- ADR-UM-06：開關優先序 env (`MYAGENT_DISABLE_USER_MODEL`) > `CLAUDE_CODE_SIMPLE` > settings (`userModelEnabled`) > 預設啟用；CLI flag 暫不做（env var 前綴已夠用）
 
 **詳細設計見 `USER_MODELING_PLAN.md`（根目錄）。**
 
@@ -189,7 +212,7 @@
 - [x] M-LLAMA-CFG-8 typecheck 綠、端對端 seed + shell load 驗證、commit
 
 ### 完成標準
-- [x] 首次跑 free-code 後 `~/.my-agent/llamacpp.json` + `llamacpp.README.md` 自動建立
+- [x] 首次跑 my-agent 後 `~/.my-agent/llamacpp.json` + `llamacpp.README.md` 自動建立
 - [x] `bash scripts/llama/serve.sh` 能正確讀 config（驗證過 HOST/PORT/CTX/ALIAS 皆來自 json）
 - [x] env var 臨時覆蓋仍有效（`LLAMA_CTX=65536 bash serve.sh` 依然覆蓋）
 - [x] JSON 壞 / 缺檔不 crash，走內建預設並 stderr 警告
@@ -225,14 +248,14 @@
 
 ## 已完成里程碑：M1 — 透過 llama.cpp 支援本地模型（封存）
 
-**目標**：free-code 能直接連接專案內跑的 llama.cpp server（`http://127.0.0.1:8080/v1`，model alias `qwen3.5-9b-neo`），支援串流和全部 39 個工具的 tool calling。**不再**經過 LiteLLM proxy（ADR-001 已推翻，見 CLAUDE.md）。
+**目標**：my-agent 能直接連接專案內跑的 llama.cpp server（`http://127.0.0.1:8080/v1`，model alias `qwen3.5-9b-neo`），支援串流和全部 39 個工具的 tool calling。**不再**經過 LiteLLM proxy（ADR-001 已推翻，見 CLAUDE.md）。
 
 **架構硬約束**：`src/QueryEngine.ts` 與 `src/Tool.ts` 在 `.claude/settings.json` deny list — **不能改**。因此 provider 必須在內部把 OpenAI SSE 轉成 Anthropic 形狀的 stream event，下游無感。
 
 **實作路徑**：**路徑 B（fetch adapter）** — 2026-04-15 PoC 驗證通過（commit `b2af143`）。仿 `src/services/api/codex-fetch-adapter.ts` 模式，寫 `llamacpp-fetch-adapter.ts`，塞給 `new Anthropic({ fetch })`，翻譯層集中一處，`claude.ts` / `QueryEngine.ts` 零修改。**不另建** `src/services/providers/` 抽象層（路徑 A 已放棄）。
 
 ### 階段一：摸底與可行性驗證
-- [x] 閱讀並記錄 free-code 現有 API 架構的實測事實（`src/services/api/client.ts`、`src/services/api/claude.ts`、`src/utils/model/providers.ts`），把發現寫進 `skills/freecode-architecture/SKILL.md`
+- [x] 閱讀並記錄 my-agent 現有 API 架構的實測事實（`src/services/api/client.ts`、`src/services/api/claude.ts`、`src/utils/model/providers.ts`），把發現寫進 `skills/freecode-architecture/SKILL.md`
 - [x] 閱讀 Hermes 的 `reference/hermes-agent/hermes_cli/auth.py` 與 `reference/hermes-agent/agent/auxiliary_client.py`，只取「ProviderConfig + 動態客戶端工廠」設計概念（不直接複製 Python）
 - [x] PoC：路徑 B 可行性驗證 — 寫 `scripts/poc/llamacpp-fetch-poc.ts`，確認 Anthropic SDK 透過 fetch adapter 可成功與 llama-server 通訊（2026-04-15 commit `b2af143`）
 - [x] 架構決策：確定走路徑 B（fetch adapter）— 棄新 provider 層
@@ -284,7 +307,7 @@
 
 ## 當前里程碑：M3 — 移植 anthropics/skills 為 Bundled Skills
 
-**目標**：將 `anthropics/skills` GitHub repo 的 17 個通用 skill 內化為 free-code 的 bundled TypeScript skills。SKILL.md 變成 TypeScript 模組、Python scripts 改寫為 TypeScript——讓它們成為 free-code 二進位檔的一部分，不依賴外部 marketplace。與 ADR-007（vendor SDK）精神一致。依 ADR-003，所有 skill 無條件註冊，不使用 feature flag。不依賴 LibreOffice 等大型系統軟體，所有功能用純 TypeScript/JavaScript 套件實現。
+**目標**：將 `anthropics/skills` GitHub repo 的 17 個通用 skill 內化為 my-agent 的 bundled TypeScript skills。SKILL.md 變成 TypeScript 模組、Python scripts 改寫為 TypeScript——讓它們成為 my-agent 二進位檔的一部分，不依賴外部 marketplace。與 ADR-007（vendor SDK）精神一致。依 ADR-003，所有 skill 無條件註冊，不使用 feature flag。不依賴 LibreOffice 等大型系統軟體，所有功能用純 TypeScript/JavaScript 套件實現。
 
 **詳細實作設計見 plan 檔 `glowing-soaring-truffle.md`。**
 
@@ -323,14 +346,14 @@
 ## 未來里程碑（尚未詳細規劃）
 
 ### M4 — Hermes Cron 排程（TypeScript 重新實作）
-將 Hermes 的 cron 系統（自然語言排程 + 多平台派送）移植到 free-code。
+將 Hermes 的 cron 系統（自然語言排程 + 多平台派送）移植到 my-agent。
 
 ### M5 — Hermes 訊息閘道（TypeScript 重新實作）
-將 Telegram/Discord/Slack 閘道移植到 free-code。
+將 Telegram/Discord/Slack 閘道移植到 my-agent。
 
 ### M6 — Self-Improving Loop（AutoDream × Hermes 合併）
 
-**目標**：合併 free-code 的 AutoDream（背景記憶整合）與 Hermes Agent 的 self-improving loop（即時自我改進迴圈），讓系統從「被動整理記憶」進化為「邊做邊學邊改」。三個階段漸進實施：方案一（擴展 Dream prompt）→ 方案二（即時 Nudge 雙迴圈）→ 方案三（完整三層自改進系統）。以 **llama.cpp 本地模型** 為主要運行情境。
+**目標**：合併 my-agent 的 AutoDream（背景記憶整合）與 Hermes Agent 的 self-improving loop（即時自我改進迴圈），讓系統從「被動整理記憶」進化為「邊做邊學邊改」。三個階段漸進實施：方案一（擴展 Dream prompt）→ 方案二（即時 Nudge 雙迴圈）→ 方案三（完整三層自改進系統）。以 **llama.cpp 本地模型** 為主要運行情境。
 
 **詳細設計分析見 `AUTODREAM_HERMES_MERGE_ANALYSIS.md`。**
 
@@ -433,7 +456,7 @@
 
 #### SkillCreationSurvey 閉環補齊
 - [x] M6c-04 新增 `src/components/SkillCreationSurvey.tsx`：仿 SkillImprovementSurvey 模式，顯示候選 skill 的 name/description/steps，「1: 建立 / 0: 略過」互動
-- [x] M6c-05 修改 `src/screens/REPL.tsx`：加入 SkillCreationSurvey import + render；移除 SkillImprovementSurvey 的 `"external" === 'ant'` guard（free-code 已解鎖所有功能）
+- [x] M6c-05 修改 `src/screens/REPL.tsx`：加入 SkillCreationSurvey import + render；移除 SkillImprovementSurvey 的 `"external" === 'ant'` guard（my-agent 已解鎖所有功能）
 
 #### 品牌重塑：config 檔案搬移
 - [x] M6c-06 修改 `src/utils/env.ts`：`getGlobalClaudeFile()` 的檔名 `.claude.json` → `.my-agent.json`，含自動 migration（複製舊檔到新路徑）
@@ -450,7 +473,7 @@
 
 ### M6d — 移除 Auth 依賴 + GrowthBook 本地化 + 功能解鎖
 
-**目標**：free-code 完全使用本地模型，移除所有 Anthropic auth 依賴。GrowthBook 停用遠端 fetch，所有 flag 預設 true 並從 .my-agent.json 讀取。解鎖被 auth gate 擋住的功能。
+**目標**：my-agent 完全使用本地模型，移除所有 Anthropic auth 依賴。GrowthBook 停用遠端 fetch，所有 flag 預設 true 並從 .my-agent.json 讀取。解鎖被 auth gate 擋住的功能。
 
 #### 區塊 1：GrowthBook 本地化
 - [x] M6d-01 修改 `src/services/analytics/growthbook.ts`：`initializeGrowthBook()` 直接回 null（不連遠端）
@@ -479,7 +502,7 @@
 - [x] M6d-18 typecheck 通過 + 93/93 測試全綠 + 端到端 `bun run dev -p "hi"` 成功回應
 
 ### M7 — Hermes 使用者建模（TypeScript 重新實作）
-將 Honcho 風格的使用者建模和跨 session 回憶移植到 free-code。
+將 Honcho 風格的使用者建模和跨 session 回憶移植到 my-agent。
 
 ### M8 — 移除殘留 Anthropic 對外連線與品牌字串
 
@@ -541,7 +564,7 @@
 
 **目標**：`src/skills/bundled/claude-api/` 內容是教使用者用 Anthropic SDK，整個改寫成 my-agent + 本地 LLM 對接教學。
 
-- [x] M12-01 目錄改名 `claude-api` → `anthropic-sdk-reference`；SKILL.md frontmatter 更新清楚標示「外部 SDK 參考、非 free-code 本地 LLM」
+- [x] M12-01 目錄改名 `claude-api` → `anthropic-sdk-reference`；SKILL.md frontmatter 更新清楚標示「外部 SDK 參考、非 my-agent 本地 LLM」
 - [x] M12-02 N/A — 採用「只改名不改內容」策略（247KB 多語言 SDK 文件保留實用價值，定位改為「外部 Anthropic SDK 參考資料」）
 - [x] M12-03 `claudeApiContent.ts` 8+ 處 import 路徑 `./claude-api/` → `./anthropic-sdk-reference/`；`claudeApi.ts` 註冊名稱與文案同步更新
 - [x] M12-04 typecheck 綠 + `bun run dev -p "9-3="` 回 `9 - 3 = 6`
@@ -589,7 +612,7 @@
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
 > 格式：`- YYYY-MM-DD: [完成的任務] | [遇到的問題] | [下一步]`
 
-- 2026-04-15: 本地 llama.cpp b8457 + Qwen3.5-9B-Neo Q5_K_M 部署完成（scripts/llama/*），煙測 2+2=4 通過，58 tok/s prompt eval | 踩了 --log-colors 參數變更、Git Bash UTF-8 mangling、Neo reasoning_content/content 分離三個坑，都已記入 LESSONS.md | 下一步：M1 階段一，整合這個 server 作為 free-code 的本地 provider
+- 2026-04-15: 本地 llama.cpp b8457 + Qwen3.5-9B-Neo Q5_K_M 部署完成（scripts/llama/*），煙測 2+2=4 通過，58 tok/s prompt eval | 踩了 --log-colors 參數變更、Git Bash UTF-8 mangling、Neo reasoning_content/content 分離三個坑，都已記入 LESSONS.md | 下一步：M1 階段一，整合這個 server 作為 my-agent 的本地 provider
 
 ---
 
@@ -749,21 +772,21 @@
 
 - 2026-04-16 15:50: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
 
-- 2026-04-16 16:05: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+- 2026-04-16 16:05: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
 
-- 2026-04-16 16:13: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+- 2026-04-16 16:13: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
 
-- 2026-04-16 20:54: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+- 2026-04-16 20:54: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
 
-- 2026-04-16 21:15: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+- 2026-04-16 21:15: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
 
-- 2026-04-16 21:26: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+- 2026-04-16 21:26: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
 
-- 2026-04-16 21:39: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+- 2026-04-16 21:39: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
 
-- 2026-04-16 21:44: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+- 2026-04-16 21:44: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
 
-- 2026-04-16 22:01: Session 結束 | 進度：60/77 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.free-code → .my-agent
+- 2026-04-16 22:01: Session 結束 | 進度：60/77 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
 
 - 2026-04-16 22:43: Session 結束 | 進度：75/77 任務 | a1125a3 docs: 修正 CLAUDE.md 及 .claude/ 設定對齊現狀
 
@@ -909,7 +932,7 @@
 - [x] M16-05 grep 確認 0 殘留
 
 ### 驗收
-- `bun src/entrypoints/cli.tsx --help` 不再印 free-code hint stderr ✅
+- `bun src/entrypoints/cli.tsx --help` 不再印 my-agent hint stderr ✅
 - `getClaudeConfigHomeDir()` 預設 `~/.my-agent`、`CLAUDE_CONFIG_DIR` env 覆寫保留 ✅
 - 從 Claude Code 切過來的使用者可查 CLAUDE.md 遷移指南 ✅
 
@@ -943,11 +966,11 @@
 
 - 2026-04-18 21:26: Session 結束 | 進度：265/278 任務 | 790d9d3 fix(skill-creation): 批准後把完整候選資訊注入對話
 
-- 2026-04-18 22:13: Session 結束 | 進度：265/278 任務 | b7bacd1 docs(context): 記錄 free-code 上下文組成詳解（M-UM + M2）
+- 2026-04-18 22:13: Session 結束 | 進度：265/278 任務 | b7bacd1 docs(context): 記錄 my-agent 上下文組成詳解（M-UM + M2）
 
-- 2026-04-18 22:18: Session 結束 | 進度：265/278 任務 | b7bacd1 docs(context): 記錄 free-code 上下文組成詳解（M-UM + M2）
+- 2026-04-18 22:18: Session 結束 | 進度：265/278 任務 | b7bacd1 docs(context): 記錄 my-agent 上下文組成詳解（M-UM + M2）
 
-- 2026-04-19 07:10: Session 結束 | 進度：265/278 任務 | b7bacd1 docs(context): 記錄 free-code 上下文組成詳解（M-UM + M2）
+- 2026-04-19 07:10: Session 結束 | 進度：265/278 任務 | b7bacd1 docs(context): 記錄 my-agent 上下文組成詳解（M-UM + M2）
 
 - 2026-04-19 07:40: Session 結束 | 進度：274/287 任務 | 3129f2c refactor(brand): 使用者可見字串改為 my-agent，新增 my-agent bin alias
 
@@ -974,3 +997,11 @@
 - 2026-04-19 09:54: Session 結束 | 進度：311/329 任務 | 67a20c9 feat(llamacpp-ctx): 上下文溢出偵測與自動復原（解決 128K 模型卡死問題）
 
 - 2026-04-19 09:59: Session 結束 | 進度：311/329 任務 | 67a20c9 feat(llamacpp-ctx): 上下文溢出偵測與自動復原（解決 128K 模型卡死問題）
+
+- 2026-04-19 10:19: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.my-agent/llamacpp.json
+
+- 2026-04-19 10:26: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.my-agent/llamacpp.json
+
+- 2026-04-19 10:39: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.my-agent/llamacpp.json
+
+- 2026-04-19 10:42: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.my-agent/llamacpp.json

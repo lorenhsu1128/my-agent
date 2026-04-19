@@ -14,7 +14,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 
 // Redirect CLAUDE_CONFIG_DIR BEFORE importing anything that memoizes on it.
-const tempHome = mkdtempSync(join(tmpdir(), 'freecode-index-smoke-'))
+const tempHome = mkdtempSync(join(tmpdir(), 'myagent-index-smoke-'))
 process.env.CLAUDE_CONFIG_DIR = tempHome
 
 const {

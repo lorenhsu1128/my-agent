@@ -49,7 +49,7 @@ export type ModelOption = {
 }
 
 export function getDefaultOptionForUser(fastMode = false): ModelOption {
-  // free-code: llamacpp 為預設 provider，避免後段顯示 Sonnet 4.6 字樣
+  // my-agent: llamacpp 為預設 provider，避免後段顯示 Sonnet 4.6 字樣
   if (getAPIProvider() === 'llamacpp') {
     return {
       value: null,
@@ -311,7 +311,7 @@ function getOpusPlanOption(): ModelOption {
 // @[MODEL LAUNCH]: Update the model picker lists below to include/reorder options for the new model.
 // Each user tier (ant, Max/Team Premium, Pro/Team Standard/Enterprise, PAYG 1P, PAYG 3P) has its own list.
 function getModelOptionsBase(fastMode = false): ModelOption[] {
-  // free-code: llamacpp 為預設 provider 時，只回傳 Default 選項，
+  // my-agent: llamacpp 為預設 provider 時，只回傳 Default 選項，
   // getModelOptions() 後續會自動追加 LLAMACPP_MODEL_ALIASES（行 509），
   // 不要混入任何 Anthropic / Codex 模型。
   if (getAPIProvider() === 'llamacpp') {

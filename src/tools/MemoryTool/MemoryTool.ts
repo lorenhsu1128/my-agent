@@ -455,7 +455,7 @@ export const MemoryTool = buildTool({
         return {
           result: false,
           message:
-            '使用者建模已停用（FREECODE_DISABLE_USER_MODEL 或 settings.userModelEnabled=false）',
+            '使用者建模已停用（MYAGENT_DISABLE_USER_MODEL 或 settings.userModelEnabled=false）',
           errorCode: 1,
         }
       }

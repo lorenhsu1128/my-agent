@@ -943,7 +943,7 @@ export const SettingsSchema = lazySchema(() =>
         .boolean()
         .optional()
         .describe(
-          'Enable user modeling (USER.md persona block injected into system prompt). Defaults to true. Disable via FREECODE_DISABLE_USER_MODEL=1 env var or --no-user-model CLI flag.',
+          'Enable user modeling (USER.md persona block injected into system prompt). Defaults to true. Disable via MYAGENT_DISABLE_USER_MODEL=1 env var or --no-user-model CLI flag.',
         ),
       autoDreamEnabled: z
         .boolean()

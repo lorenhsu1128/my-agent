@@ -2,7 +2,7 @@
 
 ## Context
 
-free-code 目前約 **15–16K tokens** 的 system prompt 文字直接寫死在 TypeScript 程式碼裡（`src/constants/prompts.ts` 8 大段 + `src/memdir/memoryTypes.ts`/`teamMemPrompts.ts` 記憶系統說明 + `src/userModel/prompt.ts` 外框）。任何措辭調整都必須改 code → typecheck → build → 重啟，迭代成本高。
+my-agent 目前約 **15–16K tokens** 的 system prompt 文字直接寫死在 TypeScript 程式碼裡（`src/constants/prompts.ts` 8 大段 + `src/memdir/memoryTypes.ts`/`teamMemPrompts.ts` 記憶系統說明 + `src/userModel/prompt.ts` 外框）。任何措辭調整都必須改 code → typecheck → build → 重啟，迭代成本高。
 
 本計畫把這些文字外部化到 `~/.my-agent/` 下的 `.md` 檔，使用者可直接編輯並在下一 turn 生效。採用**缺檔用內建、存在就完全取代**的覆蓋語義（與既有 USER.md / MEMORY.md 一致），並支援 **global + per-project** 雙層（`~/.my-agent/projects/<slug>/system-prompt/` 可覆蓋 global）。
 

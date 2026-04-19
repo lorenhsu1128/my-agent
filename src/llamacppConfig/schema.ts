@@ -2,7 +2,7 @@
  * llama.cpp 設定檔 schema。
  *
  * 存放位置：~/.my-agent/llamacpp.json
- * 單一來源：free-code TS 端 + scripts/llama/*.sh 都讀這份。
+ * 單一來源：my-agent TS 端 + scripts/llama/*.sh 都讀這份。
  *
  * 設計原則：
  *   - 所有欄位都 optional；缺欄位走 DEFAULTS
@@ -33,9 +33,9 @@ export const LlamaCppServerSchema = z.object({
 })
 
 export const LlamaCppConfigSchema = z.object({
-  /** free-code TS 端連線的 OpenAI 相容 endpoint（含 /v1） */
+  /** my-agent TS 端連線的 OpenAI 相容 endpoint（含 /v1） */
   baseUrl: z.string().url().default('http://127.0.0.1:8080/v1'),
-  /** free-code 端送給 server 的 model 名稱（需與 server.alias 一致） */
+  /** my-agent 端送給 server 的 model 名稱（需與 server.alias 一致） */
   model: z.string().default('qwen3.5-9b-neo'),
   /** 用於 auto-compact 閾值計算；若 server /slots 查不到就用此值 */
   contextSize: z.number().int().positive().default(131072),

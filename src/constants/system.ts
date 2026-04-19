@@ -44,7 +44,7 @@ export function getCLISyspromptPrefix(options?: {
   return DEFAULT_PREFIX
 }
 
-// free-code: 抽出 prefix const，避免 magic string 散落
+// my-agent: 抽出 prefix const，避免 magic string 散落
 export const ATTRIBUTION_HEADER_PREFIX = 'x-anthropic-billing-header'
 
 /**
@@ -72,7 +72,7 @@ export function getAttributionHeader(fingerprint: string): string {
   if (!isAttributionHeaderEnabled()) {
     return ''
   }
-  // free-code: 本地 llamacpp 不需要 Anthropic 計費標頭，避免送出含 anthropic 字樣的 prompt prefix
+  // my-agent: 本地 llamacpp 不需要 Anthropic 計費標頭，避免送出含 anthropic 字樣的 prompt prefix
   if (getAPIProvider() === 'llamacpp') {
     return ''
   }

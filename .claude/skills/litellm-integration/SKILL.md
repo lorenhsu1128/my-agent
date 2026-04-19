@@ -1,14 +1,14 @@
 # LiteLLM Proxy 整合
 
 ## 說明
-如何設定、配置和使用 LiteLLM 作為 free-code 與本地/雲端 LLM provider 之間的 proxy 層。設定或除錯 LiteLLM 連接時載入此技能。
+如何設定、配置和使用 LiteLLM 作為 my-agent 與本地/雲端 LLM provider 之間的 proxy 層。設定或除錯 LiteLLM 連接時載入此技能。
 
 ## 工具集
 terminal, file
 
 ## 什麼是 LiteLLM
 
-LiteLLM 是一個 Python proxy，提供 OpenAI 相容的 API 端點（`/v1/chat/completions`），將請求轉譯到 100+ 個 LLM provider。我們用它作為中間層，這樣 free-code 只需實作一種轉譯（Anthropic ↔ OpenAI），LiteLLM 處理其餘的。
+LiteLLM 是一個 Python proxy，提供 OpenAI 相容的 API 端點（`/v1/chat/completions`），將請求轉譯到 100+ 個 LLM provider。我們用它作為中間層，這樣 my-agent 只需實作一種轉譯（Anthropic ↔ OpenAI），LiteLLM 處理其餘的。
 
 ## 設定
 

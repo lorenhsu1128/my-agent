@@ -1,12 +1,12 @@
-# Plan: 引入 Hermes 式「使用者建模」(User Modeling) 到 free-code
+# Plan: 引入 Hermes 式「使用者建模」(User Modeling) 到 my-agent
 
 ## Context
 
-使用者想把 Hermes Agent 的 **使用者建模** 概念移植進 free-code，並加上可開關的參數；設定檔 / 記錄檔放在 `~/.my-agent/` 下。
+使用者想把 Hermes Agent 的 **使用者建模** 概念移植進 my-agent，並加上可開關的參數；設定檔 / 記錄檔放在 `~/.my-agent/` 下。
 
 ### 兩邊現況比較
 
-| 面向 | Hermes | free-code M2 現況 |
+| 面向 | Hermes | my-agent M2 現況 |
 |---|---|---|
 | 檔案結構 | `~/.hermes/memories/MEMORY.md` + `USER.md` 兩檔 | `~/.my-agent/projects/<slug>/memory/` 下多個 typed 檔案（`user_*.md`, `feedback_*.md`, `project_*.md`, `reference_*.md`）+ `MEMORY.md` 索引 |
 | 使用者檔案 | **獨立 `USER.md`**、字元上限 1375、session 啟動**凍結快照**注入 system prompt | 無獨立 persona 檔；使用者資訊散落在 `user_*.md` / `feedback_*.md` 多檔 |
@@ -16,7 +16,7 @@
 
 ### 問題定位
 
-free-code 雖然已有 typed user memories，但它們是**條目式、散落、無 persona 視角**；LLM 每次拿到的是「MEMORY.md 索引 + 按需展開」，沒有一個穩定、凍結、高優先級的「**這個使用者是誰**」blob。Hermes 的 USER.md 正是補這一塊 —— 一個 curated、size-capped、永遠放在 system prompt 頂部的 persona block。
+my-agent 雖然已有 typed user memories，但它們是**條目式、散落、無 persona 視角**；LLM 每次拿到的是「MEMORY.md 索引 + 按需展開」，沒有一個穩定、凍結、高優先級的「**這個使用者是誰**」blob。Hermes 的 USER.md 正是補這一塊 —— 一個 curated、size-capped、永遠放在 system prompt 頂部的 persona block。
 
 ### 目標產出
 
@@ -49,7 +49,7 @@ free-code 雖然已有 typed user memories，但它們是**條目式、散落、
 **新增**
 - `src/userModel/userModel.ts` — 讀寫 / 快照 / 格式化 `USER.md`（雙層合併）
 - `src/userModel/paths.ts` — 解析 global + per-project 路徑
-  - global：`~/.my-agent/USER.md`（env override: `FREECODE_USER_MODEL_PATH`）
+  - global：`~/.my-agent/USER.md`（env override: `MYAGENT_USER_MODEL_PATH`）
   - project：`~/.my-agent/projects/<slug>/USER.md`（複用 `getProjectDir()`）
 - `src/userModel/prompt.ts` — 產生 `<user-profile>` 區塊（1500 char 上限、超出告警）
 - `tests/integration/user-model/` — smoke test（寫入 → 快照 → 注入 → 雙層合併 → 開關）
@@ -58,13 +58,13 @@ free-code 雖然已有 typed user memories，但它們是**條目式、散落、
 - `src/tools/MemoryTool/MemoryTool.ts` — schema 增加 `target: 'user_profile'` 分支，路由到 `userModel.ts`
 - `src/memdir/memdir.ts` — `buildMemoryPrompt()` 在最前面 prepend user profile block（受開關控制）
 - `src/utils/settings/settings.ts` — 型別加 `userModelEnabled?: boolean`（預設 `true`）
-- `src/utils/envUtils.ts` 消費端 — 讀 `FREECODE_DISABLE_USER_MODEL`
+- `src/utils/envUtils.ts` 消費端 — 讀 `MYAGENT_DISABLE_USER_MODEL`
 - CLI 參數處理（找到 `--no-auto-memory` 類似位置後加 `--no-user-model`）
 
 ### 開關三路（優先序：CLI > env > settings）
 
 1. CLI flag：`--no-user-model` / `--user-model`（最高優先）
-2. Env var：`FREECODE_DISABLE_USER_MODEL=1`
+2. Env var：`MYAGENT_DISABLE_USER_MODEL=1`
 3. settings.json：`{ "userModelEnabled": true }`（預設 true）
 
 實作參考現有 `isAutoMemoryEnabled()` in `src/memdir/paths.ts` 的 pattern。
@@ -115,7 +115,7 @@ free-code 雖然已有 typed user memories，但它們是**條目式、散落、
 3. E2E：
    - `./cli -p "我叫 Loren，用繁中，主要 shell 是 PowerShell"` → 檢查 `~/.my-agent/USER.md` 有寫入
    - 重開 session，`./cli -p "你還記得我的 shell 嗎？"` → 答案提及 PowerShell
-   - `FREECODE_DISABLE_USER_MODEL=1 ./cli -p "..."` → system prompt 不含 `<user-profile>` fence（用 `--debug` 或 inspect 驗證）
+   - `MYAGENT_DISABLE_USER_MODEL=1 ./cli -p "..."` → system prompt 不含 `<user-profile>` fence（用 `--debug` 或 inspect 驗證）
 
 ---
 

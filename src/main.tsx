@@ -18,7 +18,7 @@ import { ensureKeychainPrefetchCompleted, startKeychainPrefetch } from './utils/
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 startKeychainPrefetch();
-// free-code 首次啟動時產生全域 settings.json（JSONC 帶繁中註解）+ 補完目錄結構
+// my-agent 首次啟動時產生全域 settings.json（JSONC 帶繁中註解）+ 補完目錄結構
 import { getClaudeConfigHomeDir } from './utils/envUtils.js';
 import { generateDefaultSettingsContent } from './utils/settings/defaultSettingsGenerator.js';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
@@ -4064,7 +4064,7 @@ async function run(): Promise<CommanderCommand> {
 
   // claude auth
 
-  // free-code: OAuth sign-in is not supported — sub-commands print a notice and exit 1.
+  // my-agent: OAuth sign-in is not supported — sub-commands print a notice and exit 1.
   const auth = program.command('auth').description('Manage authentication').configureHelp(createSortedHelpConfig());
   const notSupported = () => {
     // biome-ignore lint/suspicious/noConsole: intentional CLI error output

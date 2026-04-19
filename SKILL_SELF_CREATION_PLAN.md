@@ -8,7 +8,7 @@
 
 ### 架構根本差異
 
-| | Hermes | free-code (M6 現狀) |
+| | Hermes | my-agent (M6 現狀) |
 |--|--------|-------------------|
 | **建立方式** | Agent 在對話中呼叫 `skill_manage` **工具**（6 action） | Dream forked agent 直接**寫檔案**到 `.my-agent/skills/` |
 | **安全掃描** | 程式碼層級，在工具內部每次 create/edit/patch/write_file 都執行 | scanSkill() 已實作（8 類 35 regex）但**生產路徑中零呼叫** |
@@ -16,12 +16,12 @@
 | **觸發→建立閉環** | 完整（nudge → 背景評審 → skill_manage → 掃描 → 通知） | **三個斷點**（見下方） |
 | **System prompt 引導** | SKILLS_GUIDANCE 每 session 注入 | 未注入（M6-08 標為延後） |
 
-### free-code 的三個斷點
+### my-agent 的三個斷點
 
 #### 斷點 1：Skill Creation Nudge 無消費端
 
 ```
-free-code:
+my-agent:
   偵測候選 ✅ → 設 appState.pendingSkillCandidate ✅ → [無 UI 讀取] ❌
 
 Hermes:
@@ -34,7 +34,7 @@ Hermes:
 #### 斷點 2：AutoDream Phase 7 驗證只在 Prompt 層級
 
 ```
-free-code:
+my-agent:
   Phase 7 prompt 說 "讀 skill-drafts/、驗證 3+ session" ✅
   Dream agent 是否真的執行？[無法確認] ❌
   執行後 scanSkill 驗證？[未呼叫] ❌
@@ -49,7 +49,7 @@ Hermes:
 #### 斷點 3：skillGuard 已實作但未整合
 
 ```
-free-code:
+my-agent:
   scanSkill() 函式：8 類威脅、35 regex ✅
   生產路徑呼叫次數：0 ❌
   autoDream.ts import 了但未呼叫 ❌
@@ -64,7 +64,7 @@ Hermes:
 
 ### 功能逐項對比
 
-| 功能 | Hermes | free-code |
+| 功能 | Hermes | my-agent |
 |------|--------|-----------|
 | Agent 直接建立 skill（對話中） | ✅ `skill_manage(action='create')` | ❌ 無對應工具 |
 | Agent 修改 skill（patch） | ✅ `skill_manage(action='patch')` + 模糊匹配 | ⚠️ `applySkillImprovement` 全文重寫（僅已有 project skill） |
@@ -115,7 +115,7 @@ file_content: string (write_file 必須)
 
 ## 第二部分：整合方案
 
-### 可重用的 free-code 既有程式碼
+### 可重用的 my-agent 既有程式碼
 
 | 既有模組 | 重用方式 |
 |---------|---------|

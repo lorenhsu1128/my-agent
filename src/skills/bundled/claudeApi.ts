@@ -181,9 +181,9 @@ export function registerClaudeApiSkill(): void {
   registerBundledSkill({
     name: 'anthropic-sdk-reference',
     description:
-      'External Anthropic SDK reference material — useful when writing code that targets the Anthropic Claude API. NOT used for free-code\'s own local LLM (llama.cpp) path.\n' +
+      'External Anthropic SDK reference material — useful when writing code that targets the Anthropic Claude API. NOT used for my-agent\'s own local LLM (llama.cpp) path.\n' +
       'TRIGGER when: user asks how to use Anthropic SDK / Claude API in their own application code.\n' +
-      'DO NOT TRIGGER when: code imports `openai`/other AI SDK, general programming, ML/data-science tasks, or anything related to free-code\'s internal llamacpp adapter.',
+      'DO NOT TRIGGER when: code imports `openai`/other AI SDK, general programming, ML/data-science tasks, or anything related to my-agent\'s internal llamacpp adapter.',
     allowedTools: ['Read', 'Grep', 'Glob', 'WebFetch'],
     userInvocable: true,
     async getPromptForCommand(args) {

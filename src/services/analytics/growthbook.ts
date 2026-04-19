@@ -500,7 +500,7 @@ const getGrowthBookClient = memoize(
         `GrowthBook: Creating client with clientKey=${clientKey}, attributes: ${jsonStringify(attributes)}`,
       )
     }
-    // free-code: GrowthBook 不連遠端（initializeGrowthBook 已回 null）；保留變數讓後段編譯通過
+    // my-agent: GrowthBook 不連遠端（initializeGrowthBook 已回 null）；保留變數讓後段編譯通過
     const baseUrl = ''
 
     // Skip auth if trust hasn't been established yet
@@ -619,7 +619,7 @@ const getGrowthBookClient = memoize(
  */
 export const initializeGrowthBook = memoize(
   async (): Promise<GrowthBook | null> => {
-    // free-code: 不連遠端 GrowthBook，所有 flag 從 local config 讀取
+    // my-agent: 不連遠端 GrowthBook，所有 flag 從 local config 讀取
     return null
   },
 )
@@ -706,7 +706,7 @@ export function getFeatureValue_CACHED_MAY_BE_STALE<T>(
     return configOverrides[feature] as T
   }
 
-  // free-code: 從 disk cache 讀取，找不到就用 defaultValue
+  // my-agent: 從 disk cache 讀取，找不到就用 defaultValue
   try {
     const cached = getGlobalConfig().cachedGrowthBookFeatures?.[feature]
     return cached !== undefined ? (cached as T) : defaultValue
@@ -755,7 +755,7 @@ export function checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
     return Boolean(configOverrides[gate])
   }
 
-  // free-code: 從 disk cache 讀取，找不到就回 true（預設解鎖）
+  // my-agent: 從 disk cache 讀取，找不到就回 true（預設解鎖）
   try {
     const config = getGlobalConfig()
     const gbCached = config.cachedGrowthBookFeatures?.[gate]
@@ -846,7 +846,7 @@ export async function checkGate_CACHED_OR_BLOCKING(
     return Boolean(configOverrides[gate])
   }
 
-  // free-code: 從 disk cache 讀取，找不到就回 true（預設解鎖，不阻塞）
+  // my-agent: 從 disk cache 讀取，找不到就回 true（預設解鎖，不阻塞）
   try {
     const cached = getGlobalConfig().cachedGrowthBookFeatures?.[gate]
     if (cached !== undefined) {
@@ -865,7 +865,7 @@ export async function checkGate_CACHED_OR_BLOCKING(
  * apiHostRequestHeaders cannot be updated after client creation.
  */
 export function refreshGrowthBookAfterAuthChange(): void {
-  // free-code: 不連遠端 GrowthBook，no-op
+  // my-agent: 不連遠端 GrowthBook，no-op
 }
 
 /**

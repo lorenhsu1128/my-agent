@@ -215,7 +215,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       });
     }
   }
-  // free-code: BypassPermissionsModeDialog 跳過（預設 bypassPermissions）
+  // my-agent: BypassPermissionsModeDialog 跳過（預設 bypassPermissions）
   if (feature('TRANSCRIPT_CLASSIFIER')) {
     // Only show the opt-in dialog if auto mode actually resolved — if the
     // gate denied it (org not allowlisted, settings disabled), showing
