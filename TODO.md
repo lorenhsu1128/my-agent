@@ -366,6 +366,20 @@
 
 ---
 
+## 已完成里程碑：M-BROWSER — Hermes Browser 能力整合（2026-04-19）
+
+將 Hermes Agent 的 web 研究 + 互動式瀏覽器能力以 TypeScript 重新實作進 my-agent；既有 WebFetch / WebSearch 不動，全部附加。四階段（M4-BR / M5-BR / M6-BR / M7-BR）完成。詳細決策見 ADR-011；開發日誌見 CLAUDE.md 2026-04-19 段落；工具使用說明見 `src/tools/WebBrowserTool/README.md`。
+
+- [x] M4-BR `WebCrawlTool` + 共用安全層 `secretScan` / `blocklist` — commit `c29f74c`
+- [x] M5-BR `WebBrowserTool` 本地 puppeteer backend（10 actions + a11y refs + idle TTL）— commit `32fae13`
+- [x] FIX-BUILD 修 m-deanthro 後 dangling imports 讓 `bun run build` 重新能跑 — commit `4bf674b`
+- [x] M6-BR 三家 cloud providers（Browserbase / Browser Use） + vision + screenshot + Firecrawl 整合 — commit `49d53d7`
+- [x] M7-BR README + ADR-011 + 本段 TODO 更新 — 本 commit
+
+踩坑：bun + Windows 下 playwright-core 的 pipe/CDP 無限 hang，改用 puppeteer-core 解決（沿用 `bunx playwright install chromium` 的 binary）。記錄於 memory `project_playwright_bun_incompat.md` 與 ADR-011。
+
+---
+
 ## 未來里程碑（尚未詳細規劃）
 
 ### M4 — Hermes Cron 排程（TypeScript 重新實作）
@@ -1050,3 +1064,29 @@
 - 2026-04-19 11:50: Session 結束 | 進度：334/352 任務 | 08ca2a9 fix(ripgrep): 補上 Windows ripgrep binary 修復 Grep/Glob 工具失敗
 
 - 2026-04-19 12:03: Session 結束 | 進度：344/363 任務 | 08ca2a9 fix(ripgrep): 補上 Windows ripgrep binary 修復 Grep/Glob 工具失敗
+
+- 2026-04-19 12:11: Session 結束 | 進度：344/363 任務 | 43378d0 fix(m-vision): E2E 測試圖片改用 32x32 純紅 PNG
+
+- 2026-04-19 12:16: Session 結束 | 進度：344/363 任務 | 7126e22 fix(tui): 走 llamacpp 路徑時 logo 顯示本地模型名而非 Anthropic 預設
+
+- 2026-04-19 12:19: Session 結束 | 進度：344/363 任務 | 7126e22 fix(tui): 走 llamacpp 路徑時 logo 顯示本地模型名而非 Anthropic 預設
+
+- 2026-04-19 12:52: Session 結束 | 進度：344/363 任務 | 7126e22 fix(tui): 走 llamacpp 路徑時 logo 顯示本地模型名而非 Anthropic 預設
+
+- 2026-04-19 12:57: Session 結束 | 進度：344/363 任務 | 7126e22 fix(tui): 走 llamacpp 路徑時 logo 顯示本地模型名而非 Anthropic 預設
+
+- 2026-04-19 13:02: Session 結束 | 進度：344/363 任務 | 7126e22 fix(tui): 走 llamacpp 路徑時 logo 顯示本地模型名而非 Anthropic 預設
+
+- 2026-04-19 13:06: Session 結束 | 進度：344/363 任務 | bc3a2a4 fix(m-deanthro): stage 1 — 隱藏 org leak 與修正 llamacpp 模型身份
+
+- 2026-04-19 13:33: Session 結束 | 進度：344/363 任務 | 6984141 refactor(m-deanthro): stage 3-a — getAuthTokenSource / getAnthropicApiKeyWithSource 徹底清 env
+
+- 2026-04-19 13:35: Session 結束 | 進度：344/363 任務 | 6984141 refactor(m-deanthro): stage 3-a — getAuthTokenSource / getAnthropicApiKeyWithSource 徹底清 env
+
+- 2026-04-19 13:41: Session 結束 | 進度：344/363 任務 | 6984141 refactor(m-deanthro): stage 3-a — getAuthTokenSource / getAnthropicApiKeyWithSource 徹底清 env
+
+- 2026-04-19 13:49: Session 結束 | 進度：344/363 任務 | 6984141 refactor(m-deanthro): stage 3-a — getAuthTokenSource / getAnthropicApiKeyWithSource 徹底清 env
+
+- 2026-04-19 13:55: Session 結束 | 進度：344/363 任務 | 6984141 refactor(m-deanthro): stage 3-a — getAuthTokenSource / getAnthropicApiKeyWithSource 徹底清 env
+
+- 2026-04-19 13:57: Session 結束 | 進度：344/363 任務 | 6984141 refactor(m-deanthro): stage 3-a — getAuthTokenSource / getAnthropicApiKeyWithSource 徹底清 env

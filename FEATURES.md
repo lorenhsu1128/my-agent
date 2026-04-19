@@ -281,8 +281,6 @@ than a single wrapper or asset.
   Missing `src/tools/TerminalCaptureTool/TerminalCaptureTool.js`.
 - `UDS_INBOX`
   Missing `src/utils/udsMessaging.js`.
-- `WEB_BROWSER_TOOL`
-  Missing `src/tools/WebBrowserTool/WebBrowserTool.js`.
 - `WORKFLOW_SCRIPTS`
   Fails first on `src/commands/workflows/index.js`, but there are more gaps:
   `tasks.ts` already expects `LocalWorkflowTask`, and `tools.ts` expects a

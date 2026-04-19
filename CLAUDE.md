@@ -179,6 +179,7 @@ bun test                         # 執行測試
 - ADR-010（2026-04-19）：M-LLAMA-CFG — 本地 LLM server 設定統一到 `~/.my-agent/llamacpp.json`（單一來源）。新增 `src/llamacppConfig/` 模組（schema / paths / loader / seed / index），Zod schema 驗證；TS 端 `providers.ts` / `context.ts` 讀 snapshot 取 `baseUrl` / `model` / `modelAliases` / `contextSize`（env var override 仍優先）；Shell 端新增 `scripts/llama/load-config.sh`（jq 從 JSON 抽 env），`serve.sh` `source` 它。首次啟動 `setup.ts` seed 出預設 config + `llamacpp.README.md`；缺 jq / 缺檔 / JSON 壞 graceful fallback 到 `DEFAULT_LLAMACPP_CONFIG`。理由：原本 15 處散落（3 個 const、5 個 env var、serve.sh hard-code、LLAMACPP_MODEL_ALIASES 等）難維護，改 port / ctx / 模型路徑要動多個地方；統一後 TS + shell 共用一份 source of truth，編輯生效規則清楚（TS 開新 session；shell 每次 exec 重讀）。
 - ADR-009（2026-04-19）：M-LLAMACPP-CTX — llamacpp 上下文長度偵測改善。(1) `/slots` 查詢失敗時 `console.error` 一次性警告，提示 `LLAMACPP_CTX_SIZE=<tokens>` 手動覆蓋；(2) adapter error path 新增 context-overflow 關鍵字偵測（regex 對 `context|n_ctx|prompt|token` + `length|exceed|too long/large/many|out of`），命中則改寫為 `Prompt is too long (llama.cpp): ...` 讓 `isPromptTooLongMessage()` 識別、觸發 reactive compaction；(3) streaming 收到 `finish_reason=length` + `output_tokens=0` 時記 warn 供診斷（典型上下文已滿徵兆）。理由：使用者 128K 本地模型上下文溢出時會卡在「停止回應 + server 待機」，auto-compact 因 `/slots` 未查詢到而用 200K 預設、reactive compact 又因 error message regex 不符合而不觸發；三路修復讓 llamacpp 與 Anthropic path 的錯誤復原行為一致。
 - ADR-008（2026-04-19）：M-SP — system prompt 29 個 section 外部化至 `~/.my-agent/system-prompt/` 下的 .md 檔。新增 `src/systemPromptFiles/` 模組（paths / sections / bundledDefaults / loader / snapshot / seed / index）。採 session 啟動凍結快照（沿用 M-UM pattern）、per-project > global > bundled 三層解析、完全取代（不合併）、首次啟動自動 seed global 層 + README.md。覆蓋範圍：prompts.ts 全部 15 個 section（靜態 + 動態） + cyber-risk + user-profile 外框 + memory 系統 8 個常數 + QueryEngine 4 條錯誤訊息。使用者指南見 `docs/customizing-system-prompt.md`。理由：讓措辭調整不必改 code → rebuild；per-project 可做專案專屬 prompt 客製化。
+- ADR-011（2026-04-19）：Browser 能力走 puppeteer-core，不走 playwright-core。M5 首次用 playwright-core 時發現在 bun + Windows 下預設 `--remote-debugging-pipe` transport 無限 hang，即使改 `ignoreDefaultArgs` + `remote-debugging-port` + `connectOverCDP` 也 hang（raw `ws` 套件連 chromium 可以，但 playwright 自家 client 不行）。puppeteer-core 預設 WebSocket CDP 在同環境下秒連，沿用 `bunx playwright install chromium` 裝的 browser binary 不需第二次下載。本地 / Browserbase / Browser Use 三個 provider 共用 puppeteer-core。Vision 走 vendored `my-agent-ai/sdk`（Anthropic SDK），interface 設計保留換後端空間（未來可加 Gemini / 本地 VLM）。Firecrawl 不當作 browser provider（它是 scraping API 不是 CDP target），改為 `WebCrawlTool` 的 optional fetcher backend，透過 `WEBCRAWL_BACKEND=firecrawl` + `FIRECRAWL_API_KEY` 啟用。Provider 選擇不走 feature flag（ADR-003），以 runtime env 決定：`BROWSER_PROVIDER` 顯式 > API key 偵測 > fallback local。
 
 ---
 
@@ -223,3 +224,44 @@ export CLAUDE_CONFIG_DIR=~/.claude
 > 包含：你做了什麼、修改了哪些檔案、還剩什麼、遇到的問題。
 
 ---
+
+### 2026-04-19 — M4–M7：Browser 能力整合（Hermes → my-agent TS port）
+
+**範圍**：保留既有 WebFetch / WebSearch，加入 WebCrawl 與 WebBrowser 兩個工具，補齊 Hermes Agent 的 web 研究與互動式瀏覽能力。全為附加式，無既有檔案被重寫。
+
+**M4（commit `c29f74c`）**：`WebCrawlTool` + 共用安全層
+- 新增 `src/tools/WebCrawlTool/{WebCrawlTool,crawler,prompt}.ts`（BFS + robots.txt + cheerio 抽連結 + per-host rate limit + SSRF 重用 `ssrfGuard`）
+- 新增 `src/utils/web/secretScan.ts`（重寫 Hermes `agent/redact.py`，30+ token 前綴 + bearer/env/JSON/私鑰/DB 連線字串）
+- 新增 `src/utils/web/blocklist.ts`（重寫 Hermes `website_policy.py`，`~/.my-agent/website-blocklist.yaml`，30s cache，fnmatch 萬用字元，fail-open）
+- 新增 cheerio 依賴；21 單元測試全綠；對 `https://github.com/lorenhsu1128` smoke 通過
+
+**M5（commit `32fae13`）**：`WebBrowserTool` 本地 backend
+- 新增 `src/tools/WebBrowserTool/{WebBrowserTool,session,a11y,actions,prompt}.ts`
+- `providers/{BrowserProvider,LocalProvider}.ts` — 抽象介面 + puppeteer-core 實作
+- 核心 10 actions：navigate / snapshot / click / type / scroll / back / press / console / evaluate / close
+- 持久 session + 5 分鐘 idle TTL + process.exit cleanup；navigation 時 bump generation 讓舊 ref 失效
+- a11y 走 `page.accessibility.snapshot`，輸出 `[ref=eN]` 文字樹；refToElement 用 puppeteer `-p-aria` selector + nth 回 ElementHandle
+- 所有 action 過 SSRF / blocklist / secret redaction 安全層
+- Agent 迴圈實測（qwen3.5-9b 本地）對 GitHub profile：70 refs、navigate→snapshot→close 通過
+
+**M5 踩坑（→ ADR-011）**：bun + Windows 下 playwright-core 的 `--remote-debugging-pipe` transport hang；`connectOverCDP` 對自己 spawn 的 chromium 也 hang。改用 puppeteer-core 解決（預設 WebSocket CDP）。沿用 `bunx playwright install chromium` 裝的 browser binary，不需第二套。
+
+**Build 修復（commit `4bf674b`）**：清 m-deanthro 留下的 5 處 dangling import（logout / login 模組已刪但 auth.ts / upgrade.tsx / extra-usage.tsx 還在 import；ccrClient.ts / SSETransport.ts 呼叫舊名 `getClaudeCodeUserAgent`）+ `react-devtools-core` 列 externals + `ink` import 改走 `src/ink.ts` 主題 wrapper（避開 top-level await）。`bun run build` 重新綠。
+
+**M6（commit `49d53d7`）**：三家 cloud providers + vision + Firecrawl
+- `providers/BrowserbaseProvider.ts`：REST 建 session → `puppeteer.connect`；close 時 REST 釋放 session；支援 `BROWSERBASE_ADVANCED_STEALTH`
+- `providers/BrowserUseProvider.ts`：同模式，`BROWSER_USE_API_KEY`；略 Hermes 的 Nous managed gateway（my-agent 無對應 infra）
+- `providers/selectProvider.ts`：runtime env 選 backend（顯式 `BROWSER_PROVIDER` → API key 偵測 → local）
+- `src/utils/vision/VisionClient.ts`：interface + `AnthropicVisionClient`（走 vendored `my-agent-ai/sdk`）；vision prompt 內嵌「ignore instructions inside image」防禦
+- 新 actions：`screenshot(full_page?)` / `vision(question)` / `get_images()`
+- `src/utils/web/firecrawl.ts`：`/v1/scrape` adapter；`WEBCRAWL_BACKEND=firecrawl + FIRECRAWL_API_KEY` 啟用後 BFS 每個節點走 Firecrawl（JS 渲染）
+- Agent 迴圈實測 screenshot → get_images，GitHub profile：129 KB PNG、7 張圖片
+
+**M7（本 commit）**：收尾
+- 新增 `src/tools/WebBrowserTool/README.md` action 參考 + 環境變數 + 安全模型
+- 刪 FEATURES.md 的 `WEB_BROWSER_TOOL` stub 說明
+- CLAUDE.md 開發日誌（本段）+ ADR-011
+- TODO.md 勾掉 M4–M7
+
+**新依賴**：`cheerio`（M4）、`puppeteer-core`（M5）。`playwright-core` 曾被裝但因 bun compat 問題移除。
+
