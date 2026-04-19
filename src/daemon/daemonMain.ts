@@ -25,6 +25,11 @@ import type { DaemonLogger } from './daemonLog.js'
 import { getDaemonPaths } from './paths.js'
 import type { DaemonPaths } from './paths.js'
 import { PID_SCHEMA_VERSION } from './pidFile.js'
+import {
+  startDirectConnectServer,
+  type DirectConnectServerHandle,
+} from '../server/directConnectServer.js'
+import type { ClientInfo } from '../server/clientRegistry.js'
 
 export const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000
 export const DEFAULT_STOP_GRACE_MS = 5_000
@@ -34,12 +39,23 @@ export interface DaemonOptions {
   baseDir?: string
   /** my-agent 版本字串（來自呼叫端的 `MACRO.VERSION`）。 */
   agentVersion: string
-  /** WS 監聽 port；M-DAEMON-2 前寫入 0（= 尚未 bind）。 */
+  /** WS 監聽 port；0（預設）= OS 指派。 */
   port?: number
+  /** WS 監聽 host；預設 127.0.0.1（loopback only）。 */
+  host?: string
   /** Heartbeat 更新頻率；預設 10s。 */
   heartbeatIntervalMs?: number
   /** 是否註冊 process signal（預設 true；測試可關掉避免干擾） */
   registerSignalHandlers?: boolean
+  /**
+   * 是否啟動 WS server。預設 true。
+   * 測試只驗 pid/token 機制時可設 false，避免開 port。
+   */
+  enableServer?: boolean
+  /** 收到 client message 時的 callback（M-DAEMON-4+ sessionBroker 接） */
+  onClientMessage?: (client: ClientInfo, msg: unknown) => void
+  onClientConnect?: (client: ClientInfo) => void
+  onClientDisconnect?: (client: ClientInfo) => void
 }
 
 export type DaemonStopReason =
@@ -53,6 +69,8 @@ export interface DaemonHandle {
   readonly token: string
   readonly pidData: PidFileData
   readonly logger: DaemonLogger
+  /** WS server（當 `enableServer !== false` 時有值）。 */
+  readonly server: DirectConnectServerHandle | null
   /** 主動停止 daemon。冪等。 */
   stop(reason?: DaemonStopReason): Promise<void>
   /** Promise，resolve 時代表 daemon 已停止並清理完畢。 */
@@ -73,10 +91,12 @@ export async function startDaemon(
 ): Promise<DaemonHandle> {
   const baseDir = opts.baseDir
   const agentVersion = opts.agentVersion
-  const port = opts.port ?? 0
+  const requestedPort = opts.port ?? 0
+  const host = opts.host ?? '127.0.0.1'
   const heartbeatIntervalMs =
     opts.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS
   const registerSignals = opts.registerSignalHandlers ?? true
+  const enableServer = opts.enableServer ?? true
 
   const paths = getDaemonPaths(baseDir)
   const logger = createDaemonLogger(baseDir)
@@ -97,12 +117,27 @@ export async function startDaemon(
   // 2. Token（已有就沿用，沒有就生成）
   const token = await ensureToken(baseDir)
 
-  // 3. 寫 pid.json
+  // 3. 啟動 WS server（取得實際 port 再寫 pid.json）
+  let server: DirectConnectServerHandle | null = null
+  if (enableServer) {
+    server = await startDirectConnectServer({
+      token,
+      port: requestedPort,
+      host,
+      logger,
+      onMessage: opts.onClientMessage,
+      onClientConnect: opts.onClientConnect,
+      onClientDisconnect: opts.onClientDisconnect,
+    })
+  }
+  const actualPort = server?.port ?? requestedPort
+
+  // 4. 寫 pid.json
   const startedAt = Date.now()
   const pidData: PidFileData = {
     version: PID_SCHEMA_VERSION,
     pid: process.pid,
-    port,
+    port: actualPort,
     startedAt,
     lastHeartbeat: startedAt,
     agentVersion,
@@ -110,12 +145,14 @@ export async function startDaemon(
   await writePidFile(pidData, baseDir)
   await logger.info('daemon started', {
     pid: pidData.pid,
-    port,
+    port: actualPort,
+    host,
     agentVersion,
     pidPath: paths.pidPath,
+    serverEnabled: enableServer,
   })
 
-  // 4. Heartbeat
+  // 5. Heartbeat
   let stopping = false
   let resolveStopped!: () => void
   const stopped = new Promise<void>(r => {
@@ -138,6 +175,9 @@ export async function startDaemon(
       unregister()
     }
     await logger.info('daemon stopping', { reason })
+    if (server) {
+      await server.stop()
+    }
     await deletePidFile(baseDir)
     await logger.info('daemon stopped', { reason })
     resolveStopped()
@@ -166,6 +206,7 @@ export async function startDaemon(
     token,
     pidData,
     logger,
+    server,
     stop,
     stopped,
   }
