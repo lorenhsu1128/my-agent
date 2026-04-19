@@ -16,13 +16,13 @@
 - [x] M-RENAME-4 Phase 4：根目錄 11 個 *.md + docs/ + scripts/llama/*.md（test-run-*.md 略過）+ tests/integration/user-model/user-model-smoke.ts 的 env var
 - [x] M-RENAME-5 Phase 5：`.claude/` 下 6 個 SKILL.md + reviewer.md + project-review-hermes.md；目錄 freecode-architecture → myagent-architecture（git mv）
 - [x] M-RENAME-6 Phase 6：`bun run typecheck` 過；`bun run dev --help` 已顯示 "my-agent"；TUI logo 待人工確認
-- [ ] M-RENAME-7 Phase 7：commit/push 後手動 rename 根目錄 free-code → my-agent；重開 session 後修正 POC scripts 中 session slug（`scripts/poc/query-session-index.ts:13`、`scripts/poc/session-search-e2e.ts:44`）
+- [x] M-RENAME-7 Phase 7：commit/push 後手動 rename 根目錄 free-code → my-agent；重開 session 後修正 POC scripts 中 session slug（`scripts/poc/query-session-index.ts:13`、`scripts/poc/session-search-e2e.ts:44`）
 
 ### 完成標準
 - [x] `grep -rni "free[- ]?code\|freecode" src/ scripts/ install.sh` 僅剩 2 個 POC slug（待 Phase 7）
 - [x] `bun run dev --help` 顯示 my-agent
-- [ ] TUI logo 顯示「My Agent」（人工驗證）
-- [ ] 根目錄已改為 `_projects\my-agent`（Phase 7 手動）
+- [x] TUI logo 顯示「My Agent」（人工驗證）
+- [x] 根目錄已改為 `_projects\my-agent`（Phase 7 手動）
 
 ---
 
@@ -1005,3 +1005,7 @@
 - 2026-04-19 10:39: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.my-agent/llamacpp.json
 
 - 2026-04-19 10:42: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.my-agent/llamacpp.json
+
+- 2026-04-19 11:01: Session 結束 | 進度：331/352 任務 | abdc37b feat(rename): 專案改名 free-code → My Agent（Phase 1–6）
+
+- 2026-04-19 11:08: Session 結束 | 進度：331/352 任務 | abdc37b feat(rename): 專案改名 free-code → My Agent（Phase 1–6）

@@ -10,7 +10,7 @@ const dbPath = join(
   homedir(),
   '.my-agent',
   'projects',
-  'C--Users-LOREN-Documents--projects-free-code',
+  'C--Users-LOREN-Documents--projects-my-agent',
   'session-index.db',
 )
 
