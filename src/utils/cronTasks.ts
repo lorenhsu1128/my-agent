@@ -11,7 +11,7 @@
 
 import { randomUUID } from 'crypto'
 import { readFileSync } from 'fs'
-import { mkdir, writeFile } from 'fs/promises'
+import { mkdir, rename, writeFile } from 'fs/promises'
 import { join } from 'path'
 import {
   addSessionCronTask,
@@ -67,6 +67,26 @@ export type CronTask = {
    * REPL's. Never written to disk (teammate crons are always session-only).
    */
   agentId?: string
+  // -- Wave 1 extensions (Hermes port) — all optional, backward-compat safe --
+  /** Friendly label for list / UI. Falls back to first line of prompt. */
+  name?: string
+  /**
+   * How many times a recurring task should fire before self-removing.
+   * `times: null` = forever (default, matches pre-Wave-1 behavior).
+   * `completed` is bumped on every successful fire (markJobRun).
+   * Not used for one-shots (they delete on fire regardless).
+   */
+  repeat?: { times: number | null; completed: number }
+  /** Result of the last fire — set by markJobRun. Observability only. */
+  lastStatus?: 'ok' | 'error'
+  /** Error message from last fire, if lastStatus==='error'. Redacted via secretScan before write. */
+  lastError?: string
+  /**
+   * Lifecycle state. `scheduled` = normal; `completed` = one-shot already
+   * fired (kept briefly for list before delete, or for repeat-limit reached);
+   * `paused` reserved for Wave 2. Absent = 'scheduled' (backward-compat).
+   */
+  state?: 'scheduled' | 'paused' | 'completed'
 }
 
 type CronFile = { tasks: CronTask[] }
@@ -134,6 +154,27 @@ export async function readCronTasks(dir?: string): Promise<CronTask[]> {
         : {}),
       ...(t.recurring ? { recurring: true } : {}),
       ...(t.permanent ? { permanent: true } : {}),
+      ...(typeof t.name === 'string' ? { name: t.name } : {}),
+      ...(t.repeat &&
+      typeof t.repeat.times !== 'undefined' &&
+      typeof t.repeat.completed === 'number'
+        ? {
+            repeat: {
+              times:
+                typeof t.repeat.times === 'number' ? t.repeat.times : null,
+              completed: t.repeat.completed,
+            },
+          }
+        : {}),
+      ...(t.lastStatus === 'ok' || t.lastStatus === 'error'
+        ? { lastStatus: t.lastStatus }
+        : {}),
+      ...(typeof t.lastError === 'string' ? { lastError: t.lastError } : {}),
+      ...(t.state === 'scheduled' ||
+      t.state === 'paused' ||
+      t.state === 'completed'
+        ? { state: t.state }
+        : {}),
     })
   }
   return out
@@ -168,17 +209,32 @@ export async function writeCronTasks(
 ): Promise<void> {
   const root = dir ?? getProjectRoot()
   await mkdir(join(root, '.my-agent'), { recursive: true })
-  // Strip the runtime-only `durable` flag — everything on disk is durable
-  // by definition, and keeping the flag out means readCronTasks() naturally
-  // yields durable: undefined without having to set it explicitly.
+  // Strip runtime-only flags — `durable` (session-only marker) and `agentId`
+  // (teammate route) never belong on disk. Everything on disk is durable,
+  // non-teammate by definition.
   const body: CronFile = {
-    tasks: tasks.map(({ durable: _durable, ...rest }) => rest),
+    tasks: tasks.map(
+      ({ durable: _durable, agentId: _agentId, ...rest }) => rest,
+    ),
   }
-  await writeFile(
-    getCronFilePath(root),
-    jsonStringify(body, null, 2) + '\n',
-    'utf-8',
-  )
+  // Atomic write: stage to .tmp + rename, so a crash mid-write can't leave
+  // a half-written jobs file. Matches Hermes `save_jobs` tempfile+os.replace.
+  const finalPath = getCronFilePath(root)
+  const tmpPath = `${finalPath}.${randomUUID().slice(0, 8)}.tmp`
+  const payload = jsonStringify(body, null, 2) + '\n'
+  try {
+    await writeFile(tmpPath, payload, 'utf-8')
+    await rename(tmpPath, finalPath)
+  } catch (e) {
+    // Best-effort cleanup; ignore secondary failure.
+    try {
+      const fs = getFsImplementation()
+      await fs.unlink(tmpPath)
+    } catch {
+      /* ignore */
+    }
+    throw e
+  }
 }
 
 /**
@@ -191,22 +247,38 @@ export async function writeCronTasks(
  * scheduler merges session tasks into its tick loop directly, so no file
  * change event is needed.
  */
+export type AddCronTaskExtras = {
+  /** Optional friendly label; falls back to first line of prompt in UI. */
+  name?: string
+  /**
+   * Recurring repeat cap. `null` (default) = forever — the historical
+   * behavior. Positive integer = fire that many times then self-delete.
+   * Ignored for one-shots (they always delete on first fire).
+   */
+  repeatTimes?: number | null
+}
+
 export async function addCronTask(
   cron: string,
   prompt: string,
   recurring: boolean,
   durable: boolean,
   agentId?: string,
+  extras?: AddCronTaskExtras,
 ): Promise<string> {
   // Short ID — 8 hex chars is plenty for MAX_JOBS=50, avoids slice/prefix
   // juggling between the tool layer (shows short IDs) and disk.
   const id = randomUUID().slice(0, 8)
-  const task = {
+  const task: CronTask = {
     id,
     cron,
     prompt,
     createdAt: Date.now(),
     ...(recurring ? { recurring: true } : {}),
+    ...(extras?.name ? { name: extras.name } : {}),
+    ...(recurring && extras && extras.repeatTimes !== undefined
+      ? { repeat: { times: extras.repeatTimes, completed: 0 } }
+      : {}),
   }
   if (!durable) {
     addSessionCronTask({ ...task, ...(agentId ? { agentId } : {}) })
@@ -455,4 +527,246 @@ export function findMissedTasks(tasks: CronTask[], nowMs: number): CronTask[] {
     const next = nextCronRunMs(t.cron, t.createdAt)
     return next !== null && next < nowMs
   })
+}
+
+// ===========================================================================
+// Wave 1 — Hermes-inspired helpers
+// ===========================================================================
+
+/**
+ * Parse a user-supplied schedule string into a 5-field cron expression +
+ * recurring flag. Accepts:
+ *   - Plain 5-field cron: "*\/5 * * * *" (passed through).
+ *   - Duration: "30m" / "2h" / "1d" — one-shot, fires once at (now + duration).
+ *   - Interval: "every 30m" / "every 2h" — recurring. Divisor must fit the
+ *     containing unit (60 for minutes, 24 for hours) or an error is thrown.
+ *   - ISO timestamp: "2026-04-20T14:30" — one-shot at that minute/hour/dom/month.
+ *
+ * Returns `{ cron, recurring, display }`. `display` is a human-friendly echo
+ * of the original input for result messages.
+ *
+ * Throws Error with a helpful message for unsupported inputs — callers
+ * (CronCreateTool.validateInput) convert to ValidationResult.
+ */
+export type ParsedSchedule = {
+  cron: string
+  recurring: boolean
+  display: string
+}
+
+const DURATION_RE = /^(\d+)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)$/i
+
+function parseDurationMinutes(s: string): number | null {
+  const m = s.trim().match(DURATION_RE)
+  if (!m) return null
+  const n = parseInt(m[1]!, 10)
+  const unit = m[2]!.toLowerCase()[0] // m / h / d
+  const mult = unit === 'm' ? 1 : unit === 'h' ? 60 : 1440
+  return n * mult
+}
+
+export function parseSchedule(input: string): ParsedSchedule {
+  const raw = input.trim()
+  if (!raw) throw new Error('Empty schedule')
+
+  // 5-field cron: delegate to the existing validator.
+  const parts = raw.split(/\s+/)
+  if (parts.length === 5 && parseCronExpression(raw)) {
+    return { cron: raw, recurring: true, display: raw }
+  }
+
+  // "every N<unit>"
+  const lower = raw.toLowerCase()
+  if (lower.startsWith('every ')) {
+    const tail = raw.slice(6).trim()
+    const mins = parseDurationMinutes(tail)
+    if (mins === null) {
+      throw new Error(
+        `Invalid interval '${raw}'. Use 'every 5m', 'every 2h', or 'every 1d'.`,
+      )
+    }
+    if (mins < 1) throw new Error(`Interval must be >= 1 minute: '${raw}'`)
+    if (mins < 60) {
+      if (60 % mins !== 0) {
+        throw new Error(
+          `Interval '${tail}' doesn't divide an hour evenly — use one of: 1m, 2m, 3m, 4m, 5m, 6m, 10m, 12m, 15m, 20m, 30m, or a plain cron like '*/${mins} * * * *'.`,
+        )
+      }
+      return {
+        cron: `*/${mins} * * * *`,
+        recurring: true,
+        display: `every ${mins}m`,
+      }
+    }
+    if (mins < 1440) {
+      const hours = mins / 60
+      if (!Number.isInteger(hours) || 24 % hours !== 0) {
+        throw new Error(
+          `Interval '${tail}' doesn't divide a day evenly — use one of: 1h, 2h, 3h, 4h, 6h, 8h, 12h, or a plain cron.`,
+        )
+      }
+      return {
+        cron: `0 */${hours} * * *`,
+        recurring: true,
+        display: `every ${hours}h`,
+      }
+    }
+    // 1 day or more — only 1d supported as a nice form; longer → use cron.
+    if (mins === 1440) {
+      return { cron: '0 0 * * *', recurring: true, display: 'every 1d' }
+    }
+    throw new Error(
+      `Interval > 1 day not supported as DSL; use a cron expression.`,
+    )
+  }
+
+  // ISO timestamp (has 'T' or looks like YYYY-MM-DD).
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    const d = new Date(raw)
+    if (Number.isNaN(d.getTime())) {
+      throw new Error(`Invalid ISO timestamp: '${raw}'`)
+    }
+    if (d.getTime() <= Date.now()) {
+      throw new Error(`Timestamp '${raw}' is in the past.`)
+    }
+    const cron = `${d.getMinutes()} ${d.getHours()} ${d.getDate()} ${d.getMonth() + 1} *`
+    return {
+      cron,
+      recurring: false,
+      display: `once at ${d.toLocaleString()}`,
+    }
+  }
+
+  // Plain duration like "30m" → one-shot at (now + duration).
+  const mins = parseDurationMinutes(raw)
+  if (mins !== null) {
+    if (mins < 1) throw new Error(`Duration must be >= 1 minute: '${raw}'`)
+    const when = new Date(Date.now() + mins * 60_000)
+    const cron = `${when.getMinutes()} ${when.getHours()} ${when.getDate()} ${when.getMonth() + 1} *`
+    return { cron, recurring: false, display: `once in ${raw}` }
+  }
+
+  throw new Error(
+    `Could not parse schedule '${raw}'. Supported:\n` +
+      `  - Duration (one-shot): '30m', '2h', '1d'\n` +
+      `  - Interval (recurring): 'every 5m', 'every 2h'\n` +
+      `  - Cron: '0 9 * * *'\n` +
+      `  - ISO timestamp: '2026-04-20T14:30'`,
+  )
+}
+
+/**
+ * Compute the catch-up grace window for a recurring task. Matches Hermes'
+ * `_compute_grace_seconds`: half of the expected inter-fire period, clamped
+ * between 2 minutes and 2 hours. If the task is stale by more than this
+ * grace, the scheduler fast-forwards instead of firing a stale prompt.
+ * Returns ms.
+ */
+const GRACE_MIN_MS = 2 * 60 * 1000
+const GRACE_MAX_MS = 2 * 60 * 60 * 1000
+
+export function computeGraceMs(cron: string, fromMs: number): number {
+  const first = nextCronRunMs(cron, fromMs)
+  if (first === null) return GRACE_MIN_MS
+  const second = nextCronRunMs(cron, first)
+  if (second === null) return GRACE_MIN_MS
+  const halfPeriod = Math.floor((second - first) / 2)
+  return Math.max(GRACE_MIN_MS, Math.min(halfPeriod, GRACE_MAX_MS))
+}
+
+/**
+ * Preemptively advance `lastFiredAt` to `nowMs` before the fire callback
+ * runs. Converts the file-backed recurring scheduler from at-least-once to
+ * at-most-once: if the process crashes between this write and the fire,
+ * first-sight on next boot re-seeds next fire from the just-written
+ * lastFiredAt, so the task does NOT burst-fire. One-shots are left alone —
+ * they should still retry if we crashed mid-fire.
+ *
+ * This is a pre-fire companion to markCronTasksFired (which runs post-fire
+ * in batch). Calling both is fine; markCronTasksFired becomes idempotent.
+ */
+export async function advanceNextRun(
+  id: string,
+  nowMs: number,
+  dir?: string,
+): Promise<boolean> {
+  const tasks = await readCronTasks(dir)
+  let changed = false
+  for (const t of tasks) {
+    if (t.id !== id) continue
+    if (!t.recurring) return false
+    t.lastFiredAt = nowMs
+    changed = true
+    break
+  }
+  if (changed) await writeCronTasks(tasks, dir)
+  return changed
+}
+
+/**
+ * Record the outcome of a fire. Bumps `repeat.completed`, sets
+ * `lastStatus` / `lastError`, and deletes the task if the repeat limit has
+ * been reached. Silent no-op if the task no longer exists (e.g. user
+ * deleted it mid-fire). Session tasks (durable: false) are not tracked
+ * here — they're process-local and don't need disk bookkeeping.
+ */
+export async function markJobRun(
+  id: string,
+  success: boolean,
+  error?: string,
+  dir?: string,
+): Promise<void> {
+  const tasks = await readCronTasks(dir)
+  let idx = -1
+  for (let i = 0; i < tasks.length; i++) {
+    if (tasks[i]!.id === id) {
+      idx = i
+      break
+    }
+  }
+  if (idx < 0) return
+  const t = tasks[idx]!
+  t.lastStatus = success ? 'ok' : 'error'
+  if (!success && error) {
+    // Guard: cap length so an accidentally-huge error doesn't bloat jobs.json.
+    t.lastError = error.length > 500 ? `${error.slice(0, 500)}...` : error
+  } else {
+    delete t.lastError
+  }
+  if (t.repeat && typeof t.repeat.times === 'number') {
+    t.repeat.completed = (t.repeat.completed ?? 0) + 1
+    if (t.repeat.completed >= t.repeat.times) {
+      // Limit reached — delete, same as one-shot completion.
+      tasks.splice(idx, 1)
+      await writeCronTasks(tasks, dir)
+      return
+    }
+  } else if (t.repeat) {
+    t.repeat.completed = (t.repeat.completed ?? 0) + 1
+  }
+  await writeCronTasks(tasks, dir)
+}
+
+/**
+ * Audit-log the fact that a task fired. Writes to
+ * `<project>/.my-agent/cron/output/{id}/{ts}.md`. We don't have the model
+ * response at enqueue time (REPL drains async), so the body is the prompt
+ * + fire timestamp — enough to reconstruct "what fired when" after the
+ * fact. Matches Hermes `save_job_output` on disk layout.
+ */
+export async function saveJobOutput(
+  id: string,
+  firedAtMs: number,
+  content: string,
+  dir?: string,
+): Promise<string> {
+  const root = dir ?? getProjectRoot()
+  const outDir = join(root, '.my-agent', 'cron', 'output', id)
+  await mkdir(outDir, { recursive: true })
+  const d = new Date(firedAtMs)
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`
+  const file = join(outDir, `${stamp}.md`)
+  await writeFile(file, content, 'utf-8')
+  return file
 }

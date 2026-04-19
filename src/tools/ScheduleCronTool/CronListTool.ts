@@ -1,7 +1,7 @@
 import { z } from 'zod/v4'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { cronToHuman } from '../../utils/cron.js'
-import { listAllCronTasks } from '../../utils/cronTasks.js'
+import { listAllCronTasks, nextCronRunMs } from '../../utils/cronTasks.js'
 import { truncate } from '../../utils/format.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { getTeammateContext } from '../../utils/teammateContext.js'
@@ -27,6 +27,13 @@ const outputSchema = lazySchema(() =>
         prompt: z.string(),
         recurring: z.boolean().optional(),
         durable: z.boolean().optional(),
+        name: z.string().optional(),
+        nextRunAt: z.string().optional(),
+        lastStatus: z.enum(['ok', 'error']).optional(),
+        lastError: z.string().optional(),
+        repeat: z
+          .object({ times: z.number().nullable(), completed: z.number() })
+          .optional(),
       }),
     ),
   }),
@@ -67,14 +74,29 @@ export const CronListTool = buildTool({
     const tasks = ctx
       ? allTasks.filter(t => t.agentId === ctx.agentId)
       : allTasks
-    const jobs = tasks.map(t => ({
-      id: t.id,
-      cron: t.cron,
-      humanSchedule: cronToHuman(t.cron),
-      prompt: t.prompt,
-      ...(t.recurring ? { recurring: true } : {}),
-      ...(t.durable === false ? { durable: false } : {}),
-    }))
+    const now = Date.now()
+    const jobs = tasks.map(t => {
+      const nextMs = nextCronRunMs(t.cron, t.lastFiredAt ?? t.createdAt)
+      const anchored =
+        nextMs !== null && nextMs > now
+          ? nextMs
+          : nextCronRunMs(t.cron, now)
+      return {
+        id: t.id,
+        cron: t.cron,
+        humanSchedule: cronToHuman(t.cron),
+        prompt: t.prompt,
+        ...(t.recurring ? { recurring: true } : {}),
+        ...(t.durable === false ? { durable: false } : {}),
+        ...(t.name ? { name: t.name } : {}),
+        ...(anchored !== null
+          ? { nextRunAt: new Date(anchored).toISOString() }
+          : {}),
+        ...(t.lastStatus ? { lastStatus: t.lastStatus } : {}),
+        ...(t.lastError ? { lastError: t.lastError } : {}),
+        ...(t.repeat ? { repeat: t.repeat } : {}),
+      }
+    })
     return { data: { jobs } }
   },
   mapToolResultToToolResultBlockParam(output, toolUseID) {
@@ -84,10 +106,17 @@ export const CronListTool = buildTool({
       content:
         output.jobs.length > 0
           ? output.jobs
-              .map(
-                j =>
-                  `${j.id} — ${j.humanSchedule}${j.recurring ? ' (recurring)' : ' (one-shot)'}${j.durable === false ? ' [session-only]' : ''}: ${truncate(j.prompt, 80, true)}`,
-              )
+              .map(j => {
+                const label = j.name ? ` [${j.name}]` : ''
+                const flavor = j.recurring ? ' (recurring)' : ' (one-shot)'
+                const session = j.durable === false ? ' [session-only]' : ''
+                const status = j.lastStatus ? ` last=${j.lastStatus}` : ''
+                const reps = j.repeat
+                  ? ` reps=${j.repeat.completed}/${j.repeat.times ?? '∞'}`
+                  : ''
+                const next = j.nextRunAt ? ` next=${j.nextRunAt}` : ''
+                return `${j.id}${label} — ${j.humanSchedule}${flavor}${session}${status}${reps}${next}: ${truncate(j.prompt, 80, true)}`
+              })
               .join('\n')
           : 'No scheduled jobs.',
     }

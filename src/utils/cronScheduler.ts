@@ -19,6 +19,7 @@ import {
 } from '../services/analytics/index.js'
 import { cronToHuman } from './cron.js'
 import {
+  computeGraceMs,
   type CronJitterConfig,
   type CronTask,
   DEFAULT_CRON_JITTER_CONFIG,
@@ -27,9 +28,11 @@ import {
   hasCronTasksSync,
   jitteredNextCronRunMs,
   markCronTasksFired,
+  markJobRun,
   oneShotJitteredNextCronRunMs,
   readCronTasks,
   removeCronTasks,
+  saveJobOutput,
 } from './cronTasks.js'
 import {
   releaseSchedulerLock,
@@ -236,6 +239,10 @@ export function createCronScheduler(
     // markCronTasksFired call after the loop so N fires = one write. Session
     // tasks excluded — they die with the process, no point persisting.
     const firedFileRecurring: string[] = []
+    // All file-backed tasks that fired this tick (recurring + one-shot).
+    // Used for observability writes (markJobRun + saveJobOutput). Session
+    // tasks excluded from audit too — process-local, nothing to reconstruct.
+    const firedFileAll: CronTask[] = []
     // Read once per tick. REPL callers pass getJitterConfig backed by
     // GrowthBook so a config push takes effect without restart. Daemon and
     // SDK callers omit it and get DEFAULT_CRON_JITTER_CONFIG (safe — jitter
@@ -282,6 +289,25 @@ export function createCronScheduler(
 
       if (now < next) return
 
+      // Stale-run fast-forward (Hermes parity). If a recurring task is
+      // behind by more than its grace window (half-period, clamped 2m-2h),
+      // the window is gone: fire once at most, then drop the remainder.
+      // Prevents a burst of backed-up fires after the REPL wakes up from
+      // a long idle. One-shots are left alone — "remind me at 3pm" still
+      // fires even if the user noticed late.
+      if (t.recurring) {
+        const grace = computeGraceMs(t.cron, now)
+        if (now - next > grace) {
+          const ff =
+            jitteredNextCronRunMs(t.cron, now, t.id, jitterCfg) ?? Infinity
+          nextFireAt.set(t.id, ff)
+          logForDebugging(
+            `[ScheduledTasks] ${t.id} stale by ${now - next}ms (grace ${grace}ms); fast-forward to ${ff === Infinity ? 'never' : new Date(ff).toISOString()}`,
+          )
+          return
+        }
+      }
+
       logForDebugging(
         `[ScheduledTasks] firing ${t.id}${t.recurring ? ' (recurring)' : ''}`,
       )
@@ -290,6 +316,7 @@ export function createCronScheduler(
         taskId:
           t.id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
+      if (!isSession) firedFileAll.push(t)
       if (onFireTask) {
         onFireTask(t)
       } else {
@@ -366,6 +393,33 @@ export function createCronScheduler(
           .finally(() => {
             for (const id of firedFileRecurring) inFlight.delete(id)
           })
+      }
+      // Observability (Wave 1 port). Per-task audit log + run-status update.
+      // Fire-and-forget: failures are logged but must not break the tick.
+      // One-shots fire once then get removed by the inFlight/remove path
+      // above, so markJobRun may see "task gone" — handled silently there.
+      for (const t of firedFileAll) {
+        const audit =
+          `# Cron fire\n\n` +
+          `- id: ${t.id}${t.name ? `\n- name: ${t.name}` : ''}\n` +
+          `- cron: \`${t.cron}\`\n` +
+          `- recurring: ${t.recurring ? 'true' : 'false'}\n` +
+          `- fired_at: ${new Date(now).toISOString()}\n\n` +
+          `## Prompt\n\n` +
+          '```\n' +
+          t.prompt +
+          '\n```\n'
+        void saveJobOutput(t.id, now, audit, dir).catch(e =>
+          logForDebugging(`[ScheduledTasks] saveJobOutput ${t.id}: ${e}`),
+        )
+        // Recurring tasks get run-status bookkeeping (repeat.completed,
+        // lastStatus). One-shots are being deleted in the same tick — skip
+        // to avoid a needless write-then-delete race.
+        if (t.recurring) {
+          void markJobRun(t.id, true, undefined, dir).catch(e =>
+            logForDebugging(`[ScheduledTasks] markJobRun ${t.id}: ${e}`),
+          )
+        }
       }
     }
     // Session-only tasks: process-private, the lock does not apply — the
