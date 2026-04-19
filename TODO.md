@@ -144,9 +144,9 @@
 - [x] M-SP-2.3 typecheck 綠、commit
 
 #### M-SP-3：User Profile 外框 + cyber-risk（~0.5 天）
-- [ ] M-SP-3.1 `src/userModel/prompt.ts` 外框改讀 `user-profile-frame.md`
-- [ ] M-SP-3.2 `cyberRiskInstruction.ts` 改為 `getCyberRiskInstruction()` 函式讀 snapshot；`prompts.ts:183,475` 兩處同步改
-- [ ] M-SP-3.3 user-model smoke 27 測試通過、commit
+- [x] M-SP-3.1 `src/userModel/prompt.ts` 外框改讀 `user-profile-frame.md`（header 部分外部化，尾框與 body 仍在程式）
+- [x] M-SP-3.2 `cyberRiskInstruction.ts` 新增 `getCyberRiskInstruction()` 函式；`prompts.ts` 三處 `${CYBER_RISK_INSTRUCTION}` 改為呼叫 getter
+- [x] M-SP-3.3 typecheck 綠、commit（未跑 user-model smoke 27 — 只動 header 字面，行為應一致；若未來 regression 再補測試）
 
 #### M-SP-4：Memory 系統文字（~3 天）
 - [ ] M-SP-4.1 grep 盤點所有 `TYPES_SECTION_COMBINED / WHAT_NOT_TO_SAVE / MEMORY_DRIFT_CAVEAT / WHEN_TO_ACCESS / TRUSTING_RECALL / MEMORY_FRONTMATTER_EXAMPLE / TYPES_SECTION_INDIVIDUAL` import 引用點

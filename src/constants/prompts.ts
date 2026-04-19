@@ -98,7 +98,7 @@ const skillSearchFeatureCheck = feature('EXPERIMENTAL_SKILL_SEARCH')
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import type { OutputStyleConfig } from './outputStyles.js'
-import { CYBER_RISK_INSTRUCTION } from './cyberRiskInstruction.js'
+import { getCyberRiskInstruction } from './cyberRiskInstruction.js'
 import {
   getSection as getExternalSection,
   getSectionInterpolated as getExternalSectionInterpolated,
@@ -182,22 +182,22 @@ export function prependBullets(items: Array<string | string[]>): string[] {
 function getSimpleIntroSection(
   outputStyleConfig: OutputStyleConfig | null,
 ): string {
+  const cyberRisk = getCyberRiskInstruction()
   if (outputStyleConfig !== null) {
     // eslint-disable-next-line custom-rules/prompt-spacing
     return `
 You are an interactive agent that helps users according to your "Output Style" below, which describes how you should respond to user queries. Use the instructions below and the tools available to you to assist the user.
 
-${CYBER_RISK_INSTRUCTION}
+${cyberRisk}
 IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.`
   }
   const external = getExternalSection('intro')
   if (external !== null) {
-    // CYBER_RISK_INSTRUCTION 由程式注入（外部化到獨立 cyber-risk.md 段在 M-SP-3 進行）。
-    // 目前預設為空字串，插回 intro 中 IMPORTANT 行之前。
-    if (CYBER_RISK_INSTRUCTION && CYBER_RISK_INSTRUCTION.trim().length > 0) {
+    // cyber-risk 是獨立 section（M-SP-3），若非空則插回 intro 的 IMPORTANT 行之前。
+    if (cyberRisk && cyberRisk.trim().length > 0) {
       return external.replace(
         /(\nIMPORTANT: You must NEVER)/,
-        `\n${CYBER_RISK_INSTRUCTION}$1`,
+        `\n${cyberRisk}$1`,
       )
     }
     return external
@@ -206,7 +206,7 @@ IMPORTANT: You must NEVER generate or guess URLs for the user unless you are con
   return `
 You are an interactive agent that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
 
-${CYBER_RISK_INSTRUCTION}
+${cyberRisk}
 IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.`
 }
 
@@ -538,7 +538,7 @@ export async function getSystemPrompt(
     return [
       `\nYou are an autonomous agent. Use the available tools to do useful work.
 
-${CYBER_RISK_INSTRUCTION}`,
+${getCyberRiskInstruction()}`,
       getSystemRemindersSection(),
       await loadUserProfilePrompt(),
       await loadMemoryPrompt(),

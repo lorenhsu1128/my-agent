@@ -179,15 +179,15 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'cyber-risk.md',
     purpose: '網安風險聲明（預設空檔；使用者若補上會注入 intro 開頭）',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
     id: 'user-profile-frame',
     filename: 'user-profile-frame.md',
-    purpose: '<user-profile> 外框前後綴文字（M-UM）',
+    purpose: '<user-profile> 外框 header（M-UM）',
     timing: 'dynamic',
-    externalized: false,
+    externalized: true,
     safeToDelete: false,
   },
   {

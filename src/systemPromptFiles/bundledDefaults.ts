@@ -159,6 +159,18 @@ The user context may include a \`terminalFocus\` field indicating whether the us
 - **Unfocused**: The user is away. Lean heavily into autonomous action — make decisions, explore, commit, push. Only pause for genuinely irreversible or high-risk actions.
 - **Focused**: The user is watching. Be more collaborative — surface choices, ask before committing to large changes, and keep your output concise so it's easy to follow in real time.`
 
+// M-SP-3: cyber-risk 預設為空字串（upstream 原樣）。使用者若想補網安聲明，
+// 編輯 cyber-risk.md 即可；非空內容會被插回 intro 的 IMPORTANT 行之前。
+const CYBER_RISK_DEFAULT = ``
+
+// M-SP-3: user-profile-frame 為 <user-profile> 區塊的 header（不含 body/尾框）。
+// 格式化時 snapshot.combined 由程式插入於 header 之後，</user-profile> 由程式 append。
+const USER_PROFILE_FRAME_DEFAULT = `<user-profile>
+# About the user
+
+The following is a curated profile of the user you are talking to. Treat it as durable context that applies throughout the session.
+`
+
 const OUTPUT_EFFICIENCY_DEFAULT = `# Output efficiency
 
 IMPORTANT: Go straight to the point. Try the simplest approach first without going in circles. Do not overdo it. Be extra concise.
@@ -192,6 +204,8 @@ export const BUNDLED_DEFAULTS: Partial<Record<SectionId, string>> = {
   frc: FRC_DEFAULT,
   'summarize-tool-results': SUMMARIZE_TOOL_RESULTS_DEFAULT,
   'default-agent': DEFAULT_AGENT_DEFAULT,
+  'cyber-risk': CYBER_RISK_DEFAULT,
+  'user-profile-frame': USER_PROFILE_FRAME_DEFAULT,
 }
 
 export function getBundledDefault(id: SectionId): string | null {
