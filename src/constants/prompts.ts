@@ -99,7 +99,10 @@ const skillSearchFeatureCheck = feature('EXPERIMENTAL_SKILL_SEARCH')
 /* eslint-enable @typescript-eslint/no-require-imports */
 import type { OutputStyleConfig } from './outputStyles.js'
 import { CYBER_RISK_INSTRUCTION } from './cyberRiskInstruction.js'
-import { getSection as getExternalSection } from '../systemPromptFiles/index.js'
+import {
+  getSection as getExternalSection,
+  getSectionInterpolated as getExternalSectionInterpolated,
+} from '../systemPromptFiles/index.js'
 
 export const CLAUDE_CODE_DOCS_MAP_URL =
   'https://code.claude.com/docs/en/claude_code_docs_map.md'
@@ -548,7 +551,7 @@ ${CYBER_RISK_INSTRUCTION}`,
         : getMcpInstructionsSection(mcpClients),
       getScratchpadInstructions(),
       getFunctionResultClearingSection(model),
-      SUMMARIZE_TOOL_RESULTS_SECTION,
+      getSummarizeToolResultsSection(),
       getProactiveSection(),
     ].filter(s => s !== null)
   }
@@ -587,13 +590,15 @@ ${CYBER_RISK_INSTRUCTION}`,
     systemPromptSection('skills_guidance', () => {
       const hasSkillManage = enabledTools.has('SkillManage')
       if (!hasSkillManage) return null
-      return '完成複雜任務（5+ 個工具呼叫）、修復棘手錯誤、或發現非顯而易見的 workflow 後，用 SkillManage 工具將方法保存為 skill 以便下次重用。使用 skill 時如果發現過時、不完整或錯誤，立即用 SkillManage(action=\'patch\') 修正——不要等被要求才做。不維護的 skill 會變成負擔。'
+      return (
+        getExternalSection('skills-guidance') ??
+        '完成複雜任務（5+ 個工具呼叫）、修復棘手錯誤、或發現非顯而易見的 workflow 後，用 SkillManage 工具將方法保存為 skill 以便下次重用。使用 skill 時如果發現過時、不完整或錯誤，立即用 SkillManage(action=\'patch\') 修正——不要等被要求才做。不維護的 skill 會變成負擔。'
+      )
     }),
     systemPromptSection('scratchpad', () => getScratchpadInstructions()),
     systemPromptSection('frc', () => getFunctionResultClearingSection(model)),
-    systemPromptSection(
-      'summarize_tool_results',
-      () => SUMMARIZE_TOOL_RESULTS_SECTION,
+    systemPromptSection('summarize_tool_results', () =>
+      getSummarizeToolResultsSection(),
     ),
     // Numeric length anchors — research shows ~1.2% output token reduction vs
     // qualitative "be concise". Ant-only to measure quality impact first.
@@ -602,6 +607,7 @@ ${CYBER_RISK_INSTRUCTION}`,
           systemPromptSection(
             'numeric_length_anchors',
             () =>
+              getExternalSection('numeric-length-anchors') ??
               'Length limits: keep text between tool calls to \u226425 words. Keep final responses to \u2264100 words unless the task requires more detail.',
           ),
         ]
@@ -616,6 +622,7 @@ ${CYBER_RISK_INSTRUCTION}`,
           systemPromptSection(
             'token_budget',
             () =>
+              getExternalSection('token-budget') ??
               'When the user specifies a token target (e.g., "+500k", "spend 2M tokens", "use 1B tokens"), your output token count will be shown each turn. Keep working until you approach the target \u2014 plan your work to fill it productively. The target is a hard minimum, not a suggestion. If you stop early, the system will automatically continue you.',
           ),
         ]
@@ -826,7 +833,16 @@ export function getUnameSR(): string {
   return `${osType()} ${osRelease()}`
 }
 
-export const DEFAULT_AGENT_PROMPT = `You are an agent for my-agent, a local-first coding assistant. Given the user's message, you should use the tools available to complete the task. Complete the task fully—don't gold-plate, but don't leave it half-done. When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.`
+// M-SP-2: DEFAULT_AGENT_PROMPT 的預設文字已外部化至 ~/.my-agent/system-prompt/default-agent.md
+// 此處保留 const 以維持既有 export 合約；在被匯出使用端讀取時會走 getDefaultAgentPrompt()。
+const DEFAULT_AGENT_PROMPT_FALLBACK = `You are an agent for my-agent, a local-first coding assistant. Given the user's message, you should use the tools available to complete the task. Complete the task fully—don't gold-plate, but don't leave it half-done. When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.`
+
+export function getDefaultAgentPrompt(): string {
+  return getExternalSection('default-agent') ?? DEFAULT_AGENT_PROMPT_FALLBACK
+}
+
+/** @deprecated use getDefaultAgentPrompt() — const 形式無法套用外部化。 */
+export const DEFAULT_AGENT_PROMPT = DEFAULT_AGENT_PROMPT_FALLBACK
 
 export async function enhanceSystemPromptWithEnvDetails(
   existingSystemPrompt: string[],
@@ -865,12 +881,18 @@ export async function enhanceSystemPromptWithEnvDetails(
  * Returns instructions for using the scratchpad directory if enabled.
  * The scratchpad is a per-session directory where Claude can write temporary files.
  */
+// M-SP-2: scratchpad 段已外部化至 ~/.my-agent/system-prompt/scratchpad.md
+// 含 {scratchpadDir} 插值（session-specific 路徑，由 getScratchpadDir() 注入）
 export function getScratchpadInstructions(): string | null {
   if (!isScratchpadEnabled()) {
     return null
   }
 
   const scratchpadDir = getScratchpadDir()
+  const external = getExternalSectionInterpolated('scratchpad', {
+    scratchpadDir,
+  })
+  if (external !== null) return external
 
   return `# Scratchpad Directory
 
@@ -904,12 +926,24 @@ function getFunctionResultClearingSection(model: string): string | null {
   ) {
     return null
   }
+  const external = getExternalSectionInterpolated('frc', {
+    keepRecent: config.keepRecent,
+  })
+  if (external !== null) return external
   return `# Function Result Clearing
 
 Old tool results will be automatically cleared from context to free up space. The ${config.keepRecent} most recent results are always kept.`
 }
 
-const SUMMARIZE_TOOL_RESULTS_SECTION = `When working with tool results, write down any important information you might need later in your response, as the original tool result may be cleared later.`
+const SUMMARIZE_TOOL_RESULTS_FALLBACK = `When working with tool results, write down any important information you might need later in your response, as the original tool result may be cleared later.`
+
+// M-SP-2: summarize-tool-results 已外部化；改為 getter lazy 讀取 snapshot
+function getSummarizeToolResultsSection(): string {
+  return (
+    getExternalSection('summarize-tool-results') ??
+    SUMMARIZE_TOOL_RESULTS_FALLBACK
+  )
+}
 
 function getBriefSection(): string | null {
   if (!(feature('KAIROS') || feature('KAIROS_BRIEF'))) return null
@@ -931,6 +965,19 @@ function getBriefSection(): string | null {
 function getProactiveSection(): string | null {
   if (!(feature('PROACTIVE') || feature('KAIROS'))) return null
   if (!proactiveModule?.isProactiveActive()) return null
+
+  // M-SP-2: proactive 主體已外部化；尾段 BRIEF_PROACTIVE_SECTION 仍在程式端條件 append
+  const external = getExternalSectionInterpolated('proactive', {
+    TICK_TAG,
+    SLEEP_TOOL_NAME,
+  })
+  if (external !== null) {
+    const briefTail =
+      BRIEF_PROACTIVE_SECTION && briefToolModule?.isBriefEnabled()
+        ? `\n\n${BRIEF_PROACTIVE_SECTION}`
+        : ''
+    return external + briefTail
+  }
 
   return `# Autonomous work
 

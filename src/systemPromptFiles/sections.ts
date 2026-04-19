@@ -115,7 +115,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'proactive.md',
     purpose: 'Proactive/Kairos 自主模式指示（feature 啟用時才注入）',
     timing: 'conditional',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -123,7 +123,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'skills-guidance.md',
     purpose: 'SkillManage 工具啟用時的使用指引',
     timing: 'conditional',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -131,7 +131,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'numeric-length-anchors.md',
     purpose: '回應字數上限（USER_TYPE=ant 才注入）',
     timing: 'conditional',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -139,7 +139,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'token-budget.md',
     purpose: 'Token budget 模式指示（feature TOKEN_BUDGET 啟用時）',
     timing: 'conditional',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -147,7 +147,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'scratchpad.md',
     purpose: 'Scratchpad 工作目錄指引',
     timing: 'conditional',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -155,7 +155,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'frc.md',
     purpose: 'Function result clearing 微壓縮說明',
     timing: 'conditional',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -163,7 +163,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'summarize-tool-results.md',
     purpose: '工具結果摘要指引',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {
@@ -171,7 +171,7 @@ export const SECTIONS: SectionMeta[] = [
     filename: 'default-agent.md',
     purpose: '預設 subagent 系統提示',
     timing: 'static',
-    externalized: false,
+    externalized: true,
     safeToDelete: true,
   },
   {

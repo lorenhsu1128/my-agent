@@ -12,6 +12,8 @@ export {
   loadSystemPromptSnapshot,
   getSystemPromptSnapshot,
   getSection,
+  getSectionInterpolated,
+  interpolate,
   _resetSystemPromptSnapshotForTests,
   type SystemPromptSnapshot,
 } from './snapshot.js'

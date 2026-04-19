@@ -60,6 +60,32 @@ export function getSection(id: SectionId): string | null {
   return snap.sections[id] ?? null
 }
 
+/**
+ * 簡易 `{var}` 插值：白名單變數 map，找不到的 key 維持原樣。
+ * 僅用於 section 內少量明確佔位（如 {TICK_TAG} / {SLEEP_TOOL_NAME} / {scratchpadDir} /
+ * {keepRecent} / errors 的 {maxTurns} 等）；不做複雜 template 解析。
+ */
+export function interpolate(
+  template: string,
+  vars: Record<string, string | number>,
+): string {
+  return template.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, key) => {
+    return key in vars ? String(vars[key]) : match
+  })
+}
+
+/**
+ * 組合「讀 section + 插值」的便捷方法。snapshot 缺檔 → 回 null（呼叫端 fallback）。
+ */
+export function getSectionInterpolated(
+  id: SectionId,
+  vars: Record<string, string | number>,
+): string | null {
+  const raw = getSection(id)
+  if (raw === null) return null
+  return interpolate(raw, vars)
+}
+
 /** 測試用：清除快取 */
 export function _resetSystemPromptSnapshotForTests(): void {
   cachedSnapshot = null
