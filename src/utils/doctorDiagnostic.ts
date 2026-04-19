@@ -2,7 +2,6 @@ import { execa } from 'execa'
 import { readFile, realpath } from 'fs/promises'
 import { homedir } from 'os'
 import { delimiter, join, posix, win32 } from 'path'
-import { checkGlobalInstallPermissions } from './autoUpdater.js'
 import { isInBundledMode } from './bundledMode.js'
 import {
   formatAutoUpdaterDisabledReason,
@@ -19,17 +18,16 @@ import {
   isRunningFromLocalInstallation,
   localInstallationExists,
 } from './localInstaller.js'
-import {
-  detectApk,
-  detectAsdf,
-  detectDeb,
-  detectHomebrew,
-  detectMise,
-  detectPacman,
-  detectRpm,
-  detectWinget,
-  getPackageManager,
-} from './nativeInstaller/packageManagers.js'
+// Native package manager detection removed with nativeInstaller subsystem.
+const detectApk = async () => false
+const detectAsdf = () => false
+const detectDeb = async () => false
+const detectHomebrew = () => false
+const detectMise = () => false
+const detectPacman = async () => false
+const detectRpm = async () => false
+const detectWinget = () => false
+const getPackageManager = async (): Promise<undefined> => undefined
 import { getPlatform } from './platform.js'
 import { getRipgrepStatus } from './ripgrep.js'
 import { SandboxManager } from './sandbox/sandbox-adapter.js'
@@ -573,8 +571,7 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
   // Check permissions for global installations
   let hasUpdatePermissions: boolean | null = null
   if (installationType === 'npm-global') {
-    const permCheck = await checkGlobalInstallPermissions()
-    hasUpdatePermissions = permCheck.hasPermissions
+    hasUpdatePermissions = true
 
     // Add warning if no permissions
     if (!hasUpdatePermissions && !getAutoUpdaterDisabledReason()) {

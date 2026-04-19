@@ -13,7 +13,6 @@ import { getIdeClientName, type IDEExtensionInstallationStatus, isJetBrainsIde, 
 import { getClaudeAiUserDefaultModelDescription, modelDisplayString } from './model/model.js';
 import { DEFAULT_LLAMACPP_BASE_URL, getAPIProvider } from './model/providers.js';
 import { getMTLSConfig } from './mtls.js';
-import { checkInstall } from './nativeInstaller/index.js';
 import { getProxyUrl } from './proxy.js';
 import { SandboxManager } from './sandbox/sandbox-adapter.js';
 import { getSettingsWithAllErrors } from './settings/allErrors.js';
@@ -173,8 +172,7 @@ export function buildSettingSourcesProperties(): Property[] {
   }];
 }
 export async function buildInstallationDiagnostics(): Promise<Diagnostic[]> {
-  const installWarnings = await checkInstall();
-  return installWarnings.map(warning => warning.message);
+  return [];
 }
 export async function buildInstallationHealthDiagnostics(): Promise<Diagnostic[]> {
   const diagnostic = await getDoctorDiagnostic();

@@ -19,12 +19,10 @@ import { Box, Text } from '../ink.js';
 import { useKeybindings } from '../keybindings/useKeybinding.js';
 import { useAppState } from '../state/AppState.js';
 import { getPluginErrorMessage } from '../types/plugin.js';
-import { getGcsDistTags, getNpmDistTags, type NpmDistTags } from '../utils/autoUpdater.js';
 import { type ContextWarnings, checkContextWarnings } from '../utils/doctorContextWarnings.js';
 import { type DiagnosticInfo, getDoctorDiagnostic } from '../utils/doctorDiagnostic.js';
 import { validateBoundedIntEnvVar } from '../utils/envValidation.js';
 import { pathExists } from '../utils/file.js';
-import { cleanupStaleLocks, getAllLockInfo, isPidBasedLockingEnabled, type LockInfo } from '../utils/nativeInstaller/pidLock.js';
 import { getInitialSettings } from '../utils/settings/settings.js';
 import { BASH_MAX_OUTPUT_DEFAULT, BASH_MAX_OUTPUT_UPPER_LIMIT } from '../utils/shell/outputLimits.js';
 import { TASK_MAX_OUTPUT_DEFAULT, TASK_MAX_OUTPUT_UPPER_LIMIT } from '../utils/task/outputFormatting.js';
@@ -50,7 +48,7 @@ type AgentInfo = {
 };
 type VersionLockInfo = {
   enabled: boolean;
-  locks: LockInfo[];
+  locks: never[];
   locksDir: string;
   staleLocksCleaned: number;
 };
@@ -188,24 +186,12 @@ export function Doctor(t0) {
           failedFiles
         }, async () => toolPermissionContext);
         setContextWarnings(warnings);
-        if (isPidBasedLockingEnabled()) {
-          const locksDir = join(getXDGStateHome(), "claude", "locks");
-          const staleLocksCleaned = cleanupStaleLocks(locksDir);
-          const locks = getAllLockInfo(locksDir);
-          setVersionLockInfo({
-            enabled: true,
-            locks,
-            locksDir,
-            staleLocksCleaned
-          });
-        } else {
-          setVersionLockInfo({
-            enabled: false,
-            locks: [],
-            locksDir: "",
-            staleLocksCleaned: 0
-          });
-        }
+        setVersionLockInfo({
+          enabled: false,
+          locks: [],
+          locksDir: "",
+          staleLocksCleaned: 0
+        });
       })();
     };
     t6 = [toolPermissionContext, tools, agentDefinitions];
@@ -550,9 +536,8 @@ function _temp8(v) {
 function _temp7(error) {
   return error.mcpErrorMetadata === undefined;
 }
-function _temp6(diag) {
-  const fetchDistTags = diag.installationType === "native" ? getGcsDistTags : getNpmDistTags;
-  return fetchDistTags().catch(_temp5);
+function _temp6(_diag: unknown) {
+  return Promise.resolve({ latest: null, stable: null });
 }
 function _temp5() {
   return {

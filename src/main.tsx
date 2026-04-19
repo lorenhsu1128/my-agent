@@ -123,7 +123,6 @@ import type { AgentColorName } from './tools/AgentTool/agentColorManager.js';
 import { getActiveAgentsFromList, getAgentDefinitionsWithOverrides, isBuiltInAgent, isCustomAgent, parseAgentsFromJson } from './tools/AgentTool/loadAgentsDir.js';
 import type { LogOption } from './types/logs.js';
 import type { Message as MessageType } from './types/message.js';
-import { assertMinVersion } from './utils/autoUpdater.js';
 import { getContextWindowForModel } from './utils/context.js';
 import { loadConversationForResume } from './utils/conversationRecovery.js';
 import { buildDeepLinkBanner } from './utils/deepLink/banner.js';
@@ -926,7 +925,7 @@ async function run(): Promise<CommanderCommand> {
     // terminal shell integration may mirror the process name to the tab.
     // After init() so settings.json env can also gate this (gh-4765).
     if (!isEnvTruthy(process.env.MY_AGENT_DISABLE_TERMINAL_TITLE)) {
-      process.title = 'claude';
+      process.title = 'my-agent';
     }
 
     // Attach logging sinks so subcommand handlers can use logEvent/logError.
@@ -971,7 +970,7 @@ async function run(): Promise<CommanderCommand> {
     }
     profileCheckpoint('preAction_after_settings_sync');
   });
-  program.name('claude').description(`my-agent - starts an interactive session by default, use -p/--print for non-interactive output`).argument('[prompt]', 'Your prompt', String)
+  program.name('my-agent').description(`my-agent - starts an interactive session by default, use -p/--print for non-interactive output`).argument('[prompt]', 'Your prompt', String)
   // Subcommands inherit helpOption via commander's copyInheritedSettings —
   // setting it once here covers mcp, plugin, auth, and all other subcommands.
   .helpOption('-h, --help', 'Display help for command').option('-d, --debug [filter]', 'Enable debug mode with optional category filtering (e.g., "api,hooks" or "!1p,!file")', (_value: string | true) => {
@@ -1025,7 +1024,7 @@ async function run(): Promise<CommanderCommand> {
     if (prompt === 'code') {
       logEvent('tengu_code_prompt_ignored', {});
       // biome-ignore lint/suspicious/noConsole:: intentional console output
-      console.warn(chalk.yellow('Tip: You can launch my-agent with just `claude`'));
+      console.warn(chalk.yellow('Tip: You can launch my-agent with just `my-agent`'));
       prompt = undefined;
     }
 
@@ -1725,8 +1724,6 @@ async function run(): Promise<CommanderCommand> {
       // biome-ignore lint/suspicious/noConsole:: intentional console output
       console.error(warning);
     });
-    void assertMinVersion();
-
     // claude.ai config fetch: -p mode only (interactive uses useManageMCPConnections
     // two-phase loading). Kicked off here to overlap with setup(); awaited
     // before runHeadless so single-turn -p sees connectors. Skipped under
@@ -4282,16 +4279,6 @@ async function run(): Promise<CommanderCommand> {
   // claude update
   //
   // For SemVer-compliant versioning with build metadata (X.X.X+SHA):
-  // - We perform exact string comparison (including SHA) to detect any change
-  // - This ensures users always get the latest build, even when only the SHA changes
-  // - UI shows both versions including build metadata for clarity
-  program.command('update').alias('upgrade').description('Check for updates and install if available').action(async () => {
-    const {
-      update
-    } = await import('src/cli/update.js');
-    await update();
-  });
-
   // claude up — run the project's MY-AGENT.md "# claude up" setup instructions.
   if ("external" === 'ant') {
     program.command('up').description('[ANT-ONLY] Initialize or upgrade the local dev environment using the "# claude up" section of the nearest MY-AGENT.md').action(async () => {
@@ -4316,16 +4303,6 @@ async function run(): Promise<CommanderCommand> {
       await rollback(target, options);
     });
   }
-
-  // claude install
-  program.command('install [target]').description('Install my-agent native build. Use [target] to specify version (stable, latest, or specific version)').option('--force', 'Force installation even if already installed').action(async (target: string | undefined, options: {
-    force?: boolean;
-  }) => {
-    const {
-      installHandler
-    } = await import('./cli/handlers/util.js');
-    await installHandler(target, options);
-  });
 
   // ant-only commands
   if ("external" === 'ant') {
