@@ -174,7 +174,29 @@
 
 ---
 
-## 當前里程碑：M-TOKEN — llamacpp cache token 計數修復（2026-04-19）
+## 當前里程碑：M-LLAMA-CFG — 本地 LLM server 設定外部化（2026-04-19）
+
+**目標**：15 處 llamacpp 相關設定（TS const / env var / shell 腳本 hard-code）統一到 `~/.my-agent/llamacpp.json`，TS + shell 共用一份 source of truth。
+
+### 任務
+- [x] M-LLAMA-CFG-1 建 `src/llamacppConfig/` 模組：schema / paths / loader / seed / index（Zod 驗證 + session 凍結）
+- [x] M-LLAMA-CFG-2 `providers.ts` `getLlamaCppConfig` / `isLlamaCppModel` / `getLlamaCppModelAliases` 讀 snapshot（env var 仍優先）
+- [x] M-LLAMA-CFG-3 `context.ts` `getContextWindowForModel` llamacpp 分支加 config.contextSize 為第三順位 fallback
+- [x] M-LLAMA-CFG-4 `setup.ts` 啟動鉤子呼叫 `seedLlamaCppConfigIfMissing()` + `loadLlamaCppConfigSnapshot()`
+- [x] M-LLAMA-CFG-5 新增 `scripts/llama/load-config.sh`（jq 抽 env，缺 jq / 缺檔 graceful fallback）
+- [x] M-LLAMA-CFG-6 改 `scripts/llama/serve.sh` source load-config.sh，使用匯出的 `LLAMA_*` env + `LLAMA_EXTRA_ARGS_SHELL` 動態展開
+- [x] M-LLAMA-CFG-7 Seed 同時寫出 `llamacpp.README.md`（使用者指南）
+- [x] M-LLAMA-CFG-8 typecheck 綠、端對端 seed + shell load 驗證、commit
+
+### 完成標準
+- [x] 首次跑 free-code 後 `~/.my-agent/llamacpp.json` + `llamacpp.README.md` 自動建立
+- [x] `bash scripts/llama/serve.sh` 能正確讀 config（驗證過 HOST/PORT/CTX/ALIAS 皆來自 json）
+- [x] env var 臨時覆蓋仍有效（`LLAMA_CTX=65536 bash serve.sh` 依然覆蓋）
+- [x] JSON 壞 / 缺檔不 crash，走內建預設並 stderr 警告
+
+---
+
+## 已完成里程碑：M-TOKEN — llamacpp cache token 計數修復（2026-04-19）
 
 **問題**：TUI `/cost` 與 session 摘要的 `cache read` 在 llamacpp session 一直顯示 0，但 llama.cpp 的 OpenAI-compatible response 有 `usage.prompt_tokens_details.cached_tokens` 欄位，adapter 硬編碼 0 沒接上。
 
@@ -946,3 +968,9 @@
 - 2026-04-19 09:31: Session 結束 | 進度：300/318 任務 | a0aa74e docs(m-sp-5): 完整 M-SP 文件與架構決策記錄
 
 - 2026-04-19 09:33: Session 結束 | 進度：300/318 任務 | a0aa74e docs(m-sp-5): 完整 M-SP 文件與架構決策記錄
+
+- 2026-04-19 09:41: Session 結束 | 進度：311/329 任務 | 2483e15 feat(m-token): llamacpp adapter 接上 prompt_tokens_details.cached_tokens
+
+- 2026-04-19 09:54: Session 結束 | 進度：311/329 任務 | 67a20c9 feat(llamacpp-ctx): 上下文溢出偵測與自動復原（解決 128K 模型卡死問題）
+
+- 2026-04-19 09:59: Session 結束 | 進度：311/329 任務 | 67a20c9 feat(llamacpp-ctx): 上下文溢出偵測與自動復原（解決 128K 模型卡死問題）

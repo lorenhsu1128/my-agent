@@ -24,6 +24,10 @@ import {
   seedSystemPromptDirIfMissing,
   loadSystemPromptSnapshot,
 } from './systemPromptFiles/index.js'
+import {
+  seedLlamaCppConfigIfMissing,
+  loadLlamaCppConfigSnapshot,
+} from './llamacppConfig/index.js'
 import { initSessionMemory } from './services/SessionMemory/sessionMemory.js'
 import { asSessionId } from './types/ids.js'
 import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js'
@@ -305,6 +309,12 @@ export async function setup(
     void (async () => {
       await seedSystemPromptDirIfMissing()
       await loadSystemPromptSnapshot()
+    })()
+    // M-LLAMA-CFG：首次啟動種出 ~/.my-agent/llamacpp.json + 載入 snapshot。
+    // 同樣 best-effort；缺 / 壞都走 DEFAULT_LLAMACPP_CONFIG。
+    void (async () => {
+      await seedLlamaCppConfigIfMissing()
+      await loadLlamaCppConfigSnapshot()
     })()
     if (feature('CONTEXT_COLLAPSE')) {
       /* eslint-disable @typescript-eslint/no-require-imports */

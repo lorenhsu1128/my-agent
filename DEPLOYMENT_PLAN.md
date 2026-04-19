@@ -1067,3 +1067,18 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 **驗證**：typecheck + curl llama-server 看 `prompt_tokens_details` 是否回傳 + session `/cost` 顯示非零 cache read。
 
 **非目標**：不偽造 `cache_creation_input_tokens`（llama.cpp 無概念）、不動 TUI、不動 Anthropic path。
+
+---
+
+## M-LLAMA-CFG — 本地 LLM server 設定外部化（2026-04-19）
+
+**目標**：原本 15 處散落的 llamacpp 設定（TS const + env var + shell hard-code）統一到 `~/.my-agent/llamacpp.json`。
+
+**結構**：
+- TS：`src/llamacppConfig/` 模組（schema / paths / loader / seed / index），Zod 驗證 + session 凍結快照
+- Shell：`scripts/llama/load-config.sh` 用 jq 抽出 env → `serve.sh` source 它
+- Seed：首次啟動 `setup.ts` 自動寫 `llamacpp.json` + `llamacpp.README.md`
+
+**優先序**：env var > ~/.my-agent/llamacpp.json > 內建預設。JSON 壞 / 缺檔 / 缺 jq 一律 graceful fallback。
+
+**使用者體驗**：改 port / ctx / 模型路徑改一個 JSON 檔，TS 開新 session 生效、shell 下次 exec 生效。

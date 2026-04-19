@@ -5,6 +5,7 @@ import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
 import { getModelCapability } from './model/modelCapabilities.js'
 import { getAPIProvider, getLlamaCppContextSize, isLlamaCppModel } from './model/providers.js'
+import { getLlamaCppConfigSnapshot } from '../llamacppConfig/index.js'
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
@@ -95,7 +96,11 @@ export function getContextWindowForModel(
       return antModel.contextWindow
     }
   }
-  // llamacpp provider：用 /slots 查到的實際 n_ctx，fallback 到 LLAMACPP_CTX_SIZE env
+  // llamacpp provider：優先級
+  //   1. /slots 實際查到的 n_ctx（最準）
+  //   2. LLAMACPP_CTX_SIZE env（臨時覆蓋）
+  //   3. ~/.my-agent/llamacpp.json 的 contextSize（M-LLAMA-CFG）
+  //   4. fallback 到 MODEL_CONTEXT_WINDOW_DEFAULT（200K，可能偏大）
   if (getAPIProvider() === 'llamacpp' || isLlamaCppModel(model)) {
     const cached = getLlamaCppContextSize()
     if (cached) return cached
@@ -104,6 +109,8 @@ export function getContextWindowForModel(
       const parsed = parseInt(envCtx, 10)
       if (!isNaN(parsed) && parsed > 0) return parsed
     }
+    const cfg = getLlamaCppConfigSnapshot()
+    if (cfg.contextSize > 0) return cfg.contextSize
   }
 
   return MODEL_CONTEXT_WINDOW_DEFAULT
