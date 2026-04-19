@@ -29,11 +29,10 @@ if (process.env.MYAGENT_VISION_E2E !== '1') {
 const baseUrl = process.env.LLAMA_BASE_URL || 'http://127.0.0.1:8080/v1'
 const model = process.env.LLAMA_MODEL || 'gemopus-4-e4b'
 
-// 1x1 純紅 PNG（用 bun 產）
+// 32x32 純紅 PNG base64（1x1 對 vision encoder 太小會被誤判）。
+// 產生方式：RGB(255,0,0) 填 32x32，PNG chunks + IDAT deflate。
 function tinyRedPngBase64(): string {
-  // 預先算好的最小 1x1 PNG（純紅 FF0000FF），14 byte IDAT 壓縮；
-  // 這個 base64 是合法的 PNG 檔案，能被任何圖像解碼器讀。
-  return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='
+  return 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKUlEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAReABMsP8Lh0L66kAAAAASUVORK5CYII='
 }
 
 async function main(): Promise<void> {
