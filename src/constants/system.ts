@@ -7,12 +7,12 @@ import { getAPIProvider } from '../utils/model/providers.js'
 import { getWorkload } from '../utils/workloadContext.js'
 
 const DEFAULT_PREFIX = `You are my-agent, a local-first coding assistant.`
-const AGENT_SDK_CLAUDE_CODE_PRESET_PREFIX = `You are my-agent, a local-first coding assistant, running within the my-agent Agent SDK.`
+const AGENT_SDK_MY_AGENT_PRESET_PREFIX = `You are my-agent, a local-first coding assistant, running within the my-agent Agent SDK.`
 const AGENT_SDK_PREFIX = `You are a my-agent agent, built on the my-agent Agent SDK.`
 
 const CLI_SYSPROMPT_PREFIX_VALUES = [
   DEFAULT_PREFIX,
-  AGENT_SDK_CLAUDE_CODE_PRESET_PREFIX,
+  AGENT_SDK_MY_AGENT_PRESET_PREFIX,
   AGENT_SDK_PREFIX,
 ] as const
 
@@ -37,7 +37,7 @@ export function getCLISyspromptPrefix(options?: {
 
   if (options?.isNonInteractive) {
     if (options.hasAppendSystemPrompt) {
-      return AGENT_SDK_CLAUDE_CODE_PRESET_PREFIX
+      return AGENT_SDK_MY_AGENT_PRESET_PREFIX
     }
     return AGENT_SDK_PREFIX
   }
@@ -52,7 +52,7 @@ export const ATTRIBUTION_HEADER_PREFIX = 'x-anthropic-billing-header'
  * Enabled by default, can be disabled via env var or GrowthBook killswitch.
  */
 function isAttributionHeaderEnabled(): boolean {
-  if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_ATTRIBUTION_HEADER)) {
+  if (isEnvDefinedFalsy(process.env.MY_AGENT_ATTRIBUTION_HEADER)) {
     return false
   }
   return getFeatureValue_CACHED_MAY_BE_STALE('tengu_attribution_header', true)
@@ -78,7 +78,7 @@ export function getAttributionHeader(fingerprint: string): string {
   }
 
   const version = `${MACRO.VERSION}.${fingerprint}`
-  const entrypoint = process.env.CLAUDE_CODE_ENTRYPOINT ?? 'unknown'
+  const entrypoint = process.env.MY_AGENT_ENTRYPOINT ?? 'unknown'
 
   const cch = ' cch=00000;'
   // cc_workload: turn-scoped hint so the API can route e.g. cron-initiated

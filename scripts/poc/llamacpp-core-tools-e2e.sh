@@ -3,7 +3,7 @@
 #
 # 每個工具：
 #   1. 準備環境（若需要）
-#   2. 以 CLAUDE_CODE_USE_LLAMACPP=true ./cli --dangerously-skip-permissions
+#   2. 以 MY_AGENT_USE_LLAMACPP=true ./cli --dangerously-skip-permissions
 #      -p "..." 誘導模型呼叫對應工具
 #   3. 檢驗 (c) 工具是否成功執行 / (d) 結果是否正確顯示
 #   4. 清理測試產物
@@ -38,7 +38,7 @@ CLI="./cli"
 curl -sf --max-time 3 http://127.0.0.1:8080/v1/models >/dev/null \
   || { echo "[x] llama-server 未響應；bash scripts/llama/serve.sh"; exit 2; }
 
-export CLAUDE_CODE_USE_LLAMACPP=true
+export MY_AGENT_USE_LLAMACPP=true
 export LLAMA_BASE_URL=http://127.0.0.1:8080/v1
 unset ANTHROPIC_API_KEY  # 避免 bootstrap 阻塞（LESSONS.md 記錄）
 

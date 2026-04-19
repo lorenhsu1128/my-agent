@@ -683,7 +683,7 @@ export const getSkillDirCommands = memoize(
       additionalSkillsNested,
       legacyCommands,
     ] = await Promise.all([
-      isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_POLICY_SKILLS)
+      isEnvTruthy(process.env.MY_AGENT_DISABLE_POLICY_SKILLS)
         ? Promise.resolve([])
         : loadSkillsFromSkillsDir(managedSkillsDir, 'policySettings'),
       isSettingSourceEnabled('userSettings') && !skillsLocked

@@ -521,7 +521,7 @@ export function getModelOptions(fastMode = false): ModelOption[] {
   const options = getModelOptionsBase(fastMode)
 
   // 本地 llama.cpp 模型 — 選擇它會透過 llamacpp-fetch-adapter 走本地
-  // server（ADR-005）。使用者不需額外設 CLAUDE_CODE_USE_LLAMACPP env。
+  // server（ADR-005）。使用者不需額外設 MY_AGENT_USE_LLAMACPP env。
   for (const alias of LLAMACPP_MODEL_ALIASES) {
     if (!options.some(existing => existing.value === alias)) {
       options.push({

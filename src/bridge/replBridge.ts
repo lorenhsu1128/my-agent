@@ -1132,7 +1132,7 @@ export async function initBridgeCore(
       // override for forcing v2 before the server flag is on for your user —
       // requires ccr_v2_compat_enabled server-side or registerWorker 404s.
       //
-      // Kept separate from CLAUDE_CODE_USE_CCR_V2 (the child-SDK transport
+      // Kept separate from MY_AGENT_USE_CCR_V2 (the child-SDK transport
       // selector set by sessionRunner/environment-manager) to avoid the
       // inheritance hazard in spawn mode where the parent's orchestrator
       // var would leak into a v1 child.

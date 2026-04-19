@@ -17,7 +17,7 @@ Agent-facing 排程子系統 — 7 個工具 + schedule DSL + in-process teammat
 | **CronRunNow** | 立即觸發一次 | `id` |
 
 所有工具 `isEnabled()` 檢查 `isKairosCronEnabled()`（build-time
-`AGENT_TRIGGERS` flag + runtime `CLAUDE_CODE_DISABLE_CRON` killswitch）。
+`AGENT_TRIGGERS` flag + runtime `MY_AGENT_DISABLE_CRON` killswitch）。
 
 ---
 
@@ -257,7 +257,7 @@ Durable cron 跨 session 會重新 spawn。
 | `tengu_kairos_cron` (GrowthBook) | runtime kill switch（flip=false 即時停所有 schedule） |
 | `tengu_kairos_cron_durable` (GrowthBook) | 控制 durable 路徑；off 時 durable=true 自動降成 session-only |
 | `tengu_kairos_cron_config` (GrowthBook) | jitter 參數線上調整 |
-| `CLAUDE_CODE_DISABLE_CRON` (env) | 本地 killswitch，壓過 GB |
+| `MY_AGENT_DISABLE_CRON` (env) | 本地 killswitch，壓過 GB |
 
 ---
 

@@ -74,18 +74,17 @@ bun run build:dev             # ./cli-dev，dev 版本
 
 | 變數 | 用途 |
 |---|---|
-| `CLAUDE_CODE_USE_LLAMACPP=1` | 本地 llama.cpp server（預設偵測） |
-| `CLAUDE_CODE_USE_BEDROCK=1` | AWS Bedrock |
-| `CLAUDE_CODE_USE_VERTEX=1` | Google Vertex |
-| `CLAUDE_CODE_USE_FOUNDRY=1` | Azure Foundry |
-| `CLAUDE_CODE_USE_OPENAI=1` | OpenAI Codex API |
+| `MY_AGENT_USE_LLAMACPP=1` | 本地 llama.cpp server（預設偵測） |
+| `MY_AGENT_USE_BEDROCK=1` | AWS Bedrock |
+| `MY_AGENT_USE_VERTEX=1` | Google Vertex |
+| `MY_AGENT_USE_FOUNDRY=1` | Azure Foundry |
+| `MY_AGENT_USE_OPENAI=1` | OpenAI Codex API |
 | `ANTHROPIC_API_KEY` | Messages API 直連 API key |
 | `ANTHROPIC_BASE_URL` | Messages API 的 base URL |
 | `LLAMA_BASE_URL` | 本地 llama.cpp endpoint（預設 `http://127.0.0.1:8080/v1`） |
 | `LLAMA_MODEL` | 本地模型名稱（或用 `~/.my-agent/llamacpp.json` 集中管理） |
 
-> 註：環境變數名稱保留 `CLAUDE_CODE_*` / `ANTHROPIC_*` 前綴是因為程式碼層沿用既有 key 名稱，
-> 僅作為 provider 選擇開關之用。完整設定方式見 [docs/providers.md](./docs/providers.md)。
+完整設定方式見 [docs/providers.md](./docs/providers.md)。
 
 ---
 

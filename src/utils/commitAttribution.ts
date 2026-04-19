@@ -227,7 +227,7 @@ export type AttributionData = {
  * Get the current client surface from environment.
  */
 export function getClientSurface(): string {
-  return process.env.CLAUDE_CODE_ENTRYPOINT ?? 'cli'
+  return process.env.MY_AGENT_ENTRYPOINT ?? 'cli'
 }
 
 /**

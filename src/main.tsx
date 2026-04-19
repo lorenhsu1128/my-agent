@@ -307,7 +307,7 @@ function getCertEnvVarTelemetry(): Record<string, boolean> {
   if (process.env.NODE_EXTRA_CA_CERTS) {
     result.has_node_extra_ca_certs = true;
   }
-  if (process.env.CLAUDE_CODE_CLIENT_CERT) {
+  if (process.env.MY_AGENT_CLIENT_CERT) {
     result.has_client_cert = true;
   }
   if (hasNodeOption('--use-system-ca')) {
@@ -396,7 +396,7 @@ export function startDeferredPrefetches(): void {
   // However, the spawned processes and async work still contend for CPU and event
   // loop time, which skews startup benchmarks (CPU profiles, time-to-first-render
   // measurements). Skip all of it when we're only measuring startup performance.
-  if (isEnvTruthy(process.env.CLAUDE_CODE_EXIT_AFTER_FIRST_RENDER) ||
+  if (isEnvTruthy(process.env.MY_AGENT_EXIT_AFTER_FIRST_RENDER) ||
   // --bare: skip ALL prefetches. These are cache-warms for the REPL's
   // first-turn responsiveness (initUser, getUserContext, tips, countFiles,
   // modelCapabilities, change detectors). Scripted -p calls don't have a
@@ -411,10 +411,10 @@ export function startDeferredPrefetches(): void {
   void getUserContext();
   prefetchSystemContextIfSafe();
   void getRelevantTips();
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) && !isEnvTruthy(process.env.CLAUDE_CODE_SKIP_BEDROCK_AUTH)) {
+  if (isEnvTruthy(process.env.MY_AGENT_USE_BEDROCK) && !isEnvTruthy(process.env.MY_AGENT_SKIP_BEDROCK_AUTH)) {
     void prefetchAwsCredentialsAndBedRockInfoIfSafe();
   }
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) && !isEnvTruthy(process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH)) {
+  if (isEnvTruthy(process.env.MY_AGENT_USE_VERTEX) && !isEnvTruthy(process.env.MY_AGENT_SKIP_VERTEX_AUTH)) {
     void prefetchGcpCredentialsIfSafe();
   }
   void countFilesRoundedRg(getCwd(), AbortSignal.timeout(3000), []);
@@ -522,7 +522,7 @@ function eagerLoadSettings(): void {
 }
 function initializeEntrypoint(isNonInteractive: boolean): void {
   // Skip if already set (e.g., by SDK or other entrypoints)
-  if (process.env.CLAUDE_CODE_ENTRYPOINT) {
+  if (process.env.MY_AGENT_ENTRYPOINT) {
     return;
   }
   const cliArgs = process.argv.slice(2);
@@ -530,19 +530,19 @@ function initializeEntrypoint(isNonInteractive: boolean): void {
   // Check for MCP serve command (handle flags before mcp serve, e.g., --debug mcp serve)
   const mcpIndex = cliArgs.indexOf('mcp');
   if (mcpIndex !== -1 && cliArgs[mcpIndex + 1] === 'serve') {
-    process.env.CLAUDE_CODE_ENTRYPOINT = 'mcp';
+    process.env.MY_AGENT_ENTRYPOINT = 'mcp';
     return;
   }
-  if (isEnvTruthy(process.env.CLAUDE_CODE_ACTION)) {
-    process.env.CLAUDE_CODE_ENTRYPOINT = 'claude-code-github-action';
+  if (isEnvTruthy(process.env.MY_AGENT_ACTION)) {
+    process.env.MY_AGENT_ENTRYPOINT = 'claude-code-github-action';
     return;
   }
 
   // Note: 'local-agent' entrypoint is set by the local agent mode launcher
-  // via CLAUDE_CODE_ENTRYPOINT env var (handled by early return above)
+  // via MY_AGENT_ENTRYPOINT env var (handled by early return above)
 
   // Set based on interactive status
-  process.env.CLAUDE_CODE_ENTRYPOINT = isNonInteractive ? 'sdk-cli' : 'cli';
+  process.env.MY_AGENT_ENTRYPOINT = isNonInteractive ? 'sdk-cli' : 'cli';
 }
 
 // Set by early argv processing when `claude open <url>` is detected (interactive mode only)
@@ -823,22 +823,22 @@ export async function main() {
   // Determine client type
   const clientType = (() => {
     if (isEnvTruthy(process.env.GITHUB_ACTIONS)) return 'github-action';
-    if (process.env.CLAUDE_CODE_ENTRYPOINT === 'sdk-ts') return 'sdk-typescript';
-    if (process.env.CLAUDE_CODE_ENTRYPOINT === 'sdk-py') return 'sdk-python';
-    if (process.env.CLAUDE_CODE_ENTRYPOINT === 'sdk-cli') return 'sdk-cli';
-    if (process.env.CLAUDE_CODE_ENTRYPOINT === 'claude-vscode') return 'claude-vscode';
-    if (process.env.CLAUDE_CODE_ENTRYPOINT === 'local-agent') return 'local-agent';
-    if (process.env.CLAUDE_CODE_ENTRYPOINT === 'claude-desktop') return 'claude-desktop';
+    if (process.env.MY_AGENT_ENTRYPOINT === 'sdk-ts') return 'sdk-typescript';
+    if (process.env.MY_AGENT_ENTRYPOINT === 'sdk-py') return 'sdk-python';
+    if (process.env.MY_AGENT_ENTRYPOINT === 'sdk-cli') return 'sdk-cli';
+    if (process.env.MY_AGENT_ENTRYPOINT === 'claude-vscode') return 'claude-vscode';
+    if (process.env.MY_AGENT_ENTRYPOINT === 'local-agent') return 'local-agent';
+    if (process.env.MY_AGENT_ENTRYPOINT === 'claude-desktop') return 'claude-desktop';
 
     // Check if session-ingress token is provided (indicates remote session)
-    const hasSessionIngressToken = process.env.CLAUDE_CODE_SESSION_ACCESS_TOKEN || process.env.CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR;
-    if (process.env.CLAUDE_CODE_ENTRYPOINT === 'remote' || hasSessionIngressToken) {
+    const hasSessionIngressToken = process.env.MY_AGENT_SESSION_ACCESS_TOKEN || process.env.MY_AGENT_WEBSOCKET_AUTH_FILE_DESCRIPTOR;
+    if (process.env.MY_AGENT_ENTRYPOINT === 'remote' || hasSessionIngressToken) {
       return 'remote';
     }
     return 'cli';
   })();
   setClientType(clientType);
-  const previewFormat = process.env.CLAUDE_CODE_QUESTION_PREVIEW_FORMAT;
+  const previewFormat = process.env.MY_AGENT_QUESTION_PREVIEW_FORMAT;
   if (previewFormat === 'markdown' || previewFormat === 'html') {
     setQuestionPreviewFormat(previewFormat);
   } else if (!clientType.startsWith('sdk-') &&
@@ -849,7 +849,7 @@ export async function main() {
   }
 
   // Tag sessions created via `claude remote-control` so the backend can identify them
-  if (process.env.CLAUDE_CODE_ENVIRONMENT_KIND === 'bridge') {
+  if (process.env.MY_AGENT_ENVIRONMENT_KIND === 'bridge') {
     setSessionSource('remote-control');
   }
   profileCheckpoint('main_client_type_determined');
@@ -925,7 +925,7 @@ async function run(): Promise<CommanderCommand> {
     // process.title on Windows sets the console title directly; on POSIX,
     // terminal shell integration may mirror the process name to the tab.
     // After init() so settings.json env can also gate this (gh-4765).
-    if (!isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE)) {
+    if (!isEnvTruthy(process.env.MY_AGENT_DISABLE_TERMINAL_TITLE)) {
       process.title = 'claude';
     }
 
@@ -979,7 +979,7 @@ async function run(): Promise<CommanderCommand> {
     // If not provided but flag is present, value will be true
     // The actual filtering is handled in debug.ts by parsing process.argv
     return true;
-  }).addOption(new Option('-D, --debug-to-stderr', 'Enable debug mode (to stderr)').argParser(Boolean).hideHelp()).option('--debug-file <path>', 'Write debug logs to a specific file path (implicitly enables debug mode)', () => true).option('--verbose', 'Override verbose mode setting from config', () => true).option('-p, --print', 'Print response and exit (useful for pipes). Note: The workspace trust dialog is skipped when Claude is run with the -p mode. Only use this flag in directories you trust.', () => true).option('--bare', 'Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and MY-AGENT.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. Anthropic auth is strictly ANTHROPIC_API_KEY or apiKeyHelper via --settings (OAuth and keychain are never read). 3P providers (Bedrock/Vertex/Foundry) use their own credentials. Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (MY-AGENT.md dirs), --mcp-config, --settings, --agents, --plugin-dir.', () => true).addOption(new Option('--init', 'Run Setup hooks with init trigger, then continue').hideHelp()).addOption(new Option('--init-only', 'Run Setup and SessionStart:startup hooks, then exit').hideHelp()).addOption(new Option('--maintenance', 'Run Setup hooks with maintenance trigger, then continue').hideHelp()).addOption(new Option('--output-format <format>', 'Output format (only works with --print): "text" (default), "json" (single result), or "stream-json" (realtime streaming)').choices(['text', 'json', 'stream-json'])).addOption(new Option('--json-schema <schema>', 'JSON Schema for structured output validation. ' + 'Example: {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}').argParser(String)).option('--include-hook-events', 'Include all hook lifecycle events in the output stream (only works with --output-format=stream-json)', () => true).option('--include-partial-messages', 'Include partial message chunks as they arrive (only works with --print and --output-format=stream-json)', () => true).addOption(new Option('--input-format <format>', 'Input format (only works with --print): "text" (default), or "stream-json" (realtime streaming input)').choices(['text', 'stream-json'])).option('--mcp-debug', '[DEPRECATED. Use --debug instead] Enable MCP debug mode (shows MCP server errors)', () => true).option('--dangerously-skip-permissions', 'Bypass all permission checks. Recommended only for sandboxes with no internet access.', () => true).option('--allow-dangerously-skip-permissions', 'Enable bypassing all permission checks as an option, without it being enabled by default. Recommended only for sandboxes with no internet access.', () => true).addOption(new Option('--thinking <mode>', 'Thinking mode: enabled (equivalent to adaptive), disabled').choices(['enabled', 'adaptive', 'disabled']).hideHelp()).addOption(new Option('--max-thinking-tokens <tokens>', '[DEPRECATED. Use --thinking instead for newer models] Maximum number of thinking tokens (only works with --print)').argParser(Number).hideHelp()).addOption(new Option('--max-turns <turns>', 'Maximum number of agentic turns in non-interactive mode. This will early exit the conversation after the specified number of turns. (only works with --print)').argParser(Number).hideHelp()).addOption(new Option('--max-budget-usd <amount>', 'Maximum dollar amount to spend on API calls (only works with --print)').argParser(value => {
+  }).addOption(new Option('-D, --debug-to-stderr', 'Enable debug mode (to stderr)').argParser(Boolean).hideHelp()).option('--debug-file <path>', 'Write debug logs to a specific file path (implicitly enables debug mode)', () => true).option('--verbose', 'Override verbose mode setting from config', () => true).option('-p, --print', 'Print response and exit (useful for pipes). Note: The workspace trust dialog is skipped when Claude is run with the -p mode. Only use this flag in directories you trust.', () => true).option('--bare', 'Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and MY-AGENT.md auto-discovery. Sets MY_AGENT_SIMPLE=1. Anthropic auth is strictly ANTHROPIC_API_KEY or apiKeyHelper via --settings (OAuth and keychain are never read). 3P providers (Bedrock/Vertex/Foundry) use their own credentials. Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (MY-AGENT.md dirs), --mcp-config, --settings, --agents, --plugin-dir.', () => true).addOption(new Option('--init', 'Run Setup hooks with init trigger, then continue').hideHelp()).addOption(new Option('--init-only', 'Run Setup and SessionStart:startup hooks, then exit').hideHelp()).addOption(new Option('--maintenance', 'Run Setup hooks with maintenance trigger, then continue').hideHelp()).addOption(new Option('--output-format <format>', 'Output format (only works with --print): "text" (default), "json" (single result), or "stream-json" (realtime streaming)').choices(['text', 'json', 'stream-json'])).addOption(new Option('--json-schema <schema>', 'JSON Schema for structured output validation. ' + 'Example: {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}').argParser(String)).option('--include-hook-events', 'Include all hook lifecycle events in the output stream (only works with --output-format=stream-json)', () => true).option('--include-partial-messages', 'Include partial message chunks as they arrive (only works with --print and --output-format=stream-json)', () => true).addOption(new Option('--input-format <format>', 'Input format (only works with --print): "text" (default), or "stream-json" (realtime streaming input)').choices(['text', 'stream-json'])).option('--mcp-debug', '[DEPRECATED. Use --debug instead] Enable MCP debug mode (shows MCP server errors)', () => true).option('--dangerously-skip-permissions', 'Bypass all permission checks. Recommended only for sandboxes with no internet access.', () => true).option('--allow-dangerously-skip-permissions', 'Enable bypassing all permission checks as an option, without it being enabled by default. Recommended only for sandboxes with no internet access.', () => true).addOption(new Option('--thinking <mode>', 'Thinking mode: enabled (equivalent to adaptive), disabled').choices(['enabled', 'adaptive', 'disabled']).hideHelp()).addOption(new Option('--max-thinking-tokens <tokens>', '[DEPRECATED. Use --thinking instead for newer models] Maximum number of thinking tokens (only works with --print)').argParser(Number).hideHelp()).addOption(new Option('--max-turns <turns>', 'Maximum number of agentic turns in non-interactive mode. This will early exit the conversation after the specified number of turns. (only works with --print)').argParser(Number).hideHelp()).addOption(new Option('--max-budget-usd <amount>', 'Maximum dollar amount to spend on API calls (only works with --print)').argParser(value => {
     const amount = Number(value);
     if (isNaN(amount) || amount <= 0) {
       throw new Error('--max-budget-usd must be a positive number greater than 0');
@@ -1018,7 +1018,7 @@ async function run(): Promise<CommanderCommand> {
     if ((options as {
       bare?: boolean;
     }).bare) {
-      process.env.CLAUDE_CODE_SIMPLE = '1';
+      process.env.MY_AGENT_SIMPLE = '1';
     }
 
     // Ignore "code" as a prompt - treat it the same as no prompt
@@ -1120,7 +1120,7 @@ async function run(): Promise<CommanderCommand> {
     const agentsJson = options.agents;
     const agentCli = options.agent;
     if (feature('BG_SESSIONS') && agentCli) {
-      process.env.CLAUDE_CODE_AGENT = agentCli;
+      process.env.MY_AGENT_AGENT = agentCli;
     }
 
     // NOTE: LSP manager initialization is intentionally deferred until after
@@ -1145,7 +1145,7 @@ async function run(): Promise<CommanderCommand> {
     }).tasks;
     const taskListId = tasksOption ? typeof tasksOption === 'string' ? tasksOption : DEFAULT_TASKS_MODE_TASK_LIST_ID : undefined;
     if ("external" === 'ant' && taskListId) {
-      process.env.CLAUDE_CODE_TASK_LIST_ID = taskListId;
+      process.env.MY_AGENT_TASK_LIST_ID = taskListId;
     }
 
     // Extract worktree option
@@ -1192,7 +1192,7 @@ async function run(): Promise<CommanderCommand> {
     let storedTeammateOpts: TeammateOptions | undefined;
     if (isAgentSwarmsEnabled()) {
       // Extract agent identity options (for tmux-spawned agents)
-      // These replace the CLAUDE_CODE_* environment variables
+      // These replace the MY_AGENT_* environment variables
       const teammateOpts = extractTeammateOptions(options);
       storedTeammateOpts = teammateOpts;
 
@@ -1229,12 +1229,12 @@ async function run(): Promise<CommanderCommand> {
     }).sdkUrl ?? undefined;
 
     // Allow env var to enable partial messages (used by sandbox gateway for baku)
-    const effectiveIncludePartialMessages = includePartialMessages || isEnvTruthy(process.env.CLAUDE_CODE_INCLUDE_PARTIAL_MESSAGES);
+    const effectiveIncludePartialMessages = includePartialMessages || isEnvTruthy(process.env.MY_AGENT_INCLUDE_PARTIAL_MESSAGES);
 
     // Enable all hook event types when explicitly requested via SDK option
-    // or when running in CLAUDE_CODE_REMOTE mode (CCR needs them).
+    // or when running in MY_AGENT_REMOTE mode (CCR needs them).
     // Without this, only SessionStart and Setup events are emitted.
-    if (includeHookEvents || isEnvTruthy(process.env.CLAUDE_CODE_REMOTE)) {
+    if (includeHookEvents || isEnvTruthy(process.env.MY_AGENT_REMOTE)) {
       setAllHookEventsEnabled(true);
     }
 
@@ -1312,15 +1312,15 @@ async function run(): Promise<CommanderCommand> {
       file?: string[];
     }).file;
     if (fileSpecs && fileSpecs.length > 0) {
-      // Get session ingress token (provided by EnvManager via CLAUDE_CODE_SESSION_ACCESS_TOKEN)
+      // Get session ingress token (provided by EnvManager via MY_AGENT_SESSION_ACCESS_TOKEN)
       const sessionToken = getSessionIngressAuthToken();
       if (!sessionToken) {
-        process.stderr.write(chalk.red('Error: Session token required for file downloads. CLAUDE_CODE_SESSION_ACCESS_TOKEN must be set.\n'));
+        process.stderr.write(chalk.red('Error: Session token required for file downloads. MY_AGENT_SESSION_ACCESS_TOKEN must be set.\n'));
         process.exit(1);
       }
 
       // Resolve session ID: prefer remote session ID, fall back to internal session ID
-      const fileSessionId = process.env.CLAUDE_CODE_REMOTE_SESSION_ID || getSessionId();
+      const fileSessionId = process.env.MY_AGENT_REMOTE_SESSION_ID || getSessionId();
       const files = parseFileSpecs(fileSpecs);
       if (files.length > 0) {
         // Use ANTHROPIC_BASE_URL if set (by EnvManager), otherwise use OAuth config
@@ -1822,7 +1822,7 @@ async function run(): Promise<CommanderCommand> {
 
     // Apply coordinator mode tool filtering for headless path
     // (mirrors useMergedTools.ts filtering for REPL/interactive path)
-    if (feature('COORDINATOR_MODE') && isEnvTruthy(process.env.CLAUDE_CODE_COORDINATOR_MODE)) {
+    if (feature('COORDINATOR_MODE') && isEnvTruthy(process.env.MY_AGENT_COORDINATOR_MODE)) {
       const {
         applyCoordinatorToolFilter
       } = await import('./utils/toolPool.js');
@@ -1873,7 +1873,7 @@ async function run(): Promise<CommanderCommand> {
     // pure in-memory array pushes (<1ms, zero I/O) that getBundledSkills()
     // reads synchronously. Previously ran inside setup() after ~20ms of
     // await points, so the parallel getCommands() memoized an empty list.
-    if (process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent') {
+    if (process.env.MY_AGENT_ENTRYPOINT !== 'local-agent') {
       initBuiltinPlugins();
       initBundledSkills();
     }
@@ -2149,7 +2149,7 @@ async function run(): Promise<CommanderCommand> {
     // access and conflict with delegation instructions.
     if ((feature('PROACTIVE') || feature('KAIROS')) && ((options as {
       proactive?: boolean;
-    }).proactive || isEnvTruthy(process.env.CLAUDE_CODE_PROACTIVE)) && !coordinatorModeModule?.isCoordinatorMode()) {
+    }).proactive || isEnvTruthy(process.env.MY_AGENT_PROACTIVE)) && !coordinatorModeModule?.isCoordinatorMode()) {
       /* eslint-disable @typescript-eslint/no-require-imports */
       const briefVisibility = feature('KAIROS') || feature('KAIROS_BRIEF') ? (require('./tools/BriefTool/BriefTool.js') as typeof import('./tools/BriefTool/BriefTool.js')).isBriefEnabled() ? 'Call SendUserMessage at checkpoints to mark where things stand.' : 'The user will see any text you output.' : 'The user will see any text you output.';
       /* eslint-enable @typescript-eslint/no-require-imports */
@@ -2172,7 +2172,7 @@ async function run(): Promise<CommanderCommand> {
       const ctx = getRenderContext(false);
       getFpsMetrics = ctx.getFpsMetrics;
       stats = ctx.stats;
-      // Install asciicast recorder before Ink mounts (ant-only, opt-in via CLAUDE_CODE_TERMINAL_RECORDING=1)
+      // Install asciicast recorder before Ink mounts (ant-only, opt-in via MY_AGENT_TERMINAL_RECORDING=1)
       if ("external" === 'ant') {
         installAsciicastRecorder();
       }
@@ -3012,7 +3012,7 @@ async function run(): Promise<CommanderCommand> {
     // environments can be recreated at any user message index. Gating:
     //   - Build-time: this import is stubbed in external builds.
     //   - Runtime: uploader checks github.com/anthropics/* remote + gcloud auth.
-    //   - Safety: CLAUDE_CODE_DISABLE_SESSION_DATA_UPLOAD=1 bypasses (tests set this).
+    //   - Safety: MY_AGENT_DISABLE_SESSION_DATA_UPLOAD=1 bypasses (tests set this).
     // Import is dynamic + async to avoid adding startup latency.
     const sessionUploaderPromise = "external" === 'ant' ? import('./utils/sessionDataUploader.js') : null;
 
@@ -3800,7 +3800,7 @@ async function run(): Promise<CommanderCommand> {
   }
 
   // Teammate identity options (set by leader when spawning tmux teammates)
-  // These replace the CLAUDE_CODE_* environment variables
+  // These replace the MY_AGENT_* environment variables
   program.addOption(new Option('--agent-id <id>', 'Teammate agent ID').hideHelp());
   program.addOption(new Option('--agent-name <name>', 'Teammate display name').hideHelp());
   program.addOption(new Option('--team-name <name>', 'Team name for swarm coordination').hideHelp());
@@ -4537,7 +4537,7 @@ async function logTenguInit({
 function maybeActivateProactive(options: unknown): void {
   if ((feature('PROACTIVE') || feature('KAIROS')) && ((options as {
     proactive?: boolean;
-  }).proactive || isEnvTruthy(process.env.CLAUDE_CODE_PROACTIVE))) {
+  }).proactive || isEnvTruthy(process.env.MY_AGENT_PROACTIVE))) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const proactiveModule = require('./proactive/index.js');
     if (!proactiveModule.isProactiveActive()) {
@@ -4550,12 +4550,12 @@ function maybeActivateBrief(options: unknown): void {
   const briefFlag = (options as {
     brief?: boolean;
   }).brief;
-  const briefEnv = isEnvTruthy(process.env.CLAUDE_CODE_BRIEF);
+  const briefEnv = isEnvTruthy(process.env.MY_AGENT_BRIEF);
   if (!briefFlag && !briefEnv) return;
-  // --brief / CLAUDE_CODE_BRIEF are explicit opt-ins: check entitlement,
+  // --brief / MY_AGENT_BRIEF are explicit opt-ins: check entitlement,
   // then set userMsgOptIn to activate the tool + prompt section. The env
   // var also grants entitlement (isBriefEntitled() reads it), so setting
-  // CLAUDE_CODE_BRIEF=1 alone force-enables for dev/testing — no GB gate
+  // MY_AGENT_BRIEF=1 alone force-enables for dev/testing — no GB gate
   // needed. initialIsBriefOnly reads getUserMsgOptIn() directly.
   // Conditional require: static import would leak the tool name string
   // into external builds via BriefTool.ts → prompt.ts.

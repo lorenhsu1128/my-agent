@@ -301,7 +301,7 @@ agent：[CronCreate]
 
 | 變數 | 用途 |
 |---|---|
-| `CLAUDE_CODE_DISABLE_CRON` | truthy 值 → killswitch，整個 cron 子系統停跑 |
+| `MY_AGENT_DISABLE_CRON` | truthy 值 → killswitch，整個 cron 子系統停跑 |
 
 ---
 

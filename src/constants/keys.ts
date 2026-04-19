@@ -4,7 +4,7 @@ import { isEnvTruthy } from '../utils/envUtils.js'
 // module load) is picked up. USER_TYPE is a build-time define so it's safe.
 export function getGrowthBookClientKey(): string {
   const useExperimentalClientKey =
-    isEnvTruthy(process.env.CLAUDE_CODE_EXPERIMENTAL_BUILD) ||
+    isEnvTruthy(process.env.MY_AGENT_EXPERIMENTAL_BUILD) ||
     (process.env.USER_TYPE === 'ant' &&
       isEnvTruthy(process.env.ENABLE_GROWTHBOOK_DEV))
 

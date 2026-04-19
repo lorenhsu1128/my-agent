@@ -174,7 +174,7 @@ const TOOL_HOOK_EXECUTION_TIMEOUT_MS = 10 * 60 * 1000
  */
 const SESSION_END_HOOK_TIMEOUT_MS_DEFAULT = 1500
 export function getSessionEndHookTimeoutMs(): number {
-  const raw = process.env.CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS
+  const raw = process.env.MY_AGENT_SESSIONEND_HOOKS_TIMEOUT_MS
   const parsed = raw ? parseInt(raw, 10) : NaN
   return Number.isFinite(parsed) && parsed > 0
     ? parsed
@@ -741,7 +741,7 @@ function processHookJSONOutput({
  *
  * Shell resolution: hook.shell → 'bash'. PowerShell hooks spawn pwsh
  * with -NoProfile -NonInteractive -Command and skip bash-specific prep
- * (POSIX path conversion, .sh auto-prepend, CLAUDE_CODE_SHELL_PREFIX).
+ * (POSIX path conversion, .sh auto-prepend, MY_AGENT_SHELL_PREFIX).
  * See docs/design/ps-shell-selection.md §5.1.
  */
 async function execCommandHook(
@@ -865,13 +865,13 @@ async function execCommandHook(
     }
   }
 
-  // CLAUDE_CODE_SHELL_PREFIX wraps the command via POSIX quoting
+  // MY_AGENT_SHELL_PREFIX wraps the command via POSIX quoting
   // (formatShellPrefixCommand uses shell-quote). This makes no sense for
   // PowerShell — see design §8.1. For now PS hooks ignore the prefix;
-  // a CLAUDE_CODE_PS_SHELL_PREFIX (or shell-aware prefix) is a follow-up.
+  // a MY_AGENT_PS_SHELL_PREFIX (or shell-aware prefix) is a follow-up.
   const finalCommand =
-    !isPowerShell && process.env.CLAUDE_CODE_SHELL_PREFIX
-      ? formatShellPrefixCommand(process.env.CLAUDE_CODE_SHELL_PREFIX, command)
+    !isPowerShell && process.env.MY_AGENT_SHELL_PREFIX
+      ? formatShellPrefixCommand(process.env.MY_AGENT_SHELL_PREFIX, command)
       : command
 
   const hookTimeoutMs = hook.timeout
@@ -1979,7 +1979,7 @@ async function* executeHooks({
     return
   }
 
-  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
+  if (isEnvTruthy(process.env.MY_AGENT_SIMPLE)) {
     return
   }
 
@@ -3013,7 +3013,7 @@ async function executeHooksOutsideREPL({
   signal?: AbortSignal
   timeoutMs: number
 }): Promise<HookOutsideReplResult[]> {
-  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
+  if (isEnvTruthy(process.env.MY_AGENT_SIMPLE)) {
     return []
   }
 

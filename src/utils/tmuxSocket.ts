@@ -269,7 +269,7 @@ async function doInitialize(): Promise<void> {
   const socket = getClaudeSocketName()
 
   // Create a new session with our custom socket
-  // Pass CLAUDE_CODE_SKIP_PROMPT_HISTORY via -e so it's set in the initial shell environment
+  // Pass MY_AGENT_SKIP_PROMPT_HISTORY via -e so it's set in the initial shell environment
   //
   // On Windows, the tmux server inherits WSL_INTEROP from the short-lived
   // wsl.exe that spawns it; once `new-session -d` detaches and wsl.exe exits,
@@ -287,7 +287,7 @@ async function doInitialize(): Promise<void> {
     '-s',
     'base',
     '-e',
-    'CLAUDE_CODE_SKIP_PROMPT_HISTORY=true',
+    'MY_AGENT_SKIP_PROMPT_HISTORY=true',
     ...(getPlatform() === 'windows'
       ? ['-e', 'WSL_INTEROP=/run/WSL/1_interop']
       : []),
@@ -313,7 +313,7 @@ async function doInitialize(): Promise<void> {
   // Register cleanup to kill the tmux server on exit
   registerCleanup(killTmuxServer)
 
-  // Set CLAUDE_CODE_SKIP_PROMPT_HISTORY in the tmux GLOBAL environment (-g).
+  // Set MY_AGENT_SKIP_PROMPT_HISTORY in the tmux GLOBAL environment (-g).
   // Without -g this would only apply to the 'base' session, and new sessions
   // created by TungstenTool (e.g. 'test', 'verify') would not inherit it.
   // Any my-agent instance spawned on this socket will inherit this env var,
@@ -324,7 +324,7 @@ async function doInitialize(): Promise<void> {
     socket,
     'set-environment',
     '-g',
-    'CLAUDE_CODE_SKIP_PROMPT_HISTORY',
+    'MY_AGENT_SKIP_PROMPT_HISTORY',
     'true',
   ])
 

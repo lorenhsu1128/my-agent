@@ -4,7 +4,7 @@
 import { queryLlamaCppContextSize, getLlamaCppContextSize, DEFAULT_LLAMACPP_BASE_URL } from '../../src/utils/model/providers.js'
 
 // 強制啟用 llamacpp provider
-process.env.CLAUDE_CODE_USE_LLAMACPP = 'true'
+process.env.MY_AGENT_USE_LLAMACPP = 'true'
 
 const { getContextWindowForModel } = await import('../../src/utils/context.js')
 const { getAutoCompactThreshold, getEffectiveContextWindowSize } = await import('../../src/services/compact/autoCompact.js')

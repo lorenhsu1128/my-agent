@@ -480,7 +480,7 @@ export const MemoryTool = buildTool({
     if (!isAutoMemoryEnabled()) {
       return {
         result: false,
-        message: 'Auto memory 已停用（CLAUDE_CODE_DISABLE_AUTO_MEMORY 或 settings）',
+        message: 'Auto memory 已停用（MY_AGENT_DISABLE_AUTO_MEMORY 或 settings）',
         errorCode: 1,
       }
     }

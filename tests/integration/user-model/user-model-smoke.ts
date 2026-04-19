@@ -45,7 +45,7 @@ async function main() {
   process.env.MYAGENT_USER_MODEL_PATH = globalPath
   // 確保開關預設 ON
   delete process.env.MYAGENT_DISABLE_USER_MODEL
-  delete process.env.CLAUDE_CODE_SIMPLE
+  delete process.env.MY_AGENT_SIMPLE
 
   // 動態 import（env 設好後再載入）
   const paths = await import('../../../src/userModel/paths.js')
@@ -64,9 +64,9 @@ async function main() {
   assert(paths.isUserModelEnabled() === true, 'env=false → 啟用')
 
   delete process.env.MYAGENT_DISABLE_USER_MODEL
-  process.env.CLAUDE_CODE_SIMPLE = '1'
+  process.env.MY_AGENT_SIMPLE = '1'
   assert(paths.isUserModelEnabled() === false, 'SIMPLE/bare → 停用')
-  delete process.env.CLAUDE_CODE_SIMPLE
+  delete process.env.MY_AGENT_SIMPLE
 
   assert(
     paths.getUserModelGlobalPath() === globalPath,

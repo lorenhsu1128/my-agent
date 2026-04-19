@@ -68,7 +68,7 @@ export const LlamaCppConfigSchema = z.object({
   /**
    * 會觸發 llamacpp 分支的 model 別名集合。
    * 當使用者下 `--model <alias>` 且 alias 命中此清單，即使沒設
-   * CLAUDE_CODE_USE_LLAMACPP env 也會走 llama.cpp。
+   * MY_AGENT_USE_LLAMACPP env 也會走 llama.cpp。
    */
   modelAliases: z
     .array(z.string())

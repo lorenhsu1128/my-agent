@@ -91,14 +91,14 @@ const DEFAULT_API_KEY_HELPER_TTL = 5 * 60 * 1000
  */
 function isManagedOAuthContext(): boolean {
   return (
-    isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) ||
-    process.env.CLAUDE_CODE_ENTRYPOINT === 'claude-desktop'
+    isEnvTruthy(process.env.MY_AGENT_REMOTE) ||
+    process.env.MY_AGENT_ENTRYPOINT === 'claude-desktop'
   )
 }
 
 /**
  * my-agent: 1P Anthropic auth 永遠停用——本地模型不需要登入、不讀任何
- * Anthropic-specific env var (CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_AUTH_TOKEN /
+ * Anthropic-specific env var (MY_AGENT_OAUTH_TOKEN / ANTHROPIC_AUTH_TOKEN /
  * apiKeyHelper) 也不觸 keychain。若將來要支援外部 Anthropic API，重寫
  * 此函式為 single source of truth 即可。
  */
@@ -230,11 +230,11 @@ export function isAwsCredentialExportFromProjectSettings(): boolean {
 
 /**
  * Calculate TTL in milliseconds for the API key helper cache
- * Uses CLAUDE_CODE_API_KEY_HELPER_TTL_MS env var if set and valid,
+ * Uses MY_AGENT_API_KEY_HELPER_TTL_MS env var if set and valid,
  * otherwise defaults to 5 minutes
  */
 export function calculateApiKeyHelperTTL(): number {
-  const envTtl = process.env.CLAUDE_CODE_API_KEY_HELPER_TTL_MS
+  const envTtl = process.env.MY_AGENT_API_KEY_HELPER_TTL_MS
 
   if (envTtl) {
     const parsed = parseInt(envTtl, 10)
@@ -242,7 +242,7 @@ export function calculateApiKeyHelperTTL(): number {
       return parsed
     }
     logForDebugging(
-      `Found CLAUDE_CODE_API_KEY_HELPER_TTL_MS env var, but it was not a valid number. Got ${envTtl}`,
+      `Found MY_AGENT_API_KEY_HELPER_TTL_MS env var, but it was not a valid number. Got ${envTtl}`,
       { level: 'error' },
     )
   }
@@ -1055,7 +1055,7 @@ export function saveOAuthTokensIfNeeded(tokens: OAuthTokens): {
 
 export const getClaudeAIOAuthTokens = memoize((): OAuthTokens | null => {
   // my-agent: 不讀 Anthropic OAuth token — 不碰 keychain / 不看
-  // CLAUDE_CODE_OAUTH_TOKEN env / 不看 file descriptor。永遠 null。
+  // MY_AGENT_OAUTH_TOKEN env / 不看 file descriptor。永遠 null。
   return null
 })
 
@@ -1217,7 +1217,7 @@ export async function getClaudeAIOAuthTokensAsync(): Promise<OAuthTokens | null>
 
   // Env var and FD tokens are sync and don't hit the keychain
   if (
-    process.env.CLAUDE_CODE_OAUTH_TOKEN ||
+    process.env.MY_AGENT_OAUTH_TOKEN ||
     getOAuthTokenFromFileDescriptor()
   ) {
     return getClaudeAIOAuthTokens()
@@ -1398,9 +1398,9 @@ export function is1PApiCustomer(): boolean {
 
   // Exclude Vertex, Bedrock, and Foundry customers
   if (
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)
+    isEnvTruthy(process.env.MY_AGENT_USE_BEDROCK) ||
+    isEnvTruthy(process.env.MY_AGENT_USE_VERTEX) ||
+    isEnvTruthy(process.env.MY_AGENT_USE_FOUNDRY)
   ) {
     return false
   }
@@ -1515,9 +1515,9 @@ export function getSubscriptionName(): string {
 /** Check if using third-party services (Bedrock or Vertex or Foundry) */
 export function isUsing3PServices(): boolean {
   return !!(
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)
+    isEnvTruthy(process.env.MY_AGENT_USE_BEDROCK) ||
+    isEnvTruthy(process.env.MY_AGENT_USE_VERTEX) ||
+    isEnvTruthy(process.env.MY_AGENT_USE_FOUNDRY)
   )
 }
 
@@ -1560,7 +1560,7 @@ export function getOtelHeadersFromHelper(): Record<string, string> {
 
   // Return cached headers if still valid (debounce)
   const debounceMs = parseInt(
-    process.env.CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS ||
+    process.env.MY_AGENT_OTEL_HEADERS_HELPER_DEBOUNCE_MS ||
       DEFAULT_OTEL_HEADERS_DEBOUNCE_MS.toString(),
   )
   if (
@@ -1653,8 +1653,8 @@ export function getAccountInformation() {
   const { source: authTokenSource } = getAuthTokenSource()
   const accountInfo: UserAccountInfo = {}
   if (
-    authTokenSource === 'CLAUDE_CODE_OAUTH_TOKEN' ||
-    authTokenSource === 'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR'
+    authTokenSource === 'MY_AGENT_OAUTH_TOKEN' ||
+    authTokenSource === 'MY_AGENT_OAUTH_TOKEN_FILE_DESCRIPTOR'
   ) {
     accountInfo.tokenSource = authTokenSource
   } else if (isClaudeAISubscriber()) {
@@ -1736,8 +1736,8 @@ export async function validateForceLoginOrg(): Promise<OrgValidationResult> {
   // in ~/.my-agent/.my-agent.json is user-writable and cannot be trusted.
   const { source } = getAuthTokenSource()
   const isEnvVarToken =
-    source === 'CLAUDE_CODE_OAUTH_TOKEN' ||
-    source === 'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR'
+    source === 'MY_AGENT_OAUTH_TOKEN' ||
+    source === 'MY_AGENT_OAUTH_TOKEN_FILE_DESCRIPTOR'
 
   const profile = await getOauthProfileFromOauthToken(tokens.accessToken)
   if (!profile) {
@@ -1760,9 +1760,9 @@ export async function validateForceLoginOrg(): Promise<OrgValidationResult> {
 
   if (isEnvVarToken) {
     const envVarName =
-      source === 'CLAUDE_CODE_OAUTH_TOKEN'
-        ? 'CLAUDE_CODE_OAUTH_TOKEN'
-        : 'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR'
+      source === 'MY_AGENT_OAUTH_TOKEN'
+        ? 'MY_AGENT_OAUTH_TOKEN'
+        : 'MY_AGENT_OAUTH_TOKEN_FILE_DESCRIPTOR'
     return {
       valid: false,
       message:

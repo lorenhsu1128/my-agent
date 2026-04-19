@@ -9,7 +9,7 @@
 // M2-06 smoke：測試 summarize fallback 需要讓 getAnthropicClient() 走到 fetch
 // 但目標不可達 → 快速失敗 → 驗證 graceful fallback。
 // 設在 import 之前：env 被 getClaudeConfigHomeDir / client bootstrap 讀取。
-process.env.CLAUDE_CODE_USE_LLAMACPP = 'true'
+process.env.MY_AGENT_USE_LLAMACPP = 'true'
 process.env.LLAMA_BASE_URL = 'http://127.0.0.1:9' // 保證 ECONNREFUSED
 process.env.LLAMA_MODEL = 'qwen3.5-9b-neo'
 

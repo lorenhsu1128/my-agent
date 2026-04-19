@@ -96,13 +96,13 @@ export function setShellIfWindows(): void {
  * Find the path where `bash.exe` included with git-bash exists, exiting the process if not found.
  */
 export const findGitBashPath = memoize((): string => {
-  if (process.env.CLAUDE_CODE_GIT_BASH_PATH) {
-    if (checkPathExists(process.env.CLAUDE_CODE_GIT_BASH_PATH)) {
-      return process.env.CLAUDE_CODE_GIT_BASH_PATH
+  if (process.env.MY_AGENT_GIT_BASH_PATH) {
+    if (checkPathExists(process.env.MY_AGENT_GIT_BASH_PATH)) {
+      return process.env.MY_AGENT_GIT_BASH_PATH
     }
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.error(
-      `my-agent was unable to find CLAUDE_CODE_GIT_BASH_PATH path "${process.env.CLAUDE_CODE_GIT_BASH_PATH}"`,
+      `my-agent was unable to find MY_AGENT_GIT_BASH_PATH path "${process.env.MY_AGENT_GIT_BASH_PATH}"`,
     )
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(1)
@@ -118,7 +118,7 @@ export const findGitBashPath = memoize((): string => {
 
   // biome-ignore lint/suspicious/noConsole:: intentional console output
   console.error(
-    'my-agent on Windows requires git-bash (https://git-scm.com/downloads/win). If installed but not in PATH, set environment variable pointing to your bash.exe, similar to: CLAUDE_CODE_GIT_BASH_PATH=C:\\Program Files\\Git\\bin\\bash.exe',
+    'my-agent on Windows requires git-bash (https://git-scm.com/downloads/win). If installed but not in PATH, set environment variable pointing to your bash.exe, similar to: MY_AGENT_GIT_BASH_PATH=C:\\Program Files\\Git\\bin\\bash.exe',
   )
   // eslint-disable-next-line custom-rules/no-process-exit
   process.exit(1)

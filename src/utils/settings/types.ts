@@ -8,7 +8,7 @@ import {
   PERMISSION_MODES,
 } from '../permissions/PermissionMode.js'
 import { MarketplaceSourceSchema } from '../plugins/schemas.js'
-import { CLAUDE_CODE_SETTINGS_SCHEMA_URL } from './constants.js'
+import { MY_AGENT_SETTINGS_SCHEMA_URL } from './constants.js'
 import { PermissionRuleSchema } from './permissionValidation.js'
 
 // Re-export hook schemas and types from centralized location for backward compatibility
@@ -256,7 +256,7 @@ export const SettingsSchema = lazySchema(() =>
   z
     .object({
       $schema: z
-        .literal(CLAUDE_CODE_SETTINGS_SCHEMA_URL)
+        .literal(MY_AGENT_SETTINGS_SCHEMA_URL)
         .optional()
         .describe('JSON Schema reference for my-agent settings'),
       apiKeyHelper: z
@@ -277,11 +277,11 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Command to refresh GCP authentication (e.g., gcloud auth application-default login)',
         ),
-      // Gated so the SDK generator (which runs without CLAUDE_CODE_ENABLE_XAA)
+      // Gated so the SDK generator (which runs without MY_AGENT_ENABLE_XAA)
       // doesn't surface this in GlobalClaudeSettings. Read via getXaaIdpSettings().
       // .passthrough() on the outer object keeps an existing settings.json key
       // alive across env-var-off sessions — it's just not schema-validated then.
-      ...(isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_XAA)
+      ...(isEnvTruthy(process.env.MY_AGENT_ENABLE_XAA)
         ? {
             xaaIdp: z
               .object({

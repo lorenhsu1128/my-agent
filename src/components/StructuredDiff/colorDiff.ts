@@ -10,13 +10,13 @@ export type ColorModuleUnavailableReason = 'env'
 
 /**
  * Returns a static reason why the color-diff module is unavailable, or null if available.
- * 'env' = disabled via CLAUDE_CODE_SYNTAX_HIGHLIGHT
+ * 'env' = disabled via MY_AGENT_SYNTAX_HIGHLIGHT
  *
  * The reconstructed project always uses the bundled TypeScript port, so the
  * only way to disable syntax highlighting is via the env var.
  */
 export function getColorModuleUnavailableReason(): ColorModuleUnavailableReason | null {
-  if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_SYNTAX_HIGHLIGHT)) {
+  if (isEnvDefinedFalsy(process.env.MY_AGENT_SYNTAX_HIGHLIGHT)) {
     return 'env'
   }
   return null

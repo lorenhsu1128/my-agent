@@ -106,7 +106,7 @@ import {
   getSectionInterpolated as getExternalSectionInterpolated,
 } from '../systemPromptFiles/index.js'
 
-export const CLAUDE_CODE_DOCS_MAP_URL =
+export const MY_AGENT_DOCS_MAP_URL =
   'https://code.claude.com/docs/en/claude_code_docs_map.md'
 
 /**
@@ -516,7 +516,7 @@ export async function getSystemPrompt(
   additionalWorkingDirectories?: string[],
   mcpClients?: MCPServerConnection[],
 ): Promise<string[]> {
-  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
+  if (isEnvTruthy(process.env.MY_AGENT_SIMPLE)) {
     return [
       `You are my-agent, a local-first coding assistant.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
     ]

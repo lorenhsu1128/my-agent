@@ -7,7 +7,7 @@
  *
  * 三路開關優先序（先定義者勝）：
  *   1. MYAGENT_DISABLE_USER_MODEL env var（1/true → OFF）
- *   2. CLAUDE_CODE_SIMPLE（--bare）→ OFF（延續 auto memory 的 bare 行為）
+ *   2. MY_AGENT_SIMPLE（--bare）→ OFF（延續 auto memory 的 bare 行為）
  *   3. settings.json: userModelEnabled（true/false）
  *   4. 預設啟用
  *
@@ -64,7 +64,7 @@ export function isUserModelEnabled(): boolean {
     return true
   }
   // 承襲 auto memory 的 bare 行為
-  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
+  if (isEnvTruthy(process.env.MY_AGENT_SIMPLE)) {
     return false
   }
   const settings = getInitialSettings()
