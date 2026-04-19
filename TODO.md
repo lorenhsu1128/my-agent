@@ -49,6 +49,72 @@
 
 ---
 
+## 當前里程碑：M-DAEMON — 本地 Daemon + Direct-Connect Server（2026-04-19 啟動）
+
+**目標**：把 `my-agent` 的 QueryEngine 搬進獨立長駐 daemon process，透過 WebSocket 讓 REPL / 未來的 Discord gateway / 其他 client 可 attach 同一個 session；補完 `src/server/` 原本欠缺的 server side。為 M-DISCORD 鋪路。
+
+**關鍵需求**：TUI（REPL）和未來 Discord 上的對話要**同步** — 任一邊都能看到歷史對話和即時輸出。
+
+**架構決策**（2026-04-19 與使用者逐題對齊 Q1–Q9）：
+- ADR-M-DAEMON-01：Daemon 是唯一的 QueryEngine 跑者、唯一的 session JSONL 寫入者；REPL attach 模式下只透過 WS 送 input + subscribe stream，不寫 session
+- ADR-M-DAEMON-02：IPC 協議 = 復用 `src/server/directConnectManager.ts` 既有的 WS + JSON lines 格式（control_request / control_response / SDK message 轉發已就位，只補 server side）
+- ADR-M-DAEMON-03：Daemon 監聽 `localhost:<port>` + auth token（非 unix socket；bun + Windows unix socket 風險大，呼應 ADR-011 playwright 踩坑）；port / pid 寫入 `~/.my-agent/daemon.pid.json`；token 放 `~/.my-agent/daemon.token`（0600）
+- ADR-M-DAEMON-04：REPL attach UX = 透明偵測 + 狀態列 badge 顯示（`[local]` / `[daemon:12345]` / `[daemon:stale]`）；無 daemon 自動 fallback 獨立模式
+- ADR-M-DAEMON-05：Input 策略 = 混合：使用者互動訊息（REPL Enter / Discord DM / `@mention`）= interrupt 當前 turn；自動觸發（cron / background）= queue；slash command = 立即執行
+- ADR-M-DAEMON-06：Daemon 生命週期 = 顯式 `my-agent daemon start/stop/status/restart/logs` 子命令（非 auto-spawn）
+- ADR-M-DAEMON-07：多 REPL attach 同 daemon = 允許；stream event broadcast 給所有 attached clients
+- ADR-M-DAEMON-08：Permission prompt 路由 = 回到 input source client；Discord source 退回 YOLO classifier（M-DISCORD 實作時才接）
+- ADR-M-DAEMON-09：Cron scheduler 搬進 daemon（RISK 4 解方）；REPL 獨立模式下 cron 不跑（明確化、無鎖競爭）
+
+**本 milestone 完成後**：使用者可 `my-agent daemon start` 啟動背景服務 → 開兩個 REPL 視窗都會自動 attach 同一 session → 任一邊 type 都能在另一邊即時看到；cron 由 daemon 統一觸發。
+
+### 階段一：基礎設施
+- [x] M-DAEMON-1 `src/daemon/{paths,pidFile,authToken,daemonLog,daemonMain}.ts`：pid.json（6 欄含 version/pid/port/startedAt/lastHeartbeat/agentVersion）+ 每 N ms heartbeat interval + 64-char hex token（timing-safe compare、writeFile mode 0o600 + chmod、Windows graceful no-op）+ JSON lines 結構化日誌（debug/info/warn/error）+ `startDaemon()` 整合（SIGINT/SIGTERM/SIGBREAK 註冊 + stale 偵測與接管 + DaemonAlreadyRunningError）+ stop 冪等清理。測試 `tests/integration/daemon/lifecycle.test.ts` 29/29 綠（paths / authToken 6 case / pidFile 10 case / checkDaemonLiveness 5 case / daemonLog 2 case / startDaemon 5 整合 case）。`bun run typecheck` 綠（僅 TS5101 baseline），`./cli -p "say OK"` 獨立模式未迴歸
+- [ ] M-DAEMON-2 `src/server/directConnectServer.ts` + `sessionBroker.ts` + `clientRegistry.ts`：WS server skeleton（接 WS / handshake / token 驗證 / ping）；連線登記與 disconnect 清理。對應既有的 client `directConnectManager.ts:40`。測試：WS client 連上 → 認證 → disconnect → 伺服端清理
+- [ ] M-DAEMON-3 `src/main.tsx` 註冊 `daemon` subcommand（start/stop/status/restart/logs）+ `my-agent daemon status` 顯示 port/pid/uptime/attached clients/current state + `logs -f` tail 日誌 + `stop` graceful SIGTERM 5s → SIGKILL。測試：subcommand 完整路徑
+
+### 階段二：Session 整合
+- [ ] M-DAEMON-4 `src/daemon/sessionRunner.ts` + 補完 `sessionBroker.ts`：把 REPL 的 QueryEngine 呼叫路徑抽出讓 daemon 也能跑（用 composition 包，不改 `QueryEngine.ts` deny-list 檔）；Session JSONL 獨占寫入（`lockfile`）；WS 協議 ↔ QueryEngine stream_event 對接。測試：WS client 送 input → daemon 跑 LLM → stream 回 client → session.jsonl 寫入正確
+- [ ] M-DAEMON-4.5 Cron scheduler 搬進 daemon：`src/utils/cronScheduler.ts` 初始化點從 REPL 搬到 daemon；REPL 獨立模式下跳過 cron init；cron 觸發結果透過 daemon broadcast 給 attached clients。測試：daemon 跑 cron → attached REPL 看到觸發訊息；REPL 獨立模式 cron 不跑
+- [ ] M-DAEMON-5 `src/daemon/inputQueue.ts` 狀態機（IDLE / RUNNING / INTERRUPTING）+ 混合 interrupt/queue 策略：input 元資料標 `source`（repl / discord / cron / slash）；互動訊息 = interrupt（cancel QueryEngine + flush 部分輸出 + 開始新 turn）；cron = queue；slash = 立即。測試：送 input A → 不等完成送 B → 確認 A 被 interrupt、B 接上；cron input 走 queue
+
+### 階段三：REPL thin-client
+- [ ] M-DAEMON-6 `src/repl/thinClient/{detectDaemon,thinClientMode,fallbackManager}.ts`：讀 pid.json + heartbeat check（`now - lastHeartbeat > 30s` → stale）+ token load；attach 後 REPL 不跑 QueryEngine 只 subscribe WS stream；daemon 掛了透明切獨立模式；狀態列 badge。修改 `src/screens/REPL.tsx` 加 mode prop（`standalone | attached`）；`src/utils/status.tsx` 加 daemon badge。測試：無 daemon → REPL 獨立；啟動 daemon → 新 REPL attach；kill daemon → REPL 切獨立不當機
+
+### 階段四：Multi-client + permission
+- [ ] M-DAEMON-7 `src/daemon/permissionRouter.ts`：stream event broadcast 給所有 attached clients；permission prompt 路由到 `source_client_id`；Discord fallback hook 預留 interface（M-DISCORD 才接）。測試：兩個 REPL attach 同 daemon → 任一邊 type 都看到訊息；permission prompt 只彈到發起端
+
+### 階段五：驗收
+- [ ] M-DAEMON-8 整合測試 `tests/integration/daemon/{lifecycle,attach-fallback,multi-client,input-strategy,permission-routing,session-write,smoke.sh}.ts` + `docs/daemon-mode.md` 使用者指南 + ADR-012 記入 CLAUDE.md + LESSONS.md 更新踩坑紀錄
+
+### 完成標準
+- [ ] `bun run typecheck` 綠
+- [ ] `tests/integration/daemon/` 全綠
+- [ ] 活性測試：`./cli daemon start` 後兩個 REPL 視窗 attach 同 daemon → 任一邊 type 看到同步；`./cli -p "hello"` 獨立模式仍可跑
+- [ ] Cron 在 daemon 內正確觸發，REPL 獨立模式下確認不跑
+- [ ] Daemon crash 時 REPL 透明 fallback 不當機
+- [ ] Windows + bun 環境 SIGTERM / named-event 都能 graceful stop
+
+---
+
+## 未來里程碑：M-DISCORD — Discord Gateway（M-DAEMON 完成後啟動）
+
+**目標**：接在 M-DAEMON 上面的 Discord bot — 文字對話 + 圖片進出 + slash commands + home channel 接 cron 通知。為個人使用設計（白名單永遠只有使用者一人）。
+
+**前置依賴**：M-DAEMON 必須完成（Discord adapter 是 daemon 內的另一個 input source）
+
+**範圍**：
+- DM + 個人 server channels（Q1=A+B）
+- 全 Discord 一條 session（Q2=A），與 REPL 共享同 project session（Q3=B）
+- 獨立 daemon + REPL 皆可感知 Discord 狀態（Q5=兩種都想）
+- Home channel 接 cron + 通知 + 長任務完成提示（Q4=A）
+- 白名單 1 人 → permission 走 YOLO classifier（子問題 8 fallback）
+- 不含 voice（Hermes voice 涉及 RTP/Opus/DAVE E2EE ~3000 行，延後）
+
+**待展開**：M-DAEMON 進度過半時再細化 Task 清單。
+
+---
+
 ## 當前里程碑：M2 — Session Recall & Dynamic Memory
 
 **目標情境**：以 **llama.cpp 本地模型（`qwen3.5-9b-neo`）** 為主要運行情境設計。補齊 my-agent 既有記憶系統（`src/memdir/` 四型分類 + `SessionMemory` + `extractMemories` + `autoDream` 已存在）尚缺的三塊：(1) 跨 session 歷史對話搜尋、(2) query-driven 動態 prefetch 注入、(3) 受控的 MemoryTool 寫入（含 prompt injection 掃描）。**不**移植 Hermes 的 provider plugin 抽象層，**不**改 `src/memdir/` 四型分類，**不**動 `QueryEngine.ts` / `Tool.ts` / `StreamingToolExecutor.ts`（deny list）。Anthropic 既有 code path 保留（黃金規則 #2）但**不作為**設計目標與驗收依據。
@@ -385,8 +451,9 @@
 ### M4 — Hermes Cron 排程（TypeScript 重新實作）
 將 Hermes 的 cron 系統（自然語言排程 + 多平台派送）移植到 my-agent。
 
-### M5 — Hermes 訊息閘道（TypeScript 重新實作）
-將 Telegram/Discord/Slack 閘道移植到 my-agent。
+### ~~M5 — Hermes 訊息閘道（TypeScript 重新實作）~~
+~~將 Telegram/Discord/Slack 閘道移植到 my-agent。~~
+**由 M-DAEMON（前置）+ M-DISCORD（2026-04-19 啟動）取代**。先個人用 Discord，Telegram/Slack 不在範圍內。
 
 ### M6 — Self-Improving Loop（AutoDream × Hermes 合併）
 
@@ -1090,3 +1157,57 @@
 - 2026-04-19 13:55: Session 結束 | 進度：344/363 任務 | 6984141 refactor(m-deanthro): stage 3-a — getAuthTokenSource / getAnthropicApiKeyWithSource 徹底清 env
 
 - 2026-04-19 13:57: Session 結束 | 進度：344/363 任務 | 6984141 refactor(m-deanthro): stage 3-a — getAuthTokenSource / getAnthropicApiKeyWithSource 徹底清 env
+
+- 2026-04-19 15:29: Session 結束 | 進度：349/368 任務 | 4264307 docs(browser): M7 收尾 — README、ADR-011、CLAUDE.md 開發日誌、TODO 更新
+
+- 2026-04-19 15:33: Session 結束 | 進度：349/368 任務 | 4264307 docs(browser): M7 收尾 — README、ADR-011、CLAUDE.md 開發日誌、TODO 更新
+
+- 2026-04-19 16:00: Session 結束 | 進度：349/368 任務 | 12de082 feat(cron): Wave 2 — job lifecycle + modelOverride via teammate + preRunScript
+
+- 2026-04-19 16:13: Session 結束 | 進度：349/368 任務 | 12de082 feat(cron): Wave 2 — job lifecycle + modelOverride via teammate + preRunScript
+
+- 2026-04-19 16:27: Session 結束 | 進度：349/368 任務 | 12de082 feat(cron): Wave 2 — job lifecycle + modelOverride via teammate + preRunScript
+
+- 2026-04-19 16:34: Session 結束 | 進度：349/368 任務 | 12de082 feat(cron): Wave 2 — job lifecycle + modelOverride via teammate + preRunScript
+
+- 2026-04-19 16:45: Session 結束 | 進度：349/368 任務 | 12de082 feat(cron): Wave 2 — job lifecycle + modelOverride via teammate + preRunScript
+
+- 2026-04-19 17:02: Session 結束 | 進度：349/368 任務 | cd54547 docs: 重新定位為 My Agent + 全面文件更新
+
+- 2026-04-19 17:05: Session 結束 | 進度：349/368 任務 | cd54547 docs: 重新定位為 My Agent + 全面文件更新
+
+- 2026-04-19 17:09: Session 結束 | 進度：349/368 任務 | cd54547 docs: 重新定位為 My Agent + 全面文件更新
+
+- 2026-04-19 17:17: Session 結束 | 進度：349/368 任務 | af1066d refactor: rename all CLAUDE_CODE_* env vars to MY_AGENT_*
+
+- 2026-04-19 17:27: Session 結束 | 進度：349/368 任務 | af1066d refactor: rename all CLAUDE_CODE_* env vars to MY_AGENT_*
+
+- 2026-04-19 17:34: Session 結束 | 進度：349/368 任務 | af1066d refactor: rename all CLAUDE_CODE_* env vars to MY_AGENT_*
+
+- 2026-04-19 17:37: Session 結束 | 進度：349/368 任務 | af1066d refactor: rename all CLAUDE_CODE_* env vars to MY_AGENT_*
+
+- 2026-04-19 17:49: Session 結束 | 進度：349/368 任務 | af1066d refactor: rename all CLAUDE_CODE_* env vars to MY_AGENT_*
+
+- 2026-04-19 17:55: Session 結束 | 進度：349/368 任務 | af1066d refactor: rename all CLAUDE_CODE_* env vars to MY_AGENT_*
+
+- 2026-04-19 18:28: Session 結束 | 進度：349/368 任務 | af1066d refactor: rename all CLAUDE_CODE_* env vars to MY_AGENT_*
+
+- 2026-04-19 18:32: Session 結束 | 進度：349/368 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
+
+- 2026-04-19 18:35: Session 結束 | 進度：349/368 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
+
+- 2026-04-19 18:40: Session 結束 | 進度：349/368 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
+
+- 2026-04-19 18:49: Session 結束 | 進度：349/368 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
+
+- 2026-04-19 18:52: Session 結束 | 進度：349/368 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
+
+- 2026-04-19 19:23: Session 結束 | 進度：349/368 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
+
+- 2026-04-19 19:45: Session 結束 | 進度：349/368 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
+
+- 2026-04-19 19:49: Session 結束 | 進度：349/368 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
+
+- 2026-04-19 19:58: Session 結束 | 進度：349/368 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
+
+- 2026-04-19 20:06: Session 結束 | 進度：349/383 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
