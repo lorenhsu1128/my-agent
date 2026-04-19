@@ -108,6 +108,11 @@ interface OpenAIChatCompletion {
     prompt_tokens: number
     completion_tokens: number
     total_tokens?: number
+    // M-TOKEN: llama.cpp 與 OpenAI 2024-10+ 規格回傳 KV-cache 命中 tokens。
+    // 語意等同 Anthropic 的 cache_read_input_tokens。舊版 llama.cpp 不回此欄位。
+    prompt_tokens_details?: {
+      cached_tokens?: number
+    }
   }
 }
 
@@ -135,6 +140,10 @@ interface OpenAIStreamChunk {
     prompt_tokens?: number
     completion_tokens?: number
     total_tokens?: number
+    // M-TOKEN: 見上方同欄位註解。
+    prompt_tokens_details?: {
+      cached_tokens?: number
+    }
   }
 }
 
@@ -346,7 +355,9 @@ function translateChatCompletionToAnthropic(
       input_tokens: openai.usage?.prompt_tokens ?? 0,
       output_tokens: openai.usage?.completion_tokens ?? 0,
       cache_creation_input_tokens: 0,
-      cache_read_input_tokens: 0,
+      // M-TOKEN: llama.cpp KV-cache 命中 tokens → Anthropic cache_read_input_tokens
+      cache_read_input_tokens:
+        openai.usage?.prompt_tokens_details?.cached_tokens ?? 0,
     },
   }
 }
@@ -447,7 +458,12 @@ async function* translateOpenAIStreamToAnthropic(
   // 在 content_block_stop 時一次 yield 完整 JSON 作為單一 input_json_delta，
   // 避免 Anthropic SDK 的 SSE parser 切碎跨 chunk 的 multi-byte UTF-8。
   const toolArgBuffers = new Map<number, string>()
-  const accUsage = { input_tokens: 0, output_tokens: 0 }
+  // M-TOKEN: 追加 cache_read_input_tokens 以便 message_delta 能帶給下游 updateUsage
+  const accUsage = {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_input_tokens: 0,
+  }
   let finalFinishReason: string | null = null
 
   const startMessage = () => {
@@ -596,6 +612,11 @@ async function* translateOpenAIStreamToAnthropic(
       if (typeof chunk.usage.completion_tokens === 'number') {
         accUsage.output_tokens = chunk.usage.completion_tokens
       }
+      // M-TOKEN: llama.cpp KV-cache 命中 tokens
+      if (typeof chunk.usage.prompt_tokens_details?.cached_tokens === 'number') {
+        accUsage.cache_read_input_tokens =
+          chunk.usage.prompt_tokens_details.cached_tokens
+      }
     }
   }
 
@@ -638,7 +659,15 @@ async function* translateOpenAIStreamToAnthropic(
       stop_reason: FINISH_TO_STOP[finalFinishReason ?? ''] ?? 'end_turn',
       stop_sequence: null,
     },
-    usage: { output_tokens: accUsage.output_tokens },
+    // M-TOKEN: 除了 output_tokens 外，一併送回 input_tokens / cache_read_input_tokens
+    // 讓 claude.ts:updateUsage() 能正確寫進 state（原本只送 output_tokens，
+    // 下游 input/cache 保持啟始 0）。cache_creation llama.cpp 無概念，固定 0。
+    usage: {
+      output_tokens: accUsage.output_tokens,
+      input_tokens: accUsage.input_tokens,
+      cache_read_input_tokens: accUsage.cache_read_input_tokens,
+      cache_creation_input_tokens: 0,
+    },
   })
   yield formatSSE('message_stop', { type: 'message_stop' })
 }

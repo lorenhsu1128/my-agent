@@ -174,6 +174,33 @@
 
 ---
 
+## 當前里程碑：M-TOKEN — llamacpp cache token 計數修復（2026-04-19）
+
+**問題**：TUI `/cost` 與 session 摘要的 `cache read` 在 llamacpp session 一直顯示 0，但 llama.cpp 的 OpenAI-compatible response 有 `usage.prompt_tokens_details.cached_tokens` 欄位，adapter 硬編碼 0 沒接上。
+
+**詳細計畫**：`M_TOKEN_PLAN.md`
+
+### 任務
+- [x] M-TOKEN-1 `llamacpp-fetch-adapter.ts` OpenAI 型別介面加 `prompt_tokens_details?: { cached_tokens?: number }`（非 stream + stream 兩個 interface）
+- [x] M-TOKEN-2 非 stream `translateChatCompletionToAnthropic`：`cache_read_input_tokens` 改讀 `prompt_tokens_details.cached_tokens`
+- [x] M-TOKEN-3 Streaming `accUsage` 加 `cache_read_input_tokens` 欄位
+- [x] M-TOKEN-4 Streaming chunk.usage 處理追加 `cached_tokens` 抽取
+- [x] M-TOKEN-5 Streaming `message_delta` usage 擴充 `input_tokens` / `cache_read_input_tokens` / `cache_creation_input_tokens: 0`
+- [x] M-TOKEN-6 `bun run typecheck` 綠（baseline TS5101 pre-existing）
+- [x] M-TOKEN-7 curl llama-server 驗證 `prompt_tokens_details.cached_tokens` 欄位確實存在於回應中（當前 build b8829 cache_n=0，是 server 層行為，與 adapter 無關）
+
+### 完成標準
+- [x] llama.cpp 確實會回傳 `prompt_tokens_details.cached_tokens`（adapter 已接上，值隨 server 實際 cache 命中而動）
+- [x] cache write 維持 0（llama.cpp 無此概念）
+- [x] 舊版 llama.cpp（沒回 `prompt_tokens_details`）走 `?? 0` fallback，不 crash
+- [x] Anthropic path 不退步（只動 adapter，未觸及 `services/api/client.ts` 與 `services/api/claude.ts`）
+
+### 備註
+- 本次 adapter 修好「資料管線」——cache_read_input_tokens 會從 llama.cpp response 正確流到 TUI 顯示
+- 實際 cache hit 數字取決於 llama.cpp server 端的 prefix caching 設定；curl probe 顯示當前 build b8829 的 `timings.cache_n` 為 0（可能需要額外 `--slots` 或 `--cache-reuse` 啟動參數）——這是**後續調整 llama-server 啟動腳本**的議題，不在本 M-TOKEN 範圍
+
+---
+
 ## 已完成里程碑：M1 — 透過 llama.cpp 支援本地模型（封存）
 
 **目標**：free-code 能直接連接專案內跑的 llama.cpp server（`http://127.0.0.1:8080/v1`，model alias `qwen3.5-9b-neo`），支援串流和全部 39 個工具的 tool calling。**不再**經過 LiteLLM proxy（ADR-001 已推翻，見 CLAUDE.md）。
@@ -913,3 +940,9 @@
 - 2026-04-19 08:02: Session 結束 | 進度：274/287 任務 | 3129f2c refactor(brand): 使用者可見字串改為 my-agent，新增 my-agent bin alias
 
 - 2026-04-19 08:19: Session 結束 | 進度：278/318 任務 | 1df413e feat(m-sp-1): 建立 systemPromptFiles 模組 + seed 機制，外部化 3 個靜態段
+
+- 2026-04-19 09:00: Session 結束 | 進度：300/318 任務 | a0aa74e docs(m-sp-5): 完整 M-SP 文件與架構決策記錄
+
+- 2026-04-19 09:31: Session 結束 | 進度：300/318 任務 | a0aa74e docs(m-sp-5): 完整 M-SP 文件與架構決策記錄
+
+- 2026-04-19 09:33: Session 結束 | 進度：300/318 任務 | a0aa74e docs(m-sp-5): 完整 M-SP 文件與架構決策記錄

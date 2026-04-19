@@ -1053,3 +1053,17 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 **Phase**：M-SP-1（基礎設施 + seed） → M-SP-2（動態段） → M-SP-3（user-profile + cyber-risk） → M-SP-4（memory） → M-SP-4.5（QueryEngine errors） → M-SP-5（per-project + 文件）
 
 **總工程量**：~9–10 個工作天
+
+---
+
+## M-TOKEN — llamacpp cache token 計數修復（2026-04-19）
+
+詳細計畫見 `M_TOKEN_PLAN.md`。
+
+**目標**：TUI 的 `/cost`、session 結束摘要顯示的 `cache read` tokens 在 llamacpp session 目前一直為 0；實際上 llama.cpp 的 OpenAI-compatible response 有 `usage.prompt_tokens_details.cached_tokens`，對應 Anthropic `cache_read_input_tokens`，只是 adapter 硬編碼 0 沒接上。
+
+**改動**：`src/services/api/llamacpp-fetch-adapter.ts` 5 處小改（型別擴充 + 非 stream / streaming chunk / message_delta 三條 path）。不動下游 `updateUsage` / `addToTotalModelUsage` / `formatModelUsage`（下游自動吃到新值）。
+
+**驗證**：typecheck + curl llama-server 看 `prompt_tokens_details` 是否回傳 + session `/cost` 顯示非零 cache read。
+
+**非目標**：不偽造 `cache_creation_input_tokens`（llama.cpp 無概念）、不動 TUI、不動 Anthropic path。
