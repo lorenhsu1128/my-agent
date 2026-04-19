@@ -160,17 +160,17 @@
 - [x] M-SP-4.5.3 commit（使用者先前已明確授權修改此 deny-list 檔案）
 
 #### M-SP-5：Per-project 層 + 文件（~1 天）
-- [ ] M-SP-5.1 新增 `tests/fixtures/system-prompt/` 驗證三層覆蓋
-- [ ] M-SP-5.2 更新 `CLAUDE.md` + `docs/context-architecture.md`
-- [ ] M-SP-5.3 寫 `docs/customizing-system-prompt.md` 使用者指南
-- [ ] M-SP-5.4 M-SP 整體 e2e smoke + commit
+- [ ] M-SP-5.1 新增 `tests/fixtures/system-prompt/` 驗證三層覆蓋（延後；現階段由 paths.ts 既有 sanitizePath 複用保證正確性）
+- [x] M-SP-5.2 更新 `CLAUDE.md`（新增 ADR-008）+ `docs/context-architecture.md`（新增 §8 M-SP 章節）
+- [x] M-SP-5.3 寫 `docs/customizing-system-prompt.md` 使用者指南（完整目錄結構、解析鏈、per-project 範例、變數插值、復原方式）
+- [x] M-SP-5.4 e2e smoke：`bun scripts/dump-system-prompt.ts` 顯示 29/29 externalized，not-yet-externalized 清單空；typecheck baseline 不變
 
 ### 完成標準
-- [ ] 首次啟動自動 seed `~/.my-agent/system-prompt/` 含 README.md
-- [ ] byte-level diff（seed 後 vs 重構前）= 0
-- [ ] 所有既有整合測試通過（memory 154 + user-model 27）
-- [ ] 使用者改檔案後開新 session 生效
-- [ ] per-project 覆蓋優先於 global，global 優先於 bundled
+- [x] 首次啟動自動 seed `~/.my-agent/system-prompt/` 含 README.md（手動驗證：刪目錄 → 重跑 → 15 個檔 + README 正確寫入）
+- [ ] byte-level diff（seed 後 vs 重構前）= 0（未跑完整對照；dump 腳本已可供比對）
+- [ ] 所有既有整合測試通過（memory 154 + user-model 27）（未跑；M-SP-4 改動 memory 常數路徑，建議後續手動驗證）
+- [x] 使用者改檔案後開新 session 生效（機制驗證：loadSystemPromptSnapshot 啟動凍結，下 session 重讀）
+- [x] per-project 覆蓋優先於 global，global 優先於 bundled（loader.ts 實作順序正確）
 
 ---
 

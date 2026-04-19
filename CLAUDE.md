@@ -176,6 +176,7 @@ bun test                         # 執行測試
 - ADR-005（2026-04-15）：provider 內部做格式轉譯（OpenAI SSE → Anthropic `stream_event`），保持 `QueryEngine.ts` 與 `StreamingToolExecutor.ts` 零修改。理由：這兩個檔案在 `.claude/settings.json` 的 deny list；在 provider 邊界做轉譯讓下游主幹無感。
 - ADR-006（2026-04-15）：Qwen3.5-Neo 的 `reasoning_content` 映射為 Anthropic `thinking` content block。理由：模型把 CoT 放 `reasoning_content`、答案放 `content`，對應到 Anthropic 的 thinking block 在語意上最貼近，也保留 UI 顯示 CoT 的能力。
 - ADR-007（2026-04-16）：`@anthropic-ai` 全部 7 個 npm 套件內化為專案原始碼（`src/vendor/my-agent-ai/`）。4 個有 TS 原始碼的（sdk / bedrock / vertex / foundry）直接 vendor `.ts` 檔；2 個只有編譯後 JS 的（mcpb / sandbox-runtime）vendor 可讀 JS + `.d.ts`；1 個（claude-agent-sdk）專案零 import 直接刪除。透過 `tsconfig.json` paths 映射，所有 `@anthropic-ai/sdk` import 自動指向 vendor 目錄，既有 121 個 import 不需修改路徑。理由：完全掌控 SDK 程式碼，可自由修改以支援多 provider；不再受上游版本更新影響。
+- ADR-008（2026-04-19）：M-SP — system prompt 29 個 section 外部化至 `~/.my-agent/system-prompt/` 下的 .md 檔。新增 `src/systemPromptFiles/` 模組（paths / sections / bundledDefaults / loader / snapshot / seed / index）。採 session 啟動凍結快照（沿用 M-UM pattern）、per-project > global > bundled 三層解析、完全取代（不合併）、首次啟動自動 seed global 層 + README.md。覆蓋範圍：prompts.ts 全部 15 個 section（靜態 + 動態） + cyber-risk + user-profile 外框 + memory 系統 8 個常數 + QueryEngine 4 條錯誤訊息。使用者指南見 `docs/customizing-system-prompt.md`。理由：讓措辭調整不必改 code → rebuild；per-project 可做專案專屬 prompt 客製化。
 
 ---
 
