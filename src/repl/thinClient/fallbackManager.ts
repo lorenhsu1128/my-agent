@@ -53,6 +53,13 @@ export interface FallbackManager {
   off(event: string, handler: (...args: unknown[]) => void): void
   /** 主動送 input；只在 mode === 'attached' 時可用。 */
   sendInput(text: string, intent?: 'interactive' | 'background' | 'slash'): void
+  /** 送 permissionResponse；只在 attached 時可用。 */
+  sendPermissionResponse(
+    toolUseID: string,
+    decision: 'allow' | 'deny',
+    updatedInput?: unknown,
+    message?: string,
+  ): void
   stop(): Promise<void>
 }
 
@@ -204,6 +211,18 @@ export function createFallbackManager(
         throw new Error(`cannot send input in mode=${mode}`)
       }
       socket.send({ type: 'input', text, intent })
+    },
+    sendPermissionResponse(toolUseID, decision, updatedInput, message) {
+      if (mode !== 'attached' || !socket) {
+        throw new Error(`cannot send permissionResponse in mode=${mode}`)
+      }
+      socket.send({
+        type: 'permissionResponse',
+        toolUseID,
+        decision,
+        updatedInput,
+        message,
+      })
     },
     async stop() {
       disposed = true

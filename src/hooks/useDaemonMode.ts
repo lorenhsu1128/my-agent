@@ -15,9 +15,30 @@ import {
 } from '../repl/thinClient/fallbackManager.js'
 import type { InboundFrame } from '../repl/thinClient/thinClientSocket.js'
 
+export interface PermissionRequestFrameFields {
+  toolUseID: string
+  inputId: string
+  toolName: string
+  toolInput: unknown
+  riskLevel: 'read' | 'write' | 'destructive'
+  description?: string
+  affectedPaths?: string[]
+}
+
 export interface UseDaemonModeOptions {
   /** Inbound frame 處理（6c 會接）— 預設 no-op。 */
   onFrame?: (frame: InboundFrame) => void
+  /** 收到 permissionRequest 時通知 UI 層（M-DAEMON-7b）。 */
+  onPermissionRequest?: (req: PermissionRequestFrameFields) => void
+  /** 收到 permissionPending 時通知（其他 client 被 ask 時的旁觀訊息）。 */
+  onPermissionPending?: (info: {
+    toolUseID: string
+    inputId: string
+    toolName: string
+    sourceClientId: string
+    riskLevel: 'read' | 'write' | 'destructive'
+    description?: string
+  }) => void
   /** Mode 變化時通知（REPL 用來在 attached→standalone 時顯示 system message）。 */
   onModeChange?: (mode: ClientMode) => void
   /**
@@ -42,9 +63,48 @@ export interface UseDaemonModeResult {
  * tree), so this singleton is safe.
  */
 let currentManager: FallbackManager | null = null
+/** Pending permission requests，以 toolUseID 為 key；hook 生命週期內。 */
+const pendingPermissions = new Map<string, PermissionRequestFrameFields>()
 
 export function getCurrentDaemonManager(): FallbackManager | null {
   return currentManager
+}
+
+/** 回最新未決的 permission request；給 REPL `/allow` `/deny` 預設 target 用。 */
+export function getLatestPendingPermission():
+  | PermissionRequestFrameFields
+  | null {
+  if (pendingPermissions.size === 0) return null
+  // Map 保留 insertion order；取最後一個。
+  let latest: PermissionRequestFrameFields | null = null
+  for (const v of pendingPermissions.values()) latest = v
+  return latest
+}
+
+/**
+ * 回應 permission request：送 permissionResponse frame 並從 pending map 清掉。
+ * 回傳 true 表示成功送出。
+ */
+export function respondToPermission(
+  toolUseID: string,
+  decision: 'allow' | 'deny',
+  opts?: { updatedInput?: unknown; message?: string },
+): boolean {
+  const mgr = currentManager
+  if (!mgr || mgr.state.mode !== 'attached') return false
+  if (!pendingPermissions.has(toolUseID)) return false
+  try {
+    mgr.sendPermissionResponse(
+      toolUseID,
+      decision,
+      opts?.updatedInput,
+      opts?.message,
+    )
+    pendingPermissions.delete(toolUseID)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function useDaemonMode(
@@ -56,6 +116,14 @@ export function useDaemonMode(
   onFrameRef.current = opts.onFrame
   const onModeChangeRef = useRef<typeof opts.onModeChange>(opts.onModeChange)
   onModeChangeRef.current = opts.onModeChange
+  const onPermReqRef = useRef<typeof opts.onPermissionRequest>(
+    opts.onPermissionRequest,
+  )
+  onPermReqRef.current = opts.onPermissionRequest
+  const onPermPendingRef = useRef<typeof opts.onPermissionPending>(
+    opts.onPermissionPending,
+  )
+  onPermPendingRef.current = opts.onPermissionPending
 
   useEffect(() => {
     if (opts.disabled) return
@@ -78,6 +146,25 @@ export function useDaemonMode(
     updateMode(manager.state.mode)
     manager.on('mode', updateMode)
     manager.on('frame', f => {
+      // M-DAEMON-7b：permission 分派到專屬 callback 方便 REPL 簡單處理。
+      if (f.type === 'permissionRequest') {
+        const r = f as unknown as PermissionRequestFrameFields & {
+          type: string
+        }
+        pendingPermissions.set(r.toolUseID, r)
+        onPermReqRef.current?.(r)
+      } else if (f.type === 'permissionPending') {
+        onPermPendingRef.current?.(
+          f as unknown as {
+            toolUseID: string
+            inputId: string
+            toolName: string
+            sourceClientId: string
+            riskLevel: 'read' | 'write' | 'destructive'
+            description?: string
+          },
+        )
+      }
       onFrameRef.current?.(f)
     })
 
@@ -86,7 +173,10 @@ export function useDaemonMode(
       void manager.stop()
       detector.stop()
       managerRef.current = null
-      if (currentManager === manager) currentManager = null
+      if (currentManager === manager) {
+        currentManager = null
+        pendingPermissions.clear()
+      }
       setAppState(prev =>
         prev.daemonMode === 'standalone' && prev.daemonPort === undefined
           ? prev

@@ -33,11 +33,19 @@ export type InboundFrame =
   | { type: 'runnerEvent'; inputId: string; event: unknown }
   | { type: string; [key: string]: unknown }
 
-export type OutboundFrame = {
-  type: 'input'
-  text: string
-  intent?: 'interactive' | 'background' | 'slash'
-}
+export type OutboundFrame =
+  | {
+      type: 'input'
+      text: string
+      intent?: 'interactive' | 'background' | 'slash'
+    }
+  | {
+      type: 'permissionResponse'
+      toolUseID: string
+      decision: 'allow' | 'deny'
+      updatedInput?: unknown
+      message?: string
+    }
 
 export interface ThinClientSocketOptions {
   host: string

@@ -90,7 +90,7 @@ import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js';
 import { getShortcutDisplay } from '../keybindings/shortcutFormat.js';
 import { CancelRequestHandler } from '../hooks/useCancelRequest.js';
 import { useBackgroundTaskNavigation } from '../hooks/useBackgroundTaskNavigation.js';
-import { useDaemonMode, getCurrentDaemonManager } from '../hooks/useDaemonMode.js';
+import { useDaemonMode, getCurrentDaemonManager, getLatestPendingPermission, respondToPermission } from '../hooks/useDaemonMode.js';
 import type { BetaContentBlock } from 'my-agent-ai/sdk/resources/beta/messages/messages';
 import { useSwarmInitialization } from '../hooks/useSwarmInitialization.js';
 import { useTeammateViewAutoExit } from '../hooks/useTeammateViewAutoExit.js';
@@ -3133,6 +3133,45 @@ export function REPL({
       proactiveModule?.resumeProactive();
     }
 
+    // M-DAEMON-7b：attached 模式下 /allow / /deny 回應 pending permission。
+    // 處理要在「一般 attached input 攔截」之前；這兩個是給 daemon 用的 meta command
+    // 不是 daemon-side slash。
+    {
+      const trimmed = input.trim();
+      if (
+        (trimmed === '/allow' || trimmed === '/deny') &&
+        !speculationAccept
+      ) {
+        const mgr = getCurrentDaemonManager();
+        if (mgr && mgr.state.mode === 'attached') {
+          const pending = getLatestPendingPermission();
+          if (pending) {
+            const decision = trimmed === '/allow' ? 'allow' : 'deny';
+            const ok = respondToPermission(pending.toolUseID, decision);
+            setMessages(prev => [
+              ...prev,
+              createSystemMessage(
+                ok
+                  ? `→ 已送出 ${decision} 給 ${pending.toolName} (toolUseID=${pending.toolUseID.slice(0, 8)}…)`
+                  : `✗ 無法送出 permission response（socket 狀態異常）`,
+                ok ? 'info' : 'warning'
+              )
+            ]);
+          } else {
+            setMessages(prev => [
+              ...prev,
+              createSystemMessage('目前沒有 pending permission 需要回應。', 'info')
+            ]);
+          }
+          helpers.setCursorOffset(0);
+          helpers.clearBuffer();
+          setInputValue('');
+          setPastedContents({});
+          return;
+        }
+      }
+    }
+
     // M-DAEMON-6c：attached 模式 — 把 input 送到 daemon 跑，local query 路徑跳過。
     // Slash command 和 speculation 仍走本地（daemon 暫不支援 slash）。
     // Daemon 回覆會透過 useDaemonMode 的 onFrame 塞進 messages。
@@ -4079,8 +4118,29 @@ export function REPL({
         ]);
       }
       // 其他 SDK message types（user tool_result / system / result）先忽略；
-      // tool_use 已在 assistant content 內由既有 renderer 處理。M-DAEMON-7 會補
-      // permission request / tool_result 的路由。
+      // tool_use 已在 assistant content 內由既有 renderer 處理。
+    },
+    onPermissionRequest: (req): void => {
+      const paths = req.affectedPaths?.length
+        ? ` (${req.affectedPaths.slice(0, 3).join(', ')}${req.affectedPaths.length > 3 ? '…' : ''})`
+        : '';
+      setMessages(prev => [
+        ...prev,
+        createSystemMessage(
+          `⚠ Daemon 正在要求 ${req.riskLevel.toUpperCase()} 權限：${req.description ?? req.toolName}${paths}\n` +
+            `輸入 /allow 同意、/deny 拒絕（toolUseID=${req.toolUseID.slice(0, 8)}…）`,
+          'warning'
+        )
+      ]);
+    },
+    onPermissionPending: (info): void => {
+      setMessages(prev => [
+        ...prev,
+        createSystemMessage(
+          `ℹ 另一個 client（${info.sourceClientId.slice(0, 8)}…）正在被詢問 ${info.toolName} 權限（${info.description ?? ''}）`,
+          'info'
+        )
+      ]);
     },
     onModeChange: (mode): void => {
       if (mode === 'standalone') {
