@@ -1,5 +1,9 @@
 import { useEffect, useRef } from 'react'
-import { useAppStateStore, useSetAppState } from '../state/AppState.js'
+import {
+  useAppState,
+  useAppStateStore,
+  useSetAppState,
+} from '../state/AppState.js'
 import { isTerminalTaskStatus } from '../Task.js'
 import {
   findTeammateTaskByAgentId,
@@ -55,6 +59,9 @@ export function useScheduledTasks({
 
   const store = useAppStateStore()
   const setAppState = useSetAppState()
+  // daemon mode 變化（例如 /daemon detach 後 daemon 關了）需要 re-evaluate
+  // 下面 isDaemonAliveSync() gate — mode 進入 effect dep array 觸發重跑。
+  const daemonMode = useAppState(s => s.daemonMode)
 
   useEffect(() => {
     // Runtime gate checked here (not at the hook call site) so the hook
@@ -199,8 +206,10 @@ export function useScheduledTasks({
     return () => scheduler.stop()
     // assistantMode is stable for the session lifetime; store/setAppState are
     // stable refs from useSyncExternalStore; setMessages is a stable useCallback.
+    // daemonMode 進入 dep 讓 /daemon detach 後 REPL cron 重新評估（attached 時
+    // 由 daemon 獨占跑，standalone 時 REPL 接手）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assistantMode])
+  }, [assistantMode, daemonMode])
 }
 
 function formatCronFireTime(d: Date): string {

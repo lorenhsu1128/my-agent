@@ -81,6 +81,23 @@ export interface FallbackManager {
   sendPermissionContextSync(
     mode: import('../../types/permissions.js').PermissionMode,
   ): void
+  /**
+   * 立刻嘗試 attach（不等 detector poll）。清除 suppressAutoReattach flag。
+   * 若 daemon 不 alive 或 connect 失敗回 ok:false + reason。
+   */
+  forceAttach(): Promise<{ ok: true } | { ok: false; reason: string }>
+  /**
+   * 立刻 detach 回 standalone，停 reconnect，並設 suppressAutoReattach flag
+   * （擋 detector 下一輪 poll 自動重 attach）。下次 forceAttach 會清除旗標。
+   */
+  forceDetach(): Promise<void>
+  /**
+   * 向 daemon 查當前狀態（replCount / discordEnabled）。超時或非 attached 時
+   * 回 null；caller 自己決定 fallback 行為。
+   */
+  queryDaemonStatus(
+    timeoutMs?: number,
+  ): Promise<{ replCount: number; discordEnabled: boolean } | null>
   stop(): Promise<void>
 }
 
@@ -99,6 +116,12 @@ export function createFallbackManager(
   let reconnectStart: number | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
+  /**
+   * `/daemon detach` 設 true 後，detector 下一輪 poll 看到 daemon 仍 alive
+   * 不會自動觸發 attach。`forceAttach` 成功（或呼叫時）會清除此 flag。
+   * 手動要求的一次性 opt-out，不進 config；REPL 重啟就歸零。
+   */
+  let suppressAutoReattach = false
 
   const setMode = (next: ClientMode): void => {
     if (mode === next) return
@@ -118,6 +141,17 @@ export function createFallbackManager(
   }
 
   let attachRejectedReason: string | null = null
+  /** 等待中的 queryDaemonStatus 請求，key = requestId。 */
+  const pendingStatusQueries = new Map<
+    string,
+    {
+      resolve: (
+        v: { replCount: number; discordEnabled: boolean } | null,
+      ) => void
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
+  let nextQueryId = 1
 
   const tryConnect = async (snap: DaemonSnapshot): Promise<boolean> => {
     if (!snap.alive || !snap.port || !snap.token) return false
@@ -136,6 +170,24 @@ export function createFallbackManager(
       // M-DISCORD-2：daemon 拒絕 attach（project 未 load）→ 關 socket，標記
       // rejected，設 mode=standalone，emit 一次性 attachRejected 事件讓 REPL
       // 顯示 warning。後續不再自動重試（避免無謂 reconnect loop）。
+      // daemonStatus response → resolve 對應 pending query
+      if (f.type === 'daemonStatus') {
+        const rid = String((f as { requestId?: unknown }).requestId ?? '')
+        const pending = pendingStatusQueries.get(rid)
+        if (pending) {
+          clearTimeout(pending.timer)
+          pendingStatusQueries.delete(rid)
+          const payload = f as unknown as {
+            replCount?: number
+            discordEnabled?: boolean
+          }
+          pending.resolve({
+            replCount: Number(payload.replCount ?? 0),
+            discordEnabled: Boolean(payload.discordEnabled),
+          })
+        }
+        return
+      }
       if (f.type === 'attachRejected') {
         attachRejectedReason = String(
           (f as { reason?: unknown }).reason ?? 'rejected',
@@ -218,6 +270,8 @@ export function createFallbackManager(
     // M-DISCORD-2：被 daemon 拒絕 attach 後不再自動重試 — 拒絕通常是 project
     // 沒 load，單純重 connect 沒意義；使用者需手動 `my-agent daemon load` 再開新 REPL。
     if (attachRejectedReason !== null) return
+    // `/daemon detach` 要求抑制自動 re-attach；detector 看到 daemon 活著也忽略。
+    if (suppressAutoReattach) return
     if (snap.alive && mode === 'standalone') {
       const ok = await tryConnect(snap)
       // Race guard：若 daemon 於 open 後立刻送 attachRejected，frame handler
@@ -287,6 +341,68 @@ export function createFallbackManager(
         // ignore transient send error
       }
     },
+    async forceAttach() {
+      if (disposed) return { ok: false as const, reason: 'disposed' }
+      suppressAutoReattach = false
+      attachRejectedReason = null
+      if (mode === 'attached') return { ok: true as const }
+      const snap = await detector.check()
+      // Yield so any onDaemonChange triggered by detector.check() can run
+      // its tryConnect before we check mode again — avoids double-connect.
+      await new Promise(r => setTimeout(r, 0))
+      if (mode === 'attached') return { ok: true as const }
+      if (!snap.alive) return { ok: false as const, reason: 'daemonOffline' }
+      const ok = await tryConnect(snap)
+      if (ok && attachRejectedReason === null) {
+        setMode('attached')
+        return { ok: true as const }
+      }
+      if (attachRejectedReason !== null) {
+        return { ok: false as const, reason: attachRejectedReason }
+      }
+      return { ok: false as const, reason: 'connectFailed' }
+    },
+    async forceDetach() {
+      suppressAutoReattach = true
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+      reconnectStart = null
+      // 清 pending queries（detach 後沒 socket 沒人 resolve）
+      for (const p of pendingStatusQueries.values()) {
+        clearTimeout(p.timer)
+        p.resolve(null)
+      }
+      pendingStatusQueries.clear()
+      cleanupSocket()
+      setMode('standalone')
+    },
+    async queryDaemonStatus(timeoutMs = 2_000) {
+      if (mode !== 'attached' || !socket) return null
+      const requestId = `q${nextQueryId++}-${Date.now()}`
+      return await new Promise<
+        { replCount: number; discordEnabled: boolean } | null
+      >(resolve => {
+        const timer = setTimeout(() => {
+          pendingStatusQueries.delete(requestId)
+          resolve(null)
+        }, timeoutMs)
+        pendingStatusQueries.set(requestId, { resolve, timer })
+        try {
+          // send() 型別只收 OutboundFrame union；這裡繞過（daemon 端接 unknown）。
+          ;(
+            socket as unknown as {
+              send: (f: { type: string; requestId: string }) => void
+            }
+          ).send({ type: 'queryDaemonStatus', requestId })
+        } catch {
+          clearTimeout(timer)
+          pendingStatusQueries.delete(requestId)
+          resolve(null)
+        }
+      })
+    },
     async stop() {
       disposed = true
       detector.off('change', onDaemonChange)
@@ -294,6 +410,11 @@ export function createFallbackManager(
         clearTimeout(reconnectTimer)
         reconnectTimer = null
       }
+      for (const p of pendingStatusQueries.values()) {
+        clearTimeout(p.timer)
+        p.resolve(null)
+      }
+      pendingStatusQueries.clear()
       cleanupSocket()
       emitter.removeAllListeners()
     },

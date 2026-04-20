@@ -142,6 +142,24 @@ export async function runDaemonStart(
           // 被拒的 client 送 input 一律忽略；REPL 已 fallback standalone，不該還在送。
           return
         }
+        // /daemon attach|detach 用的 daemon-wide status 查詢（不屬於任何 project runtime）。
+        if (
+          m &&
+          typeof m === 'object' &&
+          (m as { type?: string }).type === 'queryDaemonStatus'
+        ) {
+          const req = m as { type: string; requestId?: unknown }
+          const replCount = handle.server!.registry
+            .list()
+            .filter(x => x.source === 'repl').length
+          handle.server!.send(c.id, {
+            type: 'daemonStatus',
+            requestId: String(req.requestId ?? ''),
+            replCount,
+            discordEnabled: discordActive,
+          })
+          return
+        }
         // Route to the client's project runtime. projectId 由 onConnect resolve；
         // 沒 projectId 且沒 cwd 時 fallback 到 default runtime（backward compat —
         // M-DAEMON 階段的 client 不帶 cwd 也能用）。
@@ -230,6 +248,8 @@ export async function runDaemonStart(
 
       // M-DISCORD-3c：Discord gateway 在 registry 就位後啟動（enabled=true + token set）。
       let disposeDiscord: (() => Promise<void>) | null = null
+      // Daemon-wide discord active flag — /daemon detach 的 shutdown 判定會讀它。
+      let discordActive = false
       try {
         await seedDiscordConfigIfMissing()
         const discordCfg = await loadDiscordConfigSnapshot()
@@ -257,6 +277,7 @@ export async function runDaemonStart(
             },
           })
           disposeDiscord = dg.dispose
+          discordActive = true
           const tokenSrc = process.env.DISCORD_BOT_TOKEN ? 'env' : 'config'
           out(`  discord:     enabled (bot connected, token from ${tokenSrc})\n`)
         } else if (discordCfg.enabled && !discordToken) {
