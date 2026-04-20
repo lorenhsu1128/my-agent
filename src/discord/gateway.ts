@@ -101,19 +101,6 @@ export function createDiscordGateway(
     permissionUnsubs.set(runtime.projectId, [unsubPending, unsubResolved])
   }
 
-  // M-DISCORD-5：監聽 registry load 事件，新 runtime 一建好就自動掛 permission
-  // tracking + home mirror；現有 runtime（gateway 啟動前就 load 的）也補掛一次。
-  const unsubRegistryLoad = registry.onLoad(r => {
-    ensurePermissionTracking(r)
-    ensureHomeMirror(r)
-  })
-  // 補掛：daemon auto-load 默認 project 發生在 startDiscordGateway 之前，
-  // 這些已存在 runtime 要靠這個 loop 補上 listener；新的（未來 load 的）由 onLoad 處理。
-  for (const existing of registry.listProjects()) {
-    ensurePermissionTracking(existing)
-    ensureHomeMirror(existing)
-  }
-
   // M-DISCORD-5：Home channel mirror — REPL / cron 發起的 turn 輸出鏡到
   // homeChannelId（discord.json 可設）。Discord source 的 turn 略過，避免
   // 跟 streamOutput 的 reply 雙貼。每個 runtime 第一次 load 時掛一份 listener。
@@ -196,6 +183,18 @@ export function createDiscordGateway(
         err: e instanceof Error ? e.message : String(e),
       })
     }
+  }
+
+  // M-DISCORD-5：監聽 registry load 事件，新 runtime 一建好就自動掛 permission
+  // tracking + home mirror；現有 runtime（gateway 啟動前就 load 的）也補掛一次。
+  // 放在 ensureHomeMirror / postHomeMirror 宣告之後以避免 TDZ。
+  const unsubRegistryLoad = registry.onLoad(r => {
+    ensurePermissionTracking(r)
+    ensureHomeMirror(r)
+  })
+  for (const existing of registry.listProjects()) {
+    ensurePermissionTracking(existing)
+    ensureHomeMirror(existing)
   }
 
   const handleIncoming = async (
