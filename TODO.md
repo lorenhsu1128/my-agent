@@ -74,7 +74,7 @@
 - [x] M-DAEMON-3 `src/daemon/daemonCli.ts`（runDaemonStart/Stop/Status/Logs/Restart 5 handler）+ `src/main.tsx` 註冊 `my-agent daemon` 子命令樹（start/stop/status/restart/logs；commander `enablePositionalOptions` + `createSortedHelpConfig` 沿用既有模式）。handler 接受 stdout/stderr injection 便於測試；start foreground 阻塞可 Ctrl+C 或另一 shell `daemon stop`；stop SIGTERM → poll 5s → SIGKILL fallback；status 顯示 pid/port/agentVersion/startedAt/uptime/lastHeartbeat，live/stale 雙狀態回傳結構化 DaemonStatus；logs 支援 `-f` follow（AbortSignal 可停）；restart = stop + 200ms gap + start。測試 `tests/integration/daemon/cli-commands.test.ts` 12 case（status 3 + stop 3 + logs 3 + start 2 + restart 1，含 follow mode + stale cleanup），全套 58/58 綠
 
 ### 階段二：Session 整合
-- [ ] M-DAEMON-4 `src/daemon/sessionRunner.ts` + 補完 `sessionBroker.ts`：把 REPL 的 QueryEngine 呼叫路徑抽出讓 daemon 也能跑（用 composition 包，不改 `QueryEngine.ts` deny-list 檔）；Session JSONL 獨占寫入（`lockfile`）；WS 協議 ↔ QueryEngine stream_event 對接。測試：WS client 送 input → daemon 跑 LLM → stream 回 client → session.jsonl 寫入正確
+- [x] M-DAEMON-4 `src/daemon/{sessionBootstrap,queryEngineRunner,sessionBroker,sessionWriter}.ts`：Path A 完整 in-process QueryEngine 整合。4a bootstrapDaemonContext（tools / commands / MCP / AppState / readFileCache）；4b createQueryEngineRunner 包 `ask()` 成 SessionRunner（mutableMessages 持有 / SDKMessage→RunnerEvent / canUseTool 預設 auto-allow）；4c sessionBroker 接 WS↔InputQueue↔Runner + sessionWriter `.daemon.lock` 獨占（transcript 寫入沿用既有 `recordTranscript()`→Project singleton）+ daemonCli.runDaemonStart `enableQueryEngine:true` two-phase wiring；4d E2E 測試（WS input → llama.cpp → turnEnd.done → session.jsonl 驗證）。commits 412e4bd/c96d5fe/2874bb8/ef2b1b0；全 daemon 測試 90/90 綠，./cli -p 冒煙通過
 - [ ] M-DAEMON-4.5 Cron scheduler 搬進 daemon：`src/utils/cronScheduler.ts` 初始化點從 REPL 搬到 daemon；REPL 獨立模式下跳過 cron init；cron 觸發結果透過 daemon broadcast 給 attached clients。測試：daemon 跑 cron → attached REPL 看到觸發訊息；REPL 獨立模式 cron 不跑
 - [x] M-DAEMON-5 `src/daemon/{sessionRunner,inputQueue}.ts`：SessionRunner interface（run(input, signal) → AsyncIterable<RunnerEvent>）+ echoRunner / createDelayedEchoRunner 假實作（M-DAEMON-4 會用 QueryEngineRunner 取代）+ InputQueue 狀態機（IDLE/RUNNING/INTERRUPTING）+ 混合策略（interactive 搶占 / background FIFO / slash priority queue-head）+ interruptGraceMs force-clear（防 runner 卡死）+ EventEmitter 事件（state / runnerEvent / turnStart / turnEnd，帶 reason: done/error/aborted）+ defaultIntentForSource helper。測試 `input-queue.test.ts` 19 case（defaultIntent 5 + happy 4 + FIFO 2 + interrupt 3 + slash 1 + dispose 2 + runner 2），全套 77/77 綠。InputQueue 和 WS broker 解耦；M-DAEMON-4 把 QueryEngine 包成 SessionRunner 後即完成 pipeline
 
@@ -1213,3 +1213,9 @@
 - 2026-04-19 20:06: Session 結束 | 進度：349/383 任務 | bb47a0f refactor: remove auto-update subsystem + clean up "claude" aliases
 
 - 2026-04-19 20:30: Session 結束 | 進度：352/383 任務 | 6eebfae feat(daemon): CLI subcommand start/stop/status/restart/logs (M-DAEMON-3)
+
+- 2026-04-19 20:37: Session 結束 | 進度：353/383 任務 | aeb559c feat(daemon): SessionRunner iface + input queue w/ mixed strategy (M-DAEMON-5)
+
+- 2026-04-20 09:05: Session 結束 | 進度：353/383 任務 | aeb559c feat(daemon): SessionRunner iface + input queue w/ mixed strategy (M-DAEMON-5)
+
+- 2026-04-20 09:09: Session 結束 | 進度：353/383 任務 | aeb559c feat(daemon): SessionRunner iface + input queue w/ mixed strategy (M-DAEMON-5)
