@@ -328,6 +328,41 @@ export function createDiscordGateway(
     const discordChannelName =
       adapted.channelType === 'dm' ? undefined : rawChannel?.name
 
+    // M-DISCORD-AUTOBIND-7：per-turn 註冊 Discord fallback handler（dual-notify
+    // 路徑由 permissionRouter 呼叫）。post 一則「需授權」訊息到當前 Discord
+    // 頻道；實際授權仍靠 REPL `/allow` 或 Discord `/allow` slash command 回
+    // permissionResponse。Discord fallback Promise 本身不 resolve — race 依賴
+    // REPL response 或 timeout。daemon turn mutex 保證 Discord turn 序列化，
+    // 所以 set/unset 不會 race。
+    runtime.permissionRouter.setFallbackHandler({
+      async requestPermission(meta) {
+        try {
+          const chSink = client.sinkForChannel(raw.channel as TextBasedChannel)
+          const risk =
+            meta.riskLevel === 'destructive'
+              ? '🔴 **DESTRUCTIVE**'
+              : meta.riskLevel === 'write'
+                ? '🟠 WRITE'
+                : '🟢 READ'
+          const desc = meta.description ?? meta.toolName
+          const paths = meta.affectedPaths?.length
+            ? `\npaths: ${meta.affectedPaths.slice(0, 3).join(', ')}`
+            : ''
+          await chSink.send({
+            content:
+              `⚠ Tool \`${meta.toolName}\` 要求授權（${risk}）\n` +
+              `${desc}${paths}\n` +
+              `回覆 \`/allow\` 同意、\`/deny\` 拒絕（toolUseID=${meta.toolUseID.slice(0, 8)}…）。REPL 也可處理。`,
+          })
+        } catch {
+          // ignore
+        }
+        return await new Promise<never>(() => {
+          /* never resolves — REPL / timeout / Discord slash 決定 */
+        })
+      },
+    })
+
     const onTurnStart = (e: TurnStartEvent): void => {
       if (e.input.id !== inputId) return
       replBroadcastStartedAt = e.startedAt
@@ -379,6 +414,12 @@ export function createDiscordGateway(
       runtime.broker.queue.off('turnStart', onTurnStart as never)
       runtime.broker.queue.off('runnerEvent', onRunnerEvent as never)
       runtime.broker.queue.off('turnEnd', onTurnEnd as never)
+      // 清 per-turn Discord fallback（避免下一 turn 拿到舊的 channel sink）
+      try {
+        runtime.permissionRouter.setFallbackHandler(undefined)
+      } catch {
+        // ignore
+      }
     }
 
     runtime.broker.queue.on('turnStart', onTurnStart)

@@ -72,6 +72,7 @@ export function createDefaultProjectRuntimeFactory(
       const brokerRef: { current: SessionBroker | null } = { current: null }
       permissionRouter = createPermissionRouter({
         server: deps.server,
+        projectId,
         resolveSourceClientId: () =>
           brokerRef.current?.queue.currentInput?.clientId ?? null,
         resolveCurrentInputId: () =>

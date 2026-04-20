@@ -234,6 +234,12 @@ export function useDaemonMode(
             mode: import('../types/permissions.js').PermissionMode
           },
         )
+      } else if (f.type === 'permissionResolved') {
+        // M-DISCORD-AUTOBIND-7：peer（Discord / 其他 REPL）已回覆 → 清 pending
+        const r = f as unknown as { toolUseID?: string }
+        if (typeof r.toolUseID === 'string') {
+          pendingPermissions.delete(r.toolUseID)
+        }
       } else if (f.type === 'permissionPending') {
         onPermPendingRef.current?.(
           f as unknown as {

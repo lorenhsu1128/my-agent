@@ -88,6 +88,9 @@ export interface PermissionRouterOptions {
   resolveSourceClientId: () => string | null
   /** Turn ID 解析函式：router 需要把 inputId 塞進 frame。 */
   resolveCurrentInputId: () => string | null
+  /** M-DISCORD-AUTOBIND-7：projectId — 當 Discord-sourced turn 要 dual-notify 時
+   *  用來 filter attached REPL clients（只廣播到同 project 的 REPL）。 */
+  projectId?: string
   /** 等 response 的 timeout；預設 5 分鐘，到點 auto-allow。 */
   timeoutMs?: number
   /** M-DISCORD 預留：source client 失聯時的後備 prompt 通道。 */
@@ -254,6 +257,76 @@ export function createPermissionRouter(
       affectedPaths: extractAffectedPaths(input),
     }
 
+    // M-DISCORD-AUTOBIND-7：Discord-sourced turn（clientId = 'discord:...'）→
+    // dual-notify 模式：同時把 permissionRequest 廣播給同 project 的 attached
+    // REPL client + 呼叫 fallback（Discord channel 訊息）。任一邊回覆都 resolve，
+    // peer 由 handleResponse / fireResolved 的 broadcast 清掉 UI。
+    const isDiscordSourced = !!sourceId && sourceId.startsWith('discord:')
+
+    const requestFrame = {
+      type: 'permissionRequest',
+      toolUseID,
+      inputId,
+      toolName: meta.toolName,
+      toolInput: meta.toolInput,
+      riskLevel: meta.riskLevel,
+      description: meta.description,
+      affectedPaths: meta.affectedPaths,
+    }
+
+    if (isDiscordSourced) {
+      // 廣播 permissionRequest 到同 project 所有 attached REPL（取代 point-to-point）
+      const replCount = server.broadcast(
+        requestFrame,
+        (c: ClientInfo) =>
+          c.source === 'repl' &&
+          (!opts.projectId || c.projectId === opts.projectId),
+      )
+      // 同時呼叫 fallback（Discord channel 訊息）— race with REPL
+      // 若 REPL 沒人在 → 仍靠 fallback
+      firePending(toolUseID, meta)
+      return new Promise<PermissionDecision>(resolve => {
+        let done = false
+        const finish = (d: PermissionDecision): void => {
+          if (done) return
+          done = true
+          const entry = pending.get(toolUseID)
+          if (entry) {
+            scheduler.clearTimeout(entry.timer)
+            pending.delete(toolUseID)
+          }
+          // Broadcast resolve notice：讓 REPL / Discord UI 清掉 pending prompt
+          server.broadcast(
+            { type: 'permissionResolved', toolUseID, inputId },
+            (c: ClientInfo) =>
+              !opts.projectId || c.projectId === opts.projectId,
+          )
+          fireResolved(toolUseID)
+          resolve(d)
+        }
+        const timer = scheduler.setTimeout(() => {
+          finish(autoAllow(input))
+        }, timeoutMs)
+        pending.set(toolUseID, {
+          toolUseID,
+          resolve: d => finish(d),
+          timer,
+        })
+        if (fallback) {
+          fallback
+            .requestPermission({ ...meta, toolUseID, inputId })
+            .then(d => finish(d))
+            .catch(() => {
+              /* 保留 pending，等 REPL 或 timeout */
+            })
+        }
+        if (replCount === 0 && !fallback) {
+          // 沒人可問 → 立刻 auto-allow（不浪費 5min timeout）
+          finish(autoAllow(input))
+        }
+      })
+    }
+
     // 沒 source client → fallback 或 auto-allow。
     if (!sourceId) {
       if (fallback) {
@@ -271,16 +344,6 @@ export function createPermissionRouter(
     }
 
     // 點對點送 source client。失敗（client 已中斷）→ fallback。
-    const requestFrame = {
-      type: 'permissionRequest',
-      toolUseID,
-      inputId,
-      toolName: meta.toolName,
-      toolInput: meta.toolInput,
-      riskLevel: meta.riskLevel,
-      description: meta.description,
-      affectedPaths: meta.affectedPaths,
-    }
     const delivered = server.send(sourceId, requestFrame)
     if (!delivered) {
       if (fallback) {
