@@ -62,6 +62,23 @@ export interface DiscordGatewayOptions {
    * attached REPL）。未注入則只改 runtime AppState，REPL 不會收到通知。
    */
   broadcastPermissionMode?: (projectId: string, mode: PermissionMode) => void
+  /**
+   * M-DISCORD-AUTOBIND：Discord-sourced turn 結束時把內容 broadcast 給同 project
+   * 的 attached REPL（達成雙向同步）。未注入則 REPL 不會看到 Discord 發起的 turn。
+   */
+  broadcastDiscordTurn?: (
+    projectId: string,
+    payload: {
+      source: 'discord-dm' | 'discord-channel'
+      channelName?: string
+      userTag: string
+      userMessage: string
+      turnOutput: string
+      reason: 'done' | 'error' | 'cancelled' | string
+      durationMs: number
+      errorMessage?: string
+    },
+  ) => void
   /** Log handle（daemon logger）；nil 時走 logForDebugging。 */
   log?: {
     info: (msg: string, meta?: Record<string, unknown>) => Promise<void> | void
@@ -303,14 +320,26 @@ export function createDiscordGateway(
       messageId: adapted.id,
     }
 
+    // M-DISCORD-AUTOBIND：收集 Discord-sourced turn 內容，供 reverse-sync 廣播
+    let replBroadcastBuffer = ''
+    let replBroadcastStartedAt = 0
+    // Discord channel 名稱（guild message 才有；DM 為 undefined）
+    const rawChannel = raw.channel as { name?: string } | undefined
+    const discordChannelName =
+      adapted.channelType === 'dm' ? undefined : rawChannel?.name
+
     const onTurnStart = (e: TurnStartEvent): void => {
       if (e.input.id !== inputId) return
+      replBroadcastStartedAt = e.startedAt
       void reactions.onTurnStart(reactionTarget)
     }
     const onRunnerEvent = (w: RunnerEventWrapper): void => {
       if (w.input.id !== inputId) return
       if (w.event.type === 'output') {
         streamOut.handleOutput(w.event.payload)
+        // 同步累積純 assistant text 供 REPL 廣播（不含 tool_use blocks）
+        const chunk = extractAssistantText(w.event.payload)
+        if (chunk) replBroadcastBuffer += chunk
       }
     }
     const onTurnEnd = async (e: TurnEndEvent): Promise<void> => {
@@ -327,6 +356,24 @@ export function createDiscordGateway(
         await reactions.onTurnEnd(reactionTarget, e.reason)
       } catch {
         // reaction failure 吞
+      }
+      // M-DISCORD-AUTOBIND：Discord-sourced turn 結束 → broadcast 給同 project
+      // attached REPL client（達成「在 Discord 打字 REPL 也看到」）。
+      try {
+        opts.broadcastDiscordTurn?.(runtime.projectId, {
+          source: adapted.channelType === 'dm' ? 'discord-dm' : 'discord-channel',
+          channelName: discordChannelName,
+          userTag: adapted.authorUsername,
+          userMessage: adapted.content,
+          turnOutput: replBroadcastBuffer,
+          reason: e.reason,
+          durationMs: e.endedAt - replBroadcastStartedAt,
+          errorMessage: e.error,
+        })
+      } catch (err) {
+        void log?.warn?.('broadcastDiscordTurn threw', {
+          err: err instanceof Error ? err.message : String(err),
+        })
       }
       // 用完就移除 listener（InputQueue 設計上不會自動清 per-turn listener）
       runtime.broker.queue.off('turnStart', onTurnStart as never)
@@ -468,6 +515,7 @@ export async function startDiscordGateway(opts: {
   registry: ProjectRegistry
   visionEnabled: boolean
   broadcastPermissionMode?: DiscordGatewayOptions['broadcastPermissionMode']
+  broadcastDiscordTurn?: DiscordGatewayOptions['broadcastDiscordTurn']
   log?: DiscordGatewayOptions['log']
 }): Promise<{
   client: DiscordClientHandle
@@ -513,6 +561,7 @@ export async function startDiscordGateway(opts: {
     registry: opts.registry,
     visionEnabled: opts.visionEnabled,
     broadcastPermissionMode: opts.broadcastPermissionMode,
+    broadcastDiscordTurn: opts.broadcastDiscordTurn,
     log: opts.log,
   })
   gatewayRef = gateway as typeof gatewayRef

@@ -307,6 +307,17 @@ export async function runDaemonStart(
                 c => c.projectId === projectId,
               )
             },
+            broadcastDiscordTurn: (projectId, payload) => {
+              if (!handle.server) return
+              handle.server.broadcast(
+                {
+                  type: 'discordTurnEvent',
+                  projectId,
+                  ...payload,
+                },
+                c => c.projectId === projectId,
+              )
+            },
           })
           disposeDiscord = dg.dispose
           discordClientRef = dg.client.raw

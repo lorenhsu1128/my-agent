@@ -4116,6 +4116,44 @@ export function REPL({
       ]);
     },
     onFrame: (frame): void => {
+      // M-DISCORD-AUTOBIND：Discord-sourced turn 鏡像到 REPL（[via Discord ...]）
+      if (frame.type === 'discordTurnEvent') {
+        const d = frame as unknown as {
+          source: 'discord-dm' | 'discord-channel';
+          channelName?: string;
+          userTag: string;
+          userMessage: string;
+          turnOutput: string;
+          reason: string;
+          durationMs: number;
+          errorMessage?: string;
+        };
+        const sourceLabel =
+          d.source === 'discord-dm'
+            ? `Discord DM from @${d.userTag}`
+            : `Discord #${d.channelName ?? '(?)'}`;
+        const durStr =
+          d.durationMs > 60_000
+            ? `${(d.durationMs / 60_000).toFixed(1)}min`
+            : `${(d.durationMs / 1000).toFixed(1)}s`;
+        const icon =
+          d.reason === 'done' ? '✅' : d.reason === 'error' ? '❌' : '⏹️';
+        const body = d.turnOutput.trim() || '(empty)';
+        const errSuffix =
+          d.reason === 'error' && d.errorMessage
+            ? `\nerror: ${d.errorMessage}`
+            : '';
+        setMessages(prev => [
+          ...prev,
+          createSystemMessage(
+            `${icon} [via ${sourceLabel}] ${durStr}\n` +
+              `> ${d.userMessage.slice(0, 200)}${d.userMessage.length > 200 ? '…' : ''}\n` +
+              `${body}${errSuffix}`,
+            'info',
+          ),
+        ]);
+        return;
+      }
       if (frame.type !== 'runnerEvent') return;
       const evt = (frame as { event?: { type?: string; payload?: unknown } }).event;
       if (!evt || evt.type !== 'output') return;
