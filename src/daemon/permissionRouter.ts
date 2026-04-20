@@ -52,6 +52,7 @@ import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import type { PermissionDecision } from '../types/permissions.js'
 import type { DirectConnectServerHandle } from '../server/directConnectServer.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
+import { hasPermissionsToUseTool } from '../utils/permissions/permissions.js'
 
 export type RiskLevel = 'read' | 'write' | 'destructive'
 
@@ -183,10 +184,34 @@ export function createPermissionRouter(
   const canUseTool: CanUseToolFn = async (
     tool,
     input,
-    _toolUseContext,
-    _assistantMessage,
+    toolUseContext,
+    assistantMessage,
     toolUseID,
+    forceDecision,
   ) => {
+    // M-DAEMON-PERMS-C：先用 daemon 的（已同步 settings + mode）context 跑
+    // hasPermissionsToUseTool 做 pre-judge。allow / deny 直接回，不浪費 WS
+    // 往返；只有 'ask'（需要 UI 決定）才走 permissionRequest 路由到 source
+    // client。若 forceDecision 已給（譬如 classifier 自動通過）也直接用。
+    if (forceDecision !== undefined) {
+      return forceDecision
+    }
+    try {
+      const preJudge = await hasPermissionsToUseTool(
+        tool,
+        input,
+        toolUseContext,
+        assistantMessage,
+        toolUseID,
+      )
+      if (preJudge.behavior === 'allow' || preJudge.behavior === 'deny') {
+        return preJudge
+      }
+      // ask / passthrough → 繼續下面的 WS prompt 流程。
+    } catch {
+      // 評估失敗不擋 tool，照走 WS prompt 路徑。
+    }
+
     const sourceId = opts.resolveSourceClientId()
     const inputId = opts.resolveCurrentInputId() ?? ''
     const meta: PermissionRequestMetadata = {

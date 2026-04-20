@@ -105,6 +105,12 @@
 - [x] Daemon crash 時 REPL 透明 fallback 不當機（e2e-thin-client: daemon stopped → mode=reconnecting→standalone，不阻塞）
 - [x] Windows + bun 環境 SIGTERM 走 graceful；逾時 SIGKILL 會 force-clean pid.json（新加 runDaemonStop 邏輯）
 
+### M-DAEMON-PERMS（2026-04-20）— Daemon 權限與 TUI 同步（A+B+C 三層）
+- [x] PERMS-A：daemon sessionBootstrap 訂閱 `settingsChangeDetector` → 每次 settings.json 變動自動 `applySettingsChange(source, setAppState)`，persistent 規則（alwaysAllow/alwaysDeny/additionalDirs）即時同步；dispose 時 unsub
+- [x] PERMS-B：新 WS frame `{type:'permissionContextSync', mode}` — thin-client OutboundFrame 擴展；fallbackManager.sendPermissionContextSync（attached 才送、silent no-op）；useDaemonMode export `syncPermissionModeToDaemon()`；REPL useEffect 監視 `toolPermissionContext.mode` 變化 + onModeChange 'attached' 時推送；daemon daemonCli.onMessage 解析 frame 直接 setAppState 更新 daemon 的 toolPermissionContext.mode
+- [x] PERMS-C：permissionRouter.canUseTool 在送 WS prompt 前先呼叫 `hasPermissionsToUseTool(tool, input, context, ...)` pre-judge — allow/deny 直接回、不浪費 WS 往返；只有 'ask' 才走原本的 permissionRequest + WS 廣播 + timeout 路徑。forceDecision 也 short-circuit。pre-judge throw 防禦性 fallback 到 WS
+- [x] Tests `tests/integration/daemon/permission-sync.test.ts`：4 單元（router forceDecision 短路 / pre-judge throw 安全 fallback / bootstrap dispose 重複呼叫 / permissionContextSync setAppState 語意）。全 daemon 測試 138/138 綠，./cli -p 冒煙通過
+
 ### M-DAEMON-AUTO（2026-04-20，M-DAEMON-8 收尾後新增）— REPL 預設啟動 daemon
 - [x] AUTO-A `src/daemon/autostart.ts`：`GlobalConfig.daemonAutoStart?: boolean`（undefined=預設 true、false=停用）+ `isAutostartEnabled()` / `setAutostartEnabled()` + `spawnDetachedDaemon()` helper（`child_process.spawn(argv[0], [argv[1]?, 'daemon','start'], {detached:true, stdio:'ignore', windowsHide:true})` + unref）+ session-level `hasAttemptedAutostartThisSession` 旗標（Q1=c）+ `MY_AGENT_NO_DAEMON_AUTOSTART` env override。CLI 新增 `my-agent daemon autostart on|off|status` subcommand
 - [x] AUTO-B useDaemonMode 首次偵測 standalone 時（等 30ms 讓第一次 detector check 完成）呼叫 `isAutostartEnabled()` + `markAutostartAttempted()` → `spawnDetachedDaemon()` → `onAutostart` callback 通知 REPL（Q4=b 非阻塞；Q6=a+b 失敗印 warning 且繼續 standalone）。REPL.tsx 的 onAutostart 插 info / warning system message
@@ -1248,3 +1254,5 @@
 - 2026-04-20 11:26: Session 結束 | 進度：364/383 任務 | b6961d1 docs(daemon): M-DAEMON-8 wrap-up — smoke + docs + ADR-012 + LESSONS
 
 - 2026-04-20 11:41: Session 結束 | 進度：364/383 任務 | b6961d1 docs(daemon): M-DAEMON-8 wrap-up — smoke + docs + ADR-012 + LESSONS
+
+- 2026-04-20 11:51: Session 結束 | 進度：369/388 任務 | cd416b8 feat(daemon): auto-spawn daemon on REPL open + /daemon + autostart CLI (M-DAEMON-AUTO)

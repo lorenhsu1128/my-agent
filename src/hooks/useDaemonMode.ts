@@ -77,6 +77,16 @@ export function getCurrentDaemonManager(): FallbackManager | null {
   return currentManager
 }
 
+/**
+ * M-DAEMON-PERMS-B：把當下 TUI permissionMode 推給 daemon。attached 時才真送，
+ * 否則 no-op（manager.sendPermissionContextSync 內部判斷）。
+ */
+export function syncPermissionModeToDaemon(
+  mode: import('../types/permissions.js').PermissionMode,
+): void {
+  currentManager?.sendPermissionContextSync(mode)
+}
+
 /** 回最新未決的 permission request；給 REPL `/allow` `/deny` 預設 target 用。 */
 export function getLatestPendingPermission():
   | PermissionRequestFrameFields

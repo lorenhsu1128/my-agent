@@ -90,7 +90,7 @@ import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js';
 import { getShortcutDisplay } from '../keybindings/shortcutFormat.js';
 import { CancelRequestHandler } from '../hooks/useCancelRequest.js';
 import { useBackgroundTaskNavigation } from '../hooks/useBackgroundTaskNavigation.js';
-import { useDaemonMode, getCurrentDaemonManager, getLatestPendingPermission, respondToPermission } from '../hooks/useDaemonMode.js';
+import { useDaemonMode, getCurrentDaemonManager, getLatestPendingPermission, respondToPermission, syncPermissionModeToDaemon } from '../hooks/useDaemonMode.js';
 import type { BetaContentBlock } from 'my-agent-ai/sdk/resources/beta/messages/messages';
 import { useSwarmInitialization } from '../hooks/useSwarmInitialization.js';
 import { useTeammateViewAutoExit } from '../hooks/useTeammateViewAutoExit.js';
@@ -4157,6 +4157,10 @@ export function REPL({
       ]);
     },
     onModeChange: (mode): void => {
+      // M-DAEMON-PERMS-B：剛切 attached 時立刻推當下 permission mode 給 daemon。
+      if (mode === 'attached') {
+        syncPermissionModeToDaemon(store.getState().toolPermissionContext.mode);
+      }
       if (mode === 'standalone') {
         setMessages(prev => [
           ...prev,
@@ -4176,6 +4180,12 @@ export function REPL({
       }
     }
   });
+
+  // M-DAEMON-PERMS-B：TUI 的 permissionMode 一變，就推給 daemon 同步。
+  // 只在 attached 模式下真的送；syncPermissionModeToDaemon 內部判斷。
+  React.useEffect(() => {
+    syncPermissionModeToDaemon(toolPermissionContext.mode);
+  }, [toolPermissionContext.mode]);
 
   // Note: Permission polling is now handled by useInboxPoller
   // - Workers receive permission responses via mailbox messages

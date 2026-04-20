@@ -46,6 +46,11 @@ export type OutboundFrame =
       updatedInput?: unknown
       message?: string
     }
+  | {
+      type: 'permissionContextSync'
+      /** 當下 permission mode（從 TUI AppState.toolPermissionContext.mode 取）。 */
+      mode: import('../../types/permissions.js').PermissionMode
+    }
 
 export interface ThinClientSocketOptions {
   host: string

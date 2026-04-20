@@ -40,6 +40,8 @@ import { mergeAndFilterTools } from '../utils/toolPool.js'
 import { getCommands } from '../commands.js'
 import { initializeToolPermissionContext } from '../utils/permissions/permissionSetup.js'
 import { getMcpToolsCommandsAndResources } from '../services/mcp/client.js'
+import { settingsChangeDetector } from '../utils/settings/changeDetector.js'
+import { applySettingsChange } from '../utils/settings/applySettingsChange.js'
 import {
   createFileStateCacheWithSizeLimit,
   READ_FILE_STATE_CACHE_SIZE,
@@ -135,6 +137,15 @@ export async function bootstrapDaemonContext(
     })
   }
 
+  // M-DAEMON-PERMS-A：訂閱 settings 變化，persistent permission 規則
+  // （user settings / project settings 的 alwaysAllow/alwaysDeny/additionalDirs
+  // 等）變動時即時套進 daemon 的 AppState。沒這段 daemon 會凍結在啟動當下
+  // 的 settings snapshot，TUI 新增「Always allow Bash(git:*)」後 daemon 仍
+  // 會反覆詢問。
+  const settingsUnsub = settingsChangeDetector.subscribe(source => {
+    applySettingsChange(source, setAppState)
+  })
+
   // ReadFileCache（per-session instance，turn 間持久）。
   let readFileCache = createFileStateCacheWithSizeLimit(
     READ_FILE_STATE_CACHE_SIZE,
@@ -162,10 +173,13 @@ export async function bootstrapDaemonContext(
     )
   }
 
-  // Dispose：M-DAEMON-4a 先 no-op（MCP client close 由 process 結束自然清掉；
-  // 精細的 per-client close 放 M-DAEMON-8 收尾時加）。
+  // Dispose：unsub settings watcher；MCP client close 由 process 結束自然清掉。
   const dispose = async (): Promise<void> => {
-    // Intentionally empty for now.
+    try {
+      settingsUnsub?.()
+    } catch {
+      // ignore
+    }
   }
 
   return {

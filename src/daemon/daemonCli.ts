@@ -129,8 +129,36 @@ export async function runDaemonStart(
       })
       brokerRef.current = broker
       onMessage = (c, m): void => {
-        // M-DAEMON-7：先試 permissionResponse；命中就 route 給 router，否則交給 broker。
+        // M-DAEMON-7：permissionResponse 命中就 route 給 router。
         if (permissionRouter.handleResponse(c.id, m)) return
+        // M-DAEMON-PERMS-B：permissionContextSync 同步 TUI 當下 permission mode
+        // 到 daemon AppState。非 turn 事件，不走 queue；直接 setAppState。
+        if (
+          m &&
+          typeof m === 'object' &&
+          (m as { type?: string }).type === 'permissionContextSync'
+        ) {
+          const sync = m as { type: string; mode?: string }
+          if (typeof sync.mode === 'string') {
+            const mode = sync.mode as import('../types/permissions.js').PermissionMode
+            context.setAppState(prev =>
+              prev.toolPermissionContext.mode === mode
+                ? prev
+                : {
+                    ...prev,
+                    toolPermissionContext: {
+                      ...prev.toolPermissionContext,
+                      mode,
+                    },
+                  },
+            )
+            void handle.logger.info('permission mode synced from client', {
+              clientId: c.id,
+              mode,
+            })
+          }
+          return
+        }
         handleClientMessage(broker, c, m, (errMsg, raw) => {
           void handle.logger.warn('broker protocol error', {
             err: errMsg,

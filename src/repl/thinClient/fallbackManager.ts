@@ -60,6 +60,10 @@ export interface FallbackManager {
     updatedInput?: unknown,
     message?: string,
   ): void
+  /** 同步 TUI 當下 permission mode 到 daemon；attached 時才送，否則 no-op。 */
+  sendPermissionContextSync(
+    mode: import('../../types/permissions.js').PermissionMode,
+  ): void
   stop(): Promise<void>
 }
 
@@ -223,6 +227,15 @@ export function createFallbackManager(
         updatedInput,
         message,
       })
+    },
+    sendPermissionContextSync(permissionMode) {
+      // Silent no-op when not attached — 同步語意本來就 best-effort。
+      if (mode !== 'attached' || !socket) return
+      try {
+        socket.send({ type: 'permissionContextSync', mode: permissionMode })
+      } catch {
+        // ignore transient send error
+      }
     },
     async stop() {
       disposed = true
