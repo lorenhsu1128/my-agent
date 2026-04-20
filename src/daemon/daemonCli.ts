@@ -28,9 +28,10 @@ import { getDaemonPaths } from './paths.js'
 import { startDaemon, DaemonAlreadyRunningError } from './daemonMain.js'
 import { bootstrapDaemonContext } from './sessionBootstrap.js'
 import { createQueryEngineRunner } from './queryEngineRunner.js'
-import { createSessionBroker, handleClientMessage, sendHelloFrame } from './sessionBroker.js'
+import { createSessionBroker, handleClientMessage, sendHelloFrame, type SessionBroker } from './sessionBroker.js'
 import { beginDaemonSession } from './sessionWriter.js'
 import { startDaemonCronWiring } from './cronWiring.js'
+import { createPermissionRouter } from './permissionRouter.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 
 export const DEFAULT_STOP_GRACEFUL_MS = 5_000
@@ -103,24 +104,44 @@ export async function runDaemonStart(
       const cwd = opts.cwd ?? process.cwd()
       const context = await bootstrapDaemonContext({ cwd })
       const sessionHandle = beginDaemonSession({ cwd })
-      const runner = createQueryEngineRunner({ context })
+
+      // M-DAEMON-7：Permission router — runner 的 canUseTool 交給它路由到 source client。
+      // broker 還沒建；用 ref 讓 router 能動態查 current turn。
+      const brokerRef: { current: SessionBroker | null } = { current: null }
+      const permissionRouter = createPermissionRouter({
+        server: handle.server,
+        resolveSourceClientId: () =>
+          brokerRef.current?.queue.currentInput?.clientId ?? null,
+        resolveCurrentInputId: () =>
+          brokerRef.current?.queue.currentInput?.id ?? null,
+      })
+
+      const runner = createQueryEngineRunner({
+        context,
+        canUseTool: permissionRouter.canUseTool,
+      })
       const broker = createSessionBroker({
         server: handle.server,
         context,
         runner,
         sessionHandle,
       })
-      onMessage = (c, m): void =>
+      brokerRef.current = broker
+      onMessage = (c, m): void => {
+        // M-DAEMON-7：先試 permissionResponse；命中就 route 給 router，否則交給 broker。
+        if (permissionRouter.handleResponse(c.id, m)) return
         handleClientMessage(broker, c, m, (errMsg, raw) => {
           void handle.logger.warn('broker protocol error', {
             err: errMsg,
             raw,
           })
         })
+      }
       onConnect = (c): void => sendHelloFrame(broker, handle.server!, c.id)
       const cronHandle = startDaemonCronWiring({ broker })
       disposeBroker = async (): Promise<void> => {
         cronHandle.stop()
+        permissionRouter.cancelAll('daemon stopping')
         await broker.dispose()
         sessionHandle.dispose()
         await context.dispose()
