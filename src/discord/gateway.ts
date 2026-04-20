@@ -507,6 +507,27 @@ export async function startDiscordGateway(opts: {
 
   await client.connect()
 
+  // M-DISCORD-AUTOBIND：binding 健康檢查 — guild / channel / cwd 三層 stale 清理。
+  try {
+    const { verifyBindings } = await import('./bindingHealthCheck.js')
+    const report = await verifyBindings(client.raw, opts.config)
+    if (!report.guildAccessible) {
+      void opts.log?.warn?.('discord guild not accessible; bindings unchecked', {
+        guildId: opts.config.guildId,
+      })
+    } else {
+      void opts.log?.info?.('binding health check', {
+        healthy: report.healthy,
+        staleChannels: report.staleChannels.length,
+        staleCwds: report.staleCwds.length,
+      })
+    }
+  } catch (e) {
+    void opts.log?.warn?.('binding health check failed', {
+      err: e instanceof Error ? e.message : String(e),
+    })
+  }
+
   // M-DISCORD-5：啟動完成通知 home channel（讓使用者從 Discord 就能看到 daemon 活了）
   if (opts.config.homeChannelId) {
     try {
