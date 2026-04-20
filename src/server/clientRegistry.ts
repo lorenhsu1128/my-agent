@@ -25,6 +25,13 @@ export interface ClientInfo {
   source: ClientSource
   connectedAt: number
   remoteAddress?: string
+  /**
+   * M-DISCORD-1.4：client 關聯的 projectId（ProjectRegistry.getProject key）。
+   * 現階段（M-DISCORD-1.4）auto-load default project 後所有 client 預設綁 default；
+   * M-DISCORD-2 REPL handshake 帶 cwd 時改由 daemonMain 解析出對應 projectId
+   * 寫入此欄位。未設 = daemonCli 的 onMessage 會 fallback 到 default runtime。
+   */
+  projectId?: string
 }
 
 export interface RegisteredClient extends ClientInfo {

@@ -199,3 +199,76 @@ export async function withProjectCwd<T>(
     lease.release()
   }
 }
+
+/**
+ * 包 SessionRunner：每次 run 前搶 mutex + chdir 到 runtime.cwd + 切
+ * STATE.originalCwd；finally 還原。這是 B-1 方案的 per-turn 進入點。
+ *
+ * 不動 signal 語意：acquire 階段會尊重 signal.aborted（rejects）；underlying
+ * runner.run 收到的是同一 signal。Mutex 本身不監控 signal（acquire 已處理），
+ * lease 在 finally 釋放。
+ */
+export function wrapRunnerWithProjectCwd(
+  inner: import('./sessionRunner.js').SessionRunner,
+  opts: {
+    mutex: DaemonTurnMutex
+    projectId: string
+    cwd: string
+    baseCwd: string
+  },
+): import('./sessionRunner.js').SessionRunner {
+  return {
+    async *run(input, signal) {
+      let lease: MutexLease
+      try {
+        lease = await opts.mutex.acquire(
+          { projectId: opts.projectId, inputId: input.id },
+          signal,
+        )
+      } catch (e) {
+        yield {
+          type: 'error',
+          error: e instanceof Error ? e.message : String(e),
+        }
+        return
+      }
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const state = require('../bootstrap/state.js') as typeof import('../bootstrap/state.js')
+      const prevCwd = process.cwd()
+      const prevOriginalCwd = state.getOriginalCwd()
+      let chdirOk = false
+      try {
+        try {
+          process.chdir(opts.cwd)
+          state.setOriginalCwd(opts.cwd)
+          chdirOk = true
+        } catch (e) {
+          yield {
+            type: 'error',
+            error: `failed to chdir to ${opts.cwd}: ${e instanceof Error ? e.message : String(e)}`,
+          }
+          return
+        }
+        yield* inner.run(input, signal)
+      } finally {
+        if (chdirOk) {
+          try {
+            process.chdir(prevCwd)
+          } catch {
+            try {
+              process.chdir(opts.baseCwd)
+            } catch {
+              // nothing to do
+            }
+          }
+          try {
+            state.setOriginalCwd(prevOriginalCwd)
+          } catch {
+            // ignore
+          }
+        }
+        lease.release()
+      }
+    },
+  }
+}

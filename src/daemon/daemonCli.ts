@@ -26,13 +26,11 @@ import { createInterface } from 'readline'
 import { checkDaemonLiveness, readPidFile } from './pidFile.js'
 import { getDaemonPaths } from './paths.js'
 import { startDaemon, DaemonAlreadyRunningError } from './daemonMain.js'
-import { bootstrapDaemonContext } from './sessionBootstrap.js'
-import { createQueryEngineRunner } from './queryEngineRunner.js'
-import { createSessionBroker, handleClientMessage, sendHelloFrame, type SessionBroker } from './sessionBroker.js'
-import { beginDaemonSession } from './sessionWriter.js'
-import { startDaemonCronWiring } from './cronWiring.js'
-import { createPermissionRouter } from './permissionRouter.js'
+import { handleClientMessage, sendHelloFrame } from './sessionBroker.js'
 import { isAutostartEnabled, setAutostartEnabled } from './autostart.js'
+import { createDaemonTurnMutex } from './daemonTurnMutex.js'
+import { createProjectRegistry, projectIdFromCwd } from './projectRegistry.js'
+import { createDefaultProjectRuntimeFactory } from './projectRuntimeFactory.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 
 export const DEFAULT_STOP_GRACEFUL_MS = 5_000
@@ -99,40 +97,44 @@ export async function runDaemonStart(
       onClientConnect: c => onConnect(c),
     })
 
-    // QueryEngine wiring（可關掉給既有 daemon lifecycle 測試用）。
-    let disposeBroker: (() => Promise<void>) | null = null
+    // M-DISCORD-1.4：QueryEngine 改透過 ProjectRegistry + 全域 turn mutex。
+    // 啟動時 auto-load 一個 default project（preserves 既有 single-project 行為）；
+    // 未來（M-DISCORD-2）REPL thin-client handshake 帶 cwd 時由 registry 動態
+    // load；Discord gateway（M-DISCORD-3）也會呼 registry.loadProject。
+    let disposeRegistry: (() => Promise<void>) | null = null
     if (opts.enableQueryEngine && handle.server) {
       const cwd = opts.cwd ?? process.cwd()
-      const context = await bootstrapDaemonContext({ cwd })
-      const sessionHandle = beginDaemonSession({ cwd })
-
-      // M-DAEMON-7：Permission router — runner 的 canUseTool 交給它路由到 source client。
-      // broker 還沒建；用 ref 讓 router 能動態查 current turn。
-      const brokerRef: { current: SessionBroker | null } = { current: null }
-      const permissionRouter = createPermissionRouter({
+      const baseCwd = process.cwd()
+      const mutex = createDaemonTurnMutex()
+      const factory = createDefaultProjectRuntimeFactory({
         server: handle.server,
-        resolveSourceClientId: () =>
-          brokerRef.current?.queue.currentInput?.clientId ?? null,
-        resolveCurrentInputId: () =>
-          brokerRef.current?.queue.currentInput?.id ?? null,
+        mutex,
+        baseCwd,
+      })
+      const registry = createProjectRegistry({
+        factory,
+        onLoad: id =>
+          void handle.logger.info('project loaded', { projectId: id }),
+        onUnload: (id, reason) =>
+          void handle.logger.info('project unloaded', {
+            projectId: id,
+            reason,
+          }),
       })
 
-      const runner = createQueryEngineRunner({
-        context,
-        canUseTool: permissionRouter.canUseTool,
-      })
-      const broker = createSessionBroker({
-        server: handle.server,
-        context,
-        runner,
-        sessionHandle,
-      })
-      brokerRef.current = broker
+      // Auto-load the starting cwd as the default project.
+      const defaultRuntime = await registry.loadProject(cwd)
+
       onMessage = (c, m): void => {
-        // M-DAEMON-7：permissionResponse 命中就 route 給 router。
-        if (permissionRouter.handleResponse(c.id, m)) return
-        // M-DAEMON-PERMS-B：permissionContextSync 同步 TUI 當下 permission mode
-        // 到 daemon AppState。非 turn 事件，不走 queue；直接 setAppState。
+        // Route to the client's project runtime. 目前只有一個 runtime（default）；
+        // M-DISCORD-2 handshake 帶 cwd 時改 clientRegistry → projectId 查找。
+        const runtime =
+          registry.getProject(c.projectId ?? defaultRuntime.projectId) ??
+          defaultRuntime
+        // permissionResponse 命中就 route 給該 runtime 的 router。
+        if (runtime.permissionRouter.handleResponse(c.id, m)) return
+        // permissionContextSync（M-DAEMON-PERMS-B）同步 mode → 當前 runtime 的
+        // toolPermissionContext.mode。
         if (
           m &&
           typeof m === 'object' &&
@@ -141,7 +143,7 @@ export async function runDaemonStart(
           const sync = m as { type: string; mode?: string }
           if (typeof sync.mode === 'string') {
             const mode = sync.mode as import('../types/permissions.js').PermissionMode
-            context.setAppState(prev =>
+            runtime.context.setAppState(prev =>
               prev.toolPermissionContext.mode === mode
                 ? prev
                 : {
@@ -154,31 +156,36 @@ export async function runDaemonStart(
             )
             void handle.logger.info('permission mode synced from client', {
               clientId: c.id,
+              projectId: runtime.projectId,
               mode,
             })
           }
           return
         }
-        handleClientMessage(broker, c, m, (errMsg, raw) => {
+        runtime.touch()
+        handleClientMessage(runtime.broker, c, m, (errMsg, raw) => {
           void handle.logger.warn('broker protocol error', {
             err: errMsg,
             raw,
+            projectId: runtime.projectId,
           })
         })
       }
-      onConnect = (c): void => sendHelloFrame(broker, handle.server!, c.id)
-      const cronHandle = startDaemonCronWiring({ broker })
-      disposeBroker = async (): Promise<void> => {
-        cronHandle.stop()
-        permissionRouter.cancelAll('daemon stopping')
-        await broker.dispose()
-        sessionHandle.dispose()
-        await context.dispose()
+      onConnect = (c): void => {
+        const runtime =
+          registry.getProject(c.projectId ?? defaultRuntime.projectId) ??
+          defaultRuntime
+        if (c.source === 'repl') runtime.attachRepl(c.id)
+        runtime.touch()
+        sendHelloFrame(runtime.broker, handle.server!, c.id)
+      }
+      disposeRegistry = async (): Promise<void> => {
+        await registry.dispose()
       }
       out(
-        `  queryEngine: enabled (session ${sessionHandle.sessionId.slice(0, 8)}…)\n`,
+        `  queryEngine: enabled (default project ${defaultRuntime.projectId.slice(0, 20)}…, session ${defaultRuntime.sessionHandle.sessionId.slice(0, 8)}…)\n`,
       )
-      if (cronHandle.scheduler) {
+      if (defaultRuntime.cron.scheduler) {
         out(`  cron:        enabled\n`)
       }
     }
@@ -196,12 +203,12 @@ Send SIGINT (Ctrl+C) or run \`my-agent daemon stop\` to shut down.
 `,
     )
 
-    // 包一層 stop：先釋放 broker 再 stop server。
-    if (disposeBroker) {
+    // 包一層 stop：先釋放 registry（unload 所有 runtime）再 stop server。
+    if (disposeRegistry) {
       const origStop = handle.stop
       ;(handle as { stop: typeof origStop }).stop = async (reason): Promise<void> => {
         try {
-          await disposeBroker!()
+          await disposeRegistry!()
         } catch {
           // 盡力清理
         }
