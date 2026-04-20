@@ -57,6 +57,17 @@ export const DiscordConfigSchema = z.object({
   /** Home channel ID：cron 完成 / 長任務通知 / daemon 事件 post 至此。未設則不 post。 */
   homeChannelId: z.string().optional(),
   /**
+   * Guild ID：`/discord-bind` 建立 per-project channel 時指定建在哪個 server。
+   * Bot 須實際在此 guild 且擁有 Manage Channels 權限。未設時 `/discord-bind` 報錯。
+   */
+  guildId: z.string().optional(),
+  /**
+   * Archive category ID：daemon 啟動發現 binding 的 cwd 已不存在時，對應頻道
+   * 會被移到此 category（保留歷史訊息但不再接收新訊息）。未設則不 archive，
+   * 只清 binding。
+   */
+  archiveCategoryId: z.string().optional(),
+  /**
    * 輸出策略：
    *   - `turn-end`（預設）：等 turn 結束一次送完整回覆，超過 2000 字切多段
    *   - `edit`（未來擴充）：每 N ms edit 首則訊息模擬 streaming
@@ -81,6 +92,8 @@ export const DEFAULT_DISCORD_CONFIG: DiscordConfig = {
   projects: [],
   channelBindings: {},
   homeChannelId: undefined,
+  guildId: undefined,
+  archiveCategoryId: undefined,
   streamStrategy: 'turn-end',
   replyMode: 'first',
 }

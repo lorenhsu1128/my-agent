@@ -46,8 +46,10 @@ token / whitelist / projects 再改 \`true\` 才會生效。
 | \`projects[].name\` | UI 顯示名 |
 | \`projects[].path\` | 實際 cwd 絕對路徑 |
 | \`projects[].aliases\` | 備用前綴（e.g. \`"ma"\`） |
-| \`channelBindings\` | \`{ channelId: projectPath }\` 映射 |
+| \`channelBindings\` | \`{ channelId: projectPath }\` 映射（手動設或走 \`/discord-bind\` 自動寫入） |
 | \`homeChannelId\` | cron / 長任務完成通知 post 至此 channel |
+| \`guildId\` | \`/discord-bind\` 自動建頻道用的 server id；bot 須在此 guild 有 Manage Channels 權限 |
+| \`archiveCategoryId\` | 專案目錄刪除時，對應頻道被移到此分類保留歷史；未設則只清 binding |
 | \`streamStrategy\` | \`turn-end\`（一次送）或 \`edit\`（模擬 streaming） |
 | \`replyMode\` | \`first\`（只首段 reply）/ \`all\` / \`off\` |
 

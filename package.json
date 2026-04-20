@@ -83,6 +83,7 @@
     "marked": "^17.0.5",
     "p-map": "^7.0.4",
     "picomatch": "^4.0.4",
+    "pinyin-pro": "^3.28.1",
     "plist": "^3.1.0",
     "proper-lockfile": "^4.1.2",
     "puppeteer-core": "^24.41.0",
