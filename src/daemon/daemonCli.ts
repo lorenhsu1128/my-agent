@@ -26,6 +26,11 @@ import { createInterface } from 'readline'
 import { checkDaemonLiveness, readPidFile } from './pidFile.js'
 import { getDaemonPaths } from './paths.js'
 import { startDaemon, DaemonAlreadyRunningError } from './daemonMain.js'
+import { bootstrapDaemonContext } from './sessionBootstrap.js'
+import { createQueryEngineRunner } from './queryEngineRunner.js'
+import { createSessionBroker, handleClientMessage, sendHelloFrame } from './sessionBroker.js'
+import { beginDaemonSession } from './sessionWriter.js'
+import type { ClientInfo } from '../server/clientRegistry.js'
 
 export const DEFAULT_STOP_GRACEFUL_MS = 5_000
 export const DEFAULT_STOP_POLL_INTERVAL_MS = 100
@@ -56,6 +61,14 @@ export interface DaemonStartOptions {
   host?: string
   /** 阻塞直到 daemon 停止；預設 true。測試設 false 讓 handle 回傳。 */
   blockUntilStopped?: boolean
+  /**
+   * 啟動時 bootstrap QueryEngine context + sessionBroker，讓 WS client 真能跑 LLM。
+   * 預設 false（保持 M-DAEMON-1~3 時行為），實際 daemon start CLI 會傳 true。
+   * 測試可關掉避免拉 MCP / tools 的重負載。
+   */
+  enableQueryEngine?: boolean
+  /** bootstrap context 的 cwd；預設 process.cwd()。 */
+  cwd?: string
 }
 
 /**
@@ -69,12 +82,51 @@ export async function runDaemonStart(
   const out = ctx.stdout ?? ((m: string) => process.stdout.write(m))
   const err = ctx.stderr ?? ((m: string) => process.stderr.write(m))
   try {
+    // Two-phase wiring：broker 需要 server handle 才能廣播，但 server 啟動時就要
+    // 綁 onMessage 才能接第一條 frame。用可變 ref 讓 startDaemon 的 onMessage
+    // 只是 forwarder；broker 建好再把 handler 覆蓋掉。
+    let onMessage: (c: ClientInfo, m: unknown) => void = () => {}
+    let onConnect: (c: ClientInfo) => void = () => {}
     const handle = await startDaemon({
       baseDir: ctx.baseDir,
       agentVersion: ctx.agentVersion,
       port: opts.port,
       host: opts.host,
+      onClientMessage: (c, m) => onMessage(c, m),
+      onClientConnect: c => onConnect(c),
     })
+
+    // QueryEngine wiring（可關掉給既有 daemon lifecycle 測試用）。
+    let disposeBroker: (() => Promise<void>) | null = null
+    if (opts.enableQueryEngine && handle.server) {
+      const cwd = opts.cwd ?? process.cwd()
+      const context = await bootstrapDaemonContext({ cwd })
+      const sessionHandle = beginDaemonSession({ cwd })
+      const runner = createQueryEngineRunner({ context })
+      const broker = createSessionBroker({
+        server: handle.server,
+        context,
+        runner,
+        sessionHandle,
+      })
+      onMessage = (c, m): void =>
+        handleClientMessage(broker, c, m, (errMsg, raw) => {
+          void handle.logger.warn('broker protocol error', {
+            err: errMsg,
+            raw,
+          })
+        })
+      onConnect = (c): void => sendHelloFrame(broker, handle.server!, c.id)
+      disposeBroker = async (): Promise<void> => {
+        await broker.dispose()
+        sessionHandle.dispose()
+        await context.dispose()
+      }
+      out(
+        `  queryEngine: enabled (session ${sessionHandle.sessionId.slice(0, 8)}…)\n`,
+      )
+    }
+
     out(
       `my-agent daemon started
   pid:   ${handle.pidData.pid}
@@ -87,6 +139,20 @@ export async function runDaemonStart(
 Send SIGINT (Ctrl+C) or run \`my-agent daemon stop\` to shut down.
 `,
     )
+
+    // 包一層 stop：先釋放 broker 再 stop server。
+    if (disposeBroker) {
+      const origStop = handle.stop
+      ;(handle as { stop: typeof origStop }).stop = async (reason): Promise<void> => {
+        try {
+          await disposeBroker!()
+        } catch {
+          // 盡力清理
+        }
+        return origStop(reason)
+      }
+    }
+
     if (opts.blockUntilStopped !== false) {
       await handle.stopped
     }

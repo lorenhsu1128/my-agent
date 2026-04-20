@@ -4014,6 +4014,7 @@ async function run(): Promise<CommanderCommand> {
             {
               port: parseInt(opts.port, 10),
               host: opts.host,
+              enableQueryEngine: true,
             },
           )
           process.exit(0)
@@ -4057,6 +4058,7 @@ async function run(): Promise<CommanderCommand> {
             {
               port: parseInt(opts.port, 10),
               host: opts.host,
+              enableQueryEngine: true,
             },
           )
           process.exit(0)
