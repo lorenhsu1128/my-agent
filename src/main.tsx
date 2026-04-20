@@ -4082,6 +4082,31 @@ async function run(): Promise<CommanderCommand> {
         )
         process.exit(0)
       })
+
+    daemon
+      .command('autostart [action]')
+      .description(
+        'Enable/disable auto-spawning daemon when REPL opens (on|off|status; default: status)',
+      )
+      .action(async (action: string | undefined) => {
+        const { runDaemonAutostart } = await import('./daemon/daemonCli.js')
+        const normalized = (action ?? 'status').toLowerCase()
+        if (
+          normalized !== 'on' &&
+          normalized !== 'off' &&
+          normalized !== 'status'
+        ) {
+          process.stderr.write(
+            `unknown action: ${action}; expected on | off | status\n`,
+          )
+          process.exit(1)
+        }
+        await runDaemonAutostart(
+          { agentVersion: MACRO.VERSION as string },
+          normalized as 'on' | 'off' | 'status',
+        )
+        process.exit(0)
+      })
   }
 
   // `claude ssh <host> [dir]` — registered here only so --help shows it.

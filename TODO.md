@@ -105,6 +105,13 @@
 - [x] Daemon crash 時 REPL 透明 fallback 不當機（e2e-thin-client: daemon stopped → mode=reconnecting→standalone，不阻塞）
 - [x] Windows + bun 環境 SIGTERM 走 graceful；逾時 SIGKILL 會 force-clean pid.json（新加 runDaemonStop 邏輯）
 
+### M-DAEMON-AUTO（2026-04-20，M-DAEMON-8 收尾後新增）— REPL 預設啟動 daemon
+- [x] AUTO-A `src/daemon/autostart.ts`：`GlobalConfig.daemonAutoStart?: boolean`（undefined=預設 true、false=停用）+ `isAutostartEnabled()` / `setAutostartEnabled()` + `spawnDetachedDaemon()` helper（`child_process.spawn(argv[0], [argv[1]?, 'daemon','start'], {detached:true, stdio:'ignore', windowsHide:true})` + unref）+ session-level `hasAttemptedAutostartThisSession` 旗標（Q1=c）+ `MY_AGENT_NO_DAEMON_AUTOSTART` env override。CLI 新增 `my-agent daemon autostart on|off|status` subcommand
+- [x] AUTO-B useDaemonMode 首次偵測 standalone 時（等 30ms 讓第一次 detector check 完成）呼叫 `isAutostartEnabled()` + `markAutostartAttempted()` → `spawnDetachedDaemon()` → `onAutostart` callback 通知 REPL（Q4=b 非阻塞；Q6=a+b 失敗印 warning 且繼續 standalone）。REPL.tsx 的 onAutostart 插 info / warning system message
+- [x] AUTO-C `src/commands/daemon.ts` slash command `/daemon on|off|status`：on 啟 autostart + 若無 daemon 立刻 spawn；off 關 autostart + 若有活 daemon 送 SIGTERM；status 同時顯示 autostart + daemon liveness + pid/port
+- [x] Tests：12 單元（`tests/integration/daemon/autostart.test.ts`：isAutostartEnabled 默認/env 覆蓋/config 覆蓋、session flag lifecycle、spawn 成功路徑、runDaemonAutostart status/off/already-on）。全 daemon 134/134 綠，./cli -p 冒煙通過
+- [x] 文件：`docs/daemon-mode.md` 新增快速上手的 auto-spawn 細節 + 三個 opt-out 管道（CLI/slash/env）
+
 ---
 
 ## 未來里程碑：M-DISCORD — Discord Gateway（M-DAEMON 完成後啟動）
@@ -1235,3 +1242,9 @@
 - 2026-04-20 10:11: Session 結束 | 進度：355/383 任務 | 8e5e826 feat(daemon): cron scheduler wiring + REPL/headless skip guard (M-DAEMON-4.5)
 
 - 2026-04-20 10:41: Session 結束 | 進度：356/383 任務 | b61f58b test(daemon): thin-client E2E — lifecycle + mode transitions (M-DAEMON-6d)
+
+- 2026-04-20 11:17: Session 結束 | 進度：364/383 任務 | b6961d1 docs(daemon): M-DAEMON-8 wrap-up — smoke + docs + ADR-012 + LESSONS
+
+- 2026-04-20 11:26: Session 結束 | 進度：364/383 任務 | b6961d1 docs(daemon): M-DAEMON-8 wrap-up — smoke + docs + ADR-012 + LESSONS
+
+- 2026-04-20 11:41: Session 結束 | 進度：364/383 任務 | b6961d1 docs(daemon): M-DAEMON-8 wrap-up — smoke + docs + ADR-012 + LESSONS

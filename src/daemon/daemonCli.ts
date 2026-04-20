@@ -32,6 +32,7 @@ import { createSessionBroker, handleClientMessage, sendHelloFrame, type SessionB
 import { beginDaemonSession } from './sessionWriter.js'
 import { startDaemonCronWiring } from './cronWiring.js'
 import { createPermissionRouter } from './permissionRouter.js'
+import { isAutostartEnabled, setAutostartEnabled } from './autostart.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 
 export const DEFAULT_STOP_GRACEFUL_MS = 5_000
@@ -425,4 +426,34 @@ export async function runDaemonRestart(
   // 稍等 port 回收
   await new Promise(r => setTimeout(r, 200))
   return runDaemonStart(ctx, opts)
+}
+
+/**
+ * `my-agent daemon autostart on | off | status` 實作。
+ * 寫入 `~/.my-agent/.claude.json` 的 `daemonAutoStart` key。REPL 啟動時
+ * 讀這個決定要不要 spawn background daemon。
+ */
+export type AutostartAction = 'on' | 'off' | 'status'
+export interface AutostartResult {
+  enabled: boolean
+  changed: boolean
+}
+export async function runDaemonAutostart(
+  ctx: DaemonCliContext,
+  action: AutostartAction,
+): Promise<AutostartResult> {
+  const out = ctx.stdout ?? ((m: string) => process.stdout.write(m))
+  const prev = isAutostartEnabled()
+  if (action === 'status') {
+    out(`daemon autostart: ${prev ? 'on' : 'off'}\n`)
+    return { enabled: prev, changed: false }
+  }
+  const next = action === 'on'
+  if (next === prev) {
+    out(`daemon autostart already ${next ? 'on' : 'off'}\n`)
+    return { enabled: next, changed: false }
+  }
+  setAutostartEnabled(next)
+  out(`daemon autostart: ${prev ? 'on' : 'off'} → ${next ? 'on' : 'off'}\n`)
+  return { enabled: next, changed: true }
 }

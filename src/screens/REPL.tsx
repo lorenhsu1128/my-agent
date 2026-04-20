@@ -4101,6 +4101,20 @@ export function REPL({
   // 到訊息陣列，重用現有 rendering（tool_use content block 也跟著顯示）。
   // onModeChange：attached → 其他時顯示 system banner，告知使用者切換。
   const daemonModeHandle = useDaemonMode({
+    onAutostart: (info): void => {
+      // M-DAEMON-AUTO-B：REPL 首次偵測 no-daemon 時會 auto-spawn 一個 detached
+      // daemon（可用 `/daemon off` 或 `my-agent daemon autostart off` 關閉）。
+      // Q6=a+b：成功就 info；失敗 warning 且 REPL 繼續 standalone 不阻塞。
+      setMessages(prev => [
+        ...prev,
+        createSystemMessage(
+          info.spawned
+            ? 'Daemon 已在背景啟動；偵測到後會自動 attach（可 /daemon off 關閉 autostart）。'
+            : `Daemon auto-spawn 失敗：${info.error ?? 'unknown'}。REPL 繼續走獨立模式。`,
+          info.spawned ? 'info' : 'warning',
+        ),
+      ]);
+    },
     onFrame: (frame): void => {
       if (frame.type !== 'runnerEvent') return;
       const evt = (frame as { event?: { type?: string; payload?: unknown } }).event;

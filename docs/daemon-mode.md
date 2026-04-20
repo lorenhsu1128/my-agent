@@ -15,20 +15,51 @@ TUI 是否 attach daemon 由偵測器決定，使用者不必手動切換。
 
 ## 快速上手
 
-```bash
-# 1. 啟 daemon（foreground；保留終端輸出方便除錯）。
-#    Ctrl+C 或另一個視窗 `my-agent daemon stop` 會 graceful shutdown。
-my-agent daemon start
+**預設行為**：REPL 啟動時若無 daemon 活著，會**自動在背景 spawn 一個 detached daemon**
+（可用 `/daemon off` 或 `my-agent daemon autostart off` 關閉）。已有 daemon 則直接 attach。
 
-# 2. 另一個終端視窗打開 REPL — 會自動偵測 daemon 並 attach。
+```bash
+# 開 REPL — 若無 daemon 會自動啟動一個背景 detached daemon（幾秒後 detector
+# 偵測到 pid.json 自動 attach）。
 my-agent
 
 # 狀態列會看到：
 #   daemon: attached :52371   ← 綠色
+
+# （進階）顯式手動 foreground 啟動 daemon（方便除錯、看 log）：
+my-agent daemon start
 ```
 
 送出訊息（非 `/` 開頭）會走 daemon 跑；daemon 回的 assistant 訊息同步顯示。
 同時再開第三個 REPL attach，兩邊都會看到對方送的訊息和回覆。
+
+### Auto-spawn 細節
+
+- **只 REPL 觸發**，`my-agent -p "..."` headless 不 auto-spawn（一次性命令不需要）
+- **只第一次**：同一個 REPL session 內，若 daemon 中途被手動停掉，REPL 不會再 re-spawn
+  （外部重開 REPL 才會）
+- **非阻塞**：REPL 先起來顯示 `standalone`，spawn 完後 detector 撿到 pid.json 自動切
+  `attached`
+- **失敗不擋**：auto-spawn 失敗（port 佔用 / 權限）REPL 照常標 standalone + 插 warning
+
+### 關閉 auto-spawn
+
+三個管道（任擇）：
+
+```bash
+# 方法 1：CLI subcommand（持久寫入 ~/.my-agent/.claude.json）
+my-agent daemon autostart off
+my-agent daemon autostart on
+my-agent daemon autostart status   # 顯示目前設定
+
+# 方法 2：REPL 內 slash command（同樣持久；off 會順便停掉活 daemon）
+/daemon off
+/daemon on
+/daemon status
+
+# 方法 3：臨時 env var（不寫 config，適合 CI）
+MY_AGENT_NO_DAEMON_AUTOSTART=1 my-agent
+```
 
 ---
 
@@ -41,6 +72,7 @@ my-agent
 | `my-agent daemon status` | 顯示 pid / port / agentVersion / uptime / lastHeartbeat。 |
 | `my-agent daemon restart [--port N] [--host H]` | stop 再 start。 |
 | `my-agent daemon logs [-f]` | 印 daemon.log（JSON 行）；`-f` 類似 tail -f。 |
+| `my-agent daemon autostart on\|off\|status` | 切換「REPL 首次開啟時自動啟動 daemon」的行為（持久化到 config）。 |
 
 所有子命令吃 `CLAUDE_CONFIG_DIR` env var（預設 `~/.my-agent/`）來決定
 pid.json / daemon.token / daemon.log 的位置。

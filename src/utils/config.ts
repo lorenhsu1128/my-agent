@@ -545,6 +545,11 @@ export type GlobalConfig = {
   // undefined = use default (see getRemoteControlAtStartup() for precedence)
   remoteControlAtStartup?: boolean
 
+  // M-DAEMON-AUTO：REPL 啟動時是否 auto-spawn 一個 detached daemon（若尚未有
+  // 活 daemon）。undefined = 預設 true（啟用）；顯式 false = 停用 auto-spawn。
+  // 由 `my-agent daemon autostart on|off` 或 REPL 內 `/daemon on|off` 調整。
+  daemonAutoStart?: boolean
+
   // Cached extra usage disabled reason from the last API response
   // undefined = no cache, null = extra usage enabled, string = disabled reason.
   cachedExtraUsageDisabledReason?: string | null

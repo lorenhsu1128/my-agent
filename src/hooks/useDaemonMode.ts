@@ -14,6 +14,11 @@ import {
   type ClientMode,
 } from '../repl/thinClient/fallbackManager.js'
 import type { InboundFrame } from '../repl/thinClient/thinClientSocket.js'
+import {
+  isAutostartEnabled,
+  markAutostartAttempted,
+  spawnDetachedDaemon,
+} from '../daemon/autostart.js'
 
 export interface PermissionRequestFrameFields {
   toolUseID: string
@@ -26,6 +31,8 @@ export interface PermissionRequestFrameFields {
 }
 
 export interface UseDaemonModeOptions {
+  /** Auto-spawn 結果通知 UI（REPL 插 system message）。 */
+  onAutostart?: (info: { spawned: boolean; error?: string }) => void
   /** Inbound frame 處理（6c 會接）— 預設 no-op。 */
   onFrame?: (frame: InboundFrame) => void
   /** 收到 permissionRequest 時通知 UI 層（M-DAEMON-7b）。 */
@@ -124,6 +131,8 @@ export function useDaemonMode(
     opts.onPermissionPending,
   )
   onPermPendingRef.current = opts.onPermissionPending
+  const onAutostartRef = useRef<typeof opts.onAutostart>(opts.onAutostart)
+  onAutostartRef.current = opts.onAutostart
 
   useEffect(() => {
     if (opts.disabled) return
@@ -145,6 +154,19 @@ export function useDaemonMode(
     }
     updateMode(manager.state.mode)
     manager.on('mode', updateMode)
+
+    // M-DAEMON-AUTO-B：首次偵測 standalone → 若 config 啟用 autostart，spawn
+    // detached daemon。session flag 保證只試一次（Q1=c：外部 stop 後不 re-spawn）。
+    // 非 block — 成功後靠 detector poll 撿到 pid.json 自動切 attached。
+    void (async (): Promise<void> => {
+      // 等第一次 check 完成（detector 啟動時會自跑一次 runImmediately:true）
+      await new Promise(r => setTimeout(r, 30))
+      if (manager.state.mode !== 'standalone') return
+      if (!isAutostartEnabled()) return
+      if (markAutostartAttempted()) return // 已試過就跳過
+      const result = spawnDetachedDaemon()
+      onAutostartRef.current?.(result)
+    })()
     manager.on('frame', f => {
       // M-DAEMON-7b：permission 分派到專屬 callback 方便 REPL 簡單處理。
       if (f.type === 'permissionRequest') {
