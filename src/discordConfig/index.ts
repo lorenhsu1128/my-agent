@@ -13,6 +13,7 @@ export {
   loadDiscordConfigSnapshot,
   getDiscordConfigSnapshot,
   isDiscordEnabled,
+  getDiscordBotToken,
   _resetDiscordConfigForTests,
 } from './loader.js'
 export { seedDiscordConfigIfMissing } from './seed.js'

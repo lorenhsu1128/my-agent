@@ -19,8 +19,10 @@ token / whitelist / projects 再改 \`true\` 才會生效。
 ## 啟動流程
 
 1. 在 Discord Developer Portal 建 application → bot → 拿 Bot Token
-2. 把 token 放在環境變數 \`DISCORD_BOT_TOKEN\`（不要寫進 config 檔避免 secret 進 git）
-3. 邀請 bot 進你的私人 guild（scope: bot，最少 permissions: Read Messages / Send Messages / Add Reactions / Attach Files）
+2. Token 寫進 \`botToken\` 欄位 **或** env var \`DISCORD_BOT_TOKEN\`（env 優先）
+   - 推薦 env var：重啟 shell / 不小心分享檔案時風險較低
+   - 也可直接寫 \`botToken\`：方便 daemon 每次啟動自動帶 — 但 \`~/.my-agent/discord.json\` 檔案權限請保持 0600，不要丟進 git / 聊天室 / 公開備份
+3. 邀請 bot 進你的私人 guild（Developer Portal → OAuth2 → URL Generator → scope: bot + applications.commands，permissions 至少：Read Messages / Send Messages / Add Reactions / Attach Files）
 4. 填 \`whitelistUserIds\` = [你的 Discord user id]（右鍵 → Copy User ID，需開啟開發者模式）
 5. 編輯 \`projects\` 列出要讓 Discord 聊的 cwd；至少一個
 6. 設定 \`defaultProjectPath\` 指向其中一個 project（DM 沒前綴時 fallback）
@@ -37,6 +39,7 @@ token / whitelist / projects 再改 \`true\` 才會生效。
 | 欄位 | 用途 |
 |------|------|
 | \`enabled\` | 總開關；false 時 daemon 跳過整個 Discord gateway |
+| \`botToken\` | Bot token；env var \`DISCORD_BOT_TOKEN\` 優先於此欄位 |
 | \`whitelistUserIds\` | 僅這些 user 的訊息被處理；空陣列 = 全擋 |
 | \`defaultProjectPath\` | DM 沒前綴時的預設 project（須在 \`projects[].path\` 中） |
 | \`projects[].id\` | 路由 key（DM 前綴用） |
@@ -53,6 +56,7 @@ token / whitelist / projects 再改 \`true\` 才會生效。
 \`\`\`json
 {
   "enabled": true,
+  "botToken": "MT...your.token.here",
   "whitelistUserIds": ["123456789012345678"],
   "defaultProjectPath": "C:/Users/me/projects/my-agent",
   "projects": [
@@ -71,7 +75,10 @@ token / whitelist / projects 再改 \`true\` 才會生效。
 ## 安全提醒
 
 - **白名單**：個人使用請只放自己的 user id。bot 被拉進公開 guild 也不會回應陌生人。
-- **Token 不進檔**：token 只走 \`DISCORD_BOT_TOKEN\` env var；這份 \`discord.json\` 可安全 commit 進 repo（若不含 path/id 等機敏資訊）。
+- **Token 保護**：
+  - \`~/.my-agent/discord.json\` **不要 commit 進 git**（家目錄預設不會，但注意別手動把它複製到 repo）
+  - 檔案權限建議 \`chmod 600 ~/.my-agent/discord.json\`（Windows 可改為只有本人可讀）
+  - Token 外洩 → Developer Portal → Bot → Reset Token
 - **Permission mode**：從 Discord \`/mode default\` 等 slash command 可切 permission mode，會雙向同步到 REPL。預設 \`default\`（destructive 會請求授權）。
 `
 

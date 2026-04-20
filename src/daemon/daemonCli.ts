@@ -34,6 +34,7 @@ import { createDefaultProjectRuntimeFactory } from './projectRuntimeFactory.js'
 import {
   loadDiscordConfigSnapshot,
   seedDiscordConfigIfMissing,
+  getDiscordBotToken,
 } from '../discordConfig/index.js'
 import { isVisionEnabled } from '../llamacppConfig/loader.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
@@ -232,21 +233,26 @@ export async function runDaemonStart(
       try {
         await seedDiscordConfigIfMissing()
         const discordCfg = await loadDiscordConfigSnapshot()
-        const discordToken = process.env.DISCORD_BOT_TOKEN
-        if (discordCfg.enabled && discordToken && discordToken.trim().length > 0) {
+        const discordToken = getDiscordBotToken() // env > config.botToken
+        if (discordCfg.enabled && discordToken) {
           const { startDiscordGateway } = await import('../discord/gateway.js')
           const dg = await startDiscordGateway({
             config: discordCfg,
-            token: discordToken.trim(),
+            token: discordToken,
             registry,
             visionEnabled: isVisionEnabled(),
             log: handle.logger,
           })
           disposeDiscord = dg.dispose
-          out(`  discord:     enabled (bot connected)\n`)
+          const tokenSrc = process.env.DISCORD_BOT_TOKEN ? 'env' : 'config'
+          out(`  discord:     enabled (bot connected, token from ${tokenSrc})\n`)
         } else if (discordCfg.enabled && !discordToken) {
-          void handle.logger.warn('discord enabled in config but DISCORD_BOT_TOKEN env not set; skipping')
-          out(`  discord:     config enabled but DISCORD_BOT_TOKEN missing — skipping\n`)
+          void handle.logger.warn(
+            'discord enabled in config but no token (neither DISCORD_BOT_TOKEN env nor discord.json botToken); skipping',
+          )
+          out(
+            `  discord:     config enabled but no token — set DISCORD_BOT_TOKEN or discord.json "botToken"\n`,
+          )
         }
       } catch (e) {
         void handle.logger.error('failed to start discord gateway', {

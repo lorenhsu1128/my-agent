@@ -89,6 +89,18 @@ export function isDiscordEnabled(): boolean {
   return getDiscordConfigSnapshot().enabled
 }
 
+/**
+ * Resolve bot token — env var `DISCORD_BOT_TOKEN` 優先，其次 config.botToken。
+ * 兩者皆空回 undefined；caller 應印 warning 並跳過 gateway 啟動。
+ */
+export function getDiscordBotToken(): string | undefined {
+  const env = process.env.DISCORD_BOT_TOKEN
+  if (env && env.trim().length > 0) return env.trim()
+  const fromCfg = getDiscordConfigSnapshot().botToken
+  if (fromCfg && fromCfg.trim().length > 0) return fromCfg.trim()
+  return undefined
+}
+
 export function _resetDiscordConfigForTests(): void {
   cached = null
   loadInFlight = null

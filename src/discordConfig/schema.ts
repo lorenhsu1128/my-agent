@@ -30,6 +30,16 @@ export type DiscordProject = z.infer<typeof DiscordProjectSchema>
 export const DiscordConfigSchema = z.object({
   /** 開關；為 false 時 daemon 不起 Discord gateway。 */
   enabled: z.boolean().default(false),
+  /**
+   * Bot token。可直接寫在此處（~/.my-agent/ 在使用者家目錄、非 git 目錄，風險低）
+   * 或改用 env var `DISCORD_BOT_TOKEN`（env 優先於此欄位）。
+   *
+   * 安全提醒：
+   *   - 這檔不要 commit 進 git（家目錄預設不會）
+   *   - 檔案權限建議 0600（ssh/credentials 慣例）
+   *   - 若 token 外洩請立刻到 Discord Developer Portal → Bot → Reset Token
+   */
+  botToken: z.string().optional(),
   /** 白名單 Discord user id（snowflake 字串）；必填非空。 */
   whitelistUserIds: z.array(z.string().min(1)).default([]),
   /**
@@ -65,6 +75,7 @@ export type DiscordConfig = z.infer<typeof DiscordConfigSchema>
 
 export const DEFAULT_DISCORD_CONFIG: DiscordConfig = {
   enabled: false,
+  botToken: undefined,
   whitelistUserIds: [],
   defaultProjectPath: undefined,
   projects: [],

@@ -13,19 +13,27 @@
  * 不發任何訊息；只驗連線與 ready 事件路徑。
  */
 import { createDiscordClient } from '../../src/discord/client.js'
+import {
+  getDiscordBotToken,
+  loadDiscordConfigSnapshot,
+} from '../../src/discordConfig/index.js'
 
 const TIMEOUT_MS = 15_000
 
 async function main(): Promise<number> {
-  const token = process.env.DISCORD_BOT_TOKEN
-  if (!token || token.trim().length === 0) {
+  // Load snapshot first so getDiscordBotToken can fallback to config.botToken
+  await loadDiscordConfigSnapshot()
+  const token = getDiscordBotToken()
+  if (!token) {
     // eslint-disable-next-line no-console
-    console.error('DISCORD_BOT_TOKEN env var not set')
+    console.error(
+      'no token: set DISCORD_BOT_TOKEN env or discord.json "botToken"',
+    )
     return 2
   }
 
   const client = createDiscordClient({
-    token: token.trim(),
+    token,
     onReady: info => {
       // eslint-disable-next-line no-console
       console.log(`[smoke] ready as ${info.botTag} (${info.botId})`)
