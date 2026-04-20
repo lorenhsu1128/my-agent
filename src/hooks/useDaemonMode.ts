@@ -59,6 +59,15 @@ export interface UseDaemonModeOptions {
     hint?: string
   }) => void
   /**
+   * M-DISCORD-4：daemon 廣播 permissionModeChanged 時呼叫。REPL 收到後應
+   * apply 新 mode 到 AppState.toolPermissionContext + 插 info system message
+   * 讓使用者看到「Discord 改了 mode」。
+   */
+  onPermissionModeChanged?: (info: {
+    projectId: string
+    mode: import('../types/permissions.js').PermissionMode
+  }) => void
+  /**
    * M-DISCORD-2：REPL 的 cwd，handshake 時送給 daemon。未指定 = backward
    * compat，fallback 到 daemon 的 default runtime。
    */
@@ -162,6 +171,10 @@ export function useDaemonMode(
     opts.onAttachRejected,
   )
   onAttachRejectedRef.current = opts.onAttachRejected
+  const onPermModeChangedRef = useRef<typeof opts.onPermissionModeChanged>(
+    opts.onPermissionModeChanged,
+  )
+  onPermModeChangedRef.current = opts.onPermissionModeChanged
   const cwdRef = useRef<string | undefined>(opts.cwd)
   cwdRef.current = opts.cwd
 
@@ -214,6 +227,13 @@ export function useDaemonMode(
         }
         pendingPermissions.set(r.toolUseID, r)
         onPermReqRef.current?.(r)
+      } else if (f.type === 'permissionModeChanged') {
+        onPermModeChangedRef.current?.(
+          f as unknown as {
+            projectId: string
+            mode: import('../types/permissions.js').PermissionMode
+          },
+        )
       } else if (f.type === 'permissionPending') {
         onPermPendingRef.current?.(
           f as unknown as {

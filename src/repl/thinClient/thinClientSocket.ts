@@ -41,6 +41,15 @@ export type InboundFrame =
       cwd?: string
       hint?: string
     }
+  | {
+      /**
+       * M-DISCORD-4：daemon 通知 attached REPL：permission mode 被其他 client
+       * （例如 Discord `/mode`）改了，REPL 應同步自己的 toolPermissionContext.mode。
+       */
+      type: 'permissionModeChanged'
+      projectId: string
+      mode: import('../../types/permissions.js').PermissionMode
+    }
   | { type: string; [key: string]: unknown }
 
 export type OutboundFrame =

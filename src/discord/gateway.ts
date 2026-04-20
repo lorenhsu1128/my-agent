@@ -25,6 +25,11 @@ import {
   type StreamReplyMode,
 } from './streamOutput.js'
 import { isUserWhitelisted, routeMessage } from './router.js'
+import {
+  handleInteraction,
+  registerSlashCommands,
+  type SlashHandlerContext,
+} from './slashCommands.js'
 import type { DiscordConfig } from '../discordConfig/schema.js'
 import type { DiscordClientHandle } from './client.js'
 import type {
@@ -32,8 +37,9 @@ import type {
   DiscordIncomingMessage,
   ReactionTarget,
 } from './types.js'
-import type { Message, TextBasedChannel } from 'discord.js'
-import type { ProjectRegistry } from '../daemon/projectRegistry.js'
+import type { Interaction, Message, TextBasedChannel } from 'discord.js'
+import type { ProjectRegistry, ProjectRuntime } from '../daemon/projectRegistry.js'
+import type { PermissionMode } from '../types/permissions.js'
 import type {
   RunnerEventWrapper,
   TurnEndEvent,
@@ -47,6 +53,12 @@ export interface DiscordGatewayOptions {
   registry: ProjectRegistry
   /** llamacpp vision 是否啟用（決定 image attachment 進 agent 的格式）。 */
   visionEnabled: boolean
+  /**
+   * M-DISCORD-4：permission mode 雙向同步 — Discord `/mode` 變更後呼叫，
+   * 由 daemonCli 注入（會透過 directConnectServer broadcast 同 project 的
+   * attached REPL）。未注入則只改 runtime AppState，REPL 不會收到通知。
+   */
+  broadcastPermissionMode?: (projectId: string, mode: PermissionMode) => void
   /** Log handle（daemon logger）；nil 時走 logForDebugging。 */
   log?: {
     info: (msg: string, meta?: Record<string, unknown>) => Promise<void> | void
@@ -67,6 +79,25 @@ export function createDiscordGateway(
 ): DiscordGateway {
   const { config, client, registry, visionEnabled } = opts
   const log = opts.log
+
+  // M-DISCORD-4：per-project pending permission 追蹤，供 /allow /deny 找
+  // 最近一個 pending toolUseID。ProjectRuntime 第一次被 load 時掛 onPending /
+  // onResolved 監聽器。
+  const pendingPermissions = new Map<string, string[]>()
+  const permissionUnsubs = new Map<string, Array<() => void>>()
+  const ensurePermissionTracking = (runtime: ProjectRuntime): void => {
+    if (permissionUnsubs.has(runtime.projectId)) return
+    const queue: string[] = []
+    pendingPermissions.set(runtime.projectId, queue)
+    const unsubPending = runtime.permissionRouter.onPending(info => {
+      queue.push(info.toolUseID)
+    })
+    const unsubResolved = runtime.permissionRouter.onResolved(info => {
+      const idx = queue.indexOf(info.toolUseID)
+      if (idx >= 0) queue.splice(idx, 1)
+    })
+    permissionUnsubs.set(runtime.projectId, [unsubPending, unsubResolved])
+  }
 
   const handleIncoming = async (
     adapted: DiscordIncomingMessage,
@@ -109,6 +140,7 @@ export function createDiscordGateway(
     let runtime: Awaited<ReturnType<typeof registry.loadProject>>
     try {
       runtime = await registry.loadProject(routing.projectPath)
+      ensurePermissionTracking(runtime)
     } catch (e) {
       void log?.error('failed to load project', {
         projectPath: routing.projectPath,
@@ -232,33 +264,84 @@ export function createDiscordGateway(
   }
 
   // Gateway 接手 onMessage — caller 必須傳 client 但 onMessage 留空；這裡掛一個。
-  // （createDiscordClient 的 onMessage 是 callback 型，client 內部只會 call 一次；
-  // 若 caller 已自帶 onMessage，則 gateway 不接手 — 由 caller 決定。）
   if (raw && !raw.listenerCount('messageCreate')) {
     bindOnClient() // no-op placeholder；真實綁在 createDiscordClient 傳入的 onMessage
   }
 
-  // 導出 dispose：目前 gateway 自身沒持有 resources；client / registry 由 caller 管
+  // M-DISCORD-4：Interaction（slash command）handler。
+  const rawOnInteraction = async (interaction: Interaction): Promise<void> => {
+    try {
+      // 先確保對應 runtime 的 pending tracking 已設好（lazy，用戶可能先下 /allow）
+      const ctx: SlashHandlerContext = {
+        config,
+        registry,
+        pendingPermissions,
+        broadcastPermissionMode: opts.broadcastPermissionMode,
+      }
+      // 先對 chatInputCommand 跑 routing，讓 runtime onPending hook 綁上
+      if (interaction.isChatInputCommand()) {
+        const isDm = interaction.channel?.isDMBased() ?? false
+        if (!isDm && interaction.channelId) {
+          const bound = config.channelBindings[interaction.channelId]
+          if (bound) {
+            try {
+              const r = await registry.loadProject(bound)
+              ensurePermissionTracking(r)
+            } catch {
+              // ignore
+            }
+          }
+        } else if (isDm && config.defaultProjectPath) {
+          try {
+            const r = await registry.loadProject(config.defaultProjectPath)
+            ensurePermissionTracking(r)
+          } catch {
+            // ignore
+          }
+        }
+      }
+      await handleInteraction(interaction, ctx)
+    } catch (e) {
+      void log?.error('interaction handler threw', {
+        err: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+
+  // 導出 dispose：清 pending permission listeners。
   return {
     async dispose() {
-      // 保留 dispose 介面給未來 slash command cleanup / pending turn timers 用
+      for (const unsubs of permissionUnsubs.values()) {
+        for (const u of unsubs) {
+          try {
+            u()
+          } catch {
+            // ignore
+          }
+        }
+      }
+      permissionUnsubs.clear()
+      pendingPermissions.clear()
     },
-    // 內部暴露給 caller 的 message handler — caller 建 client 時傳給 createDiscordClient 的 onMessage
+    // caller 用來串到 createDiscordClient 的 onMessage / onInteraction
     handleIncoming: rawOnMessage,
+    handleInteraction: rawOnInteraction,
   } as DiscordGateway & {
     handleIncoming: (
       m: DiscordIncomingMessage,
       raw: Message,
     ) => Promise<void>
+    handleInteraction: (i: Interaction) => Promise<void>
   }
 }
 
-/** 幫 caller：一次建 client + gateway + 綁 onMessage 的 facade。 */
+/** 幫 caller：一次建 client + gateway + 綁 onMessage/onInteraction + 註冊 slash commands 的 facade。 */
 export async function startDiscordGateway(opts: {
   config: DiscordConfig
   token: string
   registry: ProjectRegistry
   visionEnabled: boolean
+  broadcastPermissionMode?: DiscordGatewayOptions['broadcastPermissionMode']
   log?: DiscordGatewayOptions['log']
 }): Promise<{
   client: DiscordClientHandle
@@ -267,18 +350,23 @@ export async function startDiscordGateway(opts: {
 }> {
   const { createDiscordClient } = await import('./client.js')
 
-  // 先建 gateway 物件（沒 client 也能造 — 只是一個 function reference 容器）
-  let gatewayRef: (DiscordGateway & {
-    handleIncoming?: (
-      m: DiscordIncomingMessage,
-      raw: Message,
-    ) => Promise<void>
-  }) | null = null
+  let gatewayRef:
+    | (DiscordGateway & {
+        handleIncoming?: (
+          m: DiscordIncomingMessage,
+          raw: Message,
+        ) => Promise<void>
+        handleInteraction?: (i: Interaction) => Promise<void>
+      })
+    | null = null
 
   const client = createDiscordClient({
     token: opts.token,
     onMessage: (adapted, raw) => {
       void gatewayRef?.handleIncoming?.(adapted, raw)
+    },
+    onInteraction: interaction => {
+      void gatewayRef?.handleInteraction?.(interaction)
     },
     onReady: info => {
       void opts.log?.info('discord ready', info) ??
@@ -298,11 +386,28 @@ export async function startDiscordGateway(opts: {
     client,
     registry: opts.registry,
     visionEnabled: opts.visionEnabled,
+    broadcastPermissionMode: opts.broadcastPermissionMode,
     log: opts.log,
   })
   gatewayRef = gateway as typeof gatewayRef
 
   await client.connect()
+
+  // 註冊 slash commands（連上後立刻註冊 — guild 級 instant，global 慢傳播）。
+  try {
+    const result = await registerSlashCommands(client.raw, { token: opts.token })
+    const guildOk = result.guilds.filter(g => g.ok).length
+    const guildFail = result.guilds.filter(g => !g.ok).length
+    void opts.log?.info('slash commands registered', {
+      guildOk,
+      guildFail,
+      global: result.global.ok,
+    })
+  } catch (e) {
+    void opts.log?.warn?.('slash command registration failed', {
+      err: e instanceof Error ? e.message : String(e),
+    })
+  }
 
   return {
     client,

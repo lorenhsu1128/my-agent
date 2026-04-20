@@ -242,6 +242,19 @@ export async function runDaemonStart(
             registry,
             visionEnabled: isVisionEnabled(),
             log: handle.logger,
+            // M-DISCORD-4：Discord /mode → broadcast permissionModeChanged 到
+            // 同 project 所有 attached REPL client（REPL 會 apply 本機 mode）。
+            broadcastPermissionMode: (projectId, mode) => {
+              if (!handle.server) return
+              handle.server.broadcast(
+                {
+                  type: 'permissionModeChanged',
+                  projectId,
+                  mode,
+                },
+                c => c.projectId === projectId,
+              )
+            },
           })
           disposeDiscord = dg.dispose
           const tokenSrc = process.env.DISCORD_BOT_TOKEN ? 'env' : 'config'

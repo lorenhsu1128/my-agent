@@ -4191,6 +4191,20 @@ export function REPL({
         )
       ]);
     },
+    // M-DISCORD-4：daemon 廣播 permissionModeChanged（通常是 Discord /mode
+    // 觸發）→ apply 到本機 AppState + 顯示 info。
+    onPermissionModeChanged: (info): void => {
+      const cur = store.getState().toolPermissionContext;
+      if (cur.mode === info.mode) return;
+      setToolPermissionContext({ ...cur, mode: info.mode });
+      setMessages(prev => [
+        ...prev,
+        createSystemMessage(
+          `🔀 Permission mode 已由 daemon 端（通常是 Discord /mode）改為 \`${info.mode}\``,
+          'info'
+        )
+      ]);
+    },
     cwd: getOriginalCwd(),
   });
 

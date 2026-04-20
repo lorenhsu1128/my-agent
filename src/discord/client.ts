@@ -16,6 +16,7 @@ import {
   Events,
   GatewayIntentBits,
   type ChannelType,
+  type Interaction,
   type Message,
   type TextBasedChannel,
   ChannelType as ChannelTypeEnum,
@@ -31,6 +32,8 @@ export interface DiscordClientOptions {
   token: string
   /** Message handler — whitelist / 路由在上層做。 */
   onMessage?: (msg: DiscordIncomingMessage, raw: Message) => void
+  /** Slash command / button interaction。whitelist 在上層做。 */
+  onInteraction?: (interaction: Interaction) => void
   /** 連線 ready 後的 callback（拿到 bot user 資訊）。 */
   onReady?: (info: { botId: string; botTag: string }) => void
   /** 連線錯誤（disconnect / 重連失敗等）。 */
@@ -104,6 +107,14 @@ export function createDiscordClient(
     try {
       const adapted = adaptIncoming(rawMsg)
       opts.onMessage?.(adapted, rawMsg)
+    } catch (e) {
+      opts.onError?.(e)
+    }
+  })
+
+  client.on(Events.InteractionCreate, interaction => {
+    try {
+      opts.onInteraction?.(interaction)
     } catch (e) {
       opts.onError?.(e)
     }

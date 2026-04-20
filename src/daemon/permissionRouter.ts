@@ -114,6 +114,13 @@ export interface PermissionRouter {
   handleResponse(clientId: string, frame: unknown): boolean
   /** 等待中 request 數量（測試用）。 */
   pendingCount(): number
+  /** M-DISCORD-4：列出所有 pending toolUseID（for /allow /deny 等 UX）。 */
+  listPendingIds(): string[]
+  /** M-DISCORD-4：訂閱 pending lifecycle（Discord slashCommands 追蹤用）。 */
+  onPending(
+    handler: (info: { toolUseID: string; meta: PermissionRequestMetadata }) => void,
+  ): () => void
+  onResolved(handler: (info: { toolUseID: string }) => void): () => void
   /** 取消所有等待中 request（daemon shutdown / mode switch）。 */
   cancelAll(reason?: string): void
   /** 設 / 換 Discord fallback handler。 */
@@ -175,6 +182,31 @@ export function createPermissionRouter(
   }
   const pending = new Map<string, PendingRequest>()
   let fallback: PermissionFallbackHandler | undefined = opts.fallbackHandler
+  const pendingListeners = new Set<
+    (info: { toolUseID: string; meta: PermissionRequestMetadata }) => void
+  >()
+  const resolvedListeners = new Set<(info: { toolUseID: string }) => void>()
+  const firePending = (
+    toolUseID: string,
+    meta: PermissionRequestMetadata,
+  ): void => {
+    for (const l of pendingListeners) {
+      try {
+        l({ toolUseID, meta })
+      } catch {
+        // swallow listener errors
+      }
+    }
+  }
+  const fireResolved = (toolUseID: string): void => {
+    for (const l of resolvedListeners) {
+      try {
+        l({ toolUseID })
+      } catch {
+        // swallow
+      }
+    }
+  }
 
   const autoAllow = (input: unknown): PermissionDecision => ({
     behavior: 'allow',
@@ -280,9 +312,11 @@ export function createPermissionRouter(
     )
 
     // 等 response — timeout 則 auto-allow。
+    firePending(toolUseID, meta)
     return new Promise<PermissionDecision>(resolve => {
       const timer = scheduler.setTimeout(() => {
         pending.delete(toolUseID)
+        fireResolved(toolUseID)
         resolve(autoAllow(input))
       }, timeoutMs)
       pending.set(toolUseID, {
@@ -301,6 +335,7 @@ export function createPermissionRouter(
       if (!entry) return false
       pending.delete(frame.toolUseID)
       scheduler.clearTimeout(entry.timer)
+      fireResolved(frame.toolUseID)
       if (frame.decision === 'allow') {
         entry.resolve({
           behavior: 'allow',
@@ -333,7 +368,19 @@ export function createPermissionRouter(
           },
         })
         pending.delete(id)
+        fireResolved(id)
       }
+    },
+    listPendingIds() {
+      return Array.from(pending.keys())
+    },
+    onPending(handler) {
+      pendingListeners.add(handler)
+      return () => pendingListeners.delete(handler)
+    },
+    onResolved(handler) {
+      resolvedListeners.add(handler)
+      return () => resolvedListeners.delete(handler)
     },
     setFallbackHandler(h) {
       fallback = h
