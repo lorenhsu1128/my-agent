@@ -14,6 +14,8 @@ export {
   getDiscordConfigSnapshot,
   isDiscordEnabled,
   getDiscordBotToken,
+  addChannelBinding,
+  removeChannelBinding,
   _resetDiscordConfigForTests,
 } from './loader.js'
 export { seedDiscordConfigIfMissing } from './seed.js'

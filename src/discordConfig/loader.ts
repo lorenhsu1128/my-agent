@@ -6,7 +6,7 @@
  *   - getDiscordConfigSnapshot() 同步回傳凍結結果
  *   - 檔案不存在 / JSON 壞 / schema 失敗 → 走 DEFAULT + stderr warn；enabled=false
  */
-import { readFile } from 'fs/promises'
+import { readFile, writeFile } from 'fs/promises'
 import { getDiscordConfigPath } from './paths.js'
 import {
   DEFAULT_DISCORD_CONFIG,
@@ -99,6 +99,61 @@ export function getDiscordBotToken(): string | undefined {
   const fromCfg = getDiscordConfigSnapshot().botToken
   if (fromCfg && fromCfg.trim().length > 0) return fromCfg.trim()
   return undefined
+}
+
+/**
+ * M-DISCORD-AUTOBIND：對 discord.json `channelBindings` 增刪的 atomic 寫回。
+ *
+ * 為了讓 running daemon 的 gateway 馬上看到新 binding（gateway 關閉了 config
+ * reference），這裡**就地**修改 `cached.channelBindings` 物件（delete + assign），
+ * 而非 replace whole snapshot。該 Map 物件是跟 gateway 共用的。
+ *
+ * 若 cached 尚未 load（edge case）→ 會先跑一次 load。
+ */
+export async function addChannelBinding(
+  channelId: string,
+  projectPath: string,
+): Promise<void> {
+  const cfg = await loadDiscordConfigSnapshot()
+  // 讀 live 檔案重新 parse（避免覆蓋其他使用者外部編輯）
+  const path = getDiscordConfigPath()
+  let raw: string
+  try {
+    raw = await readFile(path, 'utf-8')
+  } catch {
+    raw = JSON.stringify(DEFAULT_DISCORD_CONFIG, null, 2)
+  }
+  const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
+  const bindings =
+    (parsed.channelBindings as Record<string, string> | undefined) ?? {}
+  bindings[channelId] = projectPath
+  parsed.channelBindings = bindings
+  await writeFile(path, JSON.stringify(parsed, null, 2) + '\n', 'utf-8')
+  // 同步更新 in-memory（gateway 共用此物件 reference）
+  cfg.channelBindings[channelId] = projectPath
+}
+
+export async function removeChannelBinding(channelId: string): Promise<void> {
+  const cfg = await loadDiscordConfigSnapshot()
+  const path = getDiscordConfigPath()
+  let raw: string
+  try {
+    raw = await readFile(path, 'utf-8')
+  } catch {
+    return
+  }
+  const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
+  const bindings =
+    (parsed.channelBindings as Record<string, string> | undefined) ?? {}
+  if (!(channelId in bindings)) {
+    // 已經不在檔案裡 — 仍確保 in-memory 清乾淨
+    delete cfg.channelBindings[channelId]
+    return
+  }
+  delete bindings[channelId]
+  parsed.channelBindings = bindings
+  await writeFile(path, JSON.stringify(parsed, null, 2) + '\n', 'utf-8')
+  delete cfg.channelBindings[channelId]
 }
 
 export function _resetDiscordConfigForTests(): void {

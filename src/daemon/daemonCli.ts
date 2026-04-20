@@ -33,9 +33,16 @@ import { createProjectRegistry, projectIdFromCwd } from './projectRegistry.js'
 import { createDefaultProjectRuntimeFactory } from './projectRuntimeFactory.js'
 import {
   loadDiscordConfigSnapshot,
+  getDiscordConfigSnapshot,
   seedDiscordConfigIfMissing,
   getDiscordBotToken,
 } from '../discordConfig/index.js'
+import {
+  handleBindRequest,
+  handleUnbindRequest,
+  isDiscordBindRequest,
+  isDiscordUnbindRequest,
+} from './discordBindRpc.js'
 import { isVisionEnabled } from '../llamacppConfig/loader.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 
@@ -140,6 +147,29 @@ export async function runDaemonStart(
       onMessage = (c, m): void => {
         if (rejectedClients.has(c.id)) {
           // 被拒的 client 送 input 一律忽略；REPL 已 fallback standalone，不該還在送。
+          return
+        }
+        // M-DISCORD-AUTOBIND：/discord-bind RPC dispatch — 不屬於任何 project runtime。
+        if (isDiscordBindRequest(m)) {
+          const req = m
+          void (async () => {
+            const res = await handleBindRequest(req, {
+              getClient: () => discordClientRef,
+              getConfig: () => getDiscordConfigSnapshot(),
+            })
+            handle.server!.send(c.id, res)
+          })()
+          return
+        }
+        if (isDiscordUnbindRequest(m)) {
+          const req = m
+          void (async () => {
+            const res = await handleUnbindRequest(req, {
+              getClient: () => discordClientRef,
+              getConfig: () => getDiscordConfigSnapshot(),
+            })
+            handle.server!.send(c.id, res)
+          })()
           return
         }
         // /daemon attach|detach 用的 daemon-wide status 查詢（不屬於任何 project runtime）。
@@ -250,6 +280,8 @@ export async function runDaemonStart(
       let disposeDiscord: (() => Promise<void>) | null = null
       // Daemon-wide discord active flag — /daemon detach 的 shutdown 判定會讀它。
       let discordActive = false
+      // M-DISCORD-AUTOBIND：/discord-bind RPC 要用的 Discord Client 參考（gateway 啟動後填入）
+      let discordClientRef: import('discord.js').Client | null = null
       try {
         await seedDiscordConfigIfMissing()
         const discordCfg = await loadDiscordConfigSnapshot()
@@ -277,6 +309,7 @@ export async function runDaemonStart(
             },
           })
           disposeDiscord = dg.dispose
+          discordClientRef = dg.client.raw
           discordActive = true
           const tokenSrc = process.env.DISCORD_BOT_TOKEN ? 'env' : 'config'
           out(`  discord:     enabled (bot connected, token from ${tokenSrc})\n`)
