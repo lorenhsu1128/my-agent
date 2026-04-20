@@ -98,6 +98,31 @@ export interface FallbackManager {
   queryDaemonStatus(
     timeoutMs?: number,
   ): Promise<{ replCount: number; discordEnabled: boolean } | null>
+  /**
+   * M-DISCORD-AUTOBIND：`/discord-bind` RPC — 委託 daemon 呼 discord.js 建 guild channel
+   * 並寫回 channelBindings。非 attached 或 timeout 回 null。
+   */
+  discordBind(
+    cwd: string,
+    timeoutMs?: number,
+  ): Promise<
+    | {
+        ok: true
+        channelId: string
+        channelName?: string
+        url?: string
+        alreadyBound?: boolean
+      }
+    | { ok: false; error: string }
+    | null
+  >
+  /**
+   * `/discord-unbind` RPC — rename channel `unbound-<name>` + 清 binding。
+   */
+  discordUnbind(
+    cwd: string,
+    timeoutMs?: number,
+  ): Promise<{ ok: true } | { ok: false; error: string } | null>
   stop(): Promise<void>
 }
 
@@ -153,6 +178,26 @@ export function createFallbackManager(
   >()
   let nextQueryId = 1
 
+  /** M-DISCORD-AUTOBIND：pending discord.bind / discord.unbind response */
+  type DiscordBindResolve =
+    | ((v: {
+        ok: true
+        channelId: string
+        channelName?: string
+        url?: string
+        alreadyBound?: boolean
+      } | { ok: false; error: string } | null) => void)
+  type DiscordUnbindResolve =
+    | ((v: { ok: true } | { ok: false; error: string } | null) => void)
+  const pendingDiscordBind = new Map<
+    string,
+    { resolve: DiscordBindResolve; timer: ReturnType<typeof setTimeout> }
+  >()
+  const pendingDiscordUnbind = new Map<
+    string,
+    { resolve: DiscordUnbindResolve; timer: ReturnType<typeof setTimeout> }
+  >()
+
   const tryConnect = async (snap: DaemonSnapshot): Promise<boolean> => {
     if (!snap.alive || !snap.port || !snap.token) return false
     cleanupSocket()
@@ -171,6 +216,55 @@ export function createFallbackManager(
       // rejected，設 mode=standalone，emit 一次性 attachRejected 事件讓 REPL
       // 顯示 warning。後續不再自動重試（避免無謂 reconnect loop）。
       // daemonStatus response → resolve 對應 pending query
+      if (f.type === 'discord.bindResult') {
+        const rid = String((f as { requestId?: unknown }).requestId ?? '')
+        const pending = pendingDiscordBind.get(rid)
+        if (pending) {
+          clearTimeout(pending.timer)
+          pendingDiscordBind.delete(rid)
+          const p = f as unknown as {
+            ok?: boolean
+            channelId?: string
+            channelName?: string
+            url?: string
+            alreadyBound?: boolean
+            error?: string
+          }
+          if (p.ok) {
+            pending.resolve({
+              ok: true,
+              channelId: String(p.channelId ?? ''),
+              channelName: p.channelName,
+              url: p.url,
+              alreadyBound: p.alreadyBound,
+            })
+          } else {
+            pending.resolve({
+              ok: false,
+              error: String(p.error ?? 'unknown'),
+            })
+          }
+        }
+        return
+      }
+      if (f.type === 'discord.unbindResult') {
+        const rid = String((f as { requestId?: unknown }).requestId ?? '')
+        const pending = pendingDiscordUnbind.get(rid)
+        if (pending) {
+          clearTimeout(pending.timer)
+          pendingDiscordUnbind.delete(rid)
+          const p = f as unknown as { ok?: boolean; error?: string }
+          if (p.ok) {
+            pending.resolve({ ok: true })
+          } else {
+            pending.resolve({
+              ok: false,
+              error: String(p.error ?? 'unknown'),
+            })
+          }
+        }
+        return
+      }
       if (f.type === 'daemonStatus') {
         const rid = String((f as { requestId?: unknown }).requestId ?? '')
         const pending = pendingStatusQueries.get(rid)
@@ -375,6 +469,16 @@ export function createFallbackManager(
         p.resolve(null)
       }
       pendingStatusQueries.clear()
+      for (const p of pendingDiscordBind.values()) {
+        clearTimeout(p.timer)
+        p.resolve(null)
+      }
+      pendingDiscordBind.clear()
+      for (const p of pendingDiscordUnbind.values()) {
+        clearTimeout(p.timer)
+        p.resolve(null)
+      }
+      pendingDiscordUnbind.clear()
       cleanupSocket()
       setMode('standalone')
     },
@@ -403,6 +507,64 @@ export function createFallbackManager(
         }
       })
     },
+    async discordBind(cwd, timeoutMs = 15_000) {
+      if (mode !== 'attached' || !socket) return null
+      const requestId = `dbind${nextQueryId++}-${Date.now()}`
+      return await new Promise<
+        | { ok: true; channelId: string; channelName?: string; url?: string; alreadyBound?: boolean }
+        | { ok: false; error: string }
+        | null
+      >(resolve => {
+        const timer = setTimeout(() => {
+          pendingDiscordBind.delete(requestId)
+          resolve(null)
+        }, timeoutMs)
+        pendingDiscordBind.set(requestId, { resolve, timer })
+        try {
+          ;(
+            socket as unknown as {
+              send: (f: {
+                type: string
+                requestId: string
+                cwd: string
+              }) => void
+            }
+          ).send({ type: 'discord.bind', requestId, cwd })
+        } catch {
+          clearTimeout(timer)
+          pendingDiscordBind.delete(requestId)
+          resolve(null)
+        }
+      })
+    },
+    async discordUnbind(cwd, timeoutMs = 10_000) {
+      if (mode !== 'attached' || !socket) return null
+      const requestId = `dunbind${nextQueryId++}-${Date.now()}`
+      return await new Promise<
+        { ok: true } | { ok: false; error: string } | null
+      >(resolve => {
+        const timer = setTimeout(() => {
+          pendingDiscordUnbind.delete(requestId)
+          resolve(null)
+        }, timeoutMs)
+        pendingDiscordUnbind.set(requestId, { resolve, timer })
+        try {
+          ;(
+            socket as unknown as {
+              send: (f: {
+                type: string
+                requestId: string
+                cwd: string
+              }) => void
+            }
+          ).send({ type: 'discord.unbind', requestId, cwd })
+        } catch {
+          clearTimeout(timer)
+          pendingDiscordUnbind.delete(requestId)
+          resolve(null)
+        }
+      })
+    },
     async stop() {
       disposed = true
       detector.off('change', onDaemonChange)
@@ -415,6 +577,16 @@ export function createFallbackManager(
         p.resolve(null)
       }
       pendingStatusQueries.clear()
+      for (const p of pendingDiscordBind.values()) {
+        clearTimeout(p.timer)
+        p.resolve(null)
+      }
+      pendingDiscordBind.clear()
+      for (const p of pendingDiscordUnbind.values()) {
+        clearTimeout(p.timer)
+        p.resolve(null)
+      }
+      pendingDiscordUnbind.clear()
       cleanupSocket()
       emitter.removeAllListeners()
     },
