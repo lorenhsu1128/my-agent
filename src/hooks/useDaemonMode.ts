@@ -18,6 +18,8 @@ import type { InboundFrame } from '../repl/thinClient/thinClientSocket.js'
 export interface UseDaemonModeOptions {
   /** Inbound frame 處理（6c 會接）— 預設 no-op。 */
   onFrame?: (frame: InboundFrame) => void
+  /** Mode 變化時通知（REPL 用來在 attached→standalone 時顯示 system message）。 */
+  onModeChange?: (mode: ClientMode) => void
   /**
    * 停用整個 hook（給 daemon 自己內部跑 REPL 的 edge case，避免 attach 自己）。
    * 預設 false — 所有 REPL 都開。
@@ -30,6 +32,21 @@ export interface UseDaemonModeResult {
   managerRef: React.MutableRefObject<FallbackManager | null>
 }
 
+/**
+ * Module-level reference to the **current** mounted fallback manager, so code
+ * paths that live before the hook call site (like REPL's `onSubmit` useCallback)
+ * can still route inputs through daemon without moving the hook call or
+ * threading props. Cleared on unmount.
+ *
+ * Only one REPL can be mounted at a time (the process has a single screen
+ * tree), so this singleton is safe.
+ */
+let currentManager: FallbackManager | null = null
+
+export function getCurrentDaemonManager(): FallbackManager | null {
+  return currentManager
+}
+
 export function useDaemonMode(
   opts: UseDaemonModeOptions = {},
 ): UseDaemonModeResult {
@@ -37,12 +54,15 @@ export function useDaemonMode(
   const managerRef = useRef<FallbackManager | null>(null)
   const onFrameRef = useRef<typeof opts.onFrame>(opts.onFrame)
   onFrameRef.current = opts.onFrame
+  const onModeChangeRef = useRef<typeof opts.onModeChange>(opts.onModeChange)
+  onModeChangeRef.current = opts.onModeChange
 
   useEffect(() => {
     if (opts.disabled) return
     const detector = createDaemonDetector({ pollIntervalMs: 2_000 })
     const manager = createFallbackManager({ detector })
     managerRef.current = manager
+    currentManager = manager
 
     const updateMode = (mode: ClientMode): void => {
       setAppState(prev => {
@@ -53,6 +73,7 @@ export function useDaemonMode(
           daemonPort: detector.snapshot.port,
         }
       })
+      onModeChangeRef.current?.(mode)
     }
     updateMode(manager.state.mode)
     manager.on('mode', updateMode)
@@ -65,6 +86,7 @@ export function useDaemonMode(
       void manager.stop()
       detector.stop()
       managerRef.current = null
+      if (currentManager === manager) currentManager = null
       setAppState(prev =>
         prev.daemonMode === 'standalone' && prev.daemonPort === undefined
           ? prev

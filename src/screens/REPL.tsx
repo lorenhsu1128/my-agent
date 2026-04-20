@@ -90,7 +90,8 @@ import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js';
 import { getShortcutDisplay } from '../keybindings/shortcutFormat.js';
 import { CancelRequestHandler } from '../hooks/useCancelRequest.js';
 import { useBackgroundTaskNavigation } from '../hooks/useBackgroundTaskNavigation.js';
-import { useDaemonMode } from '../hooks/useDaemonMode.js';
+import { useDaemonMode, getCurrentDaemonManager } from '../hooks/useDaemonMode.js';
+import type { BetaContentBlock } from 'my-agent-ai/sdk/resources/beta/messages/messages';
 import { useSwarmInitialization } from '../hooks/useSwarmInitialization.js';
 import { useTeammateViewAutoExit } from '../hooks/useTeammateViewAutoExit.js';
 import { errorMessage } from '../utils/errors.js';
@@ -3132,6 +3133,32 @@ export function REPL({
       proactiveModule?.resumeProactive();
     }
 
+    // M-DAEMON-6c：attached 模式 — 把 input 送到 daemon 跑，local query 路徑跳過。
+    // Slash command 和 speculation 仍走本地（daemon 暫不支援 slash）。
+    // Daemon 回覆會透過 useDaemonMode 的 onFrame 塞進 messages。
+    {
+      const mgr = getCurrentDaemonManager();
+      if (
+        mgr &&
+        mgr.state.mode === 'attached' &&
+        !speculationAccept &&
+        !input.trim().startsWith('/')
+      ) {
+        try {
+          mgr.sendInput(input, 'interactive');
+          setMessages(prev => [...prev, createUserMessage({ content: input })]);
+          // 清掉輸入 + cursor。
+          helpers.setCursorOffset(0);
+          helpers.clearBuffer();
+          setInputValue('');
+          setPastedContents({});
+          return;
+        } catch {
+          // sendInput 失敗就 fall through 到本地路徑（防禦）
+        }
+      }
+    }
+
     // Handle immediate commands - these bypass the queue and execute right away
     // even while Claude is processing. Commands opt-in via `immediate: true`.
     // Commands triggered via keybindings are always treated as immediate.
@@ -4031,8 +4058,50 @@ export function REPL({
 
   // M-DAEMON-6：偵測 daemon 並維護 attached/standalone/reconnecting state。
   // 寫入 AppState.daemonMode，DaemonStatusIndicator 讀取顯示 badge。
-  // 6c 會加 onFrame handler 把 SDKMessage 塞進 REPL messages。
-  useDaemonMode();
+  // onFrame：daemon 廣播的 SDKMessage 轉成 REPL assistant/user messages 追加
+  // 到訊息陣列，重用現有 rendering（tool_use content block 也跟著顯示）。
+  // onModeChange：attached → 其他時顯示 system banner，告知使用者切換。
+  const daemonModeHandle = useDaemonMode({
+    onFrame: (frame): void => {
+      if (frame.type !== 'runnerEvent') return;
+      const evt = (frame as { event?: { type?: string; payload?: unknown } }).event;
+      if (!evt || evt.type !== 'output') return;
+      const sdk = evt.payload as { type?: string; message?: { content?: unknown[] } };
+      if (!sdk) return;
+      if (sdk.type === 'assistant') {
+        const content = sdk.message?.content;
+        if (!Array.isArray(content)) return;
+        setMessages(prev => [
+          ...prev,
+          createAssistantMessage({
+            content: content as BetaContentBlock[]
+          })
+        ]);
+      }
+      // 其他 SDK message types（user tool_result / system / result）先忽略；
+      // tool_use 已在 assistant content 內由既有 renderer 處理。M-DAEMON-7 會補
+      // permission request / tool_result 的路由。
+    },
+    onModeChange: (mode): void => {
+      if (mode === 'standalone') {
+        setMessages(prev => [
+          ...prev,
+          createSystemMessage(
+            'Daemon 連線中斷，已切回獨立模式。下次輸入走本地執行。',
+            'warning'
+          )
+        ]);
+      } else if (mode === 'attached') {
+        setMessages(prev => [
+          ...prev,
+          createSystemMessage(
+            'Daemon 已連線 — 後續輸入送到 daemon 執行（回覆會同步到這裡及其他 attached client）。',
+            'info'
+          )
+        ]);
+      }
+    }
+  });
 
   // Note: Permission polling is now handled by useInboxPoller
   // - Workers receive permission responses via mailbox messages
