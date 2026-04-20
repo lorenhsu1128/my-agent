@@ -79,7 +79,13 @@
 - [x] M-DAEMON-5 `src/daemon/{sessionRunner,inputQueue}.ts`：SessionRunner interface（run(input, signal) → AsyncIterable<RunnerEvent>）+ echoRunner / createDelayedEchoRunner 假實作（M-DAEMON-4 會用 QueryEngineRunner 取代）+ InputQueue 狀態機（IDLE/RUNNING/INTERRUPTING）+ 混合策略（interactive 搶占 / background FIFO / slash priority queue-head）+ interruptGraceMs force-clear（防 runner 卡死）+ EventEmitter 事件（state / runnerEvent / turnStart / turnEnd，帶 reason: done/error/aborted）+ defaultIntentForSource helper。測試 `input-queue.test.ts` 19 case（defaultIntent 5 + happy 4 + FIFO 2 + interrupt 3 + slash 1 + dispose 2 + runner 2），全套 77/77 綠。InputQueue 和 WS broker 解耦；M-DAEMON-4 把 QueryEngine 包成 SessionRunner 後即完成 pipeline
 
 ### 階段三：REPL thin-client
-- [ ] M-DAEMON-6 `src/repl/thinClient/{detectDaemon,thinClientMode,fallbackManager}.ts`：讀 pid.json + heartbeat check（`now - lastHeartbeat > 30s` → stale）+ token load；attach 後 REPL 不跑 QueryEngine 只 subscribe WS stream；daemon 掛了透明切獨立模式；狀態列 badge。修改 `src/screens/REPL.tsx` 加 mode prop（`standalone | attached`）；`src/utils/status.tsx` 加 daemon badge。測試：無 daemon → REPL 獨立；啟動 daemon → 新 REPL attach；kill daemon → REPL 切獨立不當機
+- [x] M-DAEMON-6 `src/repl/thinClient/{detectDaemon,thinClientSocket,fallbackManager}.ts` + `src/hooks/useDaemonMode.ts` + `PromptInputFooter DaemonStatusIndicator` + REPL onSubmit 攔截。
+  - 6a (commit 988657e)：detectDaemon 2s poll pid+token+heartbeat；thinClientSocket WS `ws://host:port/sessions?token=` with newline JSON；fallbackManager 狀態機 standalone↔attached↔reconnecting（socket close → reconnecting，30s 逾時回 standalone；detector 確認 daemon 死 → standalone）
+  - 6b (commit d4d3c9b)：AppState 新增 `daemonMode`/`daemonPort`；useDaemonMode hook 建 detector+manager 寫 AppState；DaemonStatusIndicator footer 顯示 `daemon: attached :port` 綠 / `reconnecting` 黃 / `standalone` 暗
+  - 6c (commit dd1085c)：onSubmit 攔截 — attached + 非 slash + 非 speculation → sendInput via WS + 塞 user message；onFrame 解析 SDKMessage.assistant → createAssistantMessage 追加；onModeChange 插 system banner；module-level `getCurrentDaemonManager()` singleton 繞過 useCallback 早於 hook 的閉包問題
+  - 6d (本 commit)：4 個 E2E（standalone detect / attach + sendInput / daemon stop → reconnecting → standalone / frame forwarding）
+  - 未覆蓋（M-DAEMON-7+）：permission prompt 路由 daemon→client、tool_result 細粒度 UI、Q3=a in-flight turn 重跑（目前只 system banner）、slash command attached support
+  - 全 daemon 測試 111/111 綠，./cli -p 冒煙通過
 
 ### 階段四：Multi-client + permission
 - [ ] M-DAEMON-7 `src/daemon/permissionRouter.ts`：stream event broadcast 給所有 attached clients；permission prompt 路由到 `source_client_id`；Discord fallback hook 預留 interface（M-DISCORD 才接）。測試：兩個 REPL attach 同 daemon → 任一邊 type 都看到訊息；permission prompt 只彈到發起端
@@ -1221,3 +1227,5 @@
 - 2026-04-20 09:09: Session 結束 | 進度：353/383 任務 | aeb559c feat(daemon): SessionRunner iface + input queue w/ mixed strategy (M-DAEMON-5)
 
 - 2026-04-20 09:43: Session 結束 | 進度：354/383 任務 | f9fe3a6 docs(todo): mark M-DAEMON-4 complete
+
+- 2026-04-20 10:11: Session 結束 | 進度：355/383 任務 | 8e5e826 feat(daemon): cron scheduler wiring + REPL/headless skip guard (M-DAEMON-4.5)
