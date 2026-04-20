@@ -15,6 +15,7 @@ import {
   Client,
   Events,
   GatewayIntentBits,
+  Partials,
   type ChannelType,
   type Interaction,
   type Message,
@@ -95,8 +96,10 @@ export function createDiscordClient(
       GatewayIntentBits.GuildMessageReactions,
       GatewayIntentBits.DirectMessageReactions,
     ],
-    // DM 在 discord.js v14 需要 Partials.Channel 才會收到
-    partials: ['CHANNEL' as never, 'MESSAGE' as never],
+    // discord.js v14：DM channel 預設不在 cache 內，需要 Partials.Channel
+    // 才會收到 DM 的 MessageCreate；沒加 → 只有 guild 訊息能收到，DM 全丟。
+    // Partials.Message 讓 message reference（reply target）即使沒 cache 也有 partial。
+    partials: [Partials.Channel, Partials.Message],
   })
 
   let state: 'idle' | 'connecting' | 'ready' | 'closed' = 'idle'
