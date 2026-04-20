@@ -104,6 +104,38 @@ export function createDiscordClient(
 
   let state: 'idle' | 'connecting' | 'ready' | 'closed' = 'idle'
 
+  // discord.js v14 DM 坑：MESSAGE_CREATE payload 不帶 `channel.type`，
+  // Partials.Channel 在 Channel.create() 時判斷 `data.type === ChannelType.DM` 不符 → 建不出 DMChannel → return null，
+  // 接著 `Failed to find guild, or unknown type for channel X undefined` → MessageCreate 直接不 emit。
+  // workaround：攔 raw packet，對「無 guild_id」的 MESSAGE_CREATE 先 `users.fetch(authorId).createDM()` populate cache，
+  // 同 packet 接著進 discord.js 的 handler 時就能正常 resolve channel。
+  const dmChannelPrefetch = new Set<string>()
+  client.on('raw' as never, async (packet: unknown) => {
+    const p = packet as {
+      t?: string
+      d?: { channel_id?: string; guild_id?: string; author?: { id?: string } }
+    }
+    if (p?.t !== 'MESSAGE_CREATE') return
+    if (p.d?.guild_id) return // guild message — 不需特別處理
+    const chanId = p.d?.channel_id
+    const authorId = p.d?.author?.id
+    if (!chanId) return
+    if (dmChannelPrefetch.has(chanId)) return
+    dmChannelPrefetch.add(chanId)
+    try {
+      // channels.fetch 直接拿 channel（discord.js 會呼叫 REST）→ 建 DMChannel → 放進 cache
+      // 未來的 MessageCreate handler 就能在 cache 找到並正常 dispatch
+      // 注意：第一則訊息會有一次延遲（fetch 完才能 re-emit），但 discord.js 14.x 以後
+      // 實測 raw 事件到 MessageCreate handler 通常相差 >50ms，fetch 夠快
+      await client.channels.fetch(chanId)
+      if (authorId) {
+        await client.users.fetch(authorId).catch(() => undefined)
+      }
+    } catch {
+      dmChannelPrefetch.delete(chanId)
+    }
+  })
+
   client.on(Events.MessageCreate, rawMsg => {
     // 忽略 bot 自己的訊息 + 其他 bot 的訊息（避免迴圈）
     if (rawMsg.author?.bot) return

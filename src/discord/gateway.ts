@@ -393,6 +393,24 @@ export async function startDiscordGateway(opts: {
 
   await client.connect()
 
+  // discord.js v14 DM 坑 workaround：MESSAGE_CREATE payload 不帶 channel.type，
+  // Partials.Channel 無法幫 DMChannel 建構（Channel.create 因 type 不符回 null）
+  // → MessageCreate event 不 emit，DM 訊息被丟。
+  // 解法：連上後預先對 whitelist users 做 user.createDM()，DM channel 寫進 cache。
+  // 之後收到 MESSAGE_CREATE 時 channels.cache 命中 → 不再走 partial 路徑 → 正常 dispatch。
+  for (const userId of opts.config.whitelistUserIds) {
+    try {
+      const u = await client.raw.users.fetch(userId)
+      await u.createDM()
+      void opts.log?.info('prefetched DM channel', { userId })
+    } catch (e) {
+      void opts.log?.warn?.('failed to prefetch DM channel', {
+        userId,
+        err: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+
   // 註冊 slash commands（連上後立刻註冊 — guild 級 instant，global 慢傳播）。
   try {
     const result = await registerSlashCommands(client.raw, { token: opts.token })
