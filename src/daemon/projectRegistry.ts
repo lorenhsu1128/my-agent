@@ -90,6 +90,17 @@ export interface ProjectRegistry {
   touchActivity(projectId: string): void
   /** 強制 sweep 一次（測試用）。回傳被 unload 的 projectId 列表。 */
   sweepIdle(): Promise<string[]>
+  /**
+   * 訂閱 runtime load/unload 事件。多個 subscriber 並存；回傳 unsub。
+   * Load = 每次新 runtime 建好（includes cold first load；不 emit 於重入 cache hit）。
+   */
+  onLoad(handler: (runtime: ProjectRuntime) => void): () => void
+  onUnload(
+    handler: (info: {
+      projectId: string
+      reason: 'idle' | 'manual' | 'shutdown'
+    }) => void,
+  ): () => void
   /** Shutdown：unload 所有 runtime，停 sweeper。 */
   dispose(): Promise<void>
 }
@@ -113,6 +124,34 @@ export function createProjectRegistry(
   const runtimes = new Map<string, ProjectRuntime>()
   // 同 cwd 並行 loadProject 時的去重 — 避免 factory 重入跑兩次
   const loading = new Map<string, Promise<ProjectRuntime>>()
+  const loadListeners = new Set<(runtime: ProjectRuntime) => void>()
+  const unloadListeners = new Set<
+    (info: {
+      projectId: string
+      reason: 'idle' | 'manual' | 'shutdown'
+    }) => void
+  >()
+  const fireLoad = (r: ProjectRuntime): void => {
+    for (const l of loadListeners) {
+      try {
+        l(r)
+      } catch {
+        // swallow listener errors
+      }
+    }
+  }
+  const fireUnload = (
+    projectId: string,
+    reason: 'idle' | 'manual' | 'shutdown',
+  ): void => {
+    for (const l of unloadListeners) {
+      try {
+        l({ projectId, reason })
+      } catch {
+        // swallow
+      }
+    }
+  }
 
   let disposed = false
   let sweeperHandle: ReturnType<typeof setInterval> | null = null
@@ -153,6 +192,7 @@ export function createProjectRegistry(
         runtime.lastActivityAt = now()
         runtimes.set(projectId, runtime)
         opts.onLoad?.(projectId)
+        fireLoad(runtime)
         startSweeper()
         return runtime
       } finally {
@@ -184,6 +224,7 @@ export function createProjectRegistry(
       // dispose 失敗不影響 registry 一致性
     }
     opts.onUnload?.(projectId, reason)
+    fireUnload(projectId, reason)
     if (runtimes.size === 0) stopSweeper()
     return true
   }
@@ -235,6 +276,14 @@ export function createProjectRegistry(
     unloadProject: id => unloadProject(id, 'manual'),
     touchActivity,
     sweepIdle,
+    onLoad(handler) {
+      loadListeners.add(handler)
+      return () => loadListeners.delete(handler)
+    },
+    onUnload(handler) {
+      unloadListeners.add(handler)
+      return () => unloadListeners.delete(handler)
+    },
     dispose,
   }
 }

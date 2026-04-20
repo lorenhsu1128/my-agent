@@ -22,8 +22,10 @@ import { adaptDiscordMessage } from './messageAdapter.js'
 import { createReactionController } from './reactions.js'
 import {
   createStreamOutputController,
+  extractAssistantText,
   type StreamReplyMode,
 } from './streamOutput.js'
+import { truncateForDiscord } from './truncate.js'
 import { isUserWhitelisted, routeMessage } from './router.js'
 import {
   handleInteraction,
@@ -99,6 +101,103 @@ export function createDiscordGateway(
     permissionUnsubs.set(runtime.projectId, [unsubPending, unsubResolved])
   }
 
+  // M-DISCORD-5：監聽 registry load 事件，新 runtime 一建好就自動掛 permission
+  // tracking + home mirror；現有 runtime（gateway 啟動前就 load 的）也補掛一次。
+  const unsubRegistryLoad = registry.onLoad(r => {
+    ensurePermissionTracking(r)
+    ensureHomeMirror(r)
+  })
+  // 補掛：daemon auto-load 默認 project 發生在 startDiscordGateway 之前，
+  // 這些已存在 runtime 要靠這個 loop 補上 listener；新的（未來 load 的）由 onLoad 處理。
+  for (const existing of registry.listProjects()) {
+    ensurePermissionTracking(existing)
+    ensureHomeMirror(existing)
+  }
+
+  // M-DISCORD-5：Home channel mirror — REPL / cron 發起的 turn 輸出鏡到
+  // homeChannelId（discord.json 可設）。Discord source 的 turn 略過，避免
+  // 跟 streamOutput 的 reply 雙貼。每個 runtime 第一次 load 時掛一份 listener。
+  const homeMirrorUnsubs = new Map<string, () => void>()
+  const ensureHomeMirror = (runtime: ProjectRuntime): void => {
+    if (homeMirrorUnsubs.has(runtime.projectId)) return
+    if (!config.homeChannelId) return // 沒設 home channel 就不做
+    // 累積每個 turn 的輸出（by inputId）— 對應 onOutput；turnEnd 時 post
+    const turnBuffers = new Map<
+      string,
+      { source: string; text: string; startedAt: number }
+    >()
+    const onTurnStart = (e: TurnStartEvent): void => {
+      // 只鏡 REPL / cron / slash / unknown；Discord source 由 streamOutput 專送
+      if (e.input.source === 'discord') return
+      turnBuffers.set(e.input.id, {
+        source: e.input.source,
+        text: '',
+        startedAt: e.startedAt,
+      })
+    }
+    const onRunnerEvent = (w: RunnerEventWrapper): void => {
+      const buf = turnBuffers.get(w.input.id)
+      if (!buf) return
+      if (w.event.type !== 'output') return
+      const chunk = extractAssistantText(w.event.payload)
+      if (chunk) buf.text += chunk
+    }
+    const onTurnEnd = (e: TurnEndEvent): void => {
+      const buf = turnBuffers.get(e.input.id)
+      if (!buf) return
+      turnBuffers.delete(e.input.id)
+      void postHomeMirror(runtime, buf, e)
+    }
+    runtime.broker.queue.on('turnStart', onTurnStart)
+    runtime.broker.queue.on('runnerEvent', onRunnerEvent)
+    runtime.broker.queue.on('turnEnd', onTurnEnd)
+    homeMirrorUnsubs.set(runtime.projectId, () => {
+      runtime.broker.queue.off('turnStart', onTurnStart as never)
+      runtime.broker.queue.off('runnerEvent', onRunnerEvent as never)
+      runtime.broker.queue.off('turnEnd', onTurnEnd as never)
+      turnBuffers.clear()
+    })
+  }
+
+  const postHomeMirror = async (
+    runtime: ProjectRuntime,
+    buf: { source: string; text: string; startedAt: number },
+    turnEnd: TurnEndEvent,
+  ): Promise<void> => {
+    if (!config.homeChannelId) return
+    try {
+      const sink = client.sinkForChannelId(config.homeChannelId)
+      const durationMs = turnEnd.endedAt - buf.startedAt
+      const durationStr =
+        durationMs > 60_000
+          ? `${(durationMs / 60_000).toFixed(1)}min`
+          : `${(durationMs / 1000).toFixed(1)}s`
+      const icon =
+        turnEnd.reason === 'done'
+          ? '✅'
+          : turnEnd.reason === 'error'
+            ? '❌'
+            : '⏹️'
+      const header =
+        `${icon} \`${runtime.projectId.slice(0, 28)}\` ` +
+        `${buf.source} turn · ${durationStr}` +
+        (turnEnd.reason === 'error' && turnEnd.error
+          ? ` · error: ${turnEnd.error.slice(0, 80)}`
+          : '')
+      const body = buf.text.trim()
+      const full = body ? `${header}\n${body}` : header
+      const chunks = truncateForDiscord(full)
+      for (let i = 0; i < chunks.length; i++) {
+        await sink.send({ content: chunks[i]! })
+      }
+    } catch (e) {
+      void log?.warn?.('home mirror post failed', {
+        projectId: runtime.projectId,
+        err: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+
   const handleIncoming = async (
     adapted: DiscordIncomingMessage,
     raw: Message,
@@ -141,6 +240,7 @@ export function createDiscordGateway(
     try {
       runtime = await registry.loadProject(routing.projectPath)
       ensurePermissionTracking(runtime)
+      ensureHomeMirror(runtime)
     } catch (e) {
       void log?.error('failed to load project', {
         projectPath: routing.projectPath,
@@ -287,6 +387,7 @@ export function createDiscordGateway(
             try {
               const r = await registry.loadProject(bound)
               ensurePermissionTracking(r)
+              ensureHomeMirror(r)
             } catch {
               // ignore
             }
@@ -295,6 +396,7 @@ export function createDiscordGateway(
           try {
             const r = await registry.loadProject(config.defaultProjectPath)
             ensurePermissionTracking(r)
+            ensureHomeMirror(r)
           } catch {
             // ignore
           }
@@ -308,7 +410,7 @@ export function createDiscordGateway(
     }
   }
 
-  // 導出 dispose：清 pending permission listeners。
+  // 導出 dispose：清 pending permission + home mirror listeners。
   return {
     async dispose() {
       for (const unsubs of permissionUnsubs.values()) {
@@ -322,6 +424,19 @@ export function createDiscordGateway(
       }
       permissionUnsubs.clear()
       pendingPermissions.clear()
+      for (const u of homeMirrorUnsubs.values()) {
+        try {
+          u()
+        } catch {
+          // ignore
+        }
+      }
+      homeMirrorUnsubs.clear()
+      try {
+        unsubRegistryLoad()
+      } catch {
+        // ignore
+      }
     },
     // caller 用來串到 createDiscordClient 的 onMessage / onInteraction
     handleIncoming: rawOnMessage,
@@ -393,6 +508,21 @@ export async function startDiscordGateway(opts: {
 
   await client.connect()
 
+  // M-DISCORD-5：啟動完成通知 home channel（讓使用者從 Discord 就能看到 daemon 活了）
+  if (opts.config.homeChannelId) {
+    try {
+      const sink = client.sinkForChannelId(opts.config.homeChannelId)
+      const ts = new Date().toISOString().replace('T', ' ').replace(/\..*/, '')
+      await sink.send({
+        content: `🟢 my-agent daemon up · bot connected · ${ts}`,
+      })
+    } catch (e) {
+      void opts.log?.warn?.('home channel startup notification failed', {
+        err: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+
   // discord.js v14 DM 坑 workaround：MESSAGE_CREATE payload 不帶 channel.type，
   // Partials.Channel 無法幫 DMChannel 建構（Channel.create 因 type 不符回 null）
   // → MessageCreate event 不 emit，DM 訊息被丟。
@@ -431,6 +561,15 @@ export async function startDiscordGateway(opts: {
     client,
     gateway,
     async dispose() {
+      // M-DISCORD-5：關機前通知 home channel（best-effort；destroy 後就連不上了）
+      if (opts.config.homeChannelId) {
+        try {
+          const sink = client.sinkForChannelId(opts.config.homeChannelId)
+          await sink.send({ content: `🔴 my-agent daemon shutting down` })
+        } catch {
+          // ignore — shutdown path 不該 crash
+        }
+      }
       await gateway.dispose()
       await client.destroy()
     },
