@@ -31,6 +31,16 @@ export type InboundFrame =
       endedAt: number
     }
   | { type: 'runnerEvent'; inputId: string; event: unknown }
+  | {
+      /**
+       * M-DISCORD-2：daemon 沒有 load 這個 project 的 runtime，拒絕 attach。
+       * REPL 應 fallback 到 standalone 並告知使用者。
+       */
+      type: 'attachRejected'
+      reason: 'projectNotLoaded' | string
+      cwd?: string
+      hint?: string
+    }
   | { type: string; [key: string]: unknown }
 
 export type OutboundFrame =
@@ -56,6 +66,17 @@ export interface ThinClientSocketOptions {
   host: string
   port: number
   token: string
+  /**
+   * M-DISCORD-2：client 所在的 cwd。daemon 端用它在 ProjectRegistry 查
+   * 對應 ProjectRuntime — 有就 attach，沒有就回 `attachRejected`。
+   * 未指定時 fallback 到 daemon 的 default runtime（backward compat）。
+   */
+  cwd?: string
+  /**
+   * ClientSource hint（'repl' / 'discord' / 'cron' / 'slash'）。未指定則 server
+   * 視為 'unknown'。Discord gateway 將來會自行決定 source。
+   */
+  source?: 'repl' | 'discord' | 'cron' | 'slash'
   /** 連線超時；預設 3000ms。 */
   connectTimeoutMs?: number
   /** 客製 WebSocket 實作（測試 inject）。 */
@@ -79,7 +100,10 @@ export function createThinClientSocket(
 ): ThinClientSocket {
   const emitter = new EventEmitter()
   const WsCtor = opts.webSocketCtor ?? WebSocket
-  const url = `ws://${opts.host}:${opts.port}/sessions?token=${encodeURIComponent(opts.token)}`
+  const params = new URLSearchParams({ token: opts.token })
+  if (opts.cwd) params.set('cwd', opts.cwd)
+  if (opts.source) params.set('source', opts.source)
+  const url = `ws://${opts.host}:${opts.port}/sessions?${params.toString()}`
   const connectTimeoutMs = opts.connectTimeoutMs ?? 3_000
 
   let ws: WebSocket | null = null

@@ -42,14 +42,31 @@ export interface FallbackManagerOptions {
   reconnectTimeoutMs?: number
   /** 每次重連嘗試間隔；預設 1s。 */
   reconnectIntervalMs?: number
+  /**
+   * M-DISCORD-2：REPL 的 cwd。daemon 端用來 resolve ProjectRuntime；未設時
+   * daemon fallback 到 default runtime（backward compat）。
+   */
+  cwd?: string
+  /** M-DISCORD-2：source hint，預設 'repl'。 */
+  source?: 'repl' | 'discord' | 'cron' | 'slash'
   /** 測試 inject：取代 socket factory。 */
   createSocket?: (opts: ThinClientSocketOptions) => ThinClientSocket
 }
 
 export interface FallbackManager {
   readonly state: FallbackManagerState
+  /** M-DISCORD-2：最近一次 daemon 拒 attach 的理由（project 未 load 等）；連成功一次 reset。 */
+  readonly lastAttachRejectedReason: string | null
   on(event: 'mode', handler: (mode: ClientMode) => void): void
   on(event: 'frame', handler: (frame: InboundFrame) => void): void
+  on(
+    event: 'attachRejected',
+    handler: (frame: {
+      reason: string
+      cwd?: string
+      hint?: string
+    }) => void,
+  ): void
   off(event: string, handler: (...args: unknown[]) => void): void
   /** 主動送 input；只在 mode === 'attached' 時可用。 */
   sendInput(text: string, intent?: 'interactive' | 'background' | 'slash'): void
@@ -100,15 +117,40 @@ export function createFallbackManager(
     }
   }
 
+  let attachRejectedReason: string | null = null
+
   const tryConnect = async (snap: DaemonSnapshot): Promise<boolean> => {
     if (!snap.alive || !snap.port || !snap.token) return false
     cleanupSocket()
+    // 進 tryConnect 即視為「新嘗試」，清掉上次的 reject 標記；避免 attachRejected
+    // frame 在 step5 被誤清（daemon 可能在 open 後立刻送 reject）。
+    attachRejectedReason = null
     const s = createSocket({
       host,
       port: snap.port,
       token: snap.token,
+      cwd: opts.cwd,
+      source: opts.source ?? 'repl',
     })
-    s.on('frame', (f: InboundFrame) => emitter.emit('frame', f))
+    s.on('frame', (f: InboundFrame) => {
+      // M-DISCORD-2：daemon 拒絕 attach（project 未 load）→ 關 socket，標記
+      // rejected，設 mode=standalone，emit 一次性 attachRejected 事件讓 REPL
+      // 顯示 warning。後續不再自動重試（避免無謂 reconnect loop）。
+      if (f.type === 'attachRejected') {
+        attachRejectedReason = String(
+          (f as { reason?: unknown }).reason ?? 'rejected',
+        )
+        emitter.emit('attachRejected', f)
+        try {
+          s.close()
+        } catch {
+          // ignore
+        }
+        setMode('standalone')
+        return
+      }
+      emitter.emit('frame', f)
+    })
     s.on('close', () => {
       if (disposed) return
       // 只要 daemon 還活著（下次 detector 確認）就試重連。
@@ -173,9 +215,14 @@ export function createFallbackManager(
 
   const onDaemonChange = async (snap: DaemonSnapshot): Promise<void> => {
     if (disposed) return
+    // M-DISCORD-2：被 daemon 拒絕 attach 後不再自動重試 — 拒絕通常是 project
+    // 沒 load，單純重 connect 沒意義；使用者需手動 `my-agent daemon load` 再開新 REPL。
+    if (attachRejectedReason !== null) return
     if (snap.alive && mode === 'standalone') {
       const ok = await tryConnect(snap)
-      if (ok) setMode('attached')
+      // Race guard：若 daemon 於 open 後立刻送 attachRejected，frame handler
+      // 可能已經把 reason 設好且 setMode('standalone')；此處不能蓋掉回 attached。
+      if (ok && attachRejectedReason === null) setMode('attached')
       // 連不上就維持 standalone；下次 detector change 再試。
     } else if (!snap.alive && (mode === 'attached' || mode === 'reconnecting')) {
       setMode('standalone')
@@ -203,6 +250,9 @@ export function createFallbackManager(
         snapshot: detector.snapshot,
         socket,
       }
+    },
+    get lastAttachRejectedReason() {
+      return attachRejectedReason
     },
     on(event, handler) {
       emitter.on(event, handler as (...args: unknown[]) => void)

@@ -88,6 +88,7 @@ export async function runDaemonStart(
     // 只是 forwarder；broker 建好再把 handler 覆蓋掉。
     let onMessage: (c: ClientInfo, m: unknown) => void = () => {}
     let onConnect: (c: ClientInfo) => void = () => {}
+    let onDisconnect: (c: ClientInfo) => void = () => {}
     const handle = await startDaemon({
       baseDir: ctx.baseDir,
       agentVersion: ctx.agentVersion,
@@ -95,6 +96,7 @@ export async function runDaemonStart(
       host: opts.host,
       onClientMessage: (c, m) => onMessage(c, m),
       onClientConnect: c => onConnect(c),
+      onClientDisconnect: c => onDisconnect(c),
     })
 
     // M-DISCORD-1.4：QueryEngine 改透過 ProjectRegistry + 全域 turn mutex。
@@ -125,12 +127,21 @@ export async function runDaemonStart(
       // Auto-load the starting cwd as the default project.
       const defaultRuntime = await registry.loadProject(cwd)
 
+      // M-DISCORD-2：client 連線時如果帶 cwd，onConnect 會嘗試 resolve 對應
+      // runtime；成功 → setClientProjectId；失敗 → 送 attachRejected + 在此 set
+      // 記錄不派訊息。此 map 記錄所有被拒的 clientId。
+      const rejectedClients = new Set<string>()
       onMessage = (c, m): void => {
-        // Route to the client's project runtime. 目前只有一個 runtime（default）；
-        // M-DISCORD-2 handshake 帶 cwd 時改 clientRegistry → projectId 查找。
-        const runtime =
-          registry.getProject(c.projectId ?? defaultRuntime.projectId) ??
-          defaultRuntime
+        if (rejectedClients.has(c.id)) {
+          // 被拒的 client 送 input 一律忽略；REPL 已 fallback standalone，不該還在送。
+          return
+        }
+        // Route to the client's project runtime. projectId 由 onConnect resolve；
+        // 沒 projectId 且沒 cwd 時 fallback 到 default runtime（backward compat —
+        // M-DAEMON 階段的 client 不帶 cwd 也能用）。
+        const runtime = c.projectId
+          ? (registry.getProject(c.projectId) ?? defaultRuntime)
+          : defaultRuntime
         // permissionResponse 命中就 route 給該 runtime 的 router。
         if (runtime.permissionRouter.handleResponse(c.id, m)) return
         // permissionContextSync（M-DAEMON-PERMS-B）同步 mode → 當前 runtime 的
@@ -172,12 +183,43 @@ export async function runDaemonStart(
         })
       }
       onConnect = (c): void => {
-        const runtime =
-          registry.getProject(c.projectId ?? defaultRuntime.projectId) ??
-          defaultRuntime
+        // M-DISCORD-2：解析 client 的 cwd → projectId。
+        //   - c.cwd 給了：registry.getProjectByCwd；有 → attach，無 → attachRejected
+        //   - c.cwd 沒給：fallback 到 default runtime（backward compat）
+        let runtime: typeof defaultRuntime | null = null
+        if (c.cwd) {
+          const found = registry.getProjectByCwd(c.cwd)
+          if (!found) {
+            // Reject: daemon 沒 load 這個 project。傳 attachRejected + 鎖 message。
+            rejectedClients.add(c.id)
+            handle.server!.send(c.id, {
+              type: 'attachRejected',
+              reason: 'projectNotLoaded',
+              cwd: c.cwd,
+              hint: `project at ${c.cwd} is not loaded in this daemon (started from ${baseCwd}). Run \`my-agent daemon load ${c.cwd}\` (TBD) or launch a new daemon in that cwd.`,
+            })
+            void handle.logger.info('client attach rejected: project not loaded', {
+              clientId: c.id,
+              cwd: c.cwd,
+            })
+            return
+          }
+          runtime = found
+          handle.server!.registry.setClientProjectId(c.id, runtime.projectId)
+        } else {
+          runtime = defaultRuntime
+          handle.server!.registry.setClientProjectId(c.id, runtime.projectId)
+        }
         if (c.source === 'repl') runtime.attachRepl(c.id)
         runtime.touch()
         sendHelloFrame(runtime.broker, handle.server!, c.id)
+      }
+      onDisconnect = (c): void => {
+        rejectedClients.delete(c.id)
+        if (c.projectId && c.source === 'repl') {
+          const runtime = registry.getProject(c.projectId)
+          runtime?.detachRepl(c.id)
+        }
       }
       disposeRegistry = async (): Promise<void> => {
         await registry.dispose()

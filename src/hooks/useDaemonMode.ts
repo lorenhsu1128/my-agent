@@ -49,6 +49,21 @@ export interface UseDaemonModeOptions {
   /** Mode 變化時通知（REPL 用來在 attached→standalone 時顯示 system message）。 */
   onModeChange?: (mode: ClientMode) => void
   /**
+   * M-DISCORD-2：daemon 拒絕 attach（project 未 load）時呼叫。REPL 應插
+   * warning system message 告知使用者需 `my-agent daemon load`（之後 M-DISCORD
+   * CLI 會加）；hook 會自動 fallback 到 standalone 模式。
+   */
+  onAttachRejected?: (info: {
+    reason: string
+    cwd?: string
+    hint?: string
+  }) => void
+  /**
+   * M-DISCORD-2：REPL 的 cwd，handshake 時送給 daemon。未指定 = backward
+   * compat，fallback 到 daemon 的 default runtime。
+   */
+  cwd?: string
+  /**
    * 停用整個 hook（給 daemon 自己內部跑 REPL 的 edge case，避免 attach 自己）。
    * 預設 false — 所有 REPL 都開。
    */
@@ -143,13 +158,27 @@ export function useDaemonMode(
   onPermPendingRef.current = opts.onPermissionPending
   const onAutostartRef = useRef<typeof opts.onAutostart>(opts.onAutostart)
   onAutostartRef.current = opts.onAutostart
+  const onAttachRejectedRef = useRef<typeof opts.onAttachRejected>(
+    opts.onAttachRejected,
+  )
+  onAttachRejectedRef.current = opts.onAttachRejected
+  const cwdRef = useRef<string | undefined>(opts.cwd)
+  cwdRef.current = opts.cwd
 
   useEffect(() => {
     if (opts.disabled) return
     const detector = createDaemonDetector({ pollIntervalMs: 2_000 })
-    const manager = createFallbackManager({ detector })
+    const manager = createFallbackManager({
+      detector,
+      cwd: cwdRef.current,
+      source: 'repl',
+    })
     managerRef.current = manager
     currentManager = manager
+
+    manager.on('attachRejected', rejection => {
+      onAttachRejectedRef.current?.(rejection)
+    })
 
     const updateMode = (mode: ClientMode): void => {
       setAppState(prev => {

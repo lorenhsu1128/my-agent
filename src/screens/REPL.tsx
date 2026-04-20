@@ -4178,7 +4178,20 @@ export function REPL({
           )
         ]);
       }
-    }
+    },
+    // M-DISCORD-2：當 daemon 拒 attach（project 未 load）時，REPL 顯示 warning
+    // 並保持 standalone。使用者可 `my-agent daemon load <path>` 後重啟 REPL。
+    onAttachRejected: (info): void => {
+      setMessages(prev => [
+        ...prev,
+        createSystemMessage(
+          `⚠ Daemon 存在但此 project (${info.cwd ?? '未知'}) 未被 load；REPL 保持獨立模式。\n` +
+            (info.hint ?? '可先 stop 現有 daemon 後在此 cwd 重新啟動，或等未來 `my-agent daemon load` 指令。'),
+          'warning'
+        )
+      ]);
+    },
+    cwd: getOriginalCwd(),
   });
 
   // M-DAEMON-PERMS-B：TUI 的 permissionMode 一變，就推給 daemon 同步。

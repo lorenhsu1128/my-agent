@@ -26,10 +26,14 @@ export interface ClientInfo {
   connectedAt: number
   remoteAddress?: string
   /**
+   * M-DISCORD-2：client 在 handshake 宣告的 cwd；daemon 端用它查 ProjectRuntime。
+   * Source=repl 一律填；discord / cron 通常不填（由 daemonCli 注入 projectId）。
+   */
+  cwd?: string
+  /**
    * M-DISCORD-1.4：client 關聯的 projectId（ProjectRegistry.getProject key）。
-   * 現階段（M-DISCORD-1.4）auto-load default project 後所有 client 預設綁 default；
-   * M-DISCORD-2 REPL handshake 帶 cwd 時改由 daemonMain 解析出對應 projectId
-   * 寫入此欄位。未設 = daemonCli 的 onMessage 會 fallback 到 default runtime。
+   * Attach 成功時 onClientConnect 會用 registry.setClientProjectId 填入；attach
+   * 被拒時保持 undefined，之後的 onMessage 會被 daemonCli 視為 reject 狀態。
    */
   projectId?: string
 }
@@ -47,6 +51,11 @@ export interface ClientRegistry {
   broadcast(payload: string, filter?: (c: ClientInfo) => boolean): number
   send(id: string, payload: string): boolean
   closeAll(code?: number, reason?: string): void
+  /**
+   * M-DISCORD-2：attach 解析完成後把 projectId 綁到 client。之後 onMessage /
+   * broadcast 可用此欄位做 scope 過濾。未設 = 尚未 attach 或 attach 被拒。
+   */
+  setClientProjectId(id: string, projectId: string | undefined): boolean
 }
 
 export function createClientRegistry(): ClientRegistry {
@@ -76,6 +85,8 @@ export function createClientRegistry(): ClientRegistry {
         source: c.source,
         connectedAt: c.connectedAt,
         remoteAddress: c.remoteAddress,
+        cwd: c.cwd,
+        projectId: c.projectId,
       }))
     },
     count() {
@@ -120,6 +131,12 @@ export function createClientRegistry(): ClientRegistry {
         }
       }
       clients.clear()
+    },
+    setClientProjectId(id, projectId) {
+      const c = clients.get(id)
+      if (!c) return false
+      c.projectId = projectId
+      return true
     },
   }
 }

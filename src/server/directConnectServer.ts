@@ -60,6 +60,8 @@ export interface DirectConnectServerHandle {
 interface SocketData {
   clientId: string
   source: ClientSource
+  /** M-DISCORD-2：client 在 handshake 宣告的 cwd（daemon 用來查 ProjectRuntime）。 */
+  cwd?: string
   remoteAddress?: string
   /** 累積未完整的 message fragment（WebSocket 保證完整 frame，這裡主要處理 newline 拆分） */
   buffer: string
@@ -98,6 +100,17 @@ function parseSourceFromRequest(req: Request): ClientSource {
   return 'unknown'
 }
 
+function parseCwdFromRequest(req: Request): string | undefined {
+  try {
+    const url = new URL(req.url)
+    const c = url.searchParams.get('cwd')
+    if (c && c.length > 0) return c
+  } catch {
+    // ignore
+  }
+  return undefined
+}
+
 export async function startDirectConnectServer(
   opts: DirectConnectServerOptions,
 ): Promise<DirectConnectServerHandle> {
@@ -125,10 +138,12 @@ export async function startDirectConnectServer(
       }
       const clientId = randomUUID()
       const source = parseSourceFromRequest(req)
+      const cwd = parseCwdFromRequest(req)
       const remoteAddress = srv.requestIP(req)?.address
       const data: SocketData = {
         clientId,
         source,
+        cwd,
         remoteAddress,
         buffer: '',
       }
@@ -143,6 +158,7 @@ export async function startDirectConnectServer(
           id: ws.data.clientId,
           source: ws.data.source,
           remoteAddress: ws.data.remoteAddress,
+          cwd: ws.data.cwd,
           socket: {
             send: (data: string) => {
               try {
@@ -173,6 +189,7 @@ export async function startDirectConnectServer(
           source: client.source,
           connectedAt: client.connectedAt,
           remoteAddress: client.remoteAddress,
+          cwd: client.cwd,
         })
       },
       message(ws: ServerWebSocket<SocketData>, raw: string | Buffer) {
@@ -204,6 +221,8 @@ export async function startDirectConnectServer(
                 source: info.source,
                 connectedAt: info.connectedAt,
                 remoteAddress: info.remoteAddress,
+                cwd: info.cwd,
+                projectId: info.projectId,
               },
               parsed,
             )
@@ -229,6 +248,8 @@ export async function startDirectConnectServer(
             source: removed.source,
             connectedAt: removed.connectedAt,
             remoteAddress: removed.remoteAddress,
+            cwd: removed.cwd,
+            projectId: removed.projectId,
           })
         }
       },
