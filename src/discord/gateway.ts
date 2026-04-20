@@ -26,6 +26,7 @@ import {
   type StreamReplyMode,
 } from './streamOutput.js'
 import { truncateForDiscord } from './truncate.js'
+import { formatMirrorHeader, pickMirrorTarget } from './replMirror.js'
 import { isUserWhitelisted, routeMessage } from './router.js'
 import {
   handleInteraction,
@@ -101,13 +102,22 @@ export function createDiscordGateway(
     permissionUnsubs.set(runtime.projectId, [unsubPending, unsubResolved])
   }
 
-  // M-DISCORD-5：Home channel mirror — REPL / cron 發起的 turn 輸出鏡到
-  // homeChannelId（discord.json 可設）。Discord source 的 turn 略過，避免
-  // 跟 streamOutput 的 reply 雙貼。每個 runtime 第一次 load 時掛一份 listener。
+  // M-DISCORD-5 + M-DISCORD-AUTOBIND-β：REPL / cron turn 的 Discord 鏡像。
+  // β 策略：
+  //   - 有 per-project channel binding → 鏡到該 project channel，加 `[from REPL]` 前綴
+  //   - 沒綁 → 鏡到 homeChannelId（舊行為）
+  //   - 兩個都沒 → 不做
+  // Discord source 的 turn 永遠略過（避免跟 streamOutput reply 雙貼）。
   const homeMirrorUnsubs = new Map<string, () => void>()
   const ensureHomeMirror = (runtime: ProjectRuntime): void => {
     if (homeMirrorUnsubs.has(runtime.projectId)) return
-    if (!config.homeChannelId) return // 沒設 home channel 就不做
+    // 若 runtime 有 binding 或 homeChannelId 有設，都要掛 listener；都沒則直接跳過
+    const target = pickMirrorTarget({
+      cwd: runtime.cwd,
+      channelBindings: config.channelBindings,
+      homeChannelId: config.homeChannelId,
+    })
+    if (!target) return
     // 累積每個 turn 的輸出（by inputId）— 對應 onOutput；turnEnd 時 post
     const turnBuffers = new Map<
       string,
@@ -151,26 +161,27 @@ export function createDiscordGateway(
     buf: { source: string; text: string; startedAt: number },
     turnEnd: TurnEndEvent,
   ): Promise<void> => {
-    if (!config.homeChannelId) return
+    const target = pickMirrorTarget({
+      cwd: runtime.cwd,
+      channelBindings: config.channelBindings,
+      homeChannelId: config.homeChannelId,
+    })
+    if (!target) return
     try {
-      const sink = client.sinkForChannelId(config.homeChannelId)
+      const sink = client.sinkForChannelId(target.channelId)
       const durationMs = turnEnd.endedAt - buf.startedAt
       const durationStr =
         durationMs > 60_000
           ? `${(durationMs / 60_000).toFixed(1)}min`
           : `${(durationMs / 1000).toFixed(1)}s`
-      const icon =
-        turnEnd.reason === 'done'
-          ? '✅'
-          : turnEnd.reason === 'error'
-            ? '❌'
-            : '⏹️'
-      const header =
-        `${icon} \`${runtime.projectId.slice(0, 28)}\` ` +
-        `${buf.source} turn · ${durationStr}` +
-        (turnEnd.reason === 'error' && turnEnd.error
-          ? ` · error: ${turnEnd.error.slice(0, 80)}`
-          : '')
+      const header = formatMirrorHeader({
+        kind: target.kind,
+        projectId: runtime.projectId,
+        source: buf.source,
+        durationStr,
+        reason: turnEnd.reason,
+        errorMessage: turnEnd.error,
+      })
       const body = buf.text.trim()
       const full = body ? `${header}\n${body}` : header
       const chunks = truncateForDiscord(full)
@@ -178,8 +189,9 @@ export function createDiscordGateway(
         await sink.send({ content: chunks[i]! })
       }
     } catch (e) {
-      void log?.warn?.('home mirror post failed', {
+      void log?.warn?.('turn mirror post failed', {
         projectId: runtime.projectId,
+        targetChannelId: target.channelId,
         err: e instanceof Error ? e.message : String(e),
       })
     }
