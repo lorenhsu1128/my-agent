@@ -227,3 +227,76 @@
 - **日期**：2026-04-18
 
 ---
+
+## Daemon 模式 / WS 整合
+
+### bun test 預設 `NODE_ENV=test` 會讓 sessionStorage short-circuit 寫入
+
+- **發生什麼事**：M-DAEMON-4d E2E 起 daemon 跑完一輪 LLM 之後 session.jsonl 完全沒寫出來，turnEnd.done 收到但檔案不存在。
+- **根本原因**：`src/utils/sessionStorage.ts` 的 `shouldSkipPersistence()` 對 `getNodeEnv() === 'test'` 直接 return true，bun test 自動設 `NODE_ENV=test`，所有 `appendEntry` / `materializeSessionFile` 被擋。production code path 完全正確。
+- **正確做法**：E2E 測試有效驗 session 寫入時，`beforeAll` 裡 `process.env.TEST_ENABLE_SESSION_PERSISTENCE = '1'`（sessionStorage 的 escape hatch）；`afterAll` 還原。單純功能測試不需要。
+- **相關檔案**：`src/utils/sessionStorage.ts:962`、`tests/integration/daemon/e2e-query-engine.test.ts`
+- **日期**：2026-04-20
+
+### `MACRO.VERSION` 等 build-time constant 在 bun test 沒有 define
+
+- **發生什麼事**：M-DAEMON-4d E2E daemon 接 QueryEngine 後，第一次跑 `ask()` 立刻拋 `ReferenceError: MACRO is not defined`。
+- **根本原因**：`MACRO.VERSION` / `MACRO.BUILD_TIME` / `MACRO.FEEDBACK_CHANNEL` 是 `bun build --define` 時才注入的 global。`src/entrypoints/cli.tsx` 有 shim（開發時才設），但 `bun test` 直接跑 TS 源碼不走 entrypoint。`src/services/api/errors.ts` 等 deep 路徑會踩到。
+- **正確做法**：E2E / integration test 檔頂部加 shim：
+  ```ts
+  if (typeof (globalThis as any).MACRO === 'undefined') {
+    (globalThis as any).MACRO = {
+      VERSION: 'test',
+      BUILD_TIME: new Date().toISOString(),
+      PACKAGE_URL: 'test',
+      FEEDBACK_CHANNEL: 'github',
+    }
+  }
+  ```
+- **相關檔案**：`src/entrypoints/cli.tsx` 有 reference implementation；`tests/integration/daemon/e2e-query-engine.test.ts` 是範例
+- **日期**：2026-04-20
+
+### Windows rmSync tmp dir 在 daemon 未完全放 file handle 時 EBUSY
+
+- **發生什麼事**：daemon E2E 跑完呼 `handle.stop()` 然後 `rmSync(tmpDir, {recursive: true, force: true})` 拋 EBUSY。
+- **根本原因**：Windows 對仍開啟的 file handle 不准刪父目錄，就算 stop() 有 closeSync/unlinkSync。底層 handle release 可能有延遲（特別是 anti-virus 介入時）。
+- **正確做法**：測試 afterAll 的 tmp cleanup 用 try/catch 包 `rmSync`，失敗時只 log 不 fail 測試本體（%TEMP% 最終會被 OS 清）。
+- **相關檔案**：`tests/integration/daemon/e2e-query-engine.test.ts`
+- **日期**：2026-04-20
+
+### `describe.skipIf()` 在 top-level await 讀入值前就 evaluate
+
+- **發生什麼事**：E2E 測試用 `beforeAll` 做 llama.cpp health check，再用 `describe.skipIf(!llamacppAlive)`；結果所有 case 都 skip 即使 llama.cpp 活著。
+- **根本原因**：bun test 的 `describe.skipIf(...)` 在 register 階段就 evaluate 條件，beforeAll 還沒跑到。
+- **正確做法**：把 health check 做成 module top-level await，讓 `describe.skipIf()` 拿到同步可用的值：
+  ```ts
+  const llamacppAlive = await checkLlamaAlive()  // module-level TLA
+  describe.skipIf(!llamacppAlive)('...', () => {...})
+  ```
+- **相關檔案**：`tests/integration/daemon/e2e-query-engine.test.ts`
+- **日期**：2026-04-20
+
+### print.ts 的 bootstrap 太黏 stdin/stdout，daemon 要複製不是抽出
+
+- **發生什麼事**：M-DAEMON-4a 嘗試從 `src/cli/print.ts`（5594 行）抽一個 `buildHeadlessContext()` 讓 daemon 重用，發現 print.ts 的 bootstrap 跟 `run()` loop / stdin listener / output.enqueue / proactive tick / skill change detector / bridge handle 全糾纏。乾淨抽出要週級重構。
+- **根本原因**：print mode 是「stdin → ask → stdout」的長 loop，daemon 是「WS → ask → broadcast」的長 server；外觀相似但 IO 驅動模型完全不同。共用一個 bootstrap 會把兩邊的 runtime 都拖進另一邊。
+- **正確做法**：Path A 走「daemon 複製必要 bootstrap」— 寫 `src/daemon/sessionBootstrap.ts` 只組 `ask()` 真的要的 context（tools / MCP / commands / AppState / readFileCache），不依賴 print.ts 任何東西。代價：bootstrap 有兩處（print + daemon），未來改 MCP 邏輯要兩邊一起改。好處：兩邊都保持簡潔，互不污染。
+- **相關檔案**：`src/daemon/sessionBootstrap.ts`、`src/cli/print.ts`
+- **日期**：2026-04-20
+
+### React hooks 的 module-level singleton 可以繞過「hook 在 useCallback 之後」的閉包問題
+
+- **發生什麼事**：REPL.tsx 的 `onSubmit` useCallback 在 line ~3120，`useDaemonMode()` 在 line ~4035。onSubmit 要 imperative 讀當下的 manager 狀態，但 JS scoping 不允許 onSubmit 的閉包引用後面宣告的 const。
+- **正確做法**：useDaemonMode 的 effect 維護一個 module-level `currentManager` singleton（REPL 只有一個實例，進程層級 singleton 安全）；`onSubmit` 呼叫 `getCurrentDaemonManager()` 取目前活的 manager。
+- **相關檔案**：`src/hooks/useDaemonMode.ts`（singleton 實作）、`src/screens/REPL.tsx:onSubmit`（consumer）
+- **日期**：2026-04-20
+
+### Token 驗證的 shape 檢查比 timing-safe compare 更早擋掉測試
+
+- **發生什麼事**：M-DAEMON thin-client 測試用 `'g'.repeat(64)` 當 fake token 傳給 `writeToken()`，直接拋 `Invalid token shape`。
+- **根本原因**：`isValidTokenShape()` 強制 64-char lowercase hex；`g` 不在 `[0-9a-f]` 範圍。
+- **正確做法**：測試的 dummy token 用 hex alphabet（`'a'.repeat(64)`, `'f'.repeat(64)`, `'0'`, `'7'` 等）。或用 `randomBytes(32).toString('hex')` 生真的 dummy。
+- **相關檔案**：`src/daemon/authToken.ts`、`tests/integration/daemon/thin-client.test.ts`
+- **日期**：2026-04-20
+
+---

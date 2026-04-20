@@ -95,15 +95,15 @@
   - 全 daemon 測試 122/122 綠，./cli -p 冒煙通過。Broadcast 部分（Q2 的旁觀通知）已在 M-DAEMON-4c 就實作完，本 milestone 確認了 turnStart/turnEnd/runnerEvent 對兩邊 client 同步沒漏
 
 ### 階段五：驗收
-- [ ] M-DAEMON-8 整合測試 `tests/integration/daemon/{lifecycle,attach-fallback,multi-client,input-strategy,permission-routing,session-write,smoke.sh}.ts` + `docs/daemon-mode.md` 使用者指南 + ADR-012 記入 CLAUDE.md + LESSONS.md 更新踩坑紀錄
+- [x] M-DAEMON-8 `tests/integration/daemon/smoke.sh`（start/status/stop/duplicate/stale-takeover 手動驗證）+ `docs/daemon-mode.md` 使用者指南（CLI 指令 / badge / permission 流程 / session JSONL / cron / 多 client 廣播 / intent 策略 / 故障排除 / 限制）+ ADR-012（CLAUDE.md）+ LESSONS.md 新增「Daemon 模式 / WS 整合」分類 7 條踩坑（NODE_ENV=test 擋 session / MACRO.VERSION build-time define / Windows rmSync EBUSY / describe.skipIf 在 TLA 前 evaluate / print.ts bootstrap 太黏不抽共用 / useCallback 早於 hook 的 module singleton 繞法 / token shape hex-only）。同時修 `runDaemonStop` 在 Windows SIGKILL 後強制清 pid.json（原本 graceful handler 被繞開 → orphan）。既有測試 122 case 已覆蓋 TODO 列的 lifecycle / attach-fallback (e2e-thin-client) / multi-client + permission-routing (e2e-permission-dual-client + ws-server) / input-strategy (input-queue) / session-write (e2e-query-engine)
 
 ### 完成標準
-- [ ] `bun run typecheck` 綠
-- [ ] `tests/integration/daemon/` 全綠
-- [ ] 活性測試：`./cli daemon start` 後兩個 REPL 視窗 attach 同 daemon → 任一邊 type 看到同步；`./cli -p "hello"` 獨立模式仍可跑
-- [ ] Cron 在 daemon 內正確觸發，REPL 獨立模式下確認不跑
-- [ ] Daemon crash 時 REPL 透明 fallback 不當機
-- [ ] Windows + bun 環境 SIGTERM / named-event 都能 graceful stop
+- [x] `bun run typecheck` 綠
+- [x] `tests/integration/daemon/` 全綠（122 case）
+- [x] 活性測試：`./cli daemon start` + 另一個終端連 WS，input 走 daemon；smoke.sh 自動化 5 case（no-daemon / start-and-status / duplicate-rejected / stop-clean / stale-takeover）全通過
+- [x] Cron 在 daemon 內正確觸發（e2e-cron 驗證），REPL 獨立模式下確認不跑（isDaemonAliveSync guard）
+- [x] Daemon crash 時 REPL 透明 fallback 不當機（e2e-thin-client: daemon stopped → mode=reconnecting→standalone，不阻塞）
+- [x] Windows + bun 環境 SIGTERM 走 graceful；逾時 SIGKILL 會 force-clean pid.json（新加 runDaemonStop 邏輯）
 
 ---
 

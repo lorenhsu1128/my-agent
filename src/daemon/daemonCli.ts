@@ -265,7 +265,22 @@ export async function runDaemonStop(
   }
   // 再等一小段清理
   await new Promise(r => setTimeout(r, pollMs * 3))
-  const final = await readPidFile(ctx.baseDir)
+  let final = await readPidFile(ctx.baseDir)
+  // Windows 上 SIGKILL（TerminateProcess）繞過 daemon 的 cleanup，pid.json
+  // 會成為 orphan；process 真的死了就由 stop 幫忙清。確認 pid 已死再刪。
+  if (final !== null && final.pid === pid) {
+    const { isPidAlive } = await import('./pidFile.js')
+    if (!isPidAlive(pid)) {
+      out(`force-killed daemon pid=${pid}; cleaning orphan pid.json\n`)
+      try {
+        const { deletePidFile } = await import('./pidFile.js')
+        await deletePidFile(ctx.baseDir)
+        final = null
+      } catch {
+        // 最後還是清不掉就讓呼叫方處理
+      }
+    }
+  }
   return {
     found: true,
     stopped: final === null,

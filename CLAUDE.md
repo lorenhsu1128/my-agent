@@ -2,7 +2,7 @@
 
 ## 專案概述
 
-本專案是 my-agent — Claude Code（TypeScript/Bun）的可建構 fork 版本，已移除遙測、移除安全護欄、解鎖所有實驗功能。我們正在擴充它，加入多 provider 支援、本地模型能力，以及從 Hermes Agent（Nous Research）移植的功能。
+本專案是 my-agent，已移除遙測、移除安全護欄、解鎖所有實驗功能。我們正在擴充它，加入多 provider 支援、本地模型能力，以及從 Hermes Agent（Nous Research）移植的功能。
 
 Hermes Agent 的原始碼作為唯讀參考資料放在 `reference/hermes-agent/`。它是 Python — 閱讀它以理解設計和邏輯，然後用 TypeScript 在 my-agent 的既有架構內重新實作。
 
@@ -28,13 +28,13 @@ Hermes Agent 的原始碼作為唯讀參考資料放在 `reference/hermes-agent/
    - 這個任務涉及了不明顯的步驟或陷阱嗎？
    - 未來可能會再次需要做類似的事嗎？
    - 這個知識是否專屬於本專案、不容易從外部文件查到？
-   
+
    如果判斷值得建立 skill：
    - 先告訴我你打算建立什麼 skill、為什麼認為有價值、大致內容摘要
    - 等我確認後，在 `.claude/skills/` 下建立新目錄和 SKILL.md
    - 遵循既有 skill 的格式（說明、工具集、具體內容）
    - 在 TODO.md 的 session 日誌中記錄新建了哪個 skill
-   
+
    人類也可以隨時指示你建立 skill，此時直接執行不需評估。
 
 ## 倉庫結構
@@ -149,11 +149,13 @@ bun test                         # 執行測試
 ## 權限設定（`.claude/settings.json`）
 
 已預先核准的操作（不會彈出確認提示）：
+
 - 任何檔案的讀取操作
 - 在 `tests/`、`TODO.md`、`LESSONS.md` 的寫入/編輯
 - Shell 指令：conda、bun、git、curl localhost、cat/ls/find/grep/head/tail/wc/echo/mkdir/cp/mv 等
 
 已封鎖的操作（會被拒絕）：
+
 - `rm -rf`、`sudo`、`chmod`
 - 寫入 `src/QueryEngine.ts`、`src/Tool.ts`（核心檔案 — 先問我）
 - 寫入 `reference/`（唯讀的 Hermes 原始碼）
@@ -161,14 +163,17 @@ bun test                         # 執行測試
 ## 當前開發狀態
 
 ### 已完成
+
 - **M1** — 透過 llama.cpp 支援本地模型（2026-04-15 完成）：fetch adapter 模式、串流 + tool call 翻譯、39 個工具全部通過
 - **M2** — Session Recall & Dynamic Memory（2026-04-16 完成）：FTS5 跨 session 搜尋、query-driven prefetch、MemoryTool 寫入（含 injection 掃描）
 - **M3** — 移植 anthropics/skills 為 Bundled Skills（2026-04-16 完成）：17 個 skill 內化為 TypeScript bundled skills
 
 ### 進行中
+
 （無 — 參見 TODO.md 底部的 M4–M7 草稿）
 
 ### 已做出的架構決策
+
 - ~~ADR-001：使用 LiteLLM 作為本地模型的 proxy（不是直接整合 Ollama）~~ **已推翻（2026-04-15）** — 改為直接跑 llama.cpp server（OpenAI 相容，`http://127.0.0.1:8080/v1`）。理由：部署已完成（見 `scripts/llama/`）、少一層中介、減少相依性。
 - ~~ADR-002：新的 provider 程式碼放在 `src/services/providers/`，不修改 `src/services/api/`~~ **已被 ADR-005 取代** — M1 實際採用 fetch adapter 模式，程式碼放在 `src/services/api/llamacpp-fetch-adapter.ts`
 - ADR-003：新功能不使用 feature flag — 所有功能直接啟用
@@ -180,6 +185,7 @@ bun test                         # 執行測試
 - ADR-009（2026-04-19）：M-LLAMACPP-CTX — llamacpp 上下文長度偵測改善。(1) `/slots` 查詢失敗時 `console.error` 一次性警告，提示 `LLAMACPP_CTX_SIZE=<tokens>` 手動覆蓋；(2) adapter error path 新增 context-overflow 關鍵字偵測（regex 對 `context|n_ctx|prompt|token` + `length|exceed|too long/large/many|out of`），命中則改寫為 `Prompt is too long (llama.cpp): ...` 讓 `isPromptTooLongMessage()` 識別、觸發 reactive compaction；(3) streaming 收到 `finish_reason=length` + `output_tokens=0` 時記 warn 供診斷（典型上下文已滿徵兆）。理由：使用者 128K 本地模型上下文溢出時會卡在「停止回應 + server 待機」，auto-compact 因 `/slots` 未查詢到而用 200K 預設、reactive compact 又因 error message regex 不符合而不觸發；三路修復讓 llamacpp 與 Anthropic path 的錯誤復原行為一致。
 - ADR-008（2026-04-19）：M-SP — system prompt 29 個 section 外部化至 `~/.my-agent/system-prompt/` 下的 .md 檔。新增 `src/systemPromptFiles/` 模組（paths / sections / bundledDefaults / loader / snapshot / seed / index）。採 session 啟動凍結快照（沿用 M-UM pattern）、per-project > global > bundled 三層解析、完全取代（不合併）、首次啟動自動 seed global 層 + README.md。覆蓋範圍：prompts.ts 全部 15 個 section（靜態 + 動態） + cyber-risk + user-profile 外框 + memory 系統 8 個常數 + QueryEngine 4 條錯誤訊息。使用者指南見 `docs/customizing-system-prompt.md`。理由：讓措辭調整不必改 code → rebuild；per-project 可做專案專屬 prompt 客製化。
 - ADR-011（2026-04-19）：Browser 能力走 puppeteer-core，不走 playwright-core。M5 首次用 playwright-core 時發現在 bun + Windows 下預設 `--remote-debugging-pipe` transport 無限 hang，即使改 `ignoreDefaultArgs` + `remote-debugging-port` + `connectOverCDP` 也 hang（raw `ws` 套件連 chromium 可以，但 playwright 自家 client 不行）。puppeteer-core 預設 WebSocket CDP 在同環境下秒連，沿用 `bunx playwright install chromium` 裝的 browser binary 不需第二次下載。本地 / Browserbase / Browser Use 三個 provider 共用 puppeteer-core。Vision 走 vendored `my-agent-ai/sdk`（Anthropic SDK），interface 設計保留換後端空間（未來可加 Gemini / 本地 VLM）。Firecrawl 不當作 browser provider（它是 scraping API 不是 CDP target），改為 `WebCrawlTool` 的 optional fetcher backend，透過 `WEBCRAWL_BACKEND=firecrawl` + `FIRECRAWL_API_KEY` 啟用。Provider 選擇不走 feature flag（ADR-003），以 runtime env 決定：`BROWSER_PROVIDER` 顯式 > API key 偵測 > fallback local。
+- ADR-012（2026-04-20）：M-DAEMON — Daemon 模式架構（Path A in-process QueryEngine 整合）。`my-agent daemon start` 起常駐 Bun.serve WS server（loopback only `127.0.0.1`、OS 指派 port、bearer token auth、pid.json heartbeat）；QueryEngineRunner 包 `ask()` 成 SessionRunner，跑真實 LLM turn；InputQueue 狀態機（IDLE/RUNNING/INTERRUPTING）+ 混合 intent 策略（interactive 打斷 / background FIFO / slash 優先）；sessionBroker 廣播 turnStart/turnEnd/runnerEvent 給所有 attached client 同步；permissionRouter 把 canUseTool 路由到 source client（含 toolName/input/riskLevel/description/affectedPaths），broadcast permissionPending 給旁觀 client（Q2=b），timeout 5min auto-allow（Q3=c），fallbackHandler interface 預留給 M-DISCORD；cron scheduler 搬進 daemon 獨占跑（`isDaemonAliveSync()` 讓 REPL/headless 跳過避免雙跑）；REPL 側 thin-client（detectDaemon 2s poll + thinClientSocket WS + fallbackManager 狀態機 standalone↔attached↔reconnecting），daemon 起/掛時透明切換，狀態列 badge 顯示目前模式。Session JSONL 沿用既有 `recordTranscript()`→`Project` singleton 不重做；`.daemon.lock` 檔防同 cwd 重啟兩份 daemon。**Path A 完整 in-process** 不是 Path B 的 spawn `./cli --print` 子程序 — 理由：狀態共享、單一 process 方便 debug、未來 Discord/cron 可同 AppState 搬動任務；代價：daemon bootstrap 要複製 main.tsx 的 headless 分支（`bootstrapDaemonContext`，不 refactor print.ts）。使用者指南見 `docs/daemon-mode.md`。Discord 整合（M-DISCORD）是 daemon 的第一個 non-REPL consumer。
 
 ---
 
@@ -230,12 +236,14 @@ export CLAUDE_CONFIG_DIR=~/.claude
 **範圍**：保留既有 WebFetch / WebSearch，加入 WebCrawl 與 WebBrowser 兩個工具，補齊 Hermes Agent 的 web 研究與互動式瀏覽能力。全為附加式，無既有檔案被重寫。
 
 **M4（commit `c29f74c`）**：`WebCrawlTool` + 共用安全層
+
 - 新增 `src/tools/WebCrawlTool/{WebCrawlTool,crawler,prompt}.ts`（BFS + robots.txt + cheerio 抽連結 + per-host rate limit + SSRF 重用 `ssrfGuard`）
 - 新增 `src/utils/web/secretScan.ts`（重寫 Hermes `agent/redact.py`，30+ token 前綴 + bearer/env/JSON/私鑰/DB 連線字串）
 - 新增 `src/utils/web/blocklist.ts`（重寫 Hermes `website_policy.py`，`~/.my-agent/website-blocklist.yaml`，30s cache，fnmatch 萬用字元，fail-open）
 - 新增 cheerio 依賴；21 單元測試全綠；對 `https://github.com/lorenhsu1128` smoke 通過
 
 **M5（commit `32fae13`）**：`WebBrowserTool` 本地 backend
+
 - 新增 `src/tools/WebBrowserTool/{WebBrowserTool,session,a11y,actions,prompt}.ts`
 - `providers/{BrowserProvider,LocalProvider}.ts` — 抽象介面 + puppeteer-core 實作
 - 核心 10 actions：navigate / snapshot / click / type / scroll / back / press / console / evaluate / close
@@ -249,6 +257,7 @@ export CLAUDE_CONFIG_DIR=~/.claude
 **Build 修復（commit `4bf674b`）**：清 m-deanthro 留下的 5 處 dangling import（logout / login 模組已刪但 auth.ts / upgrade.tsx / extra-usage.tsx 還在 import；ccrClient.ts / SSETransport.ts 呼叫舊名 `getClaudeCodeUserAgent`）+ `react-devtools-core` 列 externals + `ink` import 改走 `src/ink.ts` 主題 wrapper（避開 top-level await）。`bun run build` 重新綠。
 
 **M6（commit `49d53d7`）**：三家 cloud providers + vision + Firecrawl
+
 - `providers/BrowserbaseProvider.ts`：REST 建 session → `puppeteer.connect`；close 時 REST 釋放 session；支援 `BROWSERBASE_ADVANCED_STEALTH`
 - `providers/BrowserUseProvider.ts`：同模式，`BROWSER_USE_API_KEY`；略 Hermes 的 Nous managed gateway（my-agent 無對應 infra）
 - `providers/selectProvider.ts`：runtime env 選 backend（顯式 `BROWSER_PROVIDER` → API key 偵測 → local）
@@ -258,10 +267,10 @@ export CLAUDE_CONFIG_DIR=~/.claude
 - Agent 迴圈實測 screenshot → get_images，GitHub profile：129 KB PNG、7 張圖片
 
 **M7（本 commit）**：收尾
+
 - 新增 `src/tools/WebBrowserTool/README.md` action 參考 + 環境變數 + 安全模型
 - 刪 FEATURES.md 的 `WEB_BROWSER_TOOL` stub 說明
 - CLAUDE.md 開發日誌（本段）+ ADR-011
 - TODO.md 勾掉 M4–M7
 
 **新依賴**：`cheerio`（M4）、`puppeteer-core`（M5）。`playwright-core` 曾被裝但因 bun compat 問題移除。
-
