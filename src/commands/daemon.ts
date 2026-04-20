@@ -50,16 +50,33 @@ const call: LocalCommandCall = async args => {
       }
     }
     const r = spawnDetachedDaemon()
-    if (r.spawned) {
+    if (!r.spawned) {
       return {
         type: 'text',
-        value:
-          'autostart 已開啟。daemon spawn 已送出；幾秒內 detector 會抓到 attach。',
+        value: `autostart 已開啟，但 daemon spawn 失敗：${r.error ?? 'unknown'}。可手動執行 \`my-agent daemon start\` 看錯誤。`,
+      }
+    }
+    // 等最多 6 秒讓 daemon 寫 pid.json 並可用。spawn 樂觀回 true 但 child 可能
+    // 因為 stale lock / port 衝突等 silently 死掉；polling 驗證才是真相。
+    const deadline = Date.now() + 6_000
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 250))
+      if (isDaemonAliveSync()) {
+        const p = await readPidFile()
+        return {
+          type: 'text',
+          value: `autostart 已開啟。daemon 已啟動（pid=${p?.pid} port=${p?.port}）；REPL 幾秒內會 attach。`,
+        }
       }
     }
     return {
       type: 'text',
-      value: `autostart 已開啟，但 daemon spawn 失敗：${r.error ?? 'unknown'}。可手動執行 \`my-agent daemon start\`。`,
+      value:
+        `autostart 已開啟，spawn 已送出但 6 秒內未觀察到 pid.json。child 可能 silently 死了。診斷：\n` +
+        `  1. 手動跑 \`my-agent daemon start\` 看錯誤訊息\n` +
+        `  2. 檢查 \`~/.my-agent/daemon.log\` 最後幾行\n` +
+        `  3. 若是 stale .daemon.lock（EEXIST）：新版已自動清 dead pid；` +
+        `若仍卡死可手動刪 \`<projectDir>/.daemon.lock\``,
     }
   }
 

@@ -15,10 +15,19 @@
  * 啟另一個 daemon 但 MY_AGENT_CONFIG_HOME 指到同一處）。失敗視為致命錯誤。
  */
 import { randomUUID } from 'crypto'
-import { openSync, closeSync, unlinkSync, mkdirSync, writeSync } from 'fs'
+import {
+  openSync,
+  closeSync,
+  unlinkSync,
+  mkdirSync,
+  writeSync,
+  readFileSync,
+} from 'fs'
 import { dirname, join } from 'path'
 import { regenerateSessionId } from '../bootstrap/state.js'
 import { getProjectDir } from '../utils/sessionStorage.js'
+import { isPidAlive } from './pidFile.js'
+import { logForDebugging } from '../utils/debug.js'
 
 export interface DaemonSessionHandle {
   readonly sessionId: string
@@ -43,20 +52,55 @@ export function beginDaemonSession(
   }
 
   const lockPath = join(projectDir, '.daemon.lock')
-  // `wx` 獨占建立；如果已存在就丟錯（有另一個 daemon 活著／上次沒清乾淨）。
+  // `wx` 獨占建立；如果 EEXIST：讀 lock 內容看 pid 是否活著，死了就當 stale
+  // 自動接管（同 pidfile 的 take-over 語意），活著才真的拒絕。
   let lockFd: number
+  const tryOpen = (): number =>
+    openSync(lockPath, 'wx', 0o600)
   try {
-    lockFd = openSync(lockPath, 'wx', 0o600)
-    writeSync(
-      lockFd,
-      JSON.stringify({ pid: process.pid, startedAt: Date.now() }) + '\n',
-    )
+    lockFd = tryOpen()
   } catch (e) {
-    throw new Error(
-      `Failed to acquire daemon session lock at ${lockPath}: ${e instanceof Error ? e.message : String(e)}. ` +
-        `If no daemon is running, remove the file manually.`,
+    if ((e as NodeJS.ErrnoException)?.code !== 'EEXIST') {
+      throw new Error(
+        `Failed to acquire daemon session lock at ${lockPath}: ${e instanceof Error ? e.message : String(e)}`,
+      )
+    }
+    // Stale detection：讀 lock 判斷 pid 是否活著
+    let stale = true
+    let existing: { pid?: unknown; startedAt?: unknown } | null = null
+    try {
+      existing = JSON.parse(readFileSync(lockPath, 'utf-8')) as {
+        pid?: unknown
+        startedAt?: unknown
+      }
+      if (typeof existing.pid === 'number' && isPidAlive(existing.pid)) {
+        stale = false
+      }
+    } catch {
+      // 壞 JSON / 空檔都視為 stale
+    }
+    if (!stale) {
+      throw new Error(
+        `Daemon session lock held by live pid=${existing?.pid} at ${lockPath}. ` +
+          `Another daemon is already running for this project.`,
+      )
+    }
+    logForDebugging(
+      `[daemon:lock] stale lock at ${lockPath} (pid=${existing?.pid ?? 'unknown'} dead), taking over`,
     )
+    try {
+      unlinkSync(lockPath)
+    } catch (unlinkErr) {
+      throw new Error(
+        `Failed to remove stale daemon session lock at ${lockPath}: ${unlinkErr instanceof Error ? unlinkErr.message : String(unlinkErr)}`,
+      )
+    }
+    lockFd = tryOpen()
   }
+  writeSync(
+    lockFd,
+    JSON.stringify({ pid: process.pid, startedAt: Date.now() }) + '\n',
+  )
 
   // 新 sessionId + cwd 對應 projectDir 註冊到 STATE。
   const sessionId = regenerateSessionId({ setCurrentAsParent: false })
