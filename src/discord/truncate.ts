@@ -51,7 +51,9 @@ export function truncateForDiscord(
   opts: TruncateOptions = {},
 ): string[] {
   const max = opts.maxLength ?? DISCORD_MAX_LENGTH
-  const addCounter = opts.addCounter ?? true
+  // counterReserve=12 會吃掉 maxLength；若使用者指定很小的 max（測試 / 極端 UX）
+  // 就主動停用 counter 避免 budget 變負導致 cut 進入 1 char/iter 的退化路徑。
+  const addCounter = (opts.addCounter ?? true) && max >= 40
 
   if (content.length === 0) return ['']
   if (content.length <= max) return [content]
@@ -90,7 +92,13 @@ export function truncateForDiscord(
 
     // 為 closing ``` (\n``` = 4 chars) 預留；即使目前 state 是 closed，切片內也可能開新 code block
     const closeSuffixReserve = 4
-    const sliceLimit = budget - prefix.length - closeSuffixReserve
+    // Guard：若 maxLength 很小（測試或極端情況）導致 budget 扣完變負或近零，
+    // 退化為單純硬切 — 確保每 iter 至少吃掉 1 char，避免無限迴圈。
+    let sliceLimit = budget - prefix.length - closeSuffixReserve
+    if (sliceLimit < 1) {
+      sliceLimit = Math.max(1, budget - prefix.length)
+    }
+    if (sliceLimit < 1) sliceLimit = 1
     // 找斷點：優先 \n，其次空白；找不到就硬切
     let cut = sliceLimit
     const searchFrom = Math.max(0, sliceLimit - 200)
@@ -103,7 +111,9 @@ export function truncateForDiscord(
         cut = spaceIdx
       }
     }
-    if (cut <= 0) cut = sliceLimit
+    if (cut < 1) cut = sliceLimit
+    // 終極 guard：絕不讓 cut==0 造成無限迴圈
+    if (cut < 1) cut = 1
 
     const slice = remaining.slice(0, cut)
     const newCodeState = scanCodeBlockState(slice, codeState)
