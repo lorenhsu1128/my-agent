@@ -2701,7 +2701,13 @@ function runHeadlessStreaming(
   // the end of run() picks up the queued command.
   let cronScheduler: import('../utils/cronScheduler.js').CronScheduler | null =
     null
+  // M-DAEMON-4.5：daemon 活著時由 daemon 獨占 cron，headless 跳過避免雙跑。
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { isDaemonAliveSync } =
+    require('../daemon/pidFile.js') as typeof import('../daemon/pidFile.js')
+  const daemonOwnsCron = isDaemonAliveSync()
   if (
+    !daemonOwnsCron &&
     feature('AGENT_TRIGGERS') &&
     cronSchedulerModule &&
     cronGate?.isKairosCronEnabled()

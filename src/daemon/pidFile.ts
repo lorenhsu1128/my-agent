@@ -49,6 +49,33 @@ function isPidFileData(value: unknown): value is PidFileData {
   )
 }
 
+/**
+ * Synchronous liveness probe — readFileSync + `process.kill(pid, 0)`. Used by
+ * code paths that must decide at mount time without awaiting (e.g. REPL's
+ * `useScheduledTasks` skipping cron when a daemon owns it).
+ * Returns false (assume not alive) on any read / parse / stale error.
+ */
+export function isDaemonAliveSync(
+  baseDir?: string,
+  opts: { maxStaleMs?: number; now?: number } = {},
+): boolean {
+  const { pidPath } = getDaemonPaths(baseDir)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs') as typeof import('fs')
+    const raw = fs.readFileSync(pidPath, 'utf-8')
+    const parsed: unknown = jsonParse(raw)
+    if (!isPidFileData(parsed)) return false
+    if (parsed.version !== PID_SCHEMA_VERSION) return false
+    const maxStale = opts.maxStaleMs ?? DEFAULT_MAX_STALE_MS
+    const now = opts.now ?? Date.now()
+    if (now - parsed.lastHeartbeat > maxStale) return false
+    return isPidAlive(parsed.pid)
+  } catch {
+    return false
+  }
+}
+
 export async function readPidFile(
   baseDir?: string,
 ): Promise<PidFileData | null> {

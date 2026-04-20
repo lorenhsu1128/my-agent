@@ -5,6 +5,7 @@ import {
   findTeammateTaskByAgentId,
   injectUserMessageToTeammate,
 } from '../tasks/InProcessTeammateTask/InProcessTeammateTask.js'
+import { isDaemonAliveSync } from '../daemon/pidFile.js'
 import { isKairosCronEnabled } from '../tools/ScheduleCronTool/prompt.js'
 import type { Message } from '../types/message.js'
 import {
@@ -64,6 +65,15 @@ export function useScheduledTasks({
     // so this guard alone is launch-grain. The mid-session killswitch is
     // the isKilled option below — check() polls it every tick.
     if (!isKairosCronEnabled()) return
+    // M-DAEMON-4.5：daemon 活著就由 daemon 獨占跑 cron，REPL 跳過避免雙跑。
+    // 同步 pidfile + process.kill(pid,0) + 30s heartbeat gate；未開 daemon
+    // 或已停都會 return false，REPL 仍照跑。
+    if (isDaemonAliveSync()) {
+      logForDebugging(
+        '[ScheduledTasks] daemon detected, REPL cron skipped (owned by daemon)',
+      )
+      return
+    }
 
     // System-generated — hidden from queue preview and transcript UI.
     // In brief mode, executeForkedSlashCommand runs as a background

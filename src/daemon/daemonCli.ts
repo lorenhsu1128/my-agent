@@ -30,6 +30,7 @@ import { bootstrapDaemonContext } from './sessionBootstrap.js'
 import { createQueryEngineRunner } from './queryEngineRunner.js'
 import { createSessionBroker, handleClientMessage, sendHelloFrame } from './sessionBroker.js'
 import { beginDaemonSession } from './sessionWriter.js'
+import { startDaemonCronWiring } from './cronWiring.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 
 export const DEFAULT_STOP_GRACEFUL_MS = 5_000
@@ -117,7 +118,9 @@ export async function runDaemonStart(
           })
         })
       onConnect = (c): void => sendHelloFrame(broker, handle.server!, c.id)
+      const cronHandle = startDaemonCronWiring({ broker })
       disposeBroker = async (): Promise<void> => {
+        cronHandle.stop()
         await broker.dispose()
         sessionHandle.dispose()
         await context.dispose()
@@ -125,6 +128,9 @@ export async function runDaemonStart(
       out(
         `  queryEngine: enabled (session ${sessionHandle.sessionId.slice(0, 8)}…)\n`,
       )
+      if (cronHandle.scheduler) {
+        out(`  cron:        enabled\n`)
+      }
     }
 
     out(
