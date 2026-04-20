@@ -300,3 +300,63 @@
 - **日期**：2026-04-20
 
 ---
+
+## Discord 整合（M-DISCORD）
+
+### discord.js v14 Partials 從字串改 enum
+
+- **發生什麼事**：M-DISCORD-3c 寫 `partials: ['CHANNEL' as never, 'MESSAGE' as never]`（v13 格式）→ runtime 不被識別 → DM 收不到 MessageCreate 事件（但 slash command 因 InteractionCreate 不受影響依然運作）。
+- **根本原因**：discord.js v14 把 Partials 從 string enum 改成 integer enum（`Partials.Channel = 1` 等）。字串 `'CHANNEL'` 不符合，被 client 忽略。`as never` 繞過 TypeScript 但 runtime 爆。
+- **正確做法**：`import { Partials } from 'discord.js'` 後用 `[Partials.Channel, Partials.Message]`。
+- **相關檔案**：`src/discord/client.ts`（commit `7a6a837`）
+- **日期**：2026-04-20
+
+### discord.js v14 DM MessageCreate 不 fire — payload 缺 channel.type
+
+- **發生什麼事**：即使 Partials.Channel 設對，DM bot 訊息仍然 MessageCreate event 不 emit。raw gateway log 寫 `Failed to find guild, or unknown type for channel X undefined`。
+- **根本原因**：Discord gateway 的 MESSAGE_CREATE payload 只有 `channel_id`，沒有 `channel.type`。discord.js 內部 `Channel.create()` 判斷 `data.type === ChannelType.DM (1)` 不成立 → 回 null → 事件 drop。Partials.Channel 需要 `data.type` 存在才能建 partial DMChannel。
+- **正確做法**：啟動後對每個 whitelist user 做 `client.users.fetch(userId).createDM()` 預先把 DM channel 寫入 cache；之後收到 MESSAGE_CREATE 時 `channels.cache.get(channelId)` 命中，走 cached 路徑不進 `Channel.create`。另加 'raw' event 作為 fallback 處理非 whitelist 情況。
+- **相關檔案**：`src/discord/client.ts` + `src/discord/gateway.ts`（commit `f7ea331`）、`scripts/poc/discord-dm-debug.ts`（診斷腳本）
+- **日期**：2026-04-20
+
+### Discord bot 需要 Privileged Gateway Intents 才能讀訊息 content
+
+- **發生什麼事**：bot 連線時拋 `Used disallowed intents`；或連上了但 MessageCreate event 收到 `content: ''`。
+- **根本原因**：`MESSAGE CONTENT INTENT` 是 Discord 的 privileged intent，預設關閉，需要到 Developer Portal → Bot → Privileged Gateway Intents 手動打開。
+- **正確做法**：在 docs/discord-mode.md 明示步驟。client.ts 若遇 disallowed intents error 回報時要指向 Portal 設定。
+- **相關檔案**：`docs/discord-mode.md`
+- **日期**：2026-04-20
+
+### JavaScript `const` TDZ — 閉包內引用必須在 declaration 之後
+
+- **發生什麼事**：M-DISCORD-5 第一版把 `registry.onLoad(r => { ensureHomeMirror(r) })` 訂閱放在 `const ensureHomeMirror = ...` 宣告**前**，daemon 啟動 throw `Cannot access 'ensureHomeMirror' before initialization`，整個 Discord gateway 失敗；DM 送進 broker（早先代碼路徑仍跑）但 streamOutput 沒掛上 → bot 不再回訊息（使用者看到「沒反應」）。
+- **根本原因**：`const` / `let` 宣告沒有 hoisting（跟 `function` 不同），在 declaration 之前使用 = TDZ（Temporal Dead Zone）。JavaScript runtime 不會給警告；typecheck 也不會擋。
+- **正確做法**：把 registry subscription / `listProjects()` loop 放在**所有**被引用的 closure（ensureHomeMirror / postHomeMirror 等）**之後**。ESLint `no-use-before-define` 可偵測但我沒開；若有大型檔案需要注意宣告順序。
+- **相關檔案**：`src/discord/gateway.ts`（commit `be4dbb3`）
+- **日期**：2026-04-20
+
+### Daemon 不會 hot reload — code 改完必須 stop+start
+
+- **發生什麼事**：修了 Partials bug 後使用者說「一樣沒反應」；看 log 才發現他跑的是改 bug 前啟動的 daemon（即使用 `bun run dev` 也一樣）。
+- **根本原因**：daemon 是常駐 process，module import 在啟動時一次完成；即使 `bun run dev` 跑 TS 原始碼也沒 file watcher。檔案改動不會影響已載入的 module 記憶體。
+- **正確做法**：改完 code → `daemon stop` → `daemon start`（REPL 也一樣要 Ctrl+C 重啟）。任何 daemon 行為 debug 第一步先檢查 `daemon started` log 時間戳 > commit 時間戳。
+- **相關檔案**：`docs/discord-mode.md` 故障排查章節
+- **日期**：2026-04-20
+
+### Truncate 無限迴圈 + bun test OOM
+
+- **發生什麼事**：測試 `truncateForDiscord('a'.repeat(50), {maxLength: 10})` 時 bun test process 飆到 7GB RSS panic；之後留下 4-5 個殭屍 bun 進程吃 CPU + 記憶體。
+- **根本原因**：小 `maxLength` 扣掉 `counterReserve (12)` 變負數，`sliceLimit` 也負 → cut=-N → `slice(0, cut)` 不切任何東西 → remaining 永遠不縮短 → 無限迴圈。
+- **正確做法**：(a) 當 `max < 40` 時停用 counterReserve；(b) 所有 `sliceLimit` / `cut` 加最低 1 的 guard；(c) bun test OOM 殭屍 process 不會自己退，需 `taskkill //F //PID ...` 清。
+- **相關檔案**：`src/discord/truncate.ts`（commit `M-DISCORD-3b`）
+- **日期**：2026-04-20
+
+### Slash command 傳播時間：guild instant、global 最多 1 小時
+
+- **發生什麼事**：`registerSlashCommands` 跑成功了，但 DM 打 `/` 看不到命令選單；guild 裡卻 instant 出現。
+- **根本原因**：Discord 把 slash commands 分 guild-scope（對 guild `applicationGuildCommands` PUT）和 global-scope（`applicationCommands` PUT，DM 用）。Guild 立即生效；global 最多 1 小時傳播。
+- **正確做法**：兩種都註冊（我們的 code 都有）；文件提醒使用者 DM 看不到可能是 global 傳播還沒到，先在 guild 測。
+- **相關檔案**：`src/discord/slashCommands.ts`、`docs/discord-mode.md`
+- **日期**：2026-04-20
+
+---

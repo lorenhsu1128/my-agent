@@ -186,6 +186,7 @@ bun test                         # 執行測試
 - ADR-008（2026-04-19）：M-SP — system prompt 29 個 section 外部化至 `~/.my-agent/system-prompt/` 下的 .md 檔。新增 `src/systemPromptFiles/` 模組（paths / sections / bundledDefaults / loader / snapshot / seed / index）。採 session 啟動凍結快照（沿用 M-UM pattern）、per-project > global > bundled 三層解析、完全取代（不合併）、首次啟動自動 seed global 層 + README.md。覆蓋範圍：prompts.ts 全部 15 個 section（靜態 + 動態） + cyber-risk + user-profile 外框 + memory 系統 8 個常數 + QueryEngine 4 條錯誤訊息。使用者指南見 `docs/customizing-system-prompt.md`。理由：讓措辭調整不必改 code → rebuild；per-project 可做專案專屬 prompt 客製化。
 - ADR-011（2026-04-19）：Browser 能力走 puppeteer-core，不走 playwright-core。M5 首次用 playwright-core 時發現在 bun + Windows 下預設 `--remote-debugging-pipe` transport 無限 hang，即使改 `ignoreDefaultArgs` + `remote-debugging-port` + `connectOverCDP` 也 hang（raw `ws` 套件連 chromium 可以，但 playwright 自家 client 不行）。puppeteer-core 預設 WebSocket CDP 在同環境下秒連，沿用 `bunx playwright install chromium` 裝的 browser binary 不需第二次下載。本地 / Browserbase / Browser Use 三個 provider 共用 puppeteer-core。Vision 走 vendored `my-agent-ai/sdk`（Anthropic SDK），interface 設計保留換後端空間（未來可加 Gemini / 本地 VLM）。Firecrawl 不當作 browser provider（它是 scraping API 不是 CDP target），改為 `WebCrawlTool` 的 optional fetcher backend，透過 `WEBCRAWL_BACKEND=firecrawl` + `FIRECRAWL_API_KEY` 啟用。Provider 選擇不走 feature flag（ADR-003），以 runtime env 決定：`BROWSER_PROVIDER` 顯式 > API key 偵測 > fallback local。
 - ADR-012（2026-04-20）：M-DAEMON — Daemon 模式架構（Path A in-process QueryEngine 整合）。`my-agent daemon start` 起常駐 Bun.serve WS server（loopback only `127.0.0.1`、OS 指派 port、bearer token auth、pid.json heartbeat）；QueryEngineRunner 包 `ask()` 成 SessionRunner，跑真實 LLM turn；InputQueue 狀態機（IDLE/RUNNING/INTERRUPTING）+ 混合 intent 策略（interactive 打斷 / background FIFO / slash 優先）；sessionBroker 廣播 turnStart/turnEnd/runnerEvent 給所有 attached client 同步；permissionRouter 把 canUseTool 路由到 source client（含 toolName/input/riskLevel/description/affectedPaths），broadcast permissionPending 給旁觀 client（Q2=b），timeout 5min auto-allow（Q3=c），fallbackHandler interface 預留給 M-DISCORD；cron scheduler 搬進 daemon 獨占跑（`isDaemonAliveSync()` 讓 REPL/headless 跳過避免雙跑）；REPL 側 thin-client（detectDaemon 2s poll + thinClientSocket WS + fallbackManager 狀態機 standalone↔attached↔reconnecting），daemon 起/掛時透明切換，狀態列 badge 顯示目前模式。Session JSONL 沿用既有 `recordTranscript()`→`Project` singleton 不重做；`.daemon.lock` 檔防同 cwd 重啟兩份 daemon。**Path A 完整 in-process** 不是 Path B 的 spawn `./cli --print` 子程序 — 理由：狀態共享、單一 process 方便 debug、未來 Discord/cron 可同 AppState 搬動任務；代價：daemon bootstrap 要複製 main.tsx 的 headless 分支（`bootstrapDaemonContext`，不 refactor print.ts）。使用者指南見 `docs/daemon-mode.md`。Discord 整合（M-DISCORD）是 daemon 的第一個 non-REPL consumer。
+- ADR-013（2026-04-20）：M-DISCORD — 單 daemon 多 project Discord gateway。一個 daemon process 內活 N 個 `ProjectRuntime`（各自 AppState / broker / QueryEngineRunner / permissionRouter / cron scheduler / session JSONL），透過 `ProjectRegistry` 管理 lifecycle（lazy loadProject / hasAttachedRepl-aware idle unload / onLoad/onUnload listeners）。並行策略 **B-1**：daemon 全域 turn mutex + `wrapRunnerWithProjectCwd` 切 `process.cwd()` 與 `STATE.originalCwd` 序列化跨 project turn（個人使用場景極少並行，接受「後到者排隊」UX）；`src/utils/sessionStorage.ts` 的 Project singleton 改 `Map<cwd, Project>`。REPL thin-client WS handshake 帶 `?cwd=`；daemon 側 `getProjectByCwd` 命中 → attachRepl + 綁 projectId；沒命中 → 回 `attachRejected` frame，REPL fallback standalone（不自動重試，避免 loop）。Discord gateway 以 `DiscordConfig`（`~/.my-agent/discord.json`）為入口：訊息路由 = 白名單 + DM `#<id|alias>` 前綴 + `channelBindings[channelId]` → `projectPath` → `registry.loadProject`；discord.js v14 **DM 坑**（MESSAGE_CREATE payload 缺 `channel.type`，Partials.Channel 建不出 DMChannel）workaround 兩層：啟動 pre-fetch whitelist users DM + 'raw' event fallback。8 個 slash commands（/status /list /help /mode /clear /interrupt /allow /deny）；permission mode 雙向同步新增 `permissionModeChanged` WS frame（daemon → attached REPL）。Home channel（`homeChannelId`）鏡像 non-Discord source 的 turn 輸出 + daemon up/down 通知，Discord source 的 turn 不鏡（streamOutput 已 reply 原 DM）。**不含**：voice / Slack-Telegram / button UX / 多使用者 guild。使用者指南見 `docs/discord-mode.md`。
 
 ---
 
@@ -228,6 +229,68 @@ export CLAUDE_CONFIG_DIR=~/.claude
 > Claude Code：在這行下方附加你的 session 摘要。
 > 格式：`### YYYY-MM-DD — Session 標題`
 > 包含：你做了什麼、修改了哪些檔案、還剩什麼、遇到的問題。
+
+---
+
+### 2026-04-20 — M-DISCORD：Discord gateway（單 daemon 多 project）
+
+**範圍**：把 M-DAEMON 的 in-process daemon 擴成能同時活 N 個 ProjectRuntime，接上 Discord bot — DM / guild channel 文字對話、slash commands、permission mode 雙向同步、home channel 鏡像 REPL/cron turn。
+
+**commit 序列**：
+- `6c04352` M-DISCORD-1.0/1.1：daemon turn mutex + ProjectRegistry 骨架
+- `58eba69` 1.2：Project singleton → `Map<cwd, Project>` multi-map
+- `1d43688` 1.4：daemonCli 改 ProjectRegistry wiring + runner 包 mutex + chdir
+- `ca38f37` 2：REPL thin-client WS handshake 帶 cwd + attachRejected fallback
+- `c301227` 3a：Discord config module + router + truncate（Hermes `truncate_message` port）
+- (—) 3b：reactions + streamOutput + attachments（圖片進出）+ messageAdapter
+- `c0ffbd4` 3c：discord.js Client 封裝 + Gateway orchestrator + daemon 整合
+- `fa7b104` 支援 `botToken` 寫在 `discord.json`（env var 優先）
+- `d3d8b3c` 4：8 個 slash commands + permission mode 雙向同步（新 `permissionModeChanged` WS frame）
+- `7a6a837` fix：Partials 字串 → enum（v14 API 改變）
+- `f7ea331` fix：DM pre-fetch whitelist + 'raw' event workaround（discord.js v14 DM bug — MESSAGE_CREATE payload 缺 channel.type 導致 DMChannel 建不出）
+- `c713e99` 5：home channel REPL/cron turn mirror + daemon up/down 通知 + ProjectRegistry onLoad/onUnload listener
+- `be4dbb3` fix：TDZ — ensureHomeMirror referenced before const declaration
+
+**新模組**：
+- `src/daemon/daemonTurnMutex.ts` — FIFO mutex + `wrapRunnerWithProjectCwd`（SessionRunner 包一層 chdir + STATE.originalCwd 切換）
+- `src/daemon/projectRegistry.ts` — Map<projectId, ProjectRuntime> + lazy load + idle sweeper（hasAttachedRepl 跳過）+ onLoad/onUnload listener API
+- `src/daemon/projectRuntimeFactory.ts` — createDefaultProjectRuntimeFactory 把 bootstrapDaemonContext + beginDaemonSession + sessionBroker + permissionRouter + cronWiring 串成 ProjectRuntime
+- `src/discordConfig/` — 5 檔（schema/paths/loader/seed/index）沿用 llamacppConfig pattern
+- `src/discord/` — 10 檔（types/router/truncate/reactions/streamOutput/attachments/messageAdapter/slashCommands/client/gateway）
+- `scripts/poc/discord-connect-smoke.ts` + `discord-dm-debug.ts` — 實機連線 + DM 診斷
+
+**改造既有模組**：
+- `src/utils/sessionStorage.ts` — Project singleton → `Map<cwd, Project>`；cleanup handler 改 flush all
+- `src/daemon/permissionRouter.ts` — 加 `onPending` / `onResolved` / `listPendingIds` API 供 Discord `/allow` `/deny` 追蹤
+- `src/daemon/daemonCli.ts` — registry wiring 取代單 broker；Discord gateway 啟停串進 daemon lifecycle；`broadcastPermissionMode` callback 做 Discord → REPL 單向廣播
+- `src/server/clientRegistry.ts` / `directConnectServer.ts` — ClientInfo 加 `cwd` / `projectId` 欄位
+- `src/repl/thinClient/` 三檔 + `src/hooks/useDaemonMode.ts` + `src/screens/REPL.tsx` — cwd handshake、attachRejected fallback、`onPermissionModeChanged` handler apply 到本機 toolPermissionContext
+
+**關鍵決策 Q&A**（與使用者對齊）：
+- Q1 訊息路由 = DM `#<id>` 前綴 + Server channel binding 混合
+- Q2 REPL attach = 只能 attach 已 load 的 runtime（沒 load 回 attachRejected）
+- Q3 ProjectRuntime 生命週期 = 30min idle unload（hasAttachedRepl 時不計 idle）
+- Q4 Cron = per-ProjectRuntime scheduler
+- Q5 Permission ask 路由 = REPL-first（在場） / fallback Discord
+- Q6 Library = discord.js v14
+- Q8 Permission mode = Discord/REPL 雙向同步（permissionModeChanged frame）
+- Q9 並行隔離 = B-1（daemon turn mutex + chdir，接受後到者排隊）
+- Home channel 鏡像模式：REPL/cron 發起 turn 鏡到 home channel；Discord 發起 turn 不鏡（避免跟 reply 雙貼）
+
+**踩坑 / 重要教訓**（已入 LESSONS.md 或 ADR-013）：
+1. discord.js v14 **Partials** 從字串改 enum（`Partials.Channel` 而非 `'CHANNEL'`）— 字串 runtime 不被識別
+2. discord.js v14 **DM MESSAGE_CREATE 缺 channel.type** → DMChannel 建不出 → event 不 emit；workaround = 啟動 pre-fetch whitelist users DM channel + 'raw' packet handler 作為 fallback
+3. **MESSAGE CONTENT INTENT** 要在 Developer Portal 手動開啟（Privileged Gateway Intent），否則 bot 收不到訊息 content
+4. **`const` TDZ**：JS const 沒 hoisting，閉包內引用必須在 declaration 之後；大型 gateway 檔案要注意順序
+5. **daemon hot reload 不存在**：改 code 後 daemon 必須 stop+start 才吃新邏輯（bun run dev 也一樣）
+6. **bun test OOM**：小 maxLength + counter reservation 造成 truncate 無限迴圈→ 加下限 guard；無限迴圈的 bun test process 不會自己退，要 taskkill
+7. **slash commands 傳播**：guild-scope 註冊 instant；global（DM）最多 1 小時
+
+**測試**：daemon 180 + discord 75（含 router / truncate / reactions / streamOutput / attachments / messageAdapter / slash-commands / permission-router-hooks / project-registry / project-registry-listeners / config-token / cwd-handshake）= 共 268 integration tests 全綠；typecheck baseline 不變。
+
+**E2E 實機**（使用者驗證）：bot `MY-AGENT#3666` 連上私人 guild，DM `hi` → 👀 → ✅ + 回覆；`/mode acceptEdits` → REPL 同步顯示；home channel 收到 `🟢 daemon up` + REPL turn 鏡像。
+
+**不含（延後）**：voice channel、button/embed interactive permission UX、Slack/Telegram、多使用者 guild。
 
 ---
 

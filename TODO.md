@@ -120,21 +120,47 @@
 
 ---
 
-## 未來里程碑：M-DISCORD — Discord Gateway（M-DAEMON 完成後啟動）
+## 已完成里程碑：M-DISCORD — Discord Gateway（2026-04-20 完成）
 
-**目標**：接在 M-DAEMON 上面的 Discord bot — 文字對話 + 圖片進出 + slash commands + home channel 接 cron 通知。為個人使用設計（白名單永遠只有使用者一人）。
-
-**前置依賴**：M-DAEMON 必須完成（Discord adapter 是 daemon 內的另一個 input source）
+**目標**：daemon 上接 Discord bot — DM + guild channel 文字對話 + 圖片進出 + slash commands + home channel 鏡像。單 daemon 多 project 架構。
 
 **範圍**：
-- DM + 個人 server channels（Q1=A+B）
-- 全 Discord 一條 session（Q2=A），與 REPL 共享同 project session（Q3=B）
-- 獨立 daemon + REPL 皆可感知 Discord 狀態（Q5=兩種都想）
-- Home channel 接 cron + 通知 + 長任務完成提示（Q4=A）
-- 白名單 1 人 → permission 走 YOLO classifier（子問題 8 fallback）
-- 不含 voice（Hermes voice 涉及 RTP/Opus/DAVE E2EE ~3000 行，延後）
+- [x] DM + guild channel（Q1=混合：DM 前綴 `#<id>` + channel binding）
+- [x] 單 daemon 多 ProjectRuntime（B 方案）
+- [x] REPL attach = 只接 loaded runtime，其他 attachRejected（Q2=b）
+- [x] ProjectRuntime 30min idle unload，hasAttachedRepl 不計 idle（Q3=b）
+- [x] Cron per-ProjectRuntime（Q4=a）
+- [x] Permission mode 雙向同步 + REPL-first/Discord-fallback ask 路由（Q5=b + Q8）
+- [x] B-1 並行：daemon turn mutex + chdir，接受後到者排隊
+- [x] Home channel 鏡像 REPL/cron turn + daemon up/down（使用者要求）
+- [x] 白名單檢查（訊息 + slash）
+- [x] 8 個 slash commands：/status /list /help /mode /clear /interrupt /allow /deny
+- 不含 voice / Slack-Telegram / button UX / 多使用者 guild（延後）
 
-**待展開**：M-DAEMON 進度過半時再細化 Task 清單。
+### 任務
+- [x] M-DISCORD-1.0 daemonTurnMutex（commit `6c04352`）
+- [x] M-DISCORD-1.1 projectRegistry 骨架（commit `6c04352`）
+- [x] M-DISCORD-1.2 Project singleton 多例化（commit `58eba69`）
+- [x] M-DISCORD-1.3 sessionBootstrap settings unsub（sessionBootstrap.ts 既有 dispose 已涵蓋）
+- [x] M-DISCORD-1.4 daemonCli registry wiring + runner mutex wrap（commit `1d43688`）
+- [x] M-DISCORD-2 REPL thin-client cwd handshake + attachRejected（commit `ca38f37`）
+- [x] M-DISCORD-3a discord.js 安裝 + discordConfig + router + truncate（commit `c301227`）
+- [x] M-DISCORD-3b reactions + streamOutput + attachments + messageAdapter
+- [x] M-DISCORD-3c discord.js Client + Gateway + daemon 整合（commit `c0ffbd4`）
+- [x] botToken 支援寫在 discord.json（commit `fa7b104`）
+- [x] M-DISCORD-4 slash commands + permission mode 雙向同步（commit `d3d8b3c`）
+- [x] fix: Partials enum（commit `7a6a837`）
+- [x] fix: DM pre-fetch + 'raw' event workaround（commit `f7ea331`）
+- [x] M-DISCORD-5 home channel mirror + daemon up/down 通知（commit `c713e99`）
+- [x] fix: TDZ ensureHomeMirror（commit `be4dbb3`）
+- [x] M-DISCORD-6 docs + ADR-013 + TODO.md 勾選
+
+### 完成標準
+- [x] `bun run typecheck` baseline 不變
+- [x] 268/268 integration tests 全綠（daemon 184 + discord 84）
+- [x] `./cli -p "..."` 單機冒煙通過
+- [x] 實機 E2E（使用者驗證）：bot `MY-AGENT#3666` 連線、DM `hi` 整條 flow、`/mode` 雙向同步、home channel 鏡像皆通過
+- [x] ADR-013 + `docs/discord-mode.md` + CLAUDE.md 開發日誌
 
 ---
 
@@ -1256,3 +1282,63 @@
 - 2026-04-20 11:41: Session 結束 | 進度：364/383 任務 | b6961d1 docs(daemon): M-DAEMON-8 wrap-up — smoke + docs + ADR-012 + LESSONS
 
 - 2026-04-20 11:51: Session 結束 | 進度：369/388 任務 | cd416b8 feat(daemon): auto-spawn daemon on REPL open + /daemon + autostart CLI (M-DAEMON-AUTO)
+
+- 2026-04-20 12:19: Session 結束 | 進度：373/392 任務 | 207025f feat(daemon): three-layer permission sync TUI↔daemon (M-DAEMON-PERMS)
+
+- 2026-04-20 12:56: Session 結束 | 進度：373/392 任務 | 207025f feat(daemon): three-layer permission sync TUI↔daemon (M-DAEMON-PERMS)
+
+- 2026-04-20 13:06: Session 結束 | 進度：373/392 任務 | 96546bf fix(daemon): stale .daemon.lock auto-takeover + /daemon on real verification
+
+- 2026-04-20 13:32: Session 結束 | 進度：373/392 任務 | 96546bf fix(daemon): stale .daemon.lock auto-takeover + /daemon on real verification
+
+- 2026-04-20 13:37: Session 結束 | 進度：373/392 任務 | 96546bf fix(daemon): stale .daemon.lock auto-takeover + /daemon on real verification
+
+- 2026-04-20 13:48: Session 結束 | 進度：373/392 任務 | 96546bf fix(daemon): stale .daemon.lock auto-takeover + /daemon on real verification
+
+- 2026-04-20 14:05: Session 結束 | 進度：373/392 任務 | 96546bf fix(daemon): stale .daemon.lock auto-takeover + /daemon on real verification
+
+- 2026-04-20 14:08: Session 結束 | 進度：373/392 任務 | 96546bf fix(daemon): stale .daemon.lock auto-takeover + /daemon on real verification
+
+- 2026-04-20 14:11: Session 結束 | 進度：373/392 任務 | 96546bf fix(daemon): stale .daemon.lock auto-takeover + /daemon on real verification
+
+- 2026-04-20 14:24: Session 結束 | 進度：373/392 任務 | 58eba69 feat(daemon): M-DISCORD-1.2 — Project singleton 多例化
+
+- 2026-04-20 14:40: Session 結束 | 進度：373/392 任務 | 1d43688 feat(daemon): M-DISCORD-1.4 — ProjectRegistry wiring + runner mutex wrap
+
+- 2026-04-20 15:08: Session 結束 | 進度：373/392 任務 | c301227 feat(discord): M-DISCORD-3a — config + router + truncate (pure utils)
+
+- 2026-04-20 15:42: Session 結束 | 進度：373/392 任務 | 85afccd feat(discord): M-DISCORD-3b — reactions + streamOutput + attachments + messageAdapter
+
+- 2026-04-20 16:01: Session 結束 | 進度：373/392 任務 | 85afccd feat(discord): M-DISCORD-3b — reactions + streamOutput + attachments + messageAdapter
+
+- 2026-04-20 16:06: Session 結束 | 進度：373/392 任務 | 85afccd feat(discord): M-DISCORD-3b — reactions + streamOutput + attachments + messageAdapter
+
+- 2026-04-20 16:09: Session 結束 | 進度：373/392 任務 | c0ffbd4 feat(discord): M-DISCORD-3c — discord.js Client + Gateway + daemon 整合
+
+- 2026-04-20 16:15: Session 結束 | 進度：373/392 任務 | c0ffbd4 feat(discord): M-DISCORD-3c — discord.js Client + Gateway + daemon 整合
+
+- 2026-04-20 16:35: Session 結束 | 進度：373/392 任務 | c0ffbd4 feat(discord): M-DISCORD-3c — discord.js Client + Gateway + daemon 整合
+
+- 2026-04-20 16:47: Session 結束 | 進度：373/392 任務 | fa7b104 feat(discord): 支援 botToken 寫在 discord.json（env 優先）
+
+- 2026-04-20 17:03: Session 結束 | 進度：373/392 任務 | d3d8b3c feat(discord): M-DISCORD-4 — slash commands + permission mode 雙向同步
+
+- 2026-04-20 17:09: Session 結束 | 進度：373/392 任務 | d3d8b3c feat(discord): M-DISCORD-4 — slash commands + permission mode 雙向同步
+
+- 2026-04-20 17:15: Session 結束 | 進度：373/392 任務 | d3d8b3c feat(discord): M-DISCORD-4 — slash commands + permission mode 雙向同步
+
+- 2026-04-20 17:18: Session 結束 | 進度：373/392 任務 | 7a6a837 fix(discord): DM messages 收不到 — Partials 從字串改用 Partials enum (v14)
+
+- 2026-04-20 17:25: Session 結束 | 進度：373/392 任務 | 7a6a837 fix(discord): DM messages 收不到 — Partials 從字串改用 Partials enum (v14)
+
+- 2026-04-20 17:29: Session 結束 | 進度：373/392 任務 | 7a6a837 fix(discord): DM messages 收不到 — Partials 從字串改用 Partials enum (v14)
+
+- 2026-04-20 17:40: Session 結束 | 進度：373/392 任務 | f7ea331 fix(discord): v14 DM bug — pre-fetch DM channels + raw packet handler
+
+- 2026-04-20 19:37: Session 結束 | 進度：373/392 任務 | f7ea331 fix(discord): v14 DM bug — pre-fetch DM channels + raw packet handler
+
+- 2026-04-20 19:58: Session 結束 | 進度：373/392 任務 | c713e99 feat(discord): M-DISCORD-5 — home channel mirror + daemon up/down notifications
+
+- 2026-04-20 20:04: Session 結束 | 進度：373/392 任務 | c713e99 feat(discord): M-DISCORD-5 — home channel mirror + daemon up/down notifications
+
+- 2026-04-20 20:10: Session 結束 | 進度：373/392 任務 | be4dbb3 fix(discord): TDZ — ensureHomeMirror referenced before declaration
