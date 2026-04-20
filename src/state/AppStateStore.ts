@@ -155,6 +155,10 @@ export type AppState = DeepImmutable<{
   replBridgeInitialName: string | undefined
   // Always-on bridge: first-time remote dialog pending (set by /remote-control command)
   showRemoteCallout: boolean
+  // M-DAEMON-6：REPL 目前連線模式（daemon 存在 / attached / reconnecting / standalone）
+  daemonMode: 'standalone' | 'attached' | 'reconnecting'
+  // M-DAEMON-6：最後一次偵測到的 daemon port（attached/reconnecting 時顯示）
+  daemonPort: number | undefined
 }> & {
   // Unified task state - excluded from DeepImmutable because TaskState contains function types
   tasks: { [taskId: string]: TaskState }
@@ -506,6 +510,8 @@ export function getDefaultAppState(): AppState {
     replBridgeError: undefined,
     replBridgeInitialName: undefined,
     showRemoteCallout: false,
+    daemonMode: 'standalone',
+    daemonPort: undefined,
     toolPermissionContext: {
       ...getEmptyToolPermissionContext(),
       mode: initialMode,

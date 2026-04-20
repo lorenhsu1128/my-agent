@@ -136,6 +136,7 @@ function PromptInputFooter({
           {isFullscreen ? null : <Notifications apiKeyStatus={apiKeyStatus} debug={debug} verbose={verbose} messages={messages} ideSelection={ideSelection} mcpClients={mcpClients} isInputWrapped={isInputWrapped} isNarrow={isNarrow} />}
           {"external" === 'ant' && isUndercover() && <Text dimColor>undercover</Text>}
           <BridgeStatusIndicator bridgeSelected={bridgeSelected} />
+          <DaemonStatusIndicator />
         </Box>
       </Box>
       {"external" === 'ant' && <CoordinatorTaskPanel />}
@@ -145,6 +146,28 @@ export default memo(PromptInputFooter);
 type BridgeStatusProps = {
   bridgeSelected: boolean;
 };
+function DaemonStatusIndicator(): React.ReactNode {
+  const mode = useAppState(s => s.daemonMode);
+  const port = useAppState(s => s.daemonPort);
+  const color =
+    mode === 'attached'
+      ? 'green'
+      : mode === 'reconnecting'
+        ? 'yellow'
+        : undefined;
+  const label =
+    mode === 'attached'
+      ? `daemon: attached${port ? ` :${port}` : ''}`
+      : mode === 'reconnecting'
+        ? 'daemon: reconnecting'
+        : 'daemon: standalone';
+  return (
+    <Text color={color} dimColor={mode === 'standalone'} wrap="truncate">
+      {label}
+    </Text>
+  );
+}
+
 function BridgeStatusIndicator({
   bridgeSelected
 }: BridgeStatusProps): React.ReactNode {

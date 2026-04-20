@@ -90,6 +90,7 @@ import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js';
 import { getShortcutDisplay } from '../keybindings/shortcutFormat.js';
 import { CancelRequestHandler } from '../hooks/useCancelRequest.js';
 import { useBackgroundTaskNavigation } from '../hooks/useBackgroundTaskNavigation.js';
+import { useDaemonMode } from '../hooks/useDaemonMode.js';
 import { useSwarmInitialization } from '../hooks/useSwarmInitialization.js';
 import { useTeammateViewAutoExit } from '../hooks/useTeammateViewAutoExit.js';
 import { errorMessage } from '../utils/errors.js';
@@ -4027,6 +4028,11 @@ export function REPL({
       setMessages
     });
   }
+
+  // M-DAEMON-6：偵測 daemon 並維護 attached/standalone/reconnecting state。
+  // 寫入 AppState.daemonMode，DaemonStatusIndicator 讀取顯示 badge。
+  // 6c 會加 onFrame handler 把 SDKMessage 塞進 REPL messages。
+  useDaemonMode();
 
   // Note: Permission polling is now handled by useInboxPoller
   // - Workers receive permission responses via mailbox messages
