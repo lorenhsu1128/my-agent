@@ -88,7 +88,11 @@
   - 全 daemon 測試 111/111 綠，./cli -p 冒煙通過
 
 ### 階段四：Multi-client + permission
-- [ ] M-DAEMON-7 `src/daemon/permissionRouter.ts`：stream event broadcast 給所有 attached clients；permission prompt 路由到 `source_client_id`；Discord fallback hook 預留 interface（M-DISCORD 才接）。測試：兩個 REPL attach 同 daemon → 任一邊 type 都看到訊息；permission prompt 只彈到發起端
+- [x] M-DAEMON-7 `src/daemon/permissionRouter.ts` + thin-client 接收 + E2E。
+  - 7a (commit b3917d4)：permissionRouter.canUseTool 把 daemon 的 tool permission 送到 source client（permissionRequest 含 toolName/input/riskLevel:read|write|destructive/description/affectedPaths），廣播 permissionPending 給其他 attached clients（filter 排除 source）；等 permissionResponse{toolUseID,decision,updatedInput?,message?}；timeout 5min auto-allow；fallbackHandler interface 預留給 M-DISCORD。daemonCli 用 brokerRef 注入 runner canUseTool 且 onMessage 先試 router.handleResponse。9 單元測試
+  - 7b (commit 2d8c9c3)：thinClientSocket OutboundFrame 擴 permissionResponse；fallbackManager.sendPermissionResponse；useDaemonMode onPermissionRequest / onPermissionPending callback + pendingPermissions map + getLatestPendingPermission() + respondToPermission()；REPL 收到 permissionRequest 插警告 system message（含 risk/description/affectedPaths），收 permissionPending 插 info 旁觀；onSubmit 攔截 `/allow` `/deny` 解最新 pending → 送 WS
+  - 7c (本 commit)：2 個 E2E（雙 WS client attach 同 daemon → source 收 request / peer 收 pending 且 source 沒重複收 / source 送 allow → decision.allow；first-wins 允許 peer 搶先送 deny）
+  - 全 daemon 測試 122/122 綠，./cli -p 冒煙通過。Broadcast 部分（Q2 的旁觀通知）已在 M-DAEMON-4c 就實作完，本 milestone 確認了 turnStart/turnEnd/runnerEvent 對兩邊 client 同步沒漏
 
 ### 階段五：驗收
 - [ ] M-DAEMON-8 整合測試 `tests/integration/daemon/{lifecycle,attach-fallback,multi-client,input-strategy,permission-routing,session-write,smoke.sh}.ts` + `docs/daemon-mode.md` 使用者指南 + ADR-012 記入 CLAUDE.md + LESSONS.md 更新踩坑紀錄
@@ -1229,3 +1233,5 @@
 - 2026-04-20 09:43: Session 結束 | 進度：354/383 任務 | f9fe3a6 docs(todo): mark M-DAEMON-4 complete
 
 - 2026-04-20 10:11: Session 結束 | 進度：355/383 任務 | 8e5e826 feat(daemon): cron scheduler wiring + REPL/headless skip guard (M-DAEMON-4.5)
+
+- 2026-04-20 10:41: Session 結束 | 進度：356/383 任務 | b61f58b test(daemon): thin-client E2E — lifecycle + mode transitions (M-DAEMON-6d)
