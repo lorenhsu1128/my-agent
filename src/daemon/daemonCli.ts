@@ -31,6 +31,11 @@ import { isAutostartEnabled, setAutostartEnabled } from './autostart.js'
 import { createDaemonTurnMutex } from './daemonTurnMutex.js'
 import { createProjectRegistry, projectIdFromCwd } from './projectRegistry.js'
 import { createDefaultProjectRuntimeFactory } from './projectRuntimeFactory.js'
+import {
+  loadDiscordConfigSnapshot,
+  seedDiscordConfigIfMissing,
+} from '../discordConfig/index.js'
+import { isVisionEnabled } from '../llamacppConfig/loader.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 
 export const DEFAULT_STOP_GRACEFUL_MS = 5_000
@@ -221,7 +226,45 @@ export async function runDaemonStart(
           runtime?.detachRepl(c.id)
         }
       }
+
+      // M-DISCORD-3c：Discord gateway 在 registry 就位後啟動（enabled=true + token set）。
+      let disposeDiscord: (() => Promise<void>) | null = null
+      try {
+        await seedDiscordConfigIfMissing()
+        const discordCfg = await loadDiscordConfigSnapshot()
+        const discordToken = process.env.DISCORD_BOT_TOKEN
+        if (discordCfg.enabled && discordToken && discordToken.trim().length > 0) {
+          const { startDiscordGateway } = await import('../discord/gateway.js')
+          const dg = await startDiscordGateway({
+            config: discordCfg,
+            token: discordToken.trim(),
+            registry,
+            visionEnabled: isVisionEnabled(),
+            log: handle.logger,
+          })
+          disposeDiscord = dg.dispose
+          out(`  discord:     enabled (bot connected)\n`)
+        } else if (discordCfg.enabled && !discordToken) {
+          void handle.logger.warn('discord enabled in config but DISCORD_BOT_TOKEN env not set; skipping')
+          out(`  discord:     config enabled but DISCORD_BOT_TOKEN missing — skipping\n`)
+        }
+      } catch (e) {
+        void handle.logger.error('failed to start discord gateway', {
+          err: e instanceof Error ? e.message : String(e),
+        })
+        out(
+          `  discord:     startup failed (${e instanceof Error ? e.message : String(e)})\n`,
+        )
+      }
+
       disposeRegistry = async (): Promise<void> => {
+        if (disposeDiscord) {
+          try {
+            await disposeDiscord()
+          } catch {
+            // ignore
+          }
+        }
         await registry.dispose()
       }
       out(
