@@ -256,6 +256,60 @@ Get-Content ~/.my-agent/daemon.log -Tail 20
 | `Used disallowed intents` | Privileged intent 沒開 | 回 Developer Portal |
 | REPL 沒收到 /mode 同步 | REPL 用的是舊 code | REPL 也要 Ctrl+C 重啟 |
 
+## M-DISCORD-AUTOBIND：Per-project channel + REPL 雙向同步
+
+在 REPL 內一鍵建立 Discord per-project channel；REPL 與 Discord 雙向可見。
+
+### 前置：`discord.json` 加兩欄位
+
+```json
+{
+  "homeChannelId": "...",
+  "guildId": "<server ID>",
+  "archiveCategoryId": "<category ID>",
+  ...
+}
+```
+
+取 ID：Discord 設定 → 進階 → 開啟開發者模式，右鍵 server / category → 複製 ID。
+
+Bot 角色需有 **Manage Channels** 權限（server 設定 → 身分組 → bot 角色 → 勾選）。
+
+### 使用
+
+- `/discord-bind`（REPL 內）：在 guild 建一個 `<dirname>-<hash6>` 頻道並綁當前 cwd，寫回 `channelBindings`；不用手編 config。中文目錄名走 pinyin；日文 / emoji 等 fallback 成 `proj-<hash>`。
+- `/discord-unbind`：頻道改名 `unbound-<原名>`、清 binding，保留歷史訊息。
+- 兩個指令都要 daemon 啟動 + REPL attached。
+
+### 鏡像策略（β）
+
+- REPL / cron turn：有 per-project binding → 鏡到該頻道（前綴 `[from REPL]` / `[from cron]`）；沒綁 → 鏡到 home channel（舊行為）。互斥、不雙貼。
+- Discord-sourced turn：既有 reply 到該頻道，**也**廣播到同 project 的 attached REPL（REPL 看到 `[via Discord DM from @user]` 或 `[via #channel]`）。
+
+### 權限雙發
+
+Discord-sourced turn 要工具權限時：
+- 同 project 所有 attached REPL 都收到 `permissionRequest`
+- 原 Discord 頻道也收到「⚠ Tool X 要求授權」訊息，提示 `/allow` `/deny`
+- 任一邊回覆即解鎖，另一邊 UI 透過 `permissionResolved` frame 清掉 pending
+
+### 健康檢查
+
+daemon 啟動時掃所有 binding：
+- Guild 不可達（bot 被踢）→ binding 不動，log warn
+- Channel 被 Discord 側手動刪 → 清 binding
+- cwd 目錄不存在 → 頻道移到 `archiveCategoryId`（若設）+ 清 binding
+
+### Bot presence
+
+`Managing N projects`（N 隨 ProjectRegistry load/unload 動態更新）。
+
+### 已知限制
+
+- 單 guild（`guildId` 單值）
+- 頻道命名上限 100 字元，超長自動裁切 dirname 部分
+- Standalone 模式（無 daemon）不能 `/discord-bind`
+
 ## 範圍外（延後）
 
 - Voice channel（Hermes voice ~3000 行 RTP/Opus/DAVE E2EE，延後）

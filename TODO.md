@@ -120,6 +120,52 @@
 
 ---
 
+## 已完成里程碑：M-DISCORD-AUTOBIND — Per-project channel + REPL 雙向同步（2026-04-20 完成）
+
+**目標**：REPL 內一鍵建立 Discord per-project channel；REPL ↔ Discord 雙向 turn 可見；權限雙發。
+
+**範圍**：
+- [x] schema 加 `guildId` / `archiveCategoryId`（optional，向後相容）
+- [x] channelNaming（pinyin-pro 中文轉拼音 + fallback）
+- [x] channelFactory（create / archive / rename / welcome）
+- [x] daemon RPC（discord.bind / discord.unbind frames）
+- [x] addChannelBinding / removeChannelBinding atomic + in-place cache mutate
+- [x] REPL `/discord-bind` / `/discord-unbind`（含 daemon-required 錯誤路徑）
+- [x] bindingHealthCheck 啟動掃 guild / channel / cwd 三層 stale
+- [x] replMirror β 策略（per-project 命中 / fallback home 互斥）
+- [x] discordTurnEvent frame（Discord → REPL 反向鏡像）
+- [x] 權限雙發（broadcast + fallback race，permissionResolved 清 peer）
+- [x] bot presence `Managing N projects`（onLoad/onUnload 動態）
+- [x] 使用者指南 docs/discord-mode.md 新 section
+
+### 任務
+- [x] step 1 — schema + naming + pinyin-pro（commit `0f3241d`）
+- [x] step 2 — channelFactory + daemon RPC（commit `1eff19c`）
+- [x] step 3 — REPL slash commands（commit `6ec3e52`）
+- [x] step 4 — bindingHealthCheck（commit `561a481`）
+- [x] step 5 — replMirror β（commit `602b9e8`）
+- [x] step 6 — discordTurnEvent frame + REPL render（commit `f374c77`）
+- [x] step 7 — permission dual-notify（commit `b2b3e13`）
+- [x] step 8 — presence + turn metadata（commit `a400f1a`）
+- [x] step 9 — docs + dev log（本 commit）
+
+### 完成標準
+- [x] typecheck 綠（baseline 不變）
+- [x] 42 新 unit test 全綠；discord 總 122、daemon 198 不 regress
+- [x] `./cli --version` 冒煙不壞
+- [ ] 實機 E2E（使用者驗證 — daemon + bot 實連）
+
+### 不含（延後）
+- 自動偵測目錄建立（.my-agent/ seed 觸發）
+- 頻道節流 / 合併鏡像
+- Bot 離線訊息 queue（現況：丟棄 + log）
+- 多 guild 選擇 UI
+- Private channel / 角色權限自動配置
+- Secret scanning on mirror
+- Session JSONL 加 source/author 欄位（Message schema 改造量大）
+
+---
+
 ## 已完成里程碑：M-DISCORD — Discord Gateway（2026-04-20 完成）
 
 **目標**：daemon 上接 Discord bot — DM + guild channel 文字對話 + 圖片進出 + slash commands + home channel 鏡像。單 daemon 多 project 架構。
@@ -1342,3 +1388,21 @@
 - 2026-04-20 20:04: Session 結束 | 進度：373/392 任務 | c713e99 feat(discord): M-DISCORD-5 — home channel mirror + daemon up/down notifications
 
 - 2026-04-20 20:10: Session 結束 | 進度：373/392 任務 | be4dbb3 fix(discord): TDZ — ensureHomeMirror referenced before declaration
+
+- 2026-04-20 20:29: Session 結束 | 進度：404/423 任務 | 427f6e2 docs(discord): M-DISCORD-6 — user guide + ADR-013 + dev log + LESSONS
+
+- 2026-04-20 20:37: Session 結束 | 進度：404/423 任務 | 427f6e2 docs(discord): M-DISCORD-6 — user guide + ADR-013 + dev log + LESSONS
+
+- 2026-04-20 20:50: Session 結束 | 進度：404/423 任務 | 427f6e2 docs(discord): M-DISCORD-6 — user guide + ADR-013 + dev log + LESSONS
+
+- 2026-04-20 20:55: Session 結束 | 進度：404/423 任務 | 882a687 feat(daemon): /daemon attach + detach slash commands
+
+- 2026-04-20 21:05: Session 結束 | 進度：404/423 任務 | 882a687 feat(daemon): /daemon attach + detach slash commands
+
+- 2026-04-20 21:14: Session 結束 | 進度：404/423 任務 | 882a687 feat(daemon): /daemon attach + detach slash commands
+
+- 2026-04-20 21:16: Session 結束 | 進度：404/423 任務 | 882a687 feat(daemon): /daemon attach + detach slash commands
+
+- 2026-04-20 21:44: Session 結束 | 進度：404/423 任務 | 882a687 feat(daemon): /daemon attach + detach slash commands
+
+- 2026-04-20 21:47: Session 結束 | 進度：404/423 任務 | 882a687 feat(daemon): /daemon attach + detach slash commands

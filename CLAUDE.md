@@ -232,6 +232,65 @@ export CLAUDE_CONFIG_DIR=~/.claude
 
 ---
 
+### 2026-04-20 — M-DISCORD-AUTOBIND：Per-project channel + REPL 雙向同步
+
+**範圍**：把 M-DISCORD 的靜態 `channelBindings` 升級成 REPL 內 `/discord-bind` 一鍵建頻道；加入 Discord ↔ REPL 雙向 turn 可見 + 權限雙發。9 個 commit，每個自成邏輯單元。
+
+**commit 序列**：
+1. `0f3241d` step 1 — schema (+ guildId / archiveCategoryId) + channelNaming (pinyin-pro + fallback) + unit tests
+2. `1eff19c` step 2 — channelFactory + daemon RPC (discord.bind / discord.unbind frames) + addChannelBinding / removeChannelBinding (in-place cache mutation)
+3. `6ec3e52` step 3 — REPL `/discord-bind` / `/discord-unbind` + FallbackManager.discordBind / discordUnbind
+4. `561a481` step 4 — bindingHealthCheck (guild / channel / cwd 三層 stale)
+5. `602b9e8` step 5 — replMirror β (per-project binding 命中走專屬頻道 `[from REPL]`，沒綁走 home)
+6. `f374c77` step 6 — discordTurnEvent WS frame (Discord → REPL 反向鏡像 `[via Discord DM from @user]` / `[via #channel]`)
+7. `b2b3e13` step 7 — permission 雙發 (permissionRouter broadcast + fallback race；permissionResolved frame 清 peer)
+8. `a400f1a` step 8 — bot presence `Managing N projects` + Discord turn daemon log metadata
+9. (本 commit) step 9 — docs + dev log
+
+**新模組**：
+- `src/discord/channelNaming.ts` — sanitize / hash / compute
+- `src/discord/channelFactory.ts` — discord.js 薄封裝
+- `src/discord/bindingHealthCheck.ts` — verifyBindings
+- `src/discord/replMirror.ts` — β target picker + header formatter
+- `src/daemon/discordBindRpc.ts` — daemon WS frame handler
+- `src/commands/discordBind.ts` / `discordUnbind.ts` — REPL slash commands
+
+**改動既有**：
+- `src/discordConfig/schema.ts` — 加 `guildId` / `archiveCategoryId` (optional)
+- `src/discordConfig/loader.ts` — atomic binding write-back + in-place cache mutate（gateway 共用 reference 立即可見）
+- `src/discord/gateway.ts` — verifyBindings 啟動 + β 鏡像 + broadcastDiscordTurn + per-turn fallback + presence
+- `src/daemon/permissionRouter.ts` — 加 projectId；discord-sourced 分支走 broadcast + fallback race；emit permissionResolved
+- `src/daemon/daemonCli.ts` — 串 bind RPC + broadcastDiscordTurn callback
+- `src/repl/thinClient/fallbackManager.ts` — discordBind / discordUnbind methods
+- `src/hooks/useDaemonMode.ts` — permissionResolved 清 pendingPermissions
+- `src/screens/REPL.tsx` — onFrame render discordTurnEvent
+
+**新依賴**：`pinyin-pro` 3.28.1
+
+**關鍵決策**（與使用者對齊）：
+- 觸發時機：REPL 內 `/discord-bind`（不自動偵測目錄建立）
+- 反向 render：turn-level（不做 streaming token 同步）
+- 鏡像策略 β：per-project / home 互斥
+- Stale 處理：archive category + 清 binding
+- 命名：`<dirname>-<hash6>`；中文 pinyin；非 CJK 非 ASCII → `proj-<hash>`
+- 頻道 topic = cwd；/discord-unbind = `unbound-<name>` 保留歷史
+- 權限雙發 first-wins；DM-sourced turn 不鏡 per-project channel（私訊保密）
+- Session metadata：走 daemon log（非 JSONL，避開 Message schema 改造）
+
+**踩坑 / 教訓**：
+1. `git add -A` 無差別撈 untracked（包含百 MB binary 備份）→ 必須顯式列檔案；誤 commit 用 `git reset --soft HEAD~1` 回退
+2. `getDiscordConfigSnapshot` 是 frozen snapshot；binding 更新必須 in-place mutate，否則 running gateway closure 看不到
+3. discord.js v14 ChannelType 是 enum (`GuildText = 0`)，判定路徑用 `ch.type === ChannelType.GuildText`
+4. pinyin-pro 對混合中英文逐字拆（`v2` → `v 2`）；測試預期要寬鬆
+
+**測試**：42 新 test（naming 20 + schema 2 + bind-rpc 8 + health 3 + mirror 9）；discord 總 122、daemon 198，typecheck baseline 不變。
+
+**未做**：實機 E2E 需要真的 daemon + bot；docs/discord-mode.md 新 section 記錄完整流程。
+
+**不含**：自動目錄偵測、頻道節流、離線 queue、多 guild、private channel、secret scanning on mirror。
+
+---
+
 ### 2026-04-20 — M-DISCORD：Discord gateway（單 daemon 多 project）
 
 **範圍**：把 M-DAEMON 的 in-process daemon 擴成能同時活 N 個 ProjectRuntime，接上 Discord bot — DM / guild channel 文字對話、slash commands、permission mode 雙向同步、home channel 鏡像 REPL/cron turn。
