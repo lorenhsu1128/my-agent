@@ -138,7 +138,12 @@ export function createDaemonTurnMutex(): DaemonTurnMutex {
 }
 
 /**
- * 套用鎖 + chdir + chdir-back 的 helper。
+ * 套用鎖 + chdir + originalCwd 切換 + chdir-back 的 helper。
+ *
+ * 為什麼要動 STATE.originalCwd：`getProject()` 等許多 sessionStorage 呼叫點
+ * 用 `getOriginalCwd()` 作為 project 身分鍵。B-1 方案下 daemon 切換到
+ * runtime.cwd 時，這些呼叫點才會拿到對的 Project instance、寫對的 session
+ * JSONL。turn 結束 finally 還原成 baseCwd。
  *
  * 用法：
  * ```ts
@@ -161,12 +166,16 @@ export async function withProjectCwd<T>(
     { projectId: opts.projectId, inputId: opts.inputId },
     opts.signal,
   )
+  // 延遲 import 避免 daemonTurnMutex 單元測試啟動時就把整個 bootstrap DAG 拉進來。
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const state = require('../bootstrap/state.js') as typeof import('../bootstrap/state.js')
   const prevCwd = process.cwd()
+  const prevOriginalCwd = state.getOriginalCwd()
   try {
     try {
       process.chdir(opts.cwd)
+      state.setOriginalCwd(opts.cwd)
     } catch (e) {
-      // chdir 失敗：釋鎖、丟錯讓 caller 處理（例如 runtime.cwd 已被刪）
       throw new Error(
         `failed to chdir to ${opts.cwd}: ${e instanceof Error ? e.message : String(e)}`,
       )
@@ -176,12 +185,16 @@ export async function withProjectCwd<T>(
     try {
       process.chdir(prevCwd)
     } catch {
-      // 極端：base 目錄消失。最後嘗試 baseCwd
       try {
         process.chdir(opts.baseCwd)
       } catch {
         // 真的沒救了；daemon 後續 turn 會失敗，但此處不該 crash mutex 釋鎖
       }
+    }
+    try {
+      state.setOriginalCwd(prevOriginalCwd)
+    } catch {
+      // ignore
     }
     lease.release()
   }

@@ -439,14 +439,24 @@ export const getProjectDir = memoize((projectDir: string): string => {
   return join(getProjectsDir(), sanitizePath(projectDir))
 })
 
-let project: Project | null = null
+// M-DISCORD-1.2：Project 多例化。單 daemon 多 project 共跑時，同一個 process
+// 要能同時持有多個 Project instance（每個 cwd 一份），各自獨立 writeQueues /
+// flushTimer / currentSession* / pendingWriteCount。Key 為 cwd 字串本身
+// （未經 sanitize）— 直接對應 getOriginalCwd() / process.cwd() 當下值。
+//
+// Single-project 路徑（TUI / `./cli -p`）行為不變：所有 getProject() 呼叫點
+// 解析到同一個 cwd → 同一個 Project instance。
+const projects = new Map<string, Project>()
 let cleanupRegistered = false
 
-function getProject(): Project {
+function getProject(cwd?: string): Project {
+  const key = cwd ?? getOriginalCwd()
+  let project = projects.get(key)
   if (!project) {
     project = new Project()
+    projects.set(key, project)
 
-    // Register flush as a cleanup handler (only once)
+    // Register flush as a cleanup handler (only once — handler flushes ALL projects)
     if (!cleanupRegistered) {
       registerCleanup(async () => {
         // Flush queued writes first, then re-append session metadata
@@ -455,11 +465,13 @@ function getProject(): Project {
         // fields — if enough messages are appended after a /rename, the
         // custom-title entry gets pushed outside the window and --resume
         // shows the auto-generated firstPrompt instead.
-        await project?.flush()
-        try {
-          project?.reAppendSessionMetadata()
-        } catch {
-          // Best-effort — don't let metadata re-append crash the cleanup
+        for (const p of projects.values()) {
+          await p.flush().catch(() => undefined)
+          try {
+            p.reAppendSessionMetadata()
+          } catch {
+            // Best-effort — don't let metadata re-append crash the cleanup
+          }
         }
       })
       cleanupRegistered = true
@@ -469,20 +481,32 @@ function getProject(): Project {
 }
 
 /**
- * Reset the Project singleton's flush state for testing.
+ * Reset flush state across all Project instances for testing.
  * This ensures tests don't interfere with each other via shared counter state.
  */
 export function resetProjectFlushStateForTesting(): void {
-  project?._resetFlushState()
+  for (const p of projects.values()) {
+    p._resetFlushState()
+  }
 }
 
 /**
- * Reset the entire Project singleton for testing.
+ * Reset the Project instance map for testing.
  * This ensures tests with different CLAUDE_CONFIG_DIR values
  * don't share stale sessionFile paths.
  */
 export function resetProjectForTesting(): void {
-  project = null
+  projects.clear()
+}
+
+/** @internal Test-only introspection for multi-project Map. */
+export function _getProjectKeysForTesting(): string[] {
+  return Array.from(projects.keys())
+}
+
+/** @internal Test-only: resolve Project for explicit cwd. */
+export function _getProjectForCwdForTesting(cwd: string): Project {
+  return getProject(cwd)
 }
 
 export function setSessionFileForTesting(path: string): void {
