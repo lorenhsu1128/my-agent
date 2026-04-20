@@ -426,12 +426,18 @@ export function createDiscordGateway(
     runtime.broker.queue.on('runnerEvent', onRunnerEvent)
     runtime.broker.queue.on('turnEnd', onTurnEnd)
 
+    // M-DISCORD-AUTOBIND-8：Discord-sourced turn metadata 走 daemon log
+    // （session JSONL 由 QueryEngine 寫，source attribution 留在 log 側）
     void log?.info('discord input submitted', {
       inputId,
       projectId: runtime.projectId,
       via: routing.via,
-      authorId: adapted.authorId,
+      source: 'discord',
+      channelType: adapted.channelType,
       channelId: adapted.channelId,
+      channelName: discordChannelName,
+      author: `${adapted.authorId}:${adapted.authorUsername}`,
+      messageId: adapted.id,
       imageCount: adapt.images.length,
     })
   }
@@ -609,6 +615,28 @@ export async function startDiscordGateway(opts: {
 
   await client.connect()
 
+  // M-DISCORD-AUTOBIND-8：bot presence = "Managing N projects"
+  // （N = 當前 registry.listProjects().length；onLoad/onUnload 動態更新）
+  const updatePresence = (): void => {
+    const n = opts.registry.listProjects().length
+    try {
+      client.raw.user?.setPresence({
+        status: 'online',
+        activities: [
+          {
+            name: `Managing ${n} project${n === 1 ? '' : 's'}`,
+            type: 3, // Watching
+          },
+        ],
+      })
+    } catch {
+      // ignore
+    }
+  }
+  updatePresence()
+  const presenceUnsubLoad = opts.registry.onLoad(() => updatePresence())
+  const presenceUnsubUnload = opts.registry.onUnload(() => updatePresence())
+
   // M-DISCORD-AUTOBIND：binding 健康檢查 — guild / channel / cwd 三層 stale 清理。
   try {
     const { verifyBindings } = await import('./bindingHealthCheck.js')
@@ -691,6 +719,12 @@ export async function startDiscordGateway(opts: {
         } catch {
           // ignore — shutdown path 不該 crash
         }
+      }
+      try {
+        presenceUnsubLoad()
+        presenceUnsubUnload()
+      } catch {
+        // ignore
       }
       await gateway.dispose()
       await client.destroy()
