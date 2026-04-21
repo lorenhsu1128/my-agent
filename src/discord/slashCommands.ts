@@ -1,16 +1,17 @@
 /**
- * M-DISCORD-4：Slash command — 統一 `/discord <subcommand>` 命名空間。
+ * M-DISCORD-4：Slash command — flat top-level 結構，14 個獨立指令。
  *
  * 設計：
- *   - 單一 top-level `/discord`，下掛 14 個 subcommand
+ *   - 14 個 top-level command（/status /list /help /mode /clear /interrupt
+ *     /allow /deny /bind-other-channel /unbind-other-channel /whitelist-add
+ *     /whitelist-remove /invite /guilds）
  *   - 在 bot ready 時註冊到每個 guild（instant，dev friendly）+ global（DM 支援，
  *     propagation <1h）
  *   - 每個 interaction 自帶 channelType / channelId → 用現有 router 邏輯解析
  *     projectPath；DM 沒前綴走 defaultProjectPath；channel 走 channelBindings
- *   - 回應策略：ephemeral 回應（只有執行者看到）減少頻道噪音；狀態變更
- *     （mode）視情況可開 public
+ *   - 回應策略：ephemeral 回應（只有執行者看到）減少頻道噪音
  *
- * 白名單檢查：handleInteraction 最外層擋；所有 subcommand（含 whitelist-add）
+ * 白名單檢查：handleInteraction 最外層擋；所有 command（含 whitelist-add）
  * 都必須先過。首個 whitelist 仍要手動編 ~/.my-agent/discord.json。
  */
 import {
@@ -50,121 +51,157 @@ const INVITE_PERMISSION_BITS =
   PermissionFlagsBits.ReadMessageHistory |
   PermissionFlagsBits.AttachFiles
 
+/** 所有由本 bot 註冊的 top-level command 名稱 — handleInteraction 用來守門。 */
+export const MY_AGENT_COMMAND_NAMES: ReadonlyArray<string> = [
+  'status',
+  'list',
+  'help',
+  'mode',
+  'clear',
+  'interrupt',
+  'allow',
+  'deny',
+  'bind-other-channel',
+  'unbind-other-channel',
+  'whitelist-add',
+  'whitelist-remove',
+  'invite',
+  'guilds',
+]
+
 export function buildSlashCommands(): Array<
   ReturnType<SlashCommandBuilder['toJSON']>
 > {
-  const discord = new SlashCommandBuilder()
-    .setName('discord')
-    .setDescription('my-agent Discord gateway 控制指令')
+  const status = new SlashCommandBuilder()
+    .setName('status')
+    .setDescription('顯示 daemon + 已 load projects 狀態')
     .setDMPermission(true)
 
-  discord.addSubcommand(s =>
-    s.setName('status').setDescription('顯示 daemon + 已 load projects 狀態'),
-  )
-  discord.addSubcommand(s =>
-    s.setName('list').setDescription('列出設定的 projects 與 channel bindings'),
-  )
-  discord.addSubcommand(s => s.setName('help').setDescription('顯示可用子命令'))
+  const list = new SlashCommandBuilder()
+    .setName('list')
+    .setDescription('列出設定的 projects 與 channel bindings')
+    .setDMPermission(true)
 
-  discord.addSubcommand(s =>
-    s
-      .setName('mode')
-      .setDescription('切換當前 project 的 permission mode（雙向同步 REPL）')
-      .addStringOption(o =>
-        o
-          .setName('mode')
-          .setDescription('要切換到的 mode')
-          .setRequired(true)
-          .addChoices(
-            { name: 'default — destructive 會問', value: 'default' },
-            { name: 'acceptEdits — Edit/Write 自動放行', value: 'acceptEdits' },
-            { name: 'plan — 只讀、擋寫', value: 'plan' },
-            {
-              name: 'bypassPermissions — YOLO 全放行',
-              value: 'bypassPermissions',
-            },
-          ),
-      ),
-  )
+  const help = new SlashCommandBuilder()
+    .setName('help')
+    .setDescription('顯示 my-agent 可用指令')
+    .setDMPermission(true)
 
-  discord.addSubcommand(s =>
-    s
-      .setName('clear')
-      .setDescription('清除當前 project session（下一條訊息開新 session）'),
-  )
-  discord.addSubcommand(s =>
-    s.setName('interrupt').setDescription('中斷當前 turn'),
-  )
-  discord.addSubcommand(s =>
-    s.setName('allow').setDescription('放行最近一個待決的 tool permission'),
-  )
-  discord.addSubcommand(s =>
-    s
-      .setName('deny')
-      .setDescription('拒絕最近一個待決的 tool permission')
-      .addStringOption(o =>
-        o.setName('reason').setDescription('拒絕理由（可選）').setRequired(false),
-      ),
-  )
+  const mode = new SlashCommandBuilder()
+    .setName('mode')
+    .setDescription('切換當前 project 的 permission mode（雙向同步 REPL）')
+    .setDMPermission(true)
+    .addStringOption(o =>
+      o
+        .setName('mode')
+        .setDescription('要切換到的 mode')
+        .setRequired(true)
+        .addChoices(
+          { name: 'default — destructive 會問', value: 'default' },
+          { name: 'acceptEdits — Edit/Write 自動放行', value: 'acceptEdits' },
+          { name: 'plan — 只讀、擋寫', value: 'plan' },
+          {
+            name: 'bypassPermissions — YOLO 全放行',
+            value: 'bypassPermissions',
+          },
+        ),
+    )
 
-  discord.addSubcommand(s =>
-    s
-      .setName('bind-other-channel')
-      .setDescription('把任意（含跨 guild）channel 綁到 project')
-      .addStringOption(o =>
-        o
-          .setName('project')
-          .setDescription('Project id 或 alias（見 /discord list）')
-          .setRequired(true),
-      )
-      .addChannelOption(o =>
-        o
-          .setName('channel')
-          .setDescription('要綁的頻道（省略則綁當前 channel）')
-          .addChannelTypes(ChannelType.GuildText)
-          .setRequired(false),
-      ),
-  )
-  discord.addSubcommand(s =>
-    s
-      .setName('unbind-other-channel')
-      .setDescription('解綁 channel（純 config，不動 Discord 端；省略 = 當前 channel）')
-      .addChannelOption(o =>
-        o
-          .setName('channel')
-          .setDescription('要解綁的頻道')
-          .addChannelTypes(ChannelType.GuildText)
-          .setRequired(false),
-      ),
-  )
+  const clear = new SlashCommandBuilder()
+    .setName('clear')
+    .setDescription('清除當前 project session（下一條訊息開新 session）')
+    .setDMPermission(true)
 
-  discord.addSubcommand(s =>
-    s
-      .setName('whitelist-add')
-      .setDescription('把 user 加進白名單（允許觸發 turn）')
-      .addUserOption(o =>
-        o.setName('user').setDescription('要授權的 Discord user').setRequired(true),
-      ),
-  )
-  discord.addSubcommand(s =>
-    s
-      .setName('whitelist-remove')
-      .setDescription('把 user 從白名單移除')
-      .addUserOption(o =>
-        o.setName('user').setDescription('要撤銷的 Discord user').setRequired(true),
-      ),
-  )
+  const interrupt = new SlashCommandBuilder()
+    .setName('interrupt')
+    .setDescription('中斷當前 turn')
+    .setDMPermission(true)
 
-  discord.addSubcommand(s =>
-    s
-      .setName('invite')
-      .setDescription('產生 bot 的 OAuth invite URL（給對方 admin 邀進他們 server）'),
-  )
-  discord.addSubcommand(s =>
-    s.setName('guilds').setDescription('列出 bot 目前所在的 guild'),
-  )
+  const allow = new SlashCommandBuilder()
+    .setName('allow')
+    .setDescription('放行最近一個待決的 tool permission')
+    .setDMPermission(true)
 
-  return [discord.toJSON()]
+  const deny = new SlashCommandBuilder()
+    .setName('deny')
+    .setDescription('拒絕最近一個待決的 tool permission')
+    .setDMPermission(true)
+    .addStringOption(o =>
+      o.setName('reason').setDescription('拒絕理由（可選）').setRequired(false),
+    )
+
+  const bindOtherChannel = new SlashCommandBuilder()
+    .setName('bind-other-channel')
+    .setDescription('把任意（含跨 guild）channel 綁到 project')
+    .setDMPermission(true)
+    .addStringOption(o =>
+      o
+        .setName('project')
+        .setDescription('Project id 或 alias（見 /list）')
+        .setRequired(true),
+    )
+    .addChannelOption(o =>
+      o
+        .setName('channel')
+        .setDescription('要綁的頻道（省略則綁當前 channel）')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false),
+    )
+
+  const unbindOtherChannel = new SlashCommandBuilder()
+    .setName('unbind-other-channel')
+    .setDescription('解綁 channel（純 config，不動 Discord 端；省略 = 當前 channel）')
+    .setDMPermission(true)
+    .addChannelOption(o =>
+      o
+        .setName('channel')
+        .setDescription('要解綁的頻道')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false),
+    )
+
+  const whitelistAdd = new SlashCommandBuilder()
+    .setName('whitelist-add')
+    .setDescription('把 user 加進白名單（允許觸發 turn）')
+    .setDMPermission(true)
+    .addUserOption(o =>
+      o.setName('user').setDescription('要授權的 Discord user').setRequired(true),
+    )
+
+  const whitelistRemove = new SlashCommandBuilder()
+    .setName('whitelist-remove')
+    .setDescription('把 user 從白名單移除')
+    .setDMPermission(true)
+    .addUserOption(o =>
+      o.setName('user').setDescription('要撤銷的 Discord user').setRequired(true),
+    )
+
+  const invite = new SlashCommandBuilder()
+    .setName('invite')
+    .setDescription('產生 bot 的 OAuth invite URL（給對方 admin 邀進他們 server）')
+    .setDMPermission(true)
+
+  const guilds = new SlashCommandBuilder()
+    .setName('guilds')
+    .setDescription('列出 bot 目前所在的 guild')
+    .setDMPermission(true)
+
+  return [
+    status,
+    list,
+    help,
+    mode,
+    clear,
+    interrupt,
+    allow,
+    deny,
+    bindOtherChannel,
+    unbindOtherChannel,
+    whitelistAdd,
+    whitelistRemove,
+    invite,
+    guilds,
+  ].map(b => b.toJSON())
 }
 
 export interface SlashRegistrationResult {
@@ -274,10 +311,10 @@ export async function handleInteraction(
 ): Promise<void> {
   if (!interaction.isChatInputCommand()) return
 
-  // 只認 /discord；其他（舊 flat commands 尚未替換完成時的 residue）忽略
-  if (interaction.commandName !== 'discord') return
+  // 只處理本 bot 註冊的指令（避免跟其他 bot 同名指令串線）
+  if (!MY_AGENT_COMMAND_NAMES.includes(interaction.commandName)) return
 
-  // 白名單檢查 — 所有 subcommand 都要先過
+  // 白名單檢查 — 所有 command 都要先過
   if (!ctx.config.whitelistUserIds.includes(interaction.user.id)) {
     try {
       await interaction.reply({
@@ -290,25 +327,25 @@ export async function handleInteraction(
     return
   }
 
-  const sub = interaction.options.getSubcommand(true)
+  const sub = interaction.commandName
 
   // ── 資訊類 ────────────────────────────────────────────────────────
 
   if (sub === 'help') {
     const lines = [
       '**My Agent Discord Commands**',
-      '`/discord status` — daemon 狀態 + 已 load projects',
-      '`/discord list` — 設定的 projects + channel bindings',
-      '`/discord mode <mode>` — 切 permission mode（雙向同步 REPL）',
-      '`/discord clear` — 清除當前 project session',
-      '`/discord interrupt` — 中斷當前 turn',
-      '`/discord allow` / `/discord deny` — 回應待決的 tool permission',
-      '`/discord bind-other-channel project:<id> [channel:<ch>]` — 綁任意 channel 到 project',
-      '`/discord unbind-other-channel [channel:<ch>]` — 解綁 channel（不動 Discord 端）',
-      '`/discord whitelist-add user:<user>` / `whitelist-remove user:<user>` — 管理白名單',
-      '`/discord invite` — 產生 bot 邀請連結',
-      '`/discord guilds` — 列出 bot 所在的 guild',
-      '`/discord help` — 本說明',
+      '`/status` — daemon 狀態 + 已 load projects',
+      '`/list` — 設定的 projects + channel bindings',
+      '`/mode <mode>` — 切 permission mode（雙向同步 REPL）',
+      '`/clear` — 清除當前 project session',
+      '`/interrupt` — 中斷當前 turn',
+      '`/allow` / `/deny` — 回應待決的 tool permission',
+      '`/bind-other-channel project:<id> [channel:<ch>]` — 綁任意 channel 到 project',
+      '`/unbind-other-channel [channel:<ch>]` — 解綁 channel（不動 Discord 端）',
+      '`/whitelist-add user:<user>` / `/whitelist-remove user:<user>` — 管理白名單',
+      '`/invite` — 產生 bot 邀請連結',
+      '`/guilds` — 列出 bot 所在的 guild',
+      '`/help` — 本說明',
       '',
       '**訊息路由**：DM 前綴 `#<projectId|alias> ...` 指定 project（沒前綴走 `defaultProjectPath`）；channel 按 `channelBindings` 綁定。',
     ].join('\n')
@@ -358,7 +395,7 @@ export async function handleInteraction(
       `**Daemon status** — ${runtimes.length} project(s) loaded`,
     ]
     if (runtimes.length === 0) {
-      lines.push('_(none loaded — 傳訊息或 `/discord list` 看可用 projects)_')
+      lines.push('_(none loaded — 傳訊息或 `/list` 看可用 projects)_')
     }
     for (const r of runtimes) {
       lines.push(formatProjectLine(r))
@@ -399,7 +436,7 @@ export async function handleInteraction(
     const guilds = ctx.client?.guilds.cache
     if (!guilds || guilds.size === 0) {
       await interaction.reply({
-        content: '_(bot 目前不在任何 guild — 用 `/discord invite` 取邀請連結)_',
+        content: '_(bot 目前不在任何 guild — 用 `/invite` 取邀請連結)_',
         flags: MessageFlags.Ephemeral,
       })
       return
@@ -479,7 +516,7 @@ export async function handleInteraction(
       await interaction.reply({
         content:
           `❌ 找不到 project \`${projectKey}\`。\n` +
-          `用 \`/discord list\` 看可用的 id / aliases。`,
+          `用 \`/list\` 看可用的 id / aliases。`,
         flags: MessageFlags.Ephemeral,
       })
       return
@@ -536,7 +573,7 @@ export async function handleInteraction(
   if (!runtime) {
     await interaction.reply({
       content:
-        '❓ 這個 channel / DM 無法解析 project（channel 未 binding、或 DM 無 `defaultProjectPath`）— 用 `/discord list` 查看設定',
+        '❓ 這個 channel / DM 無法解析 project（channel 未 binding、或 DM 無 `defaultProjectPath`）— 用 `/list` 查看設定',
       flags: MessageFlags.Ephemeral,
     })
     return
@@ -632,7 +669,7 @@ export async function handleInteraction(
   }
 
   await interaction.reply({
-    content: `❓ Unknown subcommand: \`/discord ${sub}\``,
+    content: `❓ Unknown command: \`/${sub}\``,
     flags: MessageFlags.Ephemeral,
   })
 }

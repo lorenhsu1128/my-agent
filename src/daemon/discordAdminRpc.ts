@@ -25,7 +25,7 @@ import {
 import { getDiscordConfigPath } from '../discordConfig/paths.js'
 import { normalizeProjectPath } from '../discordConfig/pathNormalize.js'
 
-/** Invite URL 預設權限 bits — 跟 slash `/discord invite` 一致。 */
+/** Invite URL 預設權限 bits — 跟 slash `/invite` 一致。 */
 const INVITE_PERMISSION_BITS =
   PermissionFlagsBits.ViewChannel |
   PermissionFlagsBits.SendMessages |
