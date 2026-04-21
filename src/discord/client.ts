@@ -137,8 +137,16 @@ export function createDiscordClient(
   })
 
   client.on(Events.MessageCreate, rawMsg => {
-    // 忽略 bot 自己的訊息 + 其他 bot 的訊息（避免迴圈）
-    if (rawMsg.author?.bot) return
+    // 只忽略**自己**發的訊息避免自己回應自己無限迴圈。其他 bot 的訊息放行，
+    // 讓下游 whitelistUserIds 檢查把關（若要允許某個 bot 觸發 turn，把該 bot
+    // 的 user ID 加進 whitelistUserIds 即可；不在白名單則自動靜默丟）。
+    if (
+      client.user?.id &&
+      rawMsg.author?.id &&
+      rawMsg.author.id === client.user.id
+    ) {
+      return
+    }
     try {
       const adapted = adaptIncoming(rawMsg)
       opts.onMessage?.(adapted, rawMsg)
