@@ -745,30 +745,34 @@ async function* translateOpenAIStreamToAnthropic(
 }
 
 /**
- * 把 async generator 的所有 SSE 事件收集成一個完整 string，然後建
- * ReadableStream 一次送出。
+ * 把 async generator 逐 yield push 進 ReadableStream，每個完整 SSE event
+ * 成為獨立 chunk。
  *
- * ⚠️ 代價：使用者看不到漸進式 thinking/text 輸出（全部等 llama-server
- * 跑完才一次出現）。但這是目前唯一能確保 Anthropic SDK 的 SSE parser
- * 在 Bun Windows 上不丟 input_json_delta 事件的做法。
+ * 原本這裡攢整個 body 再一次送（看不到漸進式輸出）是為了繞 Anthropic SDK
+ * SSE parser 在跨 chunk 切到 multi-byte UTF-8 時 decode 失敗的問題。但
+ * `jsonStringifyAsciiSafe()`（見 `formatSSE`）已把所有非 ASCII escape 成
+ * `\uXXXX`，每個 yield 都是純 ASCII 完整 `event: X\ndata: Y\n\n`；
+ * UTF-8 切割風險已消失，可以安全逐 event 串流。
  *
- * 未來 Bun 修好 ReadableStream async iteration / SDK 修好 SSE parser
- * 後可改回逐 chunk push。
+ * 仍保留：`input_json_delta + content_block_stop` 在 translator 層合併成
+ * 單一 yield（見 translateOpenAIStreamToAnthropic 收尾處）— 那是另一個
+ * 獨立 workaround，不受此處影響。
  */
-async function sseGeneratorToStream(
+function sseGeneratorToStream(
   gen: AsyncGenerator<string>,
-): Promise<ReadableStream<Uint8Array>> {
+): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder()
-  const parts: string[] = []
-  for await (const value of gen) {
-    parts.push(value)
-  }
-  const fullBody = encoder.encode(parts.join(''))
   // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
   return new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(fullBody)
-      controller.close()
+    async start(controller) {
+      try {
+        for await (const value of gen) {
+          controller.enqueue(encoder.encode(value))
+        }
+        controller.close()
+      } catch (err) {
+        controller.error(err)
+      }
     },
   })
 }
@@ -911,7 +915,7 @@ export function createLlamaCppFetch(
         reportedModel,
         mkMsgId(),
       )
-      return new Response(await sseGeneratorToStream(sseGen), {
+      return new Response(sseGeneratorToStream(sseGen), {
         status: 200,
         headers: {
           'Content-Type': 'text/event-stream',
