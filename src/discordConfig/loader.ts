@@ -156,6 +156,58 @@ export async function removeChannelBinding(channelId: string): Promise<void> {
   delete cfg.channelBindings[channelId]
 }
 
+/**
+ * 加 user ID 到 whitelistUserIds（冪等）。寫回 disk + in-place mutate cached
+ * snapshot（gateway 共用 reference 立即生效）。回傳是否實際加入。
+ */
+export async function addWhitelistUser(userId: string): Promise<boolean> {
+  const cfg = await loadDiscordConfigSnapshot()
+  const already = cfg.whitelistUserIds.includes(userId)
+  const path = getDiscordConfigPath()
+  let raw: string
+  try {
+    raw = await readFile(path, 'utf-8')
+  } catch {
+    raw = JSON.stringify(DEFAULT_DISCORD_CONFIG, null, 2)
+  }
+  const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
+  const list = (parsed.whitelistUserIds as string[] | undefined) ?? []
+  if (list.includes(userId)) {
+    // disk 已有；確保 in-memory 同步（理論上一致，防邊界情況）
+    if (!already) cfg.whitelistUserIds.push(userId)
+    return false
+  }
+  list.push(userId)
+  parsed.whitelistUserIds = list
+  await writeFile(path, JSON.stringify(parsed, null, 2) + '\n', 'utf-8')
+  if (!already) cfg.whitelistUserIds.push(userId)
+  return true
+}
+
+export async function removeWhitelistUser(userId: string): Promise<boolean> {
+  const cfg = await loadDiscordConfigSnapshot()
+  const path = getDiscordConfigPath()
+  let raw: string
+  try {
+    raw = await readFile(path, 'utf-8')
+  } catch {
+    return false
+  }
+  const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
+  const list = (parsed.whitelistUserIds as string[] | undefined) ?? []
+  const idx = list.indexOf(userId)
+  const memIdx = cfg.whitelistUserIds.indexOf(userId)
+  if (idx < 0) {
+    if (memIdx >= 0) cfg.whitelistUserIds.splice(memIdx, 1)
+    return false
+  }
+  list.splice(idx, 1)
+  parsed.whitelistUserIds = list
+  await writeFile(path, JSON.stringify(parsed, null, 2) + '\n', 'utf-8')
+  if (memIdx >= 0) cfg.whitelistUserIds.splice(memIdx, 1)
+  return true
+}
+
 export function _resetDiscordConfigForTests(): void {
   cached = null
   loadInFlight = null

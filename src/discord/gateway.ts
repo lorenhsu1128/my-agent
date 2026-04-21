@@ -553,6 +553,7 @@ export function createDiscordGateway(
         registry,
         pendingPermissions,
         broadcastPermissionMode: opts.broadcastPermissionMode,
+        client: raw ?? undefined,
       }
       // 先對 chatInputCommand 跑 routing，讓 runtime onPending hook 綁上
       if (interaction.isChatInputCommand()) {
