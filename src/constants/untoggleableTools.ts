@@ -9,9 +9,9 @@
  * filter 掉（不拋錯），以避免使用者誤鎖死自己。
  */
 export const UNTOGGLEABLE_TOOLS: ReadonlySet<string> = new Set([
-  'FileRead',
-  'FileWrite',
-  'FileEdit',
+  'Read',
+  'Write',
+  'Edit',
   'Bash',
   'Glob',
   'Grep',
