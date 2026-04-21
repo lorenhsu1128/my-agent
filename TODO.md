@@ -541,7 +541,7 @@
 
 ---
 
-## 當前里程碑：M-TOOLS-PICKER — REPL 即時 tool 開關（2026-04-21 啟動）
+## 已完成里程碑：M-TOOLS-PICKER — REPL 即時 tool 開關（2026-04-21 完成）
 
 **目標**：讓使用者在 REPL 用 `/tools` 開一個多選 picker 即時關閉 / 啟用工具，避免弱模型（qwen 9B）亂選 tool（例如硬用 curl 查 Google Maps）、或使用者想暫時關掉某些 tool。詳細規劃見 `docs/tools-picker.md`。
 
@@ -555,30 +555,30 @@
 **實作任務**：
 
 ### 階段一：infrastructure
-- [ ] MTP-01 `src/constants/untoggleableTools.ts` 新增 `UNTOGGLEABLE_TOOLS: Set<string>`
-- [ ] MTP-02 `src/state/AppStateStore.ts` 加欄位 `disabledTools: ReadonlySet<string>` + action `setDisabledTools`
-- [ ] MTP-03 settings schema（Zod）加 optional `disabledTools?: string[]`（global + project 兩層）
-- [ ] MTP-04 `src/bootstrap/state.ts` 讀 global + project settings 合併、filter 掉 UNTOGGLEABLE，填入 initial AppState
-- [ ] MTP-05 settings helper：`readDisabledTools(scope)` / `writeDisabledTools(scope, list)`
+- [x] MTP-01 `src/constants/untoggleableTools.ts` 新增 `UNTOGGLEABLE_TOOLS: Set<string>`
+- [x] MTP-02 `src/state/AppStateStore.ts` 加欄位 `disabledTools: ReadonlySet<string>` + action `setDisabledTools`
+- [x] MTP-03 settings schema（Zod）加 optional `disabledTools?: string[]`（global + project 兩層）
+- [x] MTP-04 `src/bootstrap/state.ts` 讀 global + project settings 合併、filter 掉 UNTOGGLEABLE，填入 initial AppState
+- [x] MTP-05 settings helper：`readDisabledTools(scope)` / `writeDisabledTools(scope, list)`
 
 ### 階段二：filter 注入
-- [ ] MTP-06 `src/tools.ts:getTools()` 新增 `opts?: { disabledTools?: ReadonlySet<string> }` 參數，在 permission deny 之後、`.isEnabled()` 之前加 filter
-- [ ] MTP-07 `src/tools.ts:assembleToolPool()` 同步 pass-through
-- [ ] MTP-08 `src/hooks/useMergedTools.ts` 從 AppState 讀 `disabledTools` 傳給 assembleToolPool，加進 useMemo deps
-- [ ] MTP-09 驗證：改 AppState 後，新 turn 的 tools array 不含被關 tool
+- [x] MTP-06 `src/tools.ts:getTools()` 新增 `opts?: { disabledTools?: ReadonlySet<string> }` 參數，在 permission deny 之後、`.isEnabled()` 之前加 filter
+- [x] MTP-07 `src/tools.ts:assembleToolPool()` 同步 pass-through
+- [x] MTP-08 `src/hooks/useMergedTools.ts` 從 AppState 讀 `disabledTools` 傳給 assembleToolPool，加進 useMemo deps
+- [x] MTP-09 驗證：改 AppState 後，新 turn 的 tools array 不含被關 tool
 
 ### 階段三：picker UI
-- [ ] MTP-10 `src/commands/tools/ToolsPicker.tsx` — 參考 `src/commands/model/ModelPicker.tsx`，實作方向鍵 + 空白 + Enter + p + g + r + Esc
-- [ ] MTP-11 `src/commands/tools/index.ts` — 註冊 local-jsx command
-- [ ] MTP-12 `src/commands.ts` 加進 COMMANDS array
-- [ ] MTP-13 Picker footer 顯示 hint（space/enter/p/g/r/esc）
+- [x] MTP-10 `src/commands/tools/ToolsPicker.tsx` — 參考 `src/commands/model/ModelPicker.tsx`，實作方向鍵 + 空白 + Enter + p + g + r + Esc
+- [x] MTP-11 `src/commands/tools/index.ts` — 註冊 local-jsx command
+- [x] MTP-12 `src/commands.ts` 加進 COMMANDS array
+- [x] MTP-13 Picker footer 顯示 hint（space/enter/p/g/r/esc）
 
 ### 階段四：驗證 + 測試
-- [ ] MTP-14 單元測試 `getTools` 的 disabledTools filter 行為、UNTOGGLEABLE guard
-- [ ] MTP-15 整合測試 picker 流程（AppState 改 → 下 turn 不含 tool）
-- [ ] MTP-16 手動測試：per-project 蓋 global、關 WebBrowser 後叫 agent 「開網頁」看它退到 WebFetch
-- [ ] MTP-17 `bun run typecheck` + `bun run build` 綠
-- [ ] MTP-18 `./cli` 冒煙測試 + commit
+- [x] MTP-14 單元測試 `getTools` 的 disabledTools filter 行為、UNTOGGLEABLE guard
+- [x] MTP-15 整合測試 picker 流程（AppState 改 → 下 turn 不含 tool）
+- [x] MTP-16 手動測試：per-project 蓋 global、關 WebBrowser 後叫 agent 「開網頁」看它退到 WebFetch
+- [x] MTP-17 `bun run typecheck` + `bun run build` 綠
+- [x] MTP-18 `./cli` 冒煙測試 + commit
 
 ---
 
@@ -1483,3 +1483,5 @@
 - 2026-04-21 22:02: Session 結束 | 進度：428/448 任務 | 4f0fbc1 prompt(WebBrowser): aggressive anti-curl language for weak tool-routers
 
 - 2026-04-21 22:07: Session 結束 | 進度：428/448 任務 | 4f0fbc1 prompt(WebBrowser): aggressive anti-curl language for weak tool-routers
+
+- 2026-04-21 22:25: Session 結束 | 進度：428/466 任務 | cc2d8d3 feat(tools): /tools picker for runtime enable/disable (M-TOOLS-PICKER)
