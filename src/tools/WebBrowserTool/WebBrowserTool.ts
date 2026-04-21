@@ -232,11 +232,7 @@ export const WebBrowserTool = buildTool({
         : i?.action && i.ref
           ? `${i.action} ${i.ref}`
           : (i?.action ?? '')
-    return React.createElement(
-      Box,
-      null,
-      React.createElement(Text, null, `Browser ${detail}`),
-    )
+    return `Browser ${detail}`
   },
   renderToolResultMessage(content) {
     const c = content as Output

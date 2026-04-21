@@ -191,15 +191,7 @@ export const WebCrawlTool = buildTool({
       max_depth?: number
       max_pages?: number
     }
-    return React.createElement(
-      Box,
-      { flexDirection: 'row' },
-      React.createElement(
-        Text,
-        null,
-        `WebCrawl ${url ?? ''} (depth≤${max_depth ?? 2}, ≤${max_pages ?? 10} pages)`,
-      ),
-    )
+    return `WebCrawl ${url ?? ''} (depth≤${max_depth ?? 2}, ≤${max_pages ?? 10} pages)`
   },
   renderToolResultMessage(content) {
     const c = content as Output
