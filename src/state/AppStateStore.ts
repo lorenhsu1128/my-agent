@@ -165,6 +165,11 @@ export type AppState = DeepImmutable<{
   // Name → AgentId registry populated by Agent tool when `name` is provided.
   // Latest-wins on collision. Used by SendMessage to route by name.
   agentNameRegistry: Map<string, AgentId>
+  // M-TOOLS-PICKER: tool names the user has disabled for this REPL session.
+  // Merged at bootstrap from global + per-project settings (project overrides
+  // global); `/tools` picker mutates this in-session. assembleToolPool reads
+  // it and filters out matching tools — UNTOGGLEABLE_TOOLS always pass.
+  disabledTools: Set<string>
   // Task ID that has been foregrounded - its messages are shown in main view
   foregroundedTaskId?: string
   // Task ID of in-process teammate whose transcript is being viewed (undefined = leader's view)
@@ -478,10 +483,23 @@ export function getDefaultAppState(): AppState {
       ? 'plan'
       : 'default'
 
+  // M-TOOLS-PICKER: merge disabledTools from settings (project overrides global;
+  // settings merge is already handled by getInitialSettings). Filter out core
+  // tools defensively — settings file could have them by mistake.
+  const initialSettings = getInitialSettings()
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const { UNTOGGLEABLE_TOOLS } =
+    require('../constants/untoggleableTools.js') as typeof import('../constants/untoggleableTools.js')
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  const configuredDisabled = Array.isArray(initialSettings.disabledTools)
+    ? initialSettings.disabledTools.filter(name => !UNTOGGLEABLE_TOOLS.has(name))
+    : []
+
   return {
-    settings: getInitialSettings(),
+    settings: initialSettings,
     tasks: {},
     agentNameRegistry: new Map(),
+    disabledTools: new Set(configuredDisabled),
     verbose: false,
     mainLoopModel: null, // alias, full name (as with --model or env var), or null (default)
     mainLoopModelForSession: null,

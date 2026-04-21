@@ -277,7 +277,10 @@ export function filterToolsByDenyRules<
   return tools.filter(tool => !getDenyRuleForTool(permissionContext, tool))
 }
 
-export const getTools = (permissionContext: ToolPermissionContext): Tools => {
+export const getTools = (
+  permissionContext: ToolPermissionContext,
+  opts: { disabledTools?: ReadonlySet<string> } = {},
+): Tools => {
   // Simple mode: only Bash, Read, and Edit tools
   if (isEnvTruthy(process.env.MY_AGENT_SIMPLE)) {
     // --bare + REPL mode: REPL wraps Bash/Read/Edit/etc inside the VM, so
@@ -331,6 +334,19 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
     }
   }
 
+  // M-TOOLS-PICKER: honor user's `/tools` picker disables. UNTOGGLEABLE_TOOLS
+  // always pass through even if a (buggy) setting tries to disable them.
+  const disabled = opts.disabledTools
+  if (disabled && disabled.size > 0) {
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    const { UNTOGGLEABLE_TOOLS } =
+      require('./constants/untoggleableTools.js') as typeof import('./constants/untoggleableTools.js')
+    /* eslint-enable @typescript-eslint/no-require-imports */
+    allowedTools = allowedTools.filter(
+      tool => !disabled.has(tool.name) || UNTOGGLEABLE_TOOLS.has(tool.name),
+    )
+  }
+
   const isEnabled = allowedTools.map(_ => _.isEnabled())
   return allowedTools.filter((_, i) => isEnabled[i])
 }
@@ -354,8 +370,9 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
 export function assembleToolPool(
   permissionContext: ToolPermissionContext,
   mcpTools: Tools,
+  opts: { disabledTools?: ReadonlySet<string> } = {},
 ): Tools {
-  const builtInTools = getTools(permissionContext)
+  const builtInTools = getTools(permissionContext, opts)
 
   // Filter out MCP tools that are in the deny list
   const allowedMcpTools = filterToolsByDenyRules(mcpTools, permissionContext)

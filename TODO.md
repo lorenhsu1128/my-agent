@@ -541,6 +541,47 @@
 
 ---
 
+## 當前里程碑：M-TOOLS-PICKER — REPL 即時 tool 開關（2026-04-21 啟動）
+
+**目標**：讓使用者在 REPL 用 `/tools` 開一個多選 picker 即時關閉 / 啟用工具，避免弱模型（qwen 9B）亂選 tool（例如硬用 curl 查 Google Maps）、或使用者想暫時關掉某些 tool。詳細規劃見 `docs/tools-picker.md`。
+
+**架構決策**：
+- ADR-TP-01：tool **註冊**（編譯時）不變；只在**組裝**層（`useMergedTools` + `getTools`）加 filter step。每 turn 重新組裝，改 AppState 下個 turn 立即生效、不需 rebuild / restart
+- ADR-TP-02：三層持久化 — session (AppState) / per-project (`~/.my-agent/projects/<slug>/settings.json`) / global (`~/.my-agent/settings.json`)，優先 session > project > global > 預設（全開）
+- ADR-TP-03：核心 tool 不可關 — `FileRead` / `FileWrite` / `FileEdit` / `Bash` / `Glob` / `Grep` 固定為 `UNTOGGLEABLE_TOOLS`，picker 顯示但灰色鎖定
+- ADR-TP-04：關掉的 tool 從 tool array 完全隱藏，LLM 不知道其存在（而非「可見但標 disabled」）
+- ADR-TP-05：REPL client local scope — daemon / Discord / cron turn 不受影響（user 決策）；日後要擴 daemon-wide 再加 WS frame
+
+**實作任務**：
+
+### 階段一：infrastructure
+- [ ] MTP-01 `src/constants/untoggleableTools.ts` 新增 `UNTOGGLEABLE_TOOLS: Set<string>`
+- [ ] MTP-02 `src/state/AppStateStore.ts` 加欄位 `disabledTools: ReadonlySet<string>` + action `setDisabledTools`
+- [ ] MTP-03 settings schema（Zod）加 optional `disabledTools?: string[]`（global + project 兩層）
+- [ ] MTP-04 `src/bootstrap/state.ts` 讀 global + project settings 合併、filter 掉 UNTOGGLEABLE，填入 initial AppState
+- [ ] MTP-05 settings helper：`readDisabledTools(scope)` / `writeDisabledTools(scope, list)`
+
+### 階段二：filter 注入
+- [ ] MTP-06 `src/tools.ts:getTools()` 新增 `opts?: { disabledTools?: ReadonlySet<string> }` 參數，在 permission deny 之後、`.isEnabled()` 之前加 filter
+- [ ] MTP-07 `src/tools.ts:assembleToolPool()` 同步 pass-through
+- [ ] MTP-08 `src/hooks/useMergedTools.ts` 從 AppState 讀 `disabledTools` 傳給 assembleToolPool，加進 useMemo deps
+- [ ] MTP-09 驗證：改 AppState 後，新 turn 的 tools array 不含被關 tool
+
+### 階段三：picker UI
+- [ ] MTP-10 `src/commands/tools/ToolsPicker.tsx` — 參考 `src/commands/model/ModelPicker.tsx`，實作方向鍵 + 空白 + Enter + p + g + r + Esc
+- [ ] MTP-11 `src/commands/tools/index.ts` — 註冊 local-jsx command
+- [ ] MTP-12 `src/commands.ts` 加進 COMMANDS array
+- [ ] MTP-13 Picker footer 顯示 hint（space/enter/p/g/r/esc）
+
+### 階段四：驗證 + 測試
+- [ ] MTP-14 單元測試 `getTools` 的 disabledTools filter 行為、UNTOGGLEABLE guard
+- [ ] MTP-15 整合測試 picker 流程（AppState 改 → 下 turn 不含 tool）
+- [ ] MTP-16 手動測試：per-project 蓋 global、關 WebBrowser 後叫 agent 「開網頁」看它退到 WebFetch
+- [ ] MTP-17 `bun run typecheck` + `bun run build` 綠
+- [ ] MTP-18 `./cli` 冒煙測試 + commit
+
+---
+
 ## 未來里程碑（尚未詳細規劃）
 
 ### M4 — Hermes Cron 排程（TypeScript 重新實作）
@@ -1406,3 +1447,39 @@
 - 2026-04-20 21:44: Session 結束 | 進度：404/423 任務 | 882a687 feat(daemon): /daemon attach + detach slash commands
 
 - 2026-04-20 21:47: Session 結束 | 進度：404/423 任務 | 882a687 feat(daemon): /daemon attach + detach slash commands
+
+- 2026-04-21 16:51: Session 結束 | 進度：428/448 任務 | 9268755 refactor(discord): flatten slash commands from /discord <sub> to 14 top-level
+
+- 2026-04-21 16:57: Session 結束 | 進度：428/448 任務 | 9268755 refactor(discord): flatten slash commands from /discord <sub> to 14 top-level
+
+- 2026-04-21 18:29: Session 結束 | 進度：428/448 任務 | 9268755 refactor(discord): flatten slash commands from /discord <sub> to 14 top-level
+
+- 2026-04-21 20:38: Session 結束 | 進度：428/448 任務 | 9268755 refactor(discord): flatten slash commands from /discord <sub> to 14 top-level
+
+- 2026-04-21 20:43: Session 結束 | 進度：428/448 任務 | 43b0850 fix(tools): WebBrowser/WebCrawl renderToolUseMessage return string, not <Box>
+
+- 2026-04-21 21:01: Session 結束 | 進度：428/448 任務 | 43b0850 fix(tools): WebBrowser/WebCrawl renderToolUseMessage return string, not <Box>
+
+- 2026-04-21 21:05: Session 結束 | 進度：428/448 任務 | 43b0850 fix(tools): WebBrowser/WebCrawl renderToolUseMessage return string, not <Box>
+
+- 2026-04-21 21:08: Session 結束 | 進度：428/448 任務 | 43b0850 fix(tools): WebBrowser/WebCrawl renderToolUseMessage return string, not <Box>
+
+- 2026-04-21 21:13: Session 結束 | 進度：428/448 任務 | 43b0850 fix(tools): WebBrowser/WebCrawl renderToolUseMessage return string, not <Box>
+
+- 2026-04-21 21:31: Session 結束 | 進度：428/448 任務 | 12c098e fix(WebBrowser): SPA virtual-ARIA click/type fallback + diagnostic log
+
+- 2026-04-21 21:33: Session 結束 | 進度：428/448 任務 | 12c098e fix(WebBrowser): SPA virtual-ARIA click/type fallback + diagnostic log
+
+- 2026-04-21 21:38: Session 結束 | 進度：428/448 任務 | 4f0fbc1 prompt(WebBrowser): aggressive anti-curl language for weak tool-routers
+
+- 2026-04-21 21:39: Session 結束 | 進度：428/448 任務 | 4f0fbc1 prompt(WebBrowser): aggressive anti-curl language for weak tool-routers
+
+- 2026-04-21 21:51: Session 結束 | 進度：428/448 任務 | 4f0fbc1 prompt(WebBrowser): aggressive anti-curl language for weak tool-routers
+
+- 2026-04-21 21:57: Session 結束 | 進度：428/448 任務 | 4f0fbc1 prompt(WebBrowser): aggressive anti-curl language for weak tool-routers
+
+- 2026-04-21 22:00: Session 結束 | 進度：428/448 任務 | 4f0fbc1 prompt(WebBrowser): aggressive anti-curl language for weak tool-routers
+
+- 2026-04-21 22:02: Session 結束 | 進度：428/448 任務 | 4f0fbc1 prompt(WebBrowser): aggressive anti-curl language for weak tool-routers
+
+- 2026-04-21 22:07: Session 結束 | 進度：428/448 任務 | 4f0fbc1 prompt(WebBrowser): aggressive anti-curl language for weak tool-routers

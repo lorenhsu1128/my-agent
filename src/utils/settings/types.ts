@@ -652,6 +652,12 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Skip the WebFetch blocklist check for enterprise environments with restrictive security policies',
         ),
+      disabledTools: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'M-TOOLS-PICKER: tool names (as shown in `/tools` picker) that the REPL should hide from the agent. Per-project settings override global. Core tools (FileRead/FileWrite/FileEdit/Bash/Glob/Grep) are always enabled regardless of this list.',
+        ),
       sandbox: SandboxSettingsSchema().optional(),
       feedbackSurveyRate: z
         .number()

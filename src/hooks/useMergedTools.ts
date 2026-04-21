@@ -24,10 +24,15 @@ export function useMergedTools(
 ): Tools {
   let replBridgeEnabled = false
   let replBridgeOutboundOnly = false
+  // M-TOOLS-PICKER: read current session's disabledTools; included in deps so
+  // `/tools` picker changes trigger re-assembly and next turn sees new list.
+  const disabledTools = useAppState(s => s.disabledTools)
   return useMemo(() => {
     // assembleToolPool is the shared function that both REPL and runAgent use.
     // It handles: getTools() + MCP deny-rule filtering + dedup + MCP CLI exclusion.
-    const assembled = assembleToolPool(toolPermissionContext, mcpTools)
+    const assembled = assembleToolPool(toolPermissionContext, mcpTools, {
+      disabledTools,
+    })
 
     return mergeAndFilterTools(
       initialTools,
@@ -40,5 +45,6 @@ export function useMergedTools(
     toolPermissionContext,
     replBridgeEnabled,
     replBridgeOutboundOnly,
+    disabledTools,
   ])
 }
