@@ -361,10 +361,16 @@ export function createDiscordGateway(
     //    注意：目前 InputQueue.submit 只吃 string / unknown payload；image blocks
     //    的傳遞還沒打通到 QueryEngine（adapt.imageBlocks 預留未來 provider
     //    送 image block 時用；此版先靠 `[Image attachment: name]` 字串注入）。
+    //
+    // Intent 選擇：
+    //   - 人類使用者 → 'interactive'（打斷當前 turn，REPL-like 立即回應）
+    //   - 其他 bot → 'background'（FIFO 排隊不打斷，避免兩個 bot 互傳時
+    //     彼此 abort 對方 turn 產生「⏹️ Turn aborted」連鎖）
+    const isAuthorBot = raw.author?.bot === true
     const inputId = runtime.broker.queue.submit(adapt.text, {
       clientId: `discord:${adapted.authorId}:${adapted.id}`,
       source: 'discord',
-      intent: 'interactive',
+      intent: isAuthorBot ? 'background' : 'interactive',
     })
 
     // Discord channel 名稱（guild message 才有；DM 為 undefined）
