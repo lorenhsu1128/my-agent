@@ -152,15 +152,24 @@ export function createDiscordGateway(
     // 累積每個 turn 的輸出（by inputId）— 對應 onOutput；turnEnd 時 post
     const turnBuffers = new Map<
       string,
-      { source: string; text: string; startedAt: number }
+      {
+        source: string
+        text: string
+        startedAt: number
+        /** 使用者輸入原文（REPL/cron turn 才抓；Discord source 此 listener 跳過）。 */
+        userMessage: string
+      }
     >()
     const onTurnStart = (e: TurnStartEvent): void => {
       // 只鏡 REPL / cron / slash / unknown；Discord source 由 streamOutput 專送
       if (e.input.source === 'discord') return
+      const userMessage =
+        typeof e.input.payload === 'string' ? e.input.payload : ''
       turnBuffers.set(e.input.id, {
         source: e.input.source,
         text: '',
         startedAt: e.startedAt,
+        userMessage,
       })
     }
     const onRunnerEvent = (w: RunnerEventWrapper): void => {
@@ -189,7 +198,12 @@ export function createDiscordGateway(
 
   const postHomeMirror = async (
     runtime: ProjectRuntime,
-    buf: { source: string; text: string; startedAt: number },
+    buf: {
+      source: string
+      text: string
+      startedAt: number
+      userMessage: string
+    },
     turnEnd: TurnEndEvent,
   ): Promise<void> => {
     const target = pickMirrorTarget({
@@ -214,7 +228,34 @@ export function createDiscordGateway(
         errorMessage: turnEnd.error,
       })
       const body = buf.text.trim()
-      const full = body ? `${header}\n${body}` : header
+      // 使用者問題以 Discord `>` quote 引用，最多 8 行 / 500 字，避免大段貼上
+      // 把頻道刷版。超出則加省略號。
+      const rawQuestion = buf.userMessage.trim()
+      let questionBlock = ''
+      if (rawQuestion) {
+        const MAX_CHARS = 500
+        const MAX_LINES = 8
+        let snippet = rawQuestion
+        let truncated = false
+        if (snippet.length > MAX_CHARS) {
+          snippet = snippet.slice(0, MAX_CHARS)
+          truncated = true
+        }
+        const lines = snippet.split('\n')
+        if (lines.length > MAX_LINES) {
+          snippet = lines.slice(0, MAX_LINES).join('\n')
+          truncated = true
+        }
+        if (truncated) snippet += ' …'
+        questionBlock = snippet
+          .split('\n')
+          .map(l => `> ${l}`)
+          .join('\n')
+      }
+      const parts = [header]
+      if (questionBlock) parts.push(questionBlock)
+      if (body) parts.push(body)
+      const full = parts.join('\n')
       const chunks = truncateForDiscord(full)
       for (let i = 0; i < chunks.length; i++) {
         await sink.send({ content: chunks[i]! })
