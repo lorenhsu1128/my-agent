@@ -17,6 +17,7 @@
  */
 import { randomUUID } from 'crypto'
 import { sanitizePath } from '../utils/path.js'
+import { normalizeProjectPath } from '../discordConfig/pathNormalize.js'
 import type { DaemonSessionContext } from './sessionBootstrap.js'
 import type { DaemonSessionHandle } from './sessionWriter.js'
 import type { SessionBroker } from './sessionBroker.js'
@@ -105,9 +106,13 @@ export interface ProjectRegistry {
   dispose(): Promise<void>
 }
 
-/** cwd → 穩定的 projectId（沿用 sanitizePath 與 getProjectDir 同口徑）。 */
+/**
+ * cwd → 穩定的 projectId。先 normalize（Windows 正/反斜線、驅動字母大小寫）
+ * 再 sanitize，確保 `C:\foo` / `c:/foo` / `C:/foo` 都產生同一個 projectId，
+ * 避免 registry 快取 miss 導致重複 acquire daemon session lock。
+ */
 export function projectIdFromCwd(cwd: string): string {
-  return sanitizePath(cwd)
+  return sanitizePath(normalizeProjectPath(cwd))
 }
 
 const DEFAULT_IDLE_MS = 30 * 60 * 1000
@@ -177,7 +182,10 @@ export function createProjectRegistry(
 
   const loadProject = async (cwd: string): Promise<ProjectRuntime> => {
     if (disposed) throw new Error('ProjectRegistry disposed')
-    const projectId = projectIdFromCwd(cwd)
+    // Normalize 讓 factory 與 beginDaemonSession 拿到統一格式（Windows 正/反
+    // 斜線、大小寫），確保 lock file path 在多次 load 時指向同一個 lock。
+    const normalizedCwd = normalizeProjectPath(cwd)
+    const projectId = projectIdFromCwd(normalizedCwd)
     const existing = runtimes.get(projectId)
     if (existing) {
       existing.lastActivityAt = now()
@@ -188,7 +196,7 @@ export function createProjectRegistry(
 
     const p = (async () => {
       try {
-        const runtime = await factory({ cwd, projectId })
+        const runtime = await factory({ cwd: normalizedCwd, projectId })
         runtime.lastActivityAt = now()
         runtimes.set(projectId, runtime)
         opts.onLoad?.(projectId)
