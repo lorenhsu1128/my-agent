@@ -109,8 +109,8 @@ export function buildSlashCommands(): Array<
 
   discord.addSubcommand(s =>
     s
-      .setName('bind')
-      .setDescription('把 channel 綁到 project（可跨 guild 指定 channel）')
+      .setName('bind-other-channel')
+      .setDescription('把任意（含跨 guild）channel 綁到 project')
       .addStringOption(o =>
         o
           .setName('project')
@@ -127,8 +127,8 @@ export function buildSlashCommands(): Array<
   )
   discord.addSubcommand(s =>
     s
-      .setName('unbind')
-      .setDescription('解綁 channel（省略 channel 時解綁當前 channel）')
+      .setName('unbind-other-channel')
+      .setDescription('解綁 channel（純 config，不動 Discord 端；省略 = 當前 channel）')
       .addChannelOption(o =>
         o
           .setName('channel')
@@ -303,8 +303,8 @@ export async function handleInteraction(
       '`/discord clear` — 清除當前 project session',
       '`/discord interrupt` — 中斷當前 turn',
       '`/discord allow` / `/discord deny` — 回應待決的 tool permission',
-      '`/discord bind project:<id> [channel:<ch>]` — 把 channel 綁到 project',
-      '`/discord unbind [channel:<ch>]` — 解綁 channel',
+      '`/discord bind-other-channel project:<id> [channel:<ch>]` — 綁任意 channel 到 project',
+      '`/discord unbind-other-channel [channel:<ch>]` — 解綁 channel（不動 Discord 端）',
       '`/discord whitelist-add user:<user>` / `whitelist-remove user:<user>` — 管理白名單',
       '`/discord invite` — 產生 bot 邀請連結',
       '`/discord guilds` — 列出 bot 所在的 guild',
@@ -463,7 +463,7 @@ export async function handleInteraction(
     return
   }
 
-  if (sub === 'bind') {
+  if (sub === 'bind-other-channel') {
     const projectKey = interaction.options.getString('project', true)
     const channel = interaction.options.getChannel('channel')
     const targetChannelId = channel?.id ?? interaction.channelId
@@ -502,7 +502,7 @@ export async function handleInteraction(
     return
   }
 
-  if (sub === 'unbind') {
+  if (sub === 'unbind-other-channel') {
     const channel = interaction.options.getChannel('channel')
     const targetChannelId = channel?.id ?? interaction.channelId
     if (!targetChannelId) {

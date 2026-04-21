@@ -139,6 +139,13 @@ export type DiscordAdminPayload =
   | { op: 'whitelistRemove'; userId: string }
   | { op: 'invite' }
   | { op: 'guilds' }
+  | {
+      op: 'bindChannel'
+      channelId: string
+      projectPath: string
+      autoRegister?: boolean
+    }
+  | { op: 'unbindChannel'; channelId: string }
 
 export type DiscordAdminResponse =
   | { ok: true; op: 'whitelistAdd' | 'whitelistRemove'; changed: boolean }
@@ -147,6 +154,23 @@ export type DiscordAdminResponse =
       ok: true
       op: 'guilds'
       guilds: Array<{ id: string; name: string; memberCount: number }>
+    }
+  | {
+      ok: true
+      op: 'bindChannel'
+      channelId: string
+      channelName: string
+      guildId: string
+      guildName: string
+      autoRegistered?: boolean
+      existingChannels?: string[]
+    }
+  | {
+      ok: true
+      op: 'unbindChannel'
+      channelId: string
+      changed: boolean
+      previousPath?: string
     }
   | { ok: false; op: DiscordAdminPayload['op']; error: string }
 
@@ -291,6 +315,13 @@ export function createFallbackManager(
             inviteUrl?: string
             appId?: string
             guilds?: Array<{ id: string; name: string; memberCount: number }>
+            channelId?: string
+            channelName?: string
+            guildId?: string
+            guildName?: string
+            autoRegistered?: boolean
+            existingChannels?: string[]
+            previousPath?: string
           }
           const op = String(p.op ?? 'invite') as DiscordAdminPayload['op']
           if (p.ok) {
@@ -306,6 +337,28 @@ export function createFallbackManager(
                 ok: true,
                 op: 'guilds',
                 guilds: Array.isArray(p.guilds) ? p.guilds : [],
+              })
+            } else if (op === 'bindChannel') {
+              pending.resolve({
+                ok: true,
+                op: 'bindChannel',
+                channelId: String(p.channelId ?? ''),
+                channelName: String(p.channelName ?? ''),
+                guildId: String(p.guildId ?? ''),
+                guildName: String(p.guildName ?? ''),
+                ...(p.autoRegistered && { autoRegistered: true }),
+                ...(Array.isArray(p.existingChannels) &&
+                  p.existingChannels.length > 0 && {
+                    existingChannels: p.existingChannels,
+                  }),
+              })
+            } else if (op === 'unbindChannel') {
+              pending.resolve({
+                ok: true,
+                op: 'unbindChannel',
+                channelId: String(p.channelId ?? ''),
+                changed: Boolean(p.changed),
+                ...(p.previousPath && { previousPath: p.previousPath }),
               })
             } else {
               pending.resolve({
@@ -657,6 +710,9 @@ export function createFallbackManager(
             requestId: string
             op: DiscordAdminPayload['op']
             userId?: string
+            channelId?: string
+            projectPath?: string
+            autoRegister?: boolean
           } = {
             type: 'discord.admin',
             requestId,
@@ -664,6 +720,12 @@ export function createFallbackManager(
           }
           if (req.op === 'whitelistAdd' || req.op === 'whitelistRemove') {
             frame.userId = req.userId
+          } else if (req.op === 'bindChannel') {
+            frame.channelId = req.channelId
+            frame.projectPath = req.projectPath
+            if (req.autoRegister) frame.autoRegister = true
+          } else if (req.op === 'unbindChannel') {
+            frame.channelId = req.channelId
           }
           ;(
             socket as unknown as {

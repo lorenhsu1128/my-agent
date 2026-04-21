@@ -35,7 +35,7 @@ describe('buildSlashCommands', () => {
     expect(subNames).toEqual(
       [
         'allow',
-        'bind',
+        'bind-other-channel',
         'clear',
         'deny',
         'guilds',
@@ -45,7 +45,7 @@ describe('buildSlashCommands', () => {
         'list',
         'mode',
         'status',
-        'unbind',
+        'unbind-other-channel',
         'whitelist-add',
         'whitelist-remove',
       ].sort(),
@@ -74,11 +74,11 @@ describe('buildSlashCommands', () => {
     expect(reasonOpt?.required).toBeFalsy()
   })
 
-  test('/discord bind has required project + optional channel', () => {
+  test('/discord bind-other-channel has required project + optional channel', () => {
     const cmds = buildSlashCommands()
     const subs =
       (cmds[0] as unknown as { options?: SubcommandJson[] }).options ?? []
-    const bind = subs.find(o => o.name === 'bind')!
+    const bind = subs.find(o => o.name === 'bind-other-channel')!
     const opts = bind.options ?? []
     const projectOpt = opts.find(o => o.name === 'project')
     const channelOpt = opts.find(o => o.name === 'channel')

@@ -147,6 +147,8 @@ import advisor from './commands/advisor.js'
 import daemonCommand from './commands/daemon.js'
 import discordBindCommand from './commands/discordBind.js'
 import discordUnbindCommand from './commands/discordUnbind.js'
+import discordBindOtherChannelCommand from './commands/discordBindOtherChannel.js'
+import discordUnbindOtherChannelCommand from './commands/discordUnbindOtherChannel.js'
 import discordWhitelistAddCommand from './commands/discordWhitelistAdd.js'
 import discordWhitelistRemoveCommand from './commands/discordWhitelistRemove.js'
 import discordInviteCommand from './commands/discordInvite.js'
@@ -334,6 +336,8 @@ const COMMANDS = memoize((): Command[] => [
   daemonCommand,
   discordBindCommand,
   discordUnbindCommand,
+  discordBindOtherChannelCommand,
+  discordUnbindOtherChannelCommand,
   discordWhitelistAddCommand,
   discordWhitelistRemoveCommand,
   discordInviteCommand,
