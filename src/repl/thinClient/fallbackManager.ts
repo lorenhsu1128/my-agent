@@ -123,8 +123,32 @@ export interface FallbackManager {
     cwd: string,
     timeoutMs?: number,
   ): Promise<{ ok: true } | { ok: false; error: string } | null>
+  /**
+   * M-DISCORD-ADMIN：一體化 admin RPC — whitelist/invite/guilds。
+   * `op` 由 caller 指定；payload 欄位與 op 對應。非 attached / timeout 回 null。
+   */
+  discordAdmin(
+    req: DiscordAdminPayload,
+    timeoutMs?: number,
+  ): Promise<DiscordAdminResponse | null>
   stop(): Promise<void>
 }
+
+export type DiscordAdminPayload =
+  | { op: 'whitelistAdd'; userId: string }
+  | { op: 'whitelistRemove'; userId: string }
+  | { op: 'invite' }
+  | { op: 'guilds' }
+
+export type DiscordAdminResponse =
+  | { ok: true; op: 'whitelistAdd' | 'whitelistRemove'; changed: boolean }
+  | { ok: true; op: 'invite'; inviteUrl: string; appId: string }
+  | {
+      ok: true
+      op: 'guilds'
+      guilds: Array<{ id: string; name: string; memberCount: number }>
+    }
+  | { ok: false; op: DiscordAdminPayload['op']; error: string }
 
 export function createFallbackManager(
   opts: FallbackManagerOptions,
@@ -197,6 +221,12 @@ export function createFallbackManager(
     string,
     { resolve: DiscordUnbindResolve; timer: ReturnType<typeof setTimeout> }
   >()
+  /** M-DISCORD-ADMIN：pending discord.admin response（whitelist / invite / guilds） */
+  type DiscordAdminResolve = (v: DiscordAdminResponse | null) => void
+  const pendingDiscordAdmin = new Map<
+    string,
+    { resolve: DiscordAdminResolve; timer: ReturnType<typeof setTimeout> }
+  >()
 
   const tryConnect = async (snap: DaemonSnapshot): Promise<boolean> => {
     if (!snap.alive || !snap.port || !snap.token) return false
@@ -241,6 +271,53 @@ export function createFallbackManager(
           } else {
             pending.resolve({
               ok: false,
+              error: String(p.error ?? 'unknown'),
+            })
+          }
+        }
+        return
+      }
+      if (f.type === 'discord.adminResult') {
+        const rid = String((f as { requestId?: unknown }).requestId ?? '')
+        const pending = pendingDiscordAdmin.get(rid)
+        if (pending) {
+          clearTimeout(pending.timer)
+          pendingDiscordAdmin.delete(rid)
+          const p = f as unknown as {
+            ok?: boolean
+            op?: string
+            error?: string
+            changed?: boolean
+            inviteUrl?: string
+            appId?: string
+            guilds?: Array<{ id: string; name: string; memberCount: number }>
+          }
+          const op = String(p.op ?? 'invite') as DiscordAdminPayload['op']
+          if (p.ok) {
+            if (op === 'invite') {
+              pending.resolve({
+                ok: true,
+                op: 'invite',
+                inviteUrl: String(p.inviteUrl ?? ''),
+                appId: String(p.appId ?? ''),
+              })
+            } else if (op === 'guilds') {
+              pending.resolve({
+                ok: true,
+                op: 'guilds',
+                guilds: Array.isArray(p.guilds) ? p.guilds : [],
+              })
+            } else {
+              pending.resolve({
+                ok: true,
+                op: op as 'whitelistAdd' | 'whitelistRemove',
+                changed: Boolean(p.changed),
+              })
+            }
+          } else {
+            pending.resolve({
+              ok: false,
+              op,
               error: String(p.error ?? 'unknown'),
             })
           }
@@ -561,6 +638,41 @@ export function createFallbackManager(
         } catch {
           clearTimeout(timer)
           pendingDiscordUnbind.delete(requestId)
+          resolve(null)
+        }
+      })
+    },
+    async discordAdmin(req, timeoutMs = 10_000) {
+      if (mode !== 'attached' || !socket) return null
+      const requestId = `dadm${nextQueryId++}-${Date.now()}`
+      return await new Promise<DiscordAdminResponse | null>(resolve => {
+        const timer = setTimeout(() => {
+          pendingDiscordAdmin.delete(requestId)
+          resolve(null)
+        }, timeoutMs)
+        pendingDiscordAdmin.set(requestId, { resolve, timer })
+        try {
+          const frame: {
+            type: 'discord.admin'
+            requestId: string
+            op: DiscordAdminPayload['op']
+            userId?: string
+          } = {
+            type: 'discord.admin',
+            requestId,
+            op: req.op,
+          }
+          if (req.op === 'whitelistAdd' || req.op === 'whitelistRemove') {
+            frame.userId = req.userId
+          }
+          ;(
+            socket as unknown as {
+              send: (f: Record<string, unknown>) => void
+            }
+          ).send(frame)
+        } catch {
+          clearTimeout(timer)
+          pendingDiscordAdmin.delete(requestId)
           resolve(null)
         }
       })

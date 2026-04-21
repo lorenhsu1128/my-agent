@@ -147,6 +147,10 @@ import advisor from './commands/advisor.js'
 import daemonCommand from './commands/daemon.js'
 import discordBindCommand from './commands/discordBind.js'
 import discordUnbindCommand from './commands/discordUnbind.js'
+import discordWhitelistAddCommand from './commands/discordWhitelistAdd.js'
+import discordWhitelistRemoveCommand from './commands/discordWhitelistRemove.js'
+import discordInviteCommand from './commands/discordInvite.js'
+import discordGuildsCommand from './commands/discordGuilds.js'
 import { logError } from './utils/log.js'
 import { toError } from './utils/errors.js'
 import { logForDebugging } from './utils/debug.js'
@@ -330,6 +334,10 @@ const COMMANDS = memoize((): Command[] => [
   daemonCommand,
   discordBindCommand,
   discordUnbindCommand,
+  discordWhitelistAddCommand,
+  discordWhitelistRemoveCommand,
+  discordInviteCommand,
+  discordGuildsCommand,
   // my-agent: /login /logout 已移除（本地模型不需要 Anthropic OAuth）
   passes,
   ...(peersCmd ? [peersCmd] : []),

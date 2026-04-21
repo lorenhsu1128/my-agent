@@ -43,6 +43,10 @@ import {
   isDiscordBindRequest,
   isDiscordUnbindRequest,
 } from './discordBindRpc.js'
+import {
+  handleAdminRequest,
+  isDiscordAdminRequest,
+} from './discordAdminRpc.js'
 import { isVisionEnabled } from '../llamacppConfig/loader.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 
@@ -165,6 +169,18 @@ export async function runDaemonStart(
           const req = m
           void (async () => {
             const res = await handleUnbindRequest(req, {
+              getClient: () => discordClientRef,
+              getConfig: () => getDiscordConfigSnapshot(),
+            })
+            handle.server!.send(c.id, res)
+          })()
+          return
+        }
+        // M-DISCORD-ADMIN：/discord-whitelist-add|remove /discord-invite /discord-guilds RPC
+        if (isDiscordAdminRequest(m)) {
+          const req = m
+          void (async () => {
+            const res = await handleAdminRequest(req, {
               getClient: () => discordClientRef,
               getConfig: () => getDiscordConfigSnapshot(),
             })
