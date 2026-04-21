@@ -234,6 +234,19 @@ export const WebBrowserTool = buildTool({
           : (i?.action ?? '')
     return `Browser ${detail}`
   },
+  renderToolUseProgressMessage() {
+    // Puppeteer 首次啟動 Chromium 可能 5-30 秒（navigate 還有 30s page load
+    // timeout）— 給使用者一個活動指示，避免誤以為 hang。
+    return React.createElement(
+      Box,
+      null,
+      React.createElement(
+        Text,
+        { dimColor: true },
+        'Browsing… (first launch can take 10-30s)',
+      ),
+    )
+  },
   renderToolResultMessage(content) {
     const c = content as Output
     return React.createElement(
@@ -243,11 +256,42 @@ export const WebBrowserTool = buildTool({
     )
   },
   async call(input) {
-    const result = await dispatch(input)
-    const text =
-      typeof result === 'string' ? result : JSON.stringify(result, null, 2)
-    return {
-      data: { action: input.action, result: text },
+    // 診斷 log：daemon 以 stdio:ignore 起，puppeteer / chromium 錯誤會被吞。
+    // 寫 ~/.my-agent/web-browser.log，hang 時可以 tail 看 phase 卡哪。
+    const logLine = (msg: string): void => {
+      try {
+        const homedir = require('os').homedir() as string
+        const path = require('path') as typeof import('path')
+        const fs = require('fs') as typeof import('fs')
+        const logPath = path.join(homedir, '.my-agent', 'web-browser.log')
+        fs.appendFileSync(
+          logPath,
+          `${new Date().toISOString()} ${msg}\n`,
+          'utf8',
+        )
+      } catch {
+        /* ignore log failures */
+      }
+    }
+    const t0 = Date.now()
+    logLine(`call start action=${input.action}`)
+    try {
+      const result = await dispatch(input)
+      const text =
+        typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+      logLine(
+        `call ok action=${input.action} ${Date.now() - t0}ms bytes=${text.length}`,
+      )
+      return {
+        data: { action: input.action, result: text },
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const stack = err instanceof Error && err.stack ? err.stack : ''
+      logLine(
+        `call ERR action=${input.action} ${Date.now() - t0}ms msg=${msg}\nstack=${stack}`,
+      )
+      throw err
     }
   },
   mapToolResultToToolResultBlockParam({ result }, toolUseID) {

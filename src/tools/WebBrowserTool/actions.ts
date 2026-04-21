@@ -94,35 +94,57 @@ export async function snapshot(): Promise<object> {
 
 export async function click(ref: string): Promise<object> {
   const s = await getSession()
-  const el = await refToElement(
+  const resolved = await refToElement(
     s.page,
     ref,
     s.refEntries,
     s.snapshotGeneration,
     s.generation,
   )
-  await el.click({ delay: 10 })
-  await el.dispose()
-  return { ok: true, ref }
+  if (resolved.handle) {
+    await resolved.handle.click({ delay: 10 })
+    await resolved.handle.dispose().catch(() => void 0)
+  } else if (resolved.box) {
+    const { x, y, width, height } = resolved.box
+    await s.page.mouse.click(x + width / 2, y + height / 2, { delay: 10 })
+  } else {
+    // refToElement guarantees handle || box when no error, so this is defensive
+    throw new Error(`click: no usable target for ref ${ref}`)
+  }
+  return { ok: true, ref, strategy: resolved.strategy }
 }
 
 export async function type_(ref: string, text: string): Promise<object> {
   const s = await getSession()
-  const el = await refToElement(
+  const resolved = await refToElement(
     s.page,
     ref,
     s.refEntries,
     s.snapshotGeneration,
     s.generation,
   )
-  // Focus + clear + type
-  await el.focus()
-  await el.evaluate(n => {
-    if ('value' in n) (n as HTMLInputElement).value = ''
-  })
-  await el.type(text)
-  await el.dispose()
-  return { ok: true, ref, typed: text.length }
+  if (resolved.handle) {
+    await resolved.handle.focus()
+    await resolved.handle.evaluate(n => {
+      if ('value' in n) (n as HTMLInputElement).value = ''
+    })
+    await resolved.handle.type(text)
+    await resolved.handle.dispose().catch(() => void 0)
+  } else if (resolved.box) {
+    // Coordinate fallback: click to focus, then type via global keyboard.
+    // Can't clear prior value without a handle — best effort: Ctrl+A + Delete
+    // before typing so the field doesn't end up with "old text + new text".
+    const { x, y, width, height } = resolved.box
+    await s.page.mouse.click(x + width / 2, y + height / 2)
+    await s.page.keyboard.down('Control')
+    await s.page.keyboard.press('KeyA')
+    await s.page.keyboard.up('Control')
+    await s.page.keyboard.press('Delete')
+    await s.page.keyboard.type(text)
+  } else {
+    throw new Error(`type: no usable target for ref ${ref}`)
+  }
+  return { ok: true, ref, typed: text.length, strategy: resolved.strategy }
 }
 
 export async function scroll(direction: 'up' | 'down'): Promise<object> {
