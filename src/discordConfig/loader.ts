@@ -8,6 +8,7 @@
  */
 import { readFile, writeFile } from 'fs/promises'
 import { getDiscordConfigPath } from './paths.js'
+import { normalizeProjectPath } from './pathNormalize.js'
 import {
   DEFAULT_DISCORD_CONFIG,
   DiscordConfigSchema,
@@ -48,6 +49,18 @@ async function readLive(): Promise<DiscordConfig> {
     return DEFAULT_DISCORD_CONFIG
   }
   const cfg = result.data
+
+  // 路徑 normalize — 消除 Windows 正/反斜線、驅動字母大小寫差異造成的比對錯誤。
+  // 只動 in-memory；下一次 write 會自然 persist。
+  for (const p of cfg.projects) {
+    p.path = normalizeProjectPath(p.path)
+  }
+  if (cfg.defaultProjectPath) {
+    cfg.defaultProjectPath = normalizeProjectPath(cfg.defaultProjectPath)
+  }
+  for (const chId of Object.keys(cfg.channelBindings)) {
+    cfg.channelBindings[chId] = normalizeProjectPath(cfg.channelBindings[chId]!)
+  }
 
   // 交叉驗證：defaultProjectPath 必須是 projects[].path 之一（若設了）。
   if (cfg.defaultProjectPath) {
@@ -114,6 +127,7 @@ export async function addChannelBinding(
   channelId: string,
   projectPath: string,
 ): Promise<void> {
+  const normalized = normalizeProjectPath(projectPath)
   const cfg = await loadDiscordConfigSnapshot()
   // 讀 live 檔案重新 parse（避免覆蓋其他使用者外部編輯）
   const path = getDiscordConfigPath()
@@ -126,11 +140,11 @@ export async function addChannelBinding(
   const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
   const bindings =
     (parsed.channelBindings as Record<string, string> | undefined) ?? {}
-  bindings[channelId] = projectPath
+  bindings[channelId] = normalized
   parsed.channelBindings = bindings
   await writeFile(path, JSON.stringify(parsed, null, 2) + '\n', 'utf-8')
   // 同步更新 in-memory（gateway 共用此物件 reference）
-  cfg.channelBindings[channelId] = projectPath
+  cfg.channelBindings[channelId] = normalized
 }
 
 export async function removeChannelBinding(channelId: string): Promise<void> {

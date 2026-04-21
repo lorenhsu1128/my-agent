@@ -12,6 +12,7 @@ import {
   isDiscordUnbindRequest,
 } from '../../../src/daemon/discordBindRpc'
 import { _resetDiscordConfigForTests } from '../../../src/discordConfig/index'
+import { normalizeProjectPath } from '../../../src/discordConfig/pathNormalize'
 
 const CONFIG_PATH_KEY = 'DISCORD_CONFIG_PATH'
 
@@ -137,7 +138,10 @@ describe('handleBindRequest', () => {
     expect(res.url).toContain('GUILD1')
     expect(res.url).toContain('NEW_CHANNEL_ID')
     const persisted = readCfg()
-    expect(persisted.channelBindings['NEW_CHANNEL_ID']).toBe('/proj/my-agent')
+    // 路徑會被 normalize（Windows 可能前綴 drive letter 並換成小寫 + 正斜線）
+    expect(persisted.channelBindings['NEW_CHANNEL_ID']).toBe(
+      normalizeProjectPath('/proj/my-agent'),
+    )
   })
 
   test('already-bound cwd returns alreadyBound=true without creating new channel', async () => {

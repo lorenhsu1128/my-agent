@@ -23,6 +23,7 @@ import {
   removeWhitelistUser,
 } from '../discordConfig/loader.js'
 import { getDiscordConfigPath } from '../discordConfig/paths.js'
+import { normalizeProjectPath } from '../discordConfig/pathNormalize.js'
 
 /** Invite URL 預設權限 bits — 跟 slash `/discord invite` 一致。 */
 const INVITE_PERMISSION_BITS =
@@ -157,6 +158,7 @@ export async function handleAdminRequest(
   if (req.op === 'bindChannel') {
     if (!req.channelId) return { ...base, ok: false, error: 'channelId required' }
     if (!req.projectPath) return { ...base, ok: false, error: 'projectPath required' }
+    const projectPath = normalizeProjectPath(req.projectPath)
     const client = ctx.getClient()
     if (!client) return { ...base, ok: false, error: 'Discord gateway not running' }
 
@@ -183,11 +185,11 @@ export async function handleAdminRequest(
     const config = ctx.getConfig()
     // 2. 檢查 projectPath 是否在 projects[]；否且 autoRegister 就 append
     let autoRegistered = false
-    const projectExists = config.projects.some(p => p.path === req.projectPath)
+    const projectExists = config.projects.some(p => p.path === projectPath)
     if (!projectExists) {
       if (req.autoRegister) {
         try {
-          await appendProject(config, req.projectPath)
+          await appendProject(config, projectPath)
           autoRegistered = true
         } catch (e) {
           return {
@@ -201,19 +203,19 @@ export async function handleAdminRequest(
         return {
           ...base,
           ok: false,
-          error: `projectPath \`${req.projectPath}\` 不在 projects[] 中。可用：${ids || '(空)'}。`,
+          error: `projectPath \`${projectPath}\` 不在 projects[] 中。可用：${ids || '(空)'}。`,
         }
       }
     }
 
     // 3. 衝突偵測（警告但仍 proceed）
     const existingChannels = Object.entries(config.channelBindings)
-      .filter(([, p]) => p === req.projectPath)
+      .filter(([, p]) => p === projectPath)
       .map(([chId]) => chId)
 
     // 4. 寫入 binding
     try {
-      await addChannelBinding(req.channelId, req.projectPath)
+      await addChannelBinding(req.channelId, projectPath)
     } catch (e) {
       return { ...base, ok: false, error: e instanceof Error ? e.message : String(e) }
     }
@@ -265,7 +267,8 @@ export async function handleAdminRequest(
  * cached snapshot 讓 running gateway 立即看到。id / name 從 basename(path) 推導。
  * 若 id 已被佔用會 append 一個短 hash 避免重複。
  */
-async function appendProject(cfg: DiscordConfig, projectPath: string): Promise<void> {
+async function appendProject(cfg: DiscordConfig, rawPath: string): Promise<void> {
+  const projectPath = normalizeProjectPath(rawPath)
   const path = getDiscordConfigPath()
   let raw: string
   try {

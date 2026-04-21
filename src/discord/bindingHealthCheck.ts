@@ -68,15 +68,24 @@ export async function verifyBindings(
     }
     // 2) cwd 存活檢查
     if (!existsSync(cwd)) {
-      try {
-        await archiveProjectChannel(
-          client,
-          config.guildId,
-          channelId,
-          config.archiveCategoryId,
-        )
-      } catch {
-        // ignore — binding 仍 remove
+      // Archive 只對自家 guild 的 channel 做（bot 對外 guild 沒 Manage
+      // Channels 權限；且不該擅自動別人的 channel）。foreign channel 就只清
+      // binding、不 archive。
+      const guild = await client.guilds.fetch(config.guildId).catch(() => null)
+      const inOwnGuild = guild
+        ? await guild.channels.fetch(channelId).catch(() => null)
+        : null
+      if (inOwnGuild) {
+        try {
+          await archiveProjectChannel(
+            client,
+            config.guildId,
+            channelId,
+            config.archiveCategoryId,
+          )
+        } catch {
+          // ignore — binding 仍 remove
+        }
       }
       await removeChannelBinding(channelId).catch(() => undefined)
       report.staleCwds.push({ channelId, cwd })

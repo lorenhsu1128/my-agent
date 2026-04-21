@@ -95,16 +95,22 @@ export async function renameChannel(
 }
 
 /**
- * 檢查 channel 是否還存在於 guild（供 bindingHealthCheck 用）。
+ * 檢查 channel 是否還存在且 bot 可見（跨所有 guild — 支援 foreign-guild
+ * 綁定，即 `/discord-bind-other-channel` 寫的 binding）。
+ *
+ * 以前用 `guild.channels.fetch(channelId)` 只在自家 `config.guildId` 找，
+ * 導致對方 guild 的 channel 被當成 stale → 每次重啟 daemon 都會清掉 foreign
+ * bindings。改為 `client.channels.fetch(channelId)`（client 層級跨 guild）。
+ *
+ * `guildId` 參數保留給舊 caller 相容；新邏輯不使用它。
  */
 export async function channelExists(
   client: Client,
-  guildId: string,
+  _guildId: string,
   channelId: string,
 ): Promise<boolean> {
   try {
-    const guild = await fetchGuild(client, guildId)
-    const ch = await guild.channels.fetch(channelId).catch(() => null)
+    const ch = await client.channels.fetch(channelId).catch(() => null)
     return ch !== null
   } catch {
     return false

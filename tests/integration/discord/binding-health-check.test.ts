@@ -18,29 +18,34 @@ function makeClient(opts: {
   existingChannels?: Set<string>
   archiveFn?: () => Promise<void>
 }): any {
+  const resolveChannel = async (chId: string) => {
+    if (opts.existingChannels && opts.existingChannels.has(chId)) {
+      return {
+        type: 0,
+        name: `ch-${chId}`,
+        setName: async () => undefined,
+        setParent: async () => {
+          if (opts.archiveFn) await opts.archiveFn()
+        },
+      }
+    }
+    return null
+  }
   return {
     guilds: {
       cache: { get: () => null },
-      fetch: async (gid: string) => {
+      fetch: async (_gid: string) => {
         if (opts.guildFails) throw new Error('unknown guild')
         return {
           channels: {
-            fetch: async (chId: string) => {
-              if (opts.existingChannels && opts.existingChannels.has(chId)) {
-                return {
-                  type: 0,
-                  name: `ch-${chId}`,
-                  setName: async () => undefined,
-                  setParent: async () => {
-                    if (opts.archiveFn) await opts.archiveFn()
-                  },
-                }
-              }
-              return null
-            },
+            fetch: resolveChannel,
           },
         }
       },
+    },
+    // client.channels.fetch — 跨 guild 查詢 channel（channelExists 新路徑用）
+    channels: {
+      fetch: resolveChannel,
     },
   }
 }
@@ -86,6 +91,52 @@ describe('verifyBindings', () => {
     }
     const r = await verifyBindings(makeClient({ guildFails: true }), cfg)
     expect(r.guildAccessible).toBe(false)
+  })
+
+  test('foreign channel (not in own guild but client.channels.fetch resolves) is NOT stale', async () => {
+    // 模擬 bot 被邀進 foreign guild —  guild.channels.fetch(config.guildId) 回 null，
+    // 但 client.channels.fetch 能找到該 channel（bot 在別的 guild 看到它）。
+    const liveCwd = join(tmpDir, 'shared-project')
+    mkdirSync(liveCwd, { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'discord.json'),
+      JSON.stringify({
+        enabled: true,
+        whitelistUserIds: [],
+        projects: [],
+        channelBindings: { CH_FOREIGN: liveCwd },
+        guildId: 'OWN_GUILD',
+      }),
+    )
+    const cfg: any = {
+      enabled: true,
+      whitelistUserIds: [],
+      projects: [],
+      channelBindings: { CH_FOREIGN: liveCwd },
+      guildId: 'OWN_GUILD',
+      streamStrategy: 'turn-end',
+      replyMode: 'first',
+    }
+    // 特殊 client：own guild 查不到 CH_FOREIGN（空 Set），但 client 層級查得到
+    const client: any = {
+      guilds: {
+        cache: { get: () => null },
+        fetch: async () => ({
+          channels: { fetch: async () => null },
+        }),
+      },
+      channels: {
+        fetch: async (chId: string) =>
+          chId === 'CH_FOREIGN'
+            ? { type: 0, name: 'ch-foreign' }
+            : null,
+      },
+    }
+    const r = await verifyBindings(client, cfg)
+    expect(r.guildAccessible).toBe(true)
+    expect(r.healthy).toBe(1)
+    expect(r.staleChannels).toEqual([])
+    expect(r.staleCwds).toEqual([])
   })
 
   test('classifies: alive, stale channel (deleted), stale cwd (dir gone)', async () => {
