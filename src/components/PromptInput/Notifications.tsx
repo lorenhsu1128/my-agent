@@ -25,6 +25,7 @@ import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js';
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
 import { IdeStatusIndicator } from '../IdeStatusIndicator.js';
 import { MemoryUsageIndicator } from '../MemoryUsageIndicator.js';
+import { ContextProgressBar } from '../ContextProgressBar.js';
 import { SentryErrorBoundary } from '../SentryErrorBoundary.js';
 import { TokenWarning } from '../TokenWarning.js';
 import { SandboxPromptFooterHint } from './SandboxPromptFooterHint.js';
@@ -273,6 +274,7 @@ function NotificationContent({
             {tokenUsage} tokens
           </Text>
         </Box>}
+      {!isBriefOnly && <ContextProgressBar tokenUsage={tokenUsage} model={mainLoopModel} />}
       {!isBriefOnly && <TokenWarning tokenUsage={tokenUsage} model={mainLoopModel} />}
       <MemoryUsageIndicator />
       <SandboxPromptFooterHint />
