@@ -4,6 +4,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   formatMirrorHeader,
+  pickAllMirrorTargets,
   pickMirrorTarget,
 } from '../../../src/discord/replMirror'
 
@@ -42,6 +43,46 @@ describe('pickMirrorTarget', () => {
       homeChannelId: 'H',
     })
     expect(r).toEqual({ channelId: 'CH_A', kind: 'project' })
+  })
+})
+
+describe('pickAllMirrorTargets', () => {
+  test('fan-out：同 cwd 綁多 channel 都回傳', () => {
+    const r = pickAllMirrorTargets({
+      cwd: '/proj/x',
+      channelBindings: { CH_MINE: '/proj/x', CH_OTHER: '/proj/x', CH_Y: '/proj/y' },
+      homeChannelId: 'HOME',
+    })
+    expect(r).toHaveLength(2)
+    expect(r.map(t => t.channelId).sort()).toEqual(['CH_MINE', 'CH_OTHER'])
+    expect(r.every(t => t.kind === 'project')).toBe(true)
+  })
+
+  test('有 per-project binding 時不回 home', () => {
+    const r = pickAllMirrorTargets({
+      cwd: '/proj/x',
+      channelBindings: { CH_MINE: '/proj/x' },
+      homeChannelId: 'HOME',
+    })
+    expect(r).toEqual([{ channelId: 'CH_MINE', kind: 'project' }])
+  })
+
+  test('全無 binding → fallback home 一個', () => {
+    const r = pickAllMirrorTargets({
+      cwd: '/proj/x',
+      channelBindings: {},
+      homeChannelId: 'HOME',
+    })
+    expect(r).toEqual([{ channelId: 'HOME', kind: 'home' }])
+  })
+
+  test('什麼都沒 → 空陣列', () => {
+    const r = pickAllMirrorTargets({
+      cwd: '/x',
+      channelBindings: {},
+      homeChannelId: undefined,
+    })
+    expect(r).toEqual([])
   })
 })
 

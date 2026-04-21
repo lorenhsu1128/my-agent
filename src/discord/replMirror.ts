@@ -19,15 +19,31 @@ export function pickMirrorTarget(params: {
   channelBindings: Record<string, string>
   homeChannelId: string | undefined
 }): MirrorTarget | null {
+  const all = pickAllMirrorTargets(params)
+  return all[0] ?? null
+}
+
+/**
+ * 回傳**所有** per-project binding 命中的 channel（cwd === binding value）；
+ * 一個都沒有才 fallback 到 homeChannelId。用於 REPL/cron turn 需要同步鏡像到
+ * 多個 channel 的場景（例如同 cwd 同時綁自家 server channel + 對方 server channel）。
+ */
+export function pickAllMirrorTargets(params: {
+  cwd: string
+  channelBindings: Record<string, string>
+  homeChannelId: string | undefined
+}): MirrorTarget[] {
+  const matches: MirrorTarget[] = []
   for (const [chId, path] of Object.entries(params.channelBindings)) {
     if (path === params.cwd) {
-      return { channelId: chId, kind: 'project' }
+      matches.push({ channelId: chId, kind: 'project' })
     }
   }
+  if (matches.length > 0) return matches
   if (params.homeChannelId) {
-    return { channelId: params.homeChannelId, kind: 'home' }
+    return [{ channelId: params.homeChannelId, kind: 'home' }]
   }
-  return null
+  return []
 }
 
 /**

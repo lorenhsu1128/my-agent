@@ -26,7 +26,11 @@ import {
   type StreamReplyMode,
 } from './streamOutput.js'
 import { truncateForDiscord } from './truncate.js'
-import { formatMirrorHeader, pickMirrorTarget } from './replMirror.js'
+import {
+  formatMirrorHeader,
+  pickAllMirrorTargets,
+  pickMirrorTarget,
+} from './replMirror.js'
 import { isUserWhitelisted, routeMessage } from './router.js'
 import {
   handleInteraction,
@@ -206,66 +210,69 @@ export function createDiscordGateway(
     },
     turnEnd: TurnEndEvent,
   ): Promise<void> => {
-    const target = pickMirrorTarget({
+    // 多 target fan-out：若同 cwd 綁多個 channel（自家 + 對方），每個都 post。
+    // 沒 per-project binding 才 fallback 到 homeChannelId。
+    const targets = pickAllMirrorTargets({
       cwd: runtime.cwd,
       channelBindings: config.channelBindings,
       homeChannelId: config.homeChannelId,
     })
-    if (!target) return
-    try {
-      const sink = client.sinkForChannelId(target.channelId)
-      const durationMs = turnEnd.endedAt - buf.startedAt
-      const durationStr =
-        durationMs > 60_000
-          ? `${(durationMs / 60_000).toFixed(1)}min`
-          : `${(durationMs / 1000).toFixed(1)}s`
-      const header = formatMirrorHeader({
-        kind: target.kind,
-        projectId: runtime.projectId,
-        source: buf.source,
-        durationStr,
-        reason: turnEnd.reason,
-        errorMessage: turnEnd.error,
-      })
-      const body = buf.text.trim()
-      // 使用者問題以 Discord `>` quote 引用，最多 8 行 / 500 字，避免大段貼上
-      // 把頻道刷版。超出則加省略號。
-      const rawQuestion = buf.userMessage.trim()
-      let questionBlock = ''
-      if (rawQuestion) {
-        const MAX_CHARS = 500
-        const MAX_LINES = 8
-        let snippet = rawQuestion
-        let truncated = false
-        if (snippet.length > MAX_CHARS) {
-          snippet = snippet.slice(0, MAX_CHARS)
-          truncated = true
-        }
-        const lines = snippet.split('\n')
-        if (lines.length > MAX_LINES) {
-          snippet = lines.slice(0, MAX_LINES).join('\n')
-          truncated = true
-        }
-        if (truncated) snippet += ' …'
-        questionBlock = snippet
-          .split('\n')
-          .map(l => `> ${l}`)
-          .join('\n')
+    if (targets.length === 0) return
+    const durationMs = turnEnd.endedAt - buf.startedAt
+    const durationStr =
+      durationMs > 60_000
+        ? `${(durationMs / 60_000).toFixed(1)}min`
+        : `${(durationMs / 1000).toFixed(1)}s`
+    // 使用者問題以 Discord `>` quote 引用，最多 8 行 / 500 字；多 target 共用。
+    const body = buf.text.trim()
+    const rawQuestion = buf.userMessage.trim()
+    let questionBlock = ''
+    if (rawQuestion) {
+      const MAX_CHARS = 500
+      const MAX_LINES = 8
+      let snippet = rawQuestion
+      let truncated = false
+      if (snippet.length > MAX_CHARS) {
+        snippet = snippet.slice(0, MAX_CHARS)
+        truncated = true
       }
-      const parts = [header]
-      if (questionBlock) parts.push(questionBlock)
-      if (body) parts.push(body)
-      const full = parts.join('\n')
-      const chunks = truncateForDiscord(full)
-      for (let i = 0; i < chunks.length; i++) {
-        await sink.send({ content: chunks[i]! })
+      const lines = snippet.split('\n')
+      if (lines.length > MAX_LINES) {
+        snippet = lines.slice(0, MAX_LINES).join('\n')
+        truncated = true
       }
-    } catch (e) {
-      void log?.warn?.('turn mirror post failed', {
-        projectId: runtime.projectId,
-        targetChannelId: target.channelId,
-        err: e instanceof Error ? e.message : String(e),
-      })
+      if (truncated) snippet += ' …'
+      questionBlock = snippet
+        .split('\n')
+        .map(l => `> ${l}`)
+        .join('\n')
+    }
+    for (const target of targets) {
+      try {
+        const sink = client.sinkForChannelId(target.channelId)
+        const header = formatMirrorHeader({
+          kind: target.kind,
+          projectId: runtime.projectId,
+          source: buf.source,
+          durationStr,
+          reason: turnEnd.reason,
+          errorMessage: turnEnd.error,
+        })
+        const parts = [header]
+        if (questionBlock) parts.push(questionBlock)
+        if (body) parts.push(body)
+        const full = parts.join('\n')
+        const chunks = truncateForDiscord(full)
+        for (let i = 0; i < chunks.length; i++) {
+          await sink.send({ content: chunks[i]! })
+        }
+      } catch (e) {
+        void log?.warn?.('turn mirror post failed', {
+          projectId: runtime.projectId,
+          targetChannelId: target.channelId,
+          err: e instanceof Error ? e.message : String(e),
+        })
+      }
     }
   }
 
