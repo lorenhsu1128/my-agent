@@ -307,6 +307,17 @@ export async function runDaemonStart(
                 c => c.projectId === projectId,
               )
             },
+            broadcastDiscordInbound: (projectId, payload) => {
+              if (!handle.server) return
+              handle.server.broadcast(
+                {
+                  type: 'discordInboundMessage',
+                  projectId,
+                  ...payload,
+                },
+                c => c.projectId === projectId,
+              )
+            },
             broadcastDiscordTurn: (projectId, payload) => {
               if (!handle.server) return
               handle.server.broadcast(

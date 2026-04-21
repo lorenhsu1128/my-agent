@@ -63,17 +63,31 @@ export interface DiscordGatewayOptions {
    */
   broadcastPermissionMode?: (projectId: string, mode: PermissionMode) => void
   /**
-   * M-DISCORD-AUTOBIND：Discord-sourced turn 結束時把內容 broadcast 給同 project
-   * 的 attached REPL（達成雙向同步）。未注入則 REPL 不會看到 Discord 發起的 turn。
+   * M-DISCORD-AUTOBIND：Discord-sourced turn submit **前**呼叫 — 讓 REPL 先看
+   * 到使用者訊息（再接著看 agent 透過 runnerEvent 逐步回覆）。未注入 = REPL
+   * 看不到 Discord 使用者訊息。
    */
-  broadcastDiscordTurn?: (
+  broadcastDiscordInbound?: (
     projectId: string,
     payload: {
       source: 'discord-dm' | 'discord-channel'
       channelName?: string
       userTag: string
       userMessage: string
-      turnOutput: string
+      inputId: string
+    },
+  ) => void
+  /**
+   * M-DISCORD-AUTOBIND：Discord-sourced turn 結束時 broadcast footer（icon +
+   * duration + reason；error 時含 message）。使用者訊息 / 完整 turn 輸出已由
+   * broadcastDiscordInbound + runnerEvent 顯示過，這裡不重複。
+   */
+  broadcastDiscordTurn?: (
+    projectId: string,
+    payload: {
+      source: 'discord-dm' | 'discord-channel'
+      channelName?: string
+      inputId: string
       reason: 'done' | 'error' | 'cancelled' | string
       durationMs: number
       errorMessage?: string
@@ -305,6 +319,29 @@ export function createDiscordGateway(
       intent: 'interactive',
     })
 
+    // Discord channel 名稱（guild message 才有；DM 為 undefined）
+    const rawChannel = raw.channel as { name?: string } | undefined
+    const discordChannelName =
+      adapted.channelType === 'dm' ? undefined : rawChannel?.name
+
+    // M-DISCORD-AUTOBIND-FIX1：**先**廣播使用者訊息給 REPL（在 runnerEvent
+    // streaming 之前），讓 REPL 看得到「這是 Discord 使用者觸發的這個 turn」。
+    // turn 結束的 footer 走 broadcastDiscordTurn（只放 icon+duration，避免重複）。
+    try {
+      opts.broadcastDiscordInbound?.(runtime.projectId, {
+        source:
+          adapted.channelType === 'dm' ? 'discord-dm' : 'discord-channel',
+        channelName: discordChannelName,
+        userTag: adapted.authorUsername,
+        userMessage: adapted.content,
+        inputId,
+      })
+    } catch (err) {
+      void log?.warn?.('broadcastDiscordInbound threw', {
+        err: err instanceof Error ? err.message : String(err),
+      })
+    }
+
     // 5. 綁 sink / reactions / streamOutput；filter events by inputId
     const sink: DiscordChannelSink = client.sinkForChannel(
       raw.channel as TextBasedChannel,
@@ -320,13 +357,9 @@ export function createDiscordGateway(
       messageId: adapted.id,
     }
 
-    // M-DISCORD-AUTOBIND：收集 Discord-sourced turn 內容，供 reverse-sync 廣播
-    let replBroadcastBuffer = ''
+    // M-DISCORD-AUTOBIND-FIX1：只記錄 start time 給 footer 用（turnOutput 不再
+    // 累積 — REPL 已透過 runnerEvent streaming 看到 assistant 內容）。
     let replBroadcastStartedAt = 0
-    // Discord channel 名稱（guild message 才有；DM 為 undefined）
-    const rawChannel = raw.channel as { name?: string } | undefined
-    const discordChannelName =
-      adapted.channelType === 'dm' ? undefined : rawChannel?.name
 
     // M-DISCORD-AUTOBIND-7：per-turn 註冊 Discord fallback handler（dual-notify
     // 路徑由 permissionRouter 呼叫）。post 一則「需授權」訊息到當前 Discord
@@ -372,9 +405,6 @@ export function createDiscordGateway(
       if (w.input.id !== inputId) return
       if (w.event.type === 'output') {
         streamOut.handleOutput(w.event.payload)
-        // 同步累積純 assistant text 供 REPL 廣播（不含 tool_use blocks）
-        const chunk = extractAssistantText(w.event.payload)
-        if (chunk) replBroadcastBuffer += chunk
       }
     }
     const onTurnEnd = async (e: TurnEndEvent): Promise<void> => {
@@ -392,15 +422,15 @@ export function createDiscordGateway(
       } catch {
         // reaction failure 吞
       }
-      // M-DISCORD-AUTOBIND：Discord-sourced turn 結束 → broadcast 給同 project
-      // attached REPL client（達成「在 Discord 打字 REPL 也看到」）。
+      // M-DISCORD-AUTOBIND-FIX1：turn 結束 footer — 只送 icon + duration +
+      // reason（error 時含 message）。userMessage 已由 broadcastDiscordInbound
+      // 顯示，turnOutput 已由 runnerEvent streaming 顯示，都不重複。
       try {
         opts.broadcastDiscordTurn?.(runtime.projectId, {
-          source: adapted.channelType === 'dm' ? 'discord-dm' : 'discord-channel',
+          source:
+            adapted.channelType === 'dm' ? 'discord-dm' : 'discord-channel',
           channelName: discordChannelName,
-          userTag: adapted.authorUsername,
-          userMessage: adapted.content,
-          turnOutput: replBroadcastBuffer,
+          inputId,
           reason: e.reason,
           durationMs: e.endedAt - replBroadcastStartedAt,
           errorMessage: e.error,
@@ -562,6 +592,7 @@ export async function startDiscordGateway(opts: {
   registry: ProjectRegistry
   visionEnabled: boolean
   broadcastPermissionMode?: DiscordGatewayOptions['broadcastPermissionMode']
+  broadcastDiscordInbound?: DiscordGatewayOptions['broadcastDiscordInbound']
   broadcastDiscordTurn?: DiscordGatewayOptions['broadcastDiscordTurn']
   log?: DiscordGatewayOptions['log']
 }): Promise<{
@@ -608,6 +639,7 @@ export async function startDiscordGateway(opts: {
     registry: opts.registry,
     visionEnabled: opts.visionEnabled,
     broadcastPermissionMode: opts.broadcastPermissionMode,
+    broadcastDiscordInbound: opts.broadcastDiscordInbound,
     broadcastDiscordTurn: opts.broadcastDiscordTurn,
     log: opts.log,
   })
@@ -662,7 +694,12 @@ export async function startDiscordGateway(opts: {
   if (opts.config.homeChannelId) {
     try {
       const sink = client.sinkForChannelId(opts.config.homeChannelId)
-      const ts = new Date().toISOString().replace('T', ' ').replace(/\..*/, '')
+      // 本地時區時間戳（跨 locale 穩定 — getFullYear/Month/... 走系統時區）
+      const d = new Date()
+      const pad = (n: number): string => String(n).padStart(2, '0')
+      const ts =
+        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+        `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
       await sink.send({
         content: `🟢 my-agent daemon up · bot connected · ${ts}`,
       })

@@ -4116,21 +4116,40 @@ export function REPL({
       ]);
     },
     onFrame: (frame): void => {
-      // M-DISCORD-AUTOBIND：Discord-sourced turn 鏡像到 REPL（[via Discord ...]）
-      if (frame.type === 'discordTurnEvent') {
+      // M-DISCORD-AUTOBIND-FIX1：Discord 使用者訊息 — 在 agent 開始處理前先顯示
+      if (frame.type === 'discordInboundMessage') {
         const d = frame as unknown as {
           source: 'discord-dm' | 'discord-channel';
           channelName?: string;
           userTag: string;
           userMessage: string;
-          turnOutput: string;
+        };
+        const sourceLabel =
+          d.source === 'discord-dm'
+            ? `Discord DM from @${d.userTag}`
+            : `Discord #${d.channelName ?? '(?)'}`;
+        setMessages(prev => [
+          ...prev,
+          createSystemMessage(
+            `📨 [via ${sourceLabel}]\n> ${d.userMessage}`,
+            'info',
+          ),
+        ]);
+        return;
+      }
+      // M-DISCORD-AUTOBIND：Discord-sourced turn 結束 footer（不重複 userMessage
+      // / turnOutput — 前者由 discordInboundMessage 顯示、後者由 runnerEvent）
+      if (frame.type === 'discordTurnEvent') {
+        const d = frame as unknown as {
+          source: 'discord-dm' | 'discord-channel';
+          channelName?: string;
           reason: string;
           durationMs: number;
           errorMessage?: string;
         };
         const sourceLabel =
           d.source === 'discord-dm'
-            ? `Discord DM from @${d.userTag}`
+            ? `Discord DM`
             : `Discord #${d.channelName ?? '(?)'}`;
         const durStr =
           d.durationMs > 60_000
@@ -4138,17 +4157,14 @@ export function REPL({
             : `${(d.durationMs / 1000).toFixed(1)}s`;
         const icon =
           d.reason === 'done' ? '✅' : d.reason === 'error' ? '❌' : '⏹️';
-        const body = d.turnOutput.trim() || '(empty)';
         const errSuffix =
           d.reason === 'error' && d.errorMessage
-            ? `\nerror: ${d.errorMessage}`
+            ? ` · error: ${d.errorMessage}`
             : '';
         setMessages(prev => [
           ...prev,
           createSystemMessage(
-            `${icon} [via ${sourceLabel}] ${durStr}\n` +
-              `> ${d.userMessage.slice(0, 200)}${d.userMessage.length > 200 ? '…' : ''}\n` +
-              `${body}${errSuffix}`,
+            `${icon} [via ${sourceLabel}] ${durStr}${errSuffix}`,
             'info',
           ),
         ]);
