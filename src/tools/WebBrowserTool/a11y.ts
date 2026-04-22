@@ -43,9 +43,13 @@ export interface SnapshotSummary {
   has_shadow: boolean
 }
 
+/** 壓縮後的 tree 輸出與 refs 清單。tree 採「壓縮」版本（去 generic container、
+ *  flatten 單子節點、重複 sibling 去重）。raw 樹不對外輸出 — 噪聲太多且無益。 */
 export interface SnapshotResult {
   text: string
   refs: Map<string, RefEntry>
+  /** 供 tool-result JSON 直接使用的扁平 refs 陣列（按 e1, e2, ... 順序） */
+  refsList: RefEntry[]
   title: string
   url: string
   summary: SnapshotSummary
@@ -94,11 +98,42 @@ function shortName(s: string | undefined, max = 80): string {
 interface WalkContext {
   lines: string[]
   refs: Map<string, RefEntry>
+  refsList: RefEntry[]
   roleNameCounts: Map<string, number>
   refCounter: { n: number }
   interactiveCount: { n: number }
   formCount: { n: number }
   hasDialog: { v: boolean }
+}
+
+/** 壓縮階段會被 skip（不輸出也不佔 depth）的 role。這些純結構容器沒名字時
+ *  對 LLM 完全是噪聲。帶 name / 帶 ref 的仍然保留。 */
+const COMPRESS_SKIP_ROLES = new Set([
+  'generic',
+  'group',
+  'none',
+  'presentation',
+  'paragraph',
+  'LineBreak',
+  'InlineTextBox',
+  'staticText',
+  'StaticText',
+])
+
+/** 決定一個節點是否要在 tree 輸出產生自己的 line。有 ref、有 name、或
+ *  role 不在 skip list 內都算「有意義」。 */
+function isMeaningfulForTree(
+  role: string,
+  name: string,
+  hasRef: boolean,
+  hasExtras: boolean,
+): boolean {
+  if (hasRef) return true
+  if (COMPRESS_SKIP_ROLES.has(role)) {
+    // 即使是 generic/group，有 name 或有 state extras 時仍值得輸出
+    return Boolean(name) || hasExtras
+  }
+  return true
 }
 
 function walkNode(
@@ -109,18 +144,18 @@ function walkNode(
   if (!node) return
   const role = node.role ?? ''
   const name = shortName(node.name)
-  const indent = '  '.repeat(depth)
 
   const disabled = node.disabled === true
-  let label = ''
+  let refId: string | null = null
   if (INTERACTIVE_ROLES.has(role) && (name || node.value != null) && !disabled) {
     ctx.refCounter.n += 1
-    const id = `e${ctx.refCounter.n}`
+    refId = `e${ctx.refCounter.n}`
     const key = `${role}\0${name}`
     const nth = ctx.roleNameCounts.get(key) ?? 0
     ctx.roleNameCounts.set(key, nth + 1)
-    ctx.refs.set(id, { ref: id, role, name, nth })
-    label = `[ref=${id}]`
+    const entry: RefEntry = { ref: refId, role, name, nth }
+    ctx.refs.set(refId, entry)
+    ctx.refsList.push(entry)
     ctx.interactiveCount.n += 1
     if (FORM_ROLES.has(role)) ctx.formCount.n += 1
   }
@@ -136,10 +171,55 @@ function walkNode(
   if (node.pressed !== undefined) extras.push(`pressed=${node.pressed}`)
   if (disabled) extras.push('disabled')
 
-  const parts = [role, name ? `"${name}"` : '', ...extras, label].filter(Boolean)
-  if (parts.length > 0) ctx.lines.push(`${indent}- ${parts.join(' ')}`)
+  const meaningful = isMeaningfulForTree(role, name, refId !== null, extras.length > 0)
 
-  for (const c of node.children ?? []) walkNode(c, depth + 1, ctx)
+  let nextDepth = depth
+  if (meaningful) {
+    const label = refId ? `[ref=${refId}]` : ''
+    const indent = '  '.repeat(depth)
+    const parts = [role, name ? `"${name}"` : '', ...extras, label].filter(Boolean)
+    ctx.lines.push(`${indent}- ${parts.join(' ')}`)
+    nextDepth = depth + 1
+  }
+  // else: 這個節點不印，子節點沿用父 depth（flatten）
+
+  // 壓縮：連續相同 role+name 的 sibling 去重成 `× N`
+  const children = node.children ?? []
+  let i = 0
+  while (i < children.length) {
+    const c = children[i]
+    if (!c) {
+      i += 1
+      continue
+    }
+    const cRole = c.role ?? ''
+    const cName = shortName(c.name)
+    // 僅對「非 interactive 且無子樹差異」的重複 sibling 做去重 — 有 name 的
+    // interactive 元素彼此獨立（每個要獨立 ref），不能合併
+    const canDedupe =
+      !INTERACTIVE_ROLES.has(cRole) &&
+      (c.children === undefined || c.children.length === 0)
+    if (canDedupe) {
+      let count = 1
+      while (i + count < children.length) {
+        const n = children[i + count]
+        if (!n) break
+        if ((n.role ?? '') !== cRole) break
+        if (shortName(n.name) !== cName) break
+        if (n.children && n.children.length > 0) break
+        count += 1
+      }
+      if (count >= 3) {
+        const indent = '  '.repeat(nextDepth)
+        const display = [cRole, cName ? `"${cName}"` : ''].filter(Boolean).join(' ')
+        ctx.lines.push(`${indent}- ${display} × ${count}`)
+        i += count
+        continue
+      }
+    }
+    walkNode(c, nextDepth, ctx)
+    i += 1
+  }
 }
 
 /**
@@ -192,6 +272,7 @@ export async function takeSnapshot(page: Page): Promise<SnapshotResult> {
   const ctx: WalkContext = {
     lines: [],
     refs: new Map(),
+    refsList: [],
     roleNameCounts: new Map(),
     refCounter: { n: 0 },
     interactiveCount: { n: 0 },
@@ -229,6 +310,7 @@ export async function takeSnapshot(page: Page): Promise<SnapshotResult> {
   return {
     text: ctx.lines.join('\n'),
     refs: ctx.refs,
+    refsList: ctx.refsList,
     title,
     url: page.url(),
     summary: {

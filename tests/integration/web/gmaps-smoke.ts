@@ -33,7 +33,10 @@ type SnapResult = {
     has_dialog: boolean
     has_shadow: boolean
   }
-  tree: string
+  refs: { ref: string; role: string; name: string }[]
+  tree_preview: string
+  tree_truncated: boolean
+  tree_chars: number
 }
 
 async function main(): Promise<void> {
@@ -59,9 +62,12 @@ async function main(): Promise<void> {
     )
     if (snap.ref_count < 1) {
       console.error('[gmaps-smoke] FAIL: no refs from snapshot')
-      console.error(snap.tree.slice(0, 600))
+      console.error(snap.tree_preview.slice(0, 600))
       process.exit(1)
     }
+    console.log(
+      `  tree_chars=${snap.tree_chars} truncated=${snap.tree_truncated} preview_len=${snap.tree_preview.length}`,
+    )
 
     // 探測：列出非底層的 window 全域，確認能從中找到 Maps 相關結構
     const evalRes = (await evaluate(

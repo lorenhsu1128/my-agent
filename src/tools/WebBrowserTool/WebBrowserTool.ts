@@ -62,6 +62,12 @@ const inputSchema = lazySchema(() =>
     }),
     z.strictObject({
       action: z.literal('snapshot'),
+      full_tree: z
+        .boolean()
+        .default(false)
+        .describe(
+          'Default false: returns refs[] + tree_preview (first 2KB) + tree_truncated flag, keeping output small. Set true ONLY when you need the full compressed tree (e.g. an element you need is below the preview cutoff).',
+        ),
     }),
     z.strictObject({
       action: z.literal('click'),
@@ -182,7 +188,7 @@ async function dispatch(input: InputUnion): Promise<unknown> {
     case 'navigate':
       return navigate(input.url, input.wait_for)
     case 'snapshot':
-      return snapshot()
+      return snapshot(input.full_tree)
     case 'click':
       return click(input.ref, input.wait_for)
     case 'type':

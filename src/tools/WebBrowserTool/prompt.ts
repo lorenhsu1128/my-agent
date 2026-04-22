@@ -2,6 +2,32 @@ export const WEB_BROWSER_TOOL_NAME = 'WebBrowser'
 
 export const DESCRIPTION = `Drive a real headless Chromium browser. THIS IS THE CORRECT TOOL for fetching or interacting with any modern website that relies on JavaScript rendering.
 
+## HARD RULES — read first
+
+1. **Call WebBrowser DIRECTLY. DO NOT spawn Agent / Task / subagent to use this tool.** Using a subagent to call WebBrowser wastes a whole round-trip and context window. The current LLM turn has everything it needs — just invoke WebBrowser.
+2. **DO NOT Read the tool_result output file if one is created.** When a WebBrowser result is large enough to be saved to disk, the answer you need is ALREADY in the inline preview (refs[] + tree_preview). If you truly need the full tree, call \`snapshot\` again with \`full_tree: true\` instead of reading the raw file.
+3. **DO NOT call \`ToolSearch\` looking for WebBrowser** — it is a top-level tool, not a deferred tool. Its schema is already in your system prompt.
+
+## snapshot output shape (default)
+
+\`\`\`
+{
+  url, title, generation, ref_count,
+  summary: { interactive_count, form_count, has_dialog, has_shadow },
+  refs: [{ ref, role, name, nth? }, ...],   // ALL interactive elements, flat
+  tree_preview: "<compressed a11y tree, ~2 KB>",
+  tree_truncated: boolean,
+  tree_chars: <full tree length>
+}
+\`\`\`
+
+**Prefer \`refs[]\` over parsing \`tree_preview\`.** refs[] is the canonical list of everything you can click/type on. tree_preview is context for relative position only.
+
+Call \`snapshot\` with \`full_tree: true\` ONLY when:
+- The ref you need is not in refs[] AND you suspect it's hidden below the tree_preview cutoff
+- You need to inspect non-interactive structure (headings, images, landmarks) that refs[] doesn't expose
+
+
 ## When you MUST use WebBrowser (not Bash curl / not WebFetch)
 
 If the target is any of the following, WebBrowser is the ONLY tool that works:
@@ -31,7 +57,7 @@ Every mutating action returns a \`settle\` field reporting whether the page reac
 ## Actions
 
 - navigate(url, wait_for?)               Go to URL
-- snapshot()                             Accessibility tree + ref map + summary{interactive_count, form_count, has_dialog, has_shadow}
+- snapshot(full_tree?)                   refs[] + summary + tree_preview; full_tree=true for full compressed tree (rarely needed)
 - click(ref, wait_for?)                  Click @eN
 - type(ref, text, wait_for?)             Fill an input
 - scroll(direction, wait_for?)           "up" or "down", ~500px

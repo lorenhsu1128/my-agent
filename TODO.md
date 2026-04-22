@@ -1634,3 +1634,9 @@
 - 2026-04-22 21:33: Session 結束 | 進度：464/490 任務 | 1a30efa docs(CLAUDE): 加入黃金規則 10 — 跨 Windows/macOS 相容性要求
 
 - 2026-04-22 21:38: Session 結束 | 進度：464/490 任務 | 1a30efa docs(CLAUDE): 加入黃金規則 10 — 跨 Windows/macOS 相容性要求
+
+- 2026-04-22 21:59: Session 結束 | 進度：464/490 任務 | 881b23f test(webbrowser): 新增 waits / vision-locate 單測與 gmaps 冒煙；修正 JS API 勸導
+
+- 2026-04-22 22:09: Session 結束 | 進度：464/490 任務 | f30dcc1 docs(LESSONS): 記錄 daemon attached paste-ref 未展開的教訓
+
+- 2026-04-22 22:19: Session 結束 | 進度：464/490 任務 | f30dcc1 docs(LESSONS): 記錄 daemon attached paste-ref 未展開的教訓

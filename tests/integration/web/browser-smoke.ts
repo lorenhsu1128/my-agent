@@ -38,16 +38,25 @@ async function main() {
       title: string
       generation: number
       ref_count: number
-      tree: string
+      refs: { ref: string; role: string; name: string }[]
+      tree_preview: string
+      tree_truncated: boolean
+      tree_chars: number
     }
     console.log(
-      `  snapshot: generation=${snap.generation} refs=${snap.ref_count} tree_len=${snap.tree.length}`,
+      `  snapshot: gen=${snap.generation} refs=${snap.ref_count} tree_chars=${snap.tree_chars} truncated=${snap.tree_truncated} preview_len=${snap.tree_preview.length}`,
     )
-    if (snap.ref_count < 1) {
+    if (snap.ref_count < 1 || snap.refs.length < 1) {
       console.error('\n[smoke] FAIL: expected at least 1 ref in snapshot')
-      console.error('tree preview:', snap.tree.slice(0, 500))
+      console.error('tree preview:', snap.tree_preview.slice(0, 500))
       process.exit(1)
     }
+    console.log(
+      `  first 3 refs: ${snap.refs
+        .slice(0, 3)
+        .map(r => `${r.ref}/${r.role}/"${r.name.slice(0, 30)}"`)
+        .join(', ')}`,
+    )
 
     const scrollRes = await scroll('down')
     console.log(`  scroll: ${JSON.stringify(scrollRes)}`)

@@ -112,19 +112,43 @@ export async function navigate(
   }
 }
 
-export async function snapshot(): Promise<object> {
+/** 預設 tree_preview 大小上限（字元）。超過就截斷並設 tree_truncated=true。
+ *  2KB 對應一般 SPA 首屏 a11y 摘要剛好塞得下 ~40 行縮排樹，LLM 掃得完且
+ *  整個 tool result 不會被寫檔（WebBrowserTool maxResultSizeChars 150K）。 */
+const TREE_PREVIEW_CHARS = 2_000
+
+export async function snapshot(fullTree = false): Promise<object> {
   const s = await getSession()
   const snap = await takeSnapshot(s.page)
   s.refEntries = snap.refs
   s.snapshotGeneration = s.generation
-  return {
+  const fullText = redactSecrets(snap.text)
+  const truncated = fullText.length > TREE_PREVIEW_CHARS
+  const preview = truncated ? `${fullText.slice(0, TREE_PREVIEW_CHARS)}…` : fullText
+
+  const base = {
     url: snap.url,
     title: snap.title,
     generation: s.generation,
     ref_count: snap.refs.size,
     summary: snap.summary,
-    tree: redactSecrets(snap.text),
+    // 扁平 refs 清單：絕大多數情境 LLM 只需要這個就夠找元素
+    refs: snap.refsList.map(r => ({
+      ref: r.ref,
+      role: r.role,
+      name: r.name,
+      // nth 僅在 role+name 重複時需要；無重複時省略以減少 token
+      ...(r.nth > 0 ? { nth: r.nth } : {}),
+    })),
+    tree_preview: preview,
+    tree_truncated: truncated,
+    tree_chars: fullText.length,
   }
+  // full_tree=true 才附完整樹；否則 LLM 應靠 refs + tree_preview 作業
+  if (fullTree) {
+    return { ...base, tree: fullText }
+  }
+  return base
 }
 
 export async function click(
