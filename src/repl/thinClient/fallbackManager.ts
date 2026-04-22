@@ -461,9 +461,18 @@ export function createFallbackManager(
         scheduleReconnect()
       }
     })
+    // 提前指派 socket — frame handler 收到 hello 會同步觸發
+    // setMode('attached')，隨後的 'mode' listener（REPL 的 onModeChange）
+    // 會呼 sendPermissionContextSync / sendInput 等；這些 API 讀外層 socket，
+    // 若還是 null 會靜默丟棄。await s.connect() 解析順序和 ws.onmessage
+    // 的 microtask/task ordering 在 bundle 後不是 strict，所以 hello frame
+    // 可能早於 continuation 到達 → 必須在 await 前先指派。connect 失敗時
+    // 復原 socket = null，保留 cleanupSocket 語意。
+    socket = s
     try {
       await s.connect()
     } catch {
+      socket = null
       try {
         s.close()
       } catch {
@@ -471,7 +480,6 @@ export function createFallbackManager(
       }
       return false
     }
-    socket = s
     return true
   }
 
