@@ -13,8 +13,22 @@ import {
   runDaemonAutostart,
   type DaemonCliContext,
 } from './daemonCli.js'
+import {
+  seedLlamaCppConfigIfMissing,
+  loadLlamaCppConfigSnapshot,
+} from '../llamacppConfig/index.js'
+import {
+  seedDiscordConfigIfMissing,
+  loadDiscordConfigSnapshot,
+} from '../discordConfig/index.js'
 
 export async function daemonMain(args: string[]): Promise<void> {
+  // daemon fast-path 跳過 setup.ts，需要自行載入 config snapshot
+  await seedLlamaCppConfigIfMissing()
+  await loadLlamaCppConfigSnapshot()
+  await seedDiscordConfigIfMissing()
+  await loadDiscordConfigSnapshot()
+
   const sub = args[0]
   const ctx: DaemonCliContext = {
     agentVersion:
