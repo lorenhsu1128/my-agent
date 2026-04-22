@@ -73,11 +73,15 @@ Playbook, in order:
    - \`wait_for: { function: "<condition>" }\` on the next mutating action, to give the page time to render
    - Keyboard navigation: \`press("Tab")\` until focused, then \`press("Enter")\`
 
-3. **Prefer site JS APIs over UI clicks** when available. Many complex sites expose global objects that let you bypass the UI entirely:
-   - **Google Maps**: \`evaluate("map = document.querySelector('[role=region][aria-label*=Map]'); /* inspect */ ")\` to find the Map instance; or use the documented \`window.google.maps.*\` factories. Setting center/zoom via JS is far more reliable than clicking on the canvas.
-   - **Gmail / Workspace**: usually has internal message IDs in the DOM data-* attributes — faster than clicking.
-   - **Next.js / React apps**: check \`window.__NEXT_DATA__\` or \`window.__APP_STATE__\` for server-serialised state before clicking through pagination.
-   - Discover by running: \`evaluate("Object.keys(window).filter(k => !k.startsWith('_') && typeof window[k]==='object').slice(0,40)")\`
+3. **Prefer site JS APIs over UI clicks** when available. Many complex sites expose global objects that let you bypass the UI entirely. **Always discover first, do not guess globals** — what a site exposes varies between pages and versions:
+   \`\`\`
+   evaluate("JSON.stringify(Object.keys(window).filter(k => !k.startsWith('_') && typeof window[k]==='object' && window[k]!==null).slice(0,40))")
+   \`\`\`
+   Then inspect promising keys (e.g. \`APP_OPTIONS\`, \`APP_INITIALIZATION_STATE\`, \`__NEXT_DATA__\`, \`__APP_STATE__\`, \`WIZ_global_data\`, \`pageProps\`). These often contain routing state, IDs, and initial data that let you skip entire UI flows.
+   - **google.com/maps** specifically: no \`window.google.maps\` on the maps.google.com page itself (that global exists only on third-party sites embedding the Maps JS API). Inspect \`window.APP_INITIALIZATION_STATE\` instead.
+   - **Gmail / Workspace**: message IDs live in DOM \`data-message-id\` / \`data-legacy-thread-id\` attributes.
+   - **Next.js / Nuxt**: \`window.__NEXT_DATA__\` / \`window.__NUXT__\` has the full initial prop tree.
+   - Note: some SPAs re-initialise globals during navigation — if a value disappears, re-snapshot or re-evaluate rather than caching.
 
 4. **Cookie / consent overlays**. The first snapshot after navigate often shows \`has_dialog: true\`. Dismiss the dialog BEFORE attempting the real task — its z-index will intercept your clicks.
 
