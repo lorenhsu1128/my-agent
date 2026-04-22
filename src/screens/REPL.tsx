@@ -3175,6 +3175,11 @@ export function REPL({
     // M-DAEMON-6c：attached 模式 — 把 input 送到 daemon 跑，local query 路徑跳過。
     // Slash command 和 speculation 仍走本地（daemon 暫不支援 slash）。
     // Daemon 回覆會透過 useDaemonMode 的 onFrame 塞進 messages。
+    //
+    // 展開 [Pasted text #N] 引用：daemon 端看不到 pastedContents 映射，
+    // 必須在此 client 端先把 placeholder 換成原文，否則 daemon 的 LLM
+    // 只會收到 "[Pasted text #1 +3 lines]" 字串而非實際貼上內容。
+    // 對齊 line 3208 的 slash command 路徑與 handlePromptSubmit:216 的展開時機。
     {
       const mgr = getCurrentDaemonManager();
       if (
@@ -3184,8 +3189,9 @@ export function REPL({
         !input.trim().startsWith('/')
       ) {
         try {
-          mgr.sendInput(input, 'interactive');
-          setMessages(prev => [...prev, createUserMessage({ content: input })]);
+          const expandedInput = expandPastedTextRefs(input, pastedContents);
+          mgr.sendInput(expandedInput, 'interactive');
+          setMessages(prev => [...prev, createUserMessage({ content: expandedInput })]);
           // 清掉輸入 + cursor。
           helpers.setCursorOffset(0);
           helpers.clearBuffer();
