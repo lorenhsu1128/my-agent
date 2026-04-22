@@ -426,6 +426,16 @@ Send SIGINT (Ctrl+C) or run \`my-agent daemon stop\` to shut down.
 
     if (opts.blockUntilStopped !== false) {
       await handle.stopped
+      // SIGTERM 觸發 daemonMain 的原始 stop()（閉包），不會走 wrapped stop，
+      // 所以 disposeRegistry 不會被呼叫。在此補清理 + 強制退出。
+      if (disposeRegistry) {
+        try {
+          await disposeRegistry()
+        } catch {
+          // 盡力清理
+        }
+      }
+      process.exit(0)
     }
     return handle
   } catch (e) {
@@ -483,29 +493,14 @@ export async function runDaemonStop(
   const pollMs = opts.pollIntervalMs ?? DEFAULT_STOP_POLL_INTERVAL_MS
 
   out(`stopping daemon pid=${pid}...\n`)
-  try {
-    process.kill(pid, 'SIGTERM')
-  } catch (e) {
-    out(`SIGTERM failed: ${String(e)}\n`)
-    return { found: true, stopped: false, forced: false, pid }
-  }
 
-  const deadline = Date.now() + gracefulMs
-  while (Date.now() < deadline) {
-    const cur = await readPidFile(ctx.baseDir)
-    if (!cur) {
-      out(`daemon pid=${pid} stopped gracefully\n`)
-      return { found: true, stopped: true, forced: false, pid }
-    }
-    await new Promise(r => setTimeout(r, pollMs))
-  }
-
-  // SIGKILL fallback
-  out(`graceful stop timeout (${gracefulMs}ms), sending SIGKILL\n`)
+  // Bun 編譯 binary 的 SIGTERM signal handler 不可靠（macOS 實測不觸發），
+  // 直接 SIGKILL 確保 daemon 停止，再由此端清理 pid.json。
   try {
     process.kill(pid, 'SIGKILL')
-  } catch {
-    // 可能已經在 TERM 後自己退了，race
+  } catch (e) {
+    out(`SIGKILL failed: ${String(e)}\n`)
+    return { found: true, stopped: false, forced: false, pid }
   }
   // 再等一小段清理
   await new Promise(r => setTimeout(r, pollMs * 3))

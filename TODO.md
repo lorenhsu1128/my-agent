@@ -1456,3 +1456,25 @@
 - 2026-04-22 11:54: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
 
 - 2026-04-22 12:02: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 13:18: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 13:43: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 13:45: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 13:47: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 13:51: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 13:58: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 14:05: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 14:07: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 14:12: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 14:21: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 14:31: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
