@@ -1,10 +1,4 @@
-// Default export includes everything (backward compatibility)
-export * from "./cli/init.js";
-export * from "./cli/pack.js";
-export * from "./cli/unpack.js";
-export * from "./node/files.js";
-export * from "./node/sign.js";
-export * from "./node/validate.js";
+// Default export — cli/ 子目錄未 vendor（專案僅用 type import）
 export * from "./schemas/index.js";
 export * from "./shared/common.js";
 export * from "./shared/config.js";

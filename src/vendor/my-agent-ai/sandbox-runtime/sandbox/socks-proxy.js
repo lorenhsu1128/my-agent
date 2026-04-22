@@ -1,4 +1,5 @@
-import { createServer } from '@pondwader/socks5-server';
+// @pondwader/socks5-server 未安裝；sandbox 功能本專案不使用，stub 掉避免 runtime resolve 失敗
+const createServer = () => { throw new Error('socks5-server not available') };
 import { logForDebugging } from '../utils/debug.js';
 import { connectViaParentProxy, dialDirect, isValidHost, selectParentProxyUrl, shouldBypassParentProxy, } from './parent-proxy.js';
 export function createSocksProxyServer(options) {
