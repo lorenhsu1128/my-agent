@@ -20,3 +20,12 @@ export {
   type ReconcileStats,
 } from './reconciler.js'
 export { SCHEMA_VERSION } from './schema.js'
+export {
+  deleteSession,
+  deleteSessionWithDb,
+  listSessions,
+  listSessionsWithDb,
+  type DeleteSessionResult,
+  type ListSessionsOptions,
+  type SessionSummary,
+} from './delete.js'

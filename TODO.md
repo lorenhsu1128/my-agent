@@ -541,6 +541,50 @@
 
 ---
 
+## 當前里程碑：M-DELETE — Session / Memory / Trash slash commands（2026-04-22 啟動）
+
+**目標**：新增三個互動式 REPL slash commands 讓使用者選取並刪除 session 內容與 memory 條目，採軟刪除（`.trash/`），附還原機制。詳細規劃見 `docs/plan-session-memory-delete.md`。
+
+**架構決策**（2026-04-22 與使用者逐題對齊）：
+- ADR-MD-01：軟刪除 — 檔案搬到 `<projectDir>/.trash/`，DB 紀錄（FTS 索引、sessions 表）直接硬刪；restore 時檔案搬回 + 跑 reconciler 重建索引
+- ADR-MD-02：Memory 範圍 = auto-memory 個別條目 + MY-AGENT.md（非 CLAUDE.md — my-agent 實際讀前者）+ `./.my-agent/*.md` + Kairos daily logs；memory picker 雙鍵 `d` 刪除 / `e` 編輯（spawn `$EDITOR`）
+- ADR-MD-03：Session 當前進行中的 session 禁止刪除，picker 顯示 `[current]` 標籤且 disabled
+- ADR-MD-04：`/trash` 一個 picker 涵蓋 list + restore + empty + prune（跟 `/tools` 同風格）
+- ADR-MD-05：Live filter（按 `/` 進入）+ 時間快捷鍵（`1`=今天 `2`=本週 `3`=本月 `a`=全部）
+- ADR-MD-06：**Discord source 禁止觸發**三個 command；在 `src/discord/slashCommands.ts` router 層攔截並回覆「此操作僅限 REPL」
+
+### 任務
+
+#### 階段一：共用基礎層
+- [x] M-DELETE-1 `src/utils/trash/index.ts`：`moveToTrash` / `restoreFromTrash` / `listTrash` / `emptyTrash` / `pruneTrash` / `purgeTrashEntry` / `totalTrashSize` + 34 case smoke
+- [x] M-DELETE-2 `src/services/sessionIndex/delete.ts`：`deleteSessionWithDb`（transaction 刪 sessions + messages_fts + messages_seen；FTS5 用 SELECT COUNT 預量測因 changes() unreliable）+ `listSessionsWithDb(range/keyword/limit/offset)` + 22 case smoke
+- [x] M-DELETE-3 `src/utils/trash/sessionOps.ts`：`trashSession` 整合 moveToTrash + deleteSession；`restoreSessionEntries` batch；呼叫端需跑 reconcileProjectIndex 重建 FTS
+
+#### 階段二：MemoryTool 重構
+- [ ] M-DELETE-4 `src/tools/MemoryTool/MemoryTool.ts` 抽 `remove` 內部實作為可重用 pure function `removeMemoryEntry(slug, filename)`，供 `/memory-delete` 直接呼叫
+- [ ] M-DELETE-5 auto-memory reader：列 `MEMORY.md` + 各 `.md` frontmatter（name/type/description），輸出給 picker；同時支援 MY-AGENT.md / `./.my-agent/*.md` / daily logs 列舉
+
+#### 階段三：Slash Commands
+- [ ] M-DELETE-6 `src/commands/session-delete/{index.ts,SessionDeletePicker.tsx}`：仿 ToolsPicker；live filter + 時間範圍快捷鍵；`[current]` disabled；兩段式確認
+- [ ] M-DELETE-7 `src/commands/memory-delete/{index.ts,MemoryDeletePicker.tsx}`：多類型混合列表；`d` 刪除 / `e` spawn `$EDITOR`
+- [ ] M-DELETE-8 `src/commands/trash/{index.ts,TrashPicker.tsx}`：list/restore/empty/prune 整合
+- [ ] M-DELETE-9 三個 command 註冊到 `src/commands.ts`
+
+#### 階段四：Discord 黑名單 + 驗收
+- [ ] M-DELETE-10 `src/discord/slashCommands.ts` 攔截 `/session-delete` / `/memory-delete` / `/trash`，回覆「此操作僅限 REPL 內執行」
+- [ ] M-DELETE-11 整合測試：`tests/integration/delete/` — trash 共用層、session delete+restore、memory delete+edit、Discord 黑名單
+- [ ] M-DELETE-12 `bun run typecheck` 綠 + `./cli` 冒煙 + 手動 E2E（刪 session 後 `/session-search` 找不到；restore 後找回）
+- [ ] M-DELETE-13 docs：`docs/session-and-memory-management.md` 使用者指南
+
+### 完成標準
+- [ ] `bun run typecheck` 綠
+- [ ] 三個 command 在 REPL 可用且互動順暢
+- [ ] 軟刪 + restore 往返完整（session FTS 索引正確重建）
+- [ ] Discord 來源拒絕觸發（slash command 明確回拒）
+- [ ] `./cli -p "hi"` 冒煙不壞
+
+---
+
 ## 已完成里程碑：M-TOOLS-PICKER — REPL 即時 tool 開關（2026-04-21 完成）
 
 **目標**：讓使用者在 REPL 用 `/tools` 開一個多選 picker 即時關閉 / 啟用工具，避免弱模型（qwen 9B）亂選 tool（例如硬用 curl 查 Google Maps）、或使用者想暫時關掉某些 tool。詳細規劃見 `docs/tools-picker.md`。
@@ -1485,3 +1529,21 @@
 - 2026-04-21 22:07: Session 結束 | 進度：428/448 任務 | 4f0fbc1 prompt(WebBrowser): aggressive anti-curl language for weak tool-routers
 
 - 2026-04-21 22:25: Session 結束 | 進度：428/466 任務 | cc2d8d3 feat(tools): /tools picker for runtime enable/disable (M-TOOLS-PICKER)
+
+- 2026-04-21 22:46: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
+
+- 2026-04-22 09:40: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
+
+- 2026-04-22 10:16: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
+
+- 2026-04-22 10:29: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
+
+- 2026-04-22 10:32: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
+
+- 2026-04-22 10:36: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
+
+- 2026-04-22 10:39: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
+
+- 2026-04-22 10:42: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
+
+- 2026-04-22 10:44: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
