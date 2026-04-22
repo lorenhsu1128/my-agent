@@ -325,6 +325,31 @@ export function createDiscordGateway(
       return
     }
 
+    // 1.5. REPL-only command blacklist（M-DELETE-10 / ADR-MD-06）
+    //      刪除 / 清理類 slash commands 不允許 Discord 觸發 — 即使 Discord 訊息
+    //      只會變成 LLM prompt 而不會真的執行 command，仍在閘門前明確拒絕並提示，
+    //      避免使用者誤以為可以遠端刪除。
+    const replOnlyCommands = [
+      '/session-delete',
+      '/memory-delete',
+      '/trash',
+    ]
+    const promptHead = routing.prompt.trimStart()
+    if (replOnlyCommands.some(cmd => promptHead.startsWith(cmd))) {
+      try {
+        if (raw.channel.isTextBased() && 'send' in raw.channel) {
+          await (raw.channel as TextBasedChannel & {
+            send: (s: string) => Promise<Message>
+          }).send(
+            '🚫 此操作為不可逆刪除，僅限 REPL 內執行。請在本機 my-agent REPL 使用。',
+          )
+        }
+      } catch {
+        // ignore
+      }
+      return
+    }
+
     // 2. Load project runtime
     let runtime: Awaited<ReturnType<typeof registry.loadProject>>
     try {

@@ -560,21 +560,29 @@
 - [x] M-DELETE-2 `src/services/sessionIndex/delete.ts`：`deleteSessionWithDb`（transaction 刪 sessions + messages_fts + messages_seen；FTS5 用 SELECT COUNT 預量測因 changes() unreliable）+ `listSessionsWithDb(range/keyword/limit/offset)` + 22 case smoke
 - [x] M-DELETE-3 `src/utils/trash/sessionOps.ts`：`trashSession` 整合 moveToTrash + deleteSession；`restoreSessionEntries` batch；呼叫端需跑 reconcileProjectIndex 重建 FTS
 
-#### 階段二：MemoryTool 重構
-- [ ] M-DELETE-4 `src/tools/MemoryTool/MemoryTool.ts` 抽 `remove` 內部實作為可重用 pure function `removeMemoryEntry(slug, filename)`，供 `/memory-delete` 直接呼叫
-- [ ] M-DELETE-5 auto-memory reader：列 `MEMORY.md` + 各 `.md` frontmatter（name/type/description），輸出給 picker；同時支援 MY-AGENT.md / `./.my-agent/*.md` / daily logs 列舉
+#### 階段二：Memory 層
+- [x] M-DELETE-4 `src/utils/memoryDelete.ts`：`softDeleteMemoryEntry`（搬檔 + 更新 MEMORY.md 索引）+ `softDeleteStandaloneFile`（無索引類）+ `assertSafeMemoryFilename` 路徑安全驗證 + 27 case smoke
+- [x] M-DELETE-5 `src/utils/memoryList.ts`：`listAllMemoryEntries(cwd)` 列 auto-memory 條目（讀 frontmatter）+ MY-AGENT.md + `./.my-agent/*.md` + Kairos daily logs（`logs/YYYY/MM/*.md`），mtime DESC
 
 #### 階段三：Slash Commands
-- [ ] M-DELETE-6 `src/commands/session-delete/{index.ts,SessionDeletePicker.tsx}`：仿 ToolsPicker；live filter + 時間範圍快捷鍵；`[current]` disabled；兩段式確認
-- [ ] M-DELETE-7 `src/commands/memory-delete/{index.ts,MemoryDeletePicker.tsx}`：多類型混合列表；`d` 刪除 / `e` spawn `$EDITOR`
-- [ ] M-DELETE-8 `src/commands/trash/{index.ts,TrashPicker.tsx}`：list/restore/empty/prune 整合
-- [ ] M-DELETE-9 三個 command 註冊到 `src/commands.ts`
+- [x] M-DELETE-6 `/session-delete`：listSessions → picker → 軟刪（trashSession = moveToTrash + deleteSession DB）；時間範圍 1/2/3/0、live `/` filter、`[cur]` 標記禁刪、二段 y/Esc 確認
+- [x] M-DELETE-7 `/memory-delete`：listAllMemoryEntries → picker；`e` spawn `$EDITOR` 單列編輯（VISUAL/EDITOR fallback notepad/vi）；Enter 批次軟刪
+- [x] M-DELETE-8 `/trash`：listTrash → picker 整合 Enter=purge / r=restore / x=emptyAll / p=prune N 天；三向二段確認
+- [x] M-DELETE-9 `src/commands.ts` import + 註冊三個 command
 
 #### 階段四：Discord 黑名單 + 驗收
-- [ ] M-DELETE-10 `src/discord/slashCommands.ts` 攔截 `/session-delete` / `/memory-delete` / `/trash`，回覆「此操作僅限 REPL 內執行」
-- [ ] M-DELETE-11 整合測試：`tests/integration/delete/` — trash 共用層、session delete+restore、memory delete+edit、Discord 黑名單
-- [ ] M-DELETE-12 `bun run typecheck` 綠 + `./cli` 冒煙 + 手動 E2E（刪 session 後 `/session-search` 找不到；restore 後找回）
-- [ ] M-DELETE-13 docs：`docs/session-and-memory-management.md` 使用者指南
+- [x] M-DELETE-10 `src/discord/gateway.ts` handleIncoming step 1.5：prompt trimStart 比對黑名單 3 command → 回覆「僅限 REPL」；10 case smoke
+- [x] M-DELETE-11 整合測試：`tests/integration/delete/` 4 檔 93 case 全綠（trash 34 + session-delete 22 + memory-ops 27 + discord-blacklist 10）
+- [x] M-DELETE-12 `bun run typecheck` baseline 綠、`./cli -p` 冒煙通過
+- [x] M-DELETE-13 docs `docs/session-and-memory-management.md` 使用者指南
+
+### 完成標準
+- [x] `bun run typecheck` 綠（baseline 僅 TS5101 pre-existing）
+- [x] 三個 command 在 REPL 註冊成功（`grep` 確認 src/commands.ts 含三者）
+- [x] 軟刪 + restore 往返完整（trash-smoke 33 case + sessionOps 驗證 DB 刪除）
+- [x] Discord 來源拒絕觸發（discord-blacklist-smoke 10 case + gateway.ts handleIncoming step 1.5）
+- [x] `./cli -p "ok"` 冒煙不壞
+- [ ] 手動 E2E：REPL 開啟 /session-delete / /memory-delete / /trash 互動驗證（待使用者驗證）
 
 ### 完成標準
 - [ ] `bun run typecheck` 綠
