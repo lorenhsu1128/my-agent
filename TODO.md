@@ -1628,3 +1628,9 @@
 
 
 - 2026-04-22 21:14: Session 結束 | 進度：464/490 任務 | 6ebdff4 Merge branch 'macos_debug' into main
+
+- 2026-04-22 21:28: Session 結束 | 進度：464/490 任務 | 1a30efa docs(CLAUDE): 加入黃金規則 10 — 跨 Windows/macOS 相容性要求
+
+- 2026-04-22 21:33: Session 結束 | 進度：464/490 任務 | 1a30efa docs(CLAUDE): 加入黃金規則 10 — 跨 Windows/macOS 相容性要求
+
+- 2026-04-22 21:38: Session 結束 | 進度：464/490 任務 | 1a30efa docs(CLAUDE): 加入黃金規則 10 — 跨 Windows/macOS 相容性要求

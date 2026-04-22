@@ -9,10 +9,13 @@ import { getRuleByContentsForTool } from '../../utils/permissions/permissions.js
 import {
   back,
   click,
+  clickAt,
   closeBrowser,
   consoleLogs,
   evaluate,
   getImages,
+  mouseDrag,
+  mouseMove,
   navigate,
   press,
   screenshot,
@@ -20,14 +23,42 @@ import {
   snapshot,
   type_,
   vision,
+  wheel,
 } from './actions.js'
 import { DESCRIPTION, WEB_BROWSER_TOOL_NAME } from './prompt.js'
+
+// 共用 wait_for 子結構 — 所有會改變頁面狀態的 action 都可選傳
+const waitForSchema = z
+  .strictObject({
+    selector: z
+      .string()
+      .optional()
+      .describe('CSS selector to wait for before returning'),
+    state: z
+      .enum(['visible', 'hidden', 'attached'])
+      .optional()
+      .describe('Selector state to wait for (default: visible)'),
+    function: z
+      .string()
+      .optional()
+      .describe('JS expression; wait until it evaluates truthy in the page'),
+    url_matches: z
+      .string()
+      .optional()
+      .describe('Regex; wait until window.location.href matches this pattern'),
+    timeout_ms: z.number().int().positive().optional(),
+  })
+  .optional()
+  .describe(
+    'Optional explicit wait condition applied after the implicit settle. Use for SPA route changes, lazy-loaded content, or waiting for a specific element to appear/disappear.',
+  )
 
 const inputSchema = lazySchema(() =>
   z.discriminatedUnion('action', [
     z.strictObject({
       action: z.literal('navigate'),
       url: z.string().url().describe('URL to navigate to'),
+      wait_for: waitForSchema,
     }),
     z.strictObject({
       action: z.literal('snapshot'),
@@ -35,22 +66,27 @@ const inputSchema = lazySchema(() =>
     z.strictObject({
       action: z.literal('click'),
       ref: z.string().describe('Element ref from the latest snapshot, e.g. "@e5"'),
+      wait_for: waitForSchema,
     }),
     z.strictObject({
       action: z.literal('type'),
       ref: z.string(),
       text: z.string().describe('Text to fill into the input'),
+      wait_for: waitForSchema,
     }),
     z.strictObject({
       action: z.literal('scroll'),
       direction: z.enum(['up', 'down']),
+      wait_for: waitForSchema,
     }),
     z.strictObject({
       action: z.literal('back'),
+      wait_for: waitForSchema,
     }),
     z.strictObject({
       action: z.literal('press'),
       key: z.string().describe('Key to press, e.g. "Enter", "Tab"'),
+      wait_for: waitForSchema,
     }),
     z.strictObject({
       action: z.literal('console'),
@@ -72,9 +108,46 @@ const inputSchema = lazySchema(() =>
       question: z
         .string()
         .describe('Question about the current page for the vision model'),
+      return_coordinates: z
+        .boolean()
+        .default(false)
+        .describe(
+          'When true, vision model is asked to return { x, y } target coordinates (viewport pixels) suitable for click_at. Requires a vision client that implements locate().',
+        ),
     }),
     z.strictObject({
       action: z.literal('get_images'),
+    }),
+    // ---- 座標動作（canvas / map / vision-first） ----
+    z.strictObject({
+      action: z.literal('click_at'),
+      x: z.number().describe('Viewport X in CSS pixels'),
+      y: z.number().describe('Viewport Y in CSS pixels'),
+      button: z.enum(['left', 'right', 'middle']).default('left'),
+      click_count: z.number().int().min(1).max(3).default(1),
+      wait_for: waitForSchema,
+    }),
+    z.strictObject({
+      action: z.literal('mouse_move'),
+      x: z.number(),
+      y: z.number(),
+    }),
+    z.strictObject({
+      action: z.literal('mouse_drag'),
+      from_x: z.number(),
+      from_y: z.number(),
+      to_x: z.number(),
+      to_y: z.number(),
+      steps: z.number().int().min(2).max(100).default(10),
+      wait_for: waitForSchema,
+    }),
+    z.strictObject({
+      action: z.literal('wheel'),
+      x: z.number(),
+      y: z.number(),
+      delta_x: z.number().default(0),
+      delta_y: z.number().default(0),
+      wait_for: waitForSchema,
     }),
   ]),
 )
@@ -107,19 +180,19 @@ function ruleContent(input: unknown): string {
 async function dispatch(input: InputUnion): Promise<unknown> {
   switch (input.action) {
     case 'navigate':
-      return navigate(input.url)
+      return navigate(input.url, input.wait_for)
     case 'snapshot':
       return snapshot()
     case 'click':
-      return click(input.ref)
+      return click(input.ref, input.wait_for)
     case 'type':
-      return type_(input.ref, input.text)
+      return type_(input.ref, input.text, input.wait_for)
     case 'scroll':
-      return scroll(input.direction)
+      return scroll(input.direction, input.wait_for)
     case 'back':
-      return back()
+      return back(input.wait_for)
     case 'press':
-      return press(input.key)
+      return press(input.key, input.wait_for)
     case 'console':
       return consoleLogs(input.clear)
     case 'evaluate':
@@ -129,9 +202,30 @@ async function dispatch(input: InputUnion): Promise<unknown> {
     case 'screenshot':
       return screenshot(input.full_page)
     case 'vision':
-      return vision(input.question)
+      return vision(input.question, input.return_coordinates)
     case 'get_images':
       return getImages()
+    case 'click_at':
+      return clickAt(
+        input.x,
+        input.y,
+        input.button,
+        input.click_count,
+        input.wait_for,
+      )
+    case 'mouse_move':
+      return mouseMove(input.x, input.y)
+    case 'mouse_drag':
+      return mouseDrag(
+        input.from_x,
+        input.from_y,
+        input.to_x,
+        input.to_y,
+        input.steps,
+        input.wait_for,
+      )
+    case 'wheel':
+      return wheel(input.x, input.y, input.delta_x, input.delta_y, input.wait_for)
   }
 }
 
@@ -170,7 +264,8 @@ export const WebBrowserTool = buildTool({
       action === 'console' ||
       action === 'screenshot' ||
       action === 'vision' ||
-      action === 'get_images'
+      action === 'get_images' ||
+      action === 'mouse_move'
     )
   },
   async checkPermissions(input, context): Promise<PermissionDecision> {
