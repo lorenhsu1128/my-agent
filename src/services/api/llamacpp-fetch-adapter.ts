@@ -786,6 +786,14 @@ export interface LlamaCppConfig {
   vision?: boolean
 }
 
+/**
+ * Daemon 多 project 模式：切換 project 時設為 true，adapter 會在下次
+ * request 加 cache_prompt:false 強制 llama.cpp 不復用 KV cache。
+ * 送出後自動 reset 為 false。
+ */
+let skipPromptCacheOnce = false
+export function setSkipPromptCacheOnce(): void { skipPromptCacheOnce = true }
+
 export function createLlamaCppFetch(
   config: LlamaCppConfig,
 ): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
@@ -843,7 +851,11 @@ export function createLlamaCppFetch(
           'Content-Type': 'application/json',
           Accept: openaiBody.stream ? 'text/event-stream' : 'application/json',
         },
-        body: JSON.stringify(openaiBody),
+        body: JSON.stringify(
+          skipPromptCacheOnce
+            ? (() => { skipPromptCacheOnce = false; return { ...openaiBody, cache_prompt: false } })()
+            : openaiBody,
+        ),
       })
     } catch (err) {
       // 連線層失敗（server 沒跑、DNS 錯、網路斷）— 回一個 Anthropic shape

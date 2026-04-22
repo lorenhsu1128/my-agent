@@ -148,9 +148,19 @@ export async function runDaemonStart(
       // runtime；成功 → setClientProjectId；失敗 → 送 attachRejected + 在此 set
       // 記錄不派訊息。此 map 記錄所有被拒的 clientId。
       const rejectedClients = new Set<string>()
+      // M-CWD-FIX：loadProject 異步期間暫存 client，避免 input 被 fallback 到 defaultRuntime。
+      const pendingClients = new Map<string, string>()
       onMessage = (c, m): void => {
         if (rejectedClients.has(c.id)) {
           // 被拒的 client 送 input 一律忽略；REPL 已 fallback standalone，不該還在送。
+          return
+        }
+        if (pendingClients.has(c.id)) {
+          // Project 正在載入中，通知 REPL 不要送 input。
+          handle.server!.send(c.id, {
+            type: 'projectLoading',
+            cwd: pendingClients.get(c.id),
+          })
           return
         }
         // M-DISCORD-AUTOBIND：/discord-bind RPC dispatch — 不屬於任何 project runtime。
@@ -253,39 +263,56 @@ export async function runDaemonStart(
         })
       }
       onConnect = (c): void => {
-        // M-DISCORD-2：解析 client 的 cwd → projectId。
-        //   - c.cwd 給了：registry.getProjectByCwd；有 → attach，無 → attachRejected
+        // 解析 client 的 cwd → projectId。
+        //   - c.cwd 給了：registry 查找；有 → attach，無 → auto-load 再 attach
         //   - c.cwd 沒給：fallback 到 default runtime（backward compat）
-        let runtime: typeof defaultRuntime | null = null
+        const attachRuntime = (runtime: typeof defaultRuntime): void => {
+          handle.server!.registry.setClientProjectId(c.id, runtime.projectId)
+          if (c.source === 'repl') runtime.attachRepl(c.id)
+          runtime.touch()
+          sendHelloFrame(runtime.broker, handle.server!, c.id)
+        }
         if (c.cwd) {
           const found = registry.getProjectByCwd(c.cwd)
-          if (!found) {
-            // Reject: daemon 沒 load 這個 project。傳 attachRejected + 鎖 message。
-            rejectedClients.add(c.id)
-            handle.server!.send(c.id, {
-              type: 'attachRejected',
-              reason: 'projectNotLoaded',
-              cwd: c.cwd,
-              hint: `project at ${c.cwd} is not loaded in this daemon (started from ${baseCwd}). Run \`my-agent daemon load ${c.cwd}\` (TBD) or launch a new daemon in that cwd.`,
-            })
-            void handle.logger.info('client attach rejected: project not loaded', {
-              clientId: c.id,
-              cwd: c.cwd,
-            })
+          if (found) {
+            attachRuntime(found)
             return
           }
-          runtime = found
-          handle.server!.registry.setClientProjectId(c.id, runtime.projectId)
+          // Project 未載入 → lazy-load（與 Discord 路徑一致）
+          // M-CWD-FIX：標記 pending 防止 loadProject 期間 input 被 fallback 到 defaultRuntime。
+          pendingClients.set(c.id, c.cwd)
+          void handle.logger.info('auto-loading project for REPL client', {
+            clientId: c.id,
+            cwd: c.cwd,
+          })
+          registry.loadProject(c.cwd).then(
+            (loaded) => {
+              pendingClients.delete(c.id)
+              attachRuntime(loaded)
+            },
+            (err) => {
+              pendingClients.delete(c.id)
+              rejectedClients.add(c.id)
+              handle.server!.send(c.id, {
+                type: 'attachRejected',
+                reason: 'projectLoadFailed',
+                cwd: c.cwd,
+                hint: `failed to load project at ${c.cwd}: ${err instanceof Error ? err.message : String(err)}`,
+              })
+              void handle.logger.warn('auto-load project failed', {
+                clientId: c.id,
+                cwd: c.cwd,
+                err: err instanceof Error ? err.message : String(err),
+              })
+            },
+          )
         } else {
-          runtime = defaultRuntime
-          handle.server!.registry.setClientProjectId(c.id, runtime.projectId)
+          attachRuntime(defaultRuntime)
         }
-        if (c.source === 'repl') runtime.attachRepl(c.id)
-        runtime.touch()
-        sendHelloFrame(runtime.broker, handle.server!, c.id)
       }
       onDisconnect = (c): void => {
         rejectedClients.delete(c.id)
+        pendingClients.delete(c.id)
         if (c.projectId && c.source === 'repl') {
           const runtime = registry.getProject(c.projectId)
           runtime?.detachRepl(c.id)
@@ -414,6 +441,16 @@ Send SIGINT (Ctrl+C) or run \`my-agent daemon stop\` to shut down.
 
     if (opts.blockUntilStopped !== false) {
       await handle.stopped
+      // SIGTERM 觸發 daemonMain 的原始 stop()（閉包），不會走 wrapped stop，
+      // 所以 disposeRegistry 不會被呼叫。在此補清理 + 強制退出。
+      if (disposeRegistry) {
+        try {
+          await disposeRegistry()
+        } catch {
+          // 盡力清理
+        }
+      }
+      process.exit(0)
     }
     return handle
   } catch (e) {
@@ -471,29 +508,14 @@ export async function runDaemonStop(
   const pollMs = opts.pollIntervalMs ?? DEFAULT_STOP_POLL_INTERVAL_MS
 
   out(`stopping daemon pid=${pid}...\n`)
-  try {
-    process.kill(pid, 'SIGTERM')
-  } catch (e) {
-    out(`SIGTERM failed: ${String(e)}\n`)
-    return { found: true, stopped: false, forced: false, pid }
-  }
 
-  const deadline = Date.now() + gracefulMs
-  while (Date.now() < deadline) {
-    const cur = await readPidFile(ctx.baseDir)
-    if (!cur) {
-      out(`daemon pid=${pid} stopped gracefully\n`)
-      return { found: true, stopped: true, forced: false, pid }
-    }
-    await new Promise(r => setTimeout(r, pollMs))
-  }
-
-  // SIGKILL fallback
-  out(`graceful stop timeout (${gracefulMs}ms), sending SIGKILL\n`)
+  // Bun 編譯 binary 的 SIGTERM signal handler 不可靠（macOS 實測不觸發），
+  // 直接 SIGKILL 確保 daemon 停止，再由此端清理 pid.json。
   try {
     process.kill(pid, 'SIGKILL')
-  } catch {
-    // 可能已經在 TERM 後自己退了，race
+  } catch (e) {
+    out(`SIGKILL failed: ${String(e)}\n`)
+    return { found: true, stopped: false, forced: false, pid }
   }
   // 再等一小段清理
   await new Promise(r => setTimeout(r, pollMs * 3))

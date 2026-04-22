@@ -82,6 +82,7 @@ describe('createSessionBroker — queue events → broadcast', () => {
       context: emptyContext,
       runner: echoRunner,
       sessionHandle: handle,
+      projectId: 'test-project',
     })
     const client: ClientInfo = {
       id: 'c1',
@@ -106,6 +107,7 @@ describe('createSessionBroker — queue events → broadcast', () => {
       context: emptyContext,
       runner: echoRunner,
       sessionHandle: handle,
+      projectId: 'test-project',
     })
     const errors: string[] = []
     handleClientMessage(
@@ -125,6 +127,7 @@ describe('createSessionBroker — queue events → broadcast', () => {
       context: emptyContext,
       runner: echoRunner,
       sessionHandle: handle,
+      projectId: 'test-project',
     })
     const errors: string[] = []
     handleClientMessage(
@@ -144,6 +147,7 @@ describe('createSessionBroker — queue events → broadcast', () => {
       context: emptyContext,
       runner: echoRunner,
       sessionHandle: handle,
+      projectId: 'test-project',
     })
     handleClientMessage(
       broker,
@@ -166,6 +170,7 @@ describe('createSessionBroker — queue events → broadcast', () => {
       context: emptyContext,
       runner: echoRunner,
       sessionHandle: handle,
+      projectId: 'test-project',
     })
     sendHelloFrame(broker, server, 'c1')
     expect(cap.sends.length).toBe(1)

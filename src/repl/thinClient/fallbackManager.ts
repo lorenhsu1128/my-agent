@@ -252,9 +252,19 @@ export function createFallbackManager(
     { resolve: DiscordAdminResolve; timer: ReturnType<typeof setTimeout> }
   >()
 
+  // M-CWD-FIX：帶 cwd 連線時等 hello frame 才切 attached。daemon 的
+  // loadProject 是異步的；在 hello 到達前 input 會被 fallback 到 defaultRuntime。
+  // 沒帶 cwd（backward compat）則沿用舊行為：socket 連上即 attached。
+  let helloReceived = false
+  // socket 已連但 hello 尚未到達 — 防止 detector poll 重複 tryConnect 導致無限循環。
+  let awaitingHello = false
+  const requireHello = Boolean(opts.cwd)
+
   const tryConnect = async (snap: DaemonSnapshot): Promise<boolean> => {
     if (!snap.alive || !snap.port || !snap.token) return false
     cleanupSocket()
+    helloReceived = false
+    awaitingHello = requireHello
     // 進 tryConnect 即視為「新嘗試」，清掉上次的 reject 標記；避免 attachRejected
     // frame 在 step5 被誤清（daemon 可能在 open 後立刻送 reject）。
     attachRejectedReason = null
@@ -266,6 +276,17 @@ export function createFallbackManager(
       source: opts.source ?? 'repl',
     })
     s.on('frame', (f: InboundFrame) => {
+      // M-CWD-FIX：hello frame 代表 daemon 已載入 project，可以安全切 attached。
+      if (f.type === 'hello') {
+        helloReceived = true
+        awaitingHello = false
+        if (mode !== 'attached') setMode('attached')
+      }
+      // M-CWD-FIX：projectLoading — daemon 正在載入 project，REPL 不切 attached。
+      if (f.type === 'projectLoading') {
+        emitter.emit('frame', f)
+        return
+      }
       // M-DISCORD-2：daemon 拒絕 attach（project 未 load）→ 關 socket，標記
       // rejected，設 mode=standalone，emit 一次性 attachRejected 事件讓 REPL
       // 顯示 warning。後續不再自動重試（避免無謂 reconnect loop）。
@@ -413,6 +434,7 @@ export function createFallbackManager(
         return
       }
       if (f.type === 'attachRejected') {
+        awaitingHello = false
         attachRejectedReason = String(
           (f as { reason?: unknown }).reason ?? 'rejected',
         )
@@ -428,6 +450,7 @@ export function createFallbackManager(
       emitter.emit('frame', f)
     })
     s.on('close', () => {
+      awaitingHello = false
       if (disposed) return
       // 只要 daemon 還活著（下次 detector 確認）就試重連。
       if (mode === 'attached') {
@@ -438,9 +461,18 @@ export function createFallbackManager(
         scheduleReconnect()
       }
     })
+    // 提前指派 socket — frame handler 收到 hello 會同步觸發
+    // setMode('attached')，隨後的 'mode' listener（REPL 的 onModeChange）
+    // 會呼 sendPermissionContextSync / sendInput 等；這些 API 讀外層 socket，
+    // 若還是 null 會靜默丟棄。await s.connect() 解析順序和 ws.onmessage
+    // 的 microtask/task ordering 在 bundle 後不是 strict，所以 hello frame
+    // 可能早於 continuation 到達 → 必須在 await 前先指派。connect 失敗時
+    // 復原 socket = null，保留 cleanupSocket 語意。
+    socket = s
     try {
       await s.connect()
     } catch {
+      socket = null
       try {
         s.close()
       } catch {
@@ -448,7 +480,6 @@ export function createFallbackManager(
       }
       return false
     }
-    socket = s
     return true
   }
 
@@ -497,10 +528,17 @@ export function createFallbackManager(
     // `/daemon detach` 要求抑制自動 re-attach；detector 看到 daemon 活著也忽略。
     if (suppressAutoReattach) return
     if (snap.alive && mode === 'standalone') {
+      // M-CWD-FIX：已有 socket 連上但等待 hello 中 → 不重新 tryConnect（否則
+      // cleanupSocket 會關掉舊連線，hello 永遠收不到 → 無限 reconnect 循環）。
+      if (awaitingHello) return
       const ok = await tryConnect(snap)
+      // M-CWD-FIX：帶 cwd 時等 hello frame 才切 attached — daemon loadProject
+      // 異步期間 input 會被 fallback 到錯誤的 defaultRuntime。沒帶 cwd 則沿用
+      // 舊行為（socket 連上即 attached）。
       // Race guard：若 daemon 於 open 後立刻送 attachRejected，frame handler
       // 可能已經把 reason 設好且 setMode('standalone')；此處不能蓋掉回 attached。
-      if (ok && attachRejectedReason === null) setMode('attached')
+      const ready = requireHello ? helloReceived : true
+      if (ok && ready && attachRejectedReason === null) setMode('attached')
       // 連不上就維持 standalone；下次 detector change 再試。
     } else if (!snap.alive && (mode === 'attached' || mode === 'reconnecting')) {
       setMode('standalone')

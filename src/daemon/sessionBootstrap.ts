@@ -48,6 +48,15 @@ import {
   type FileStateCache,
 } from '../utils/fileStateCache.js'
 import uniqBy from 'lodash-es/uniqBy.js'
+import {
+  getOriginalCwd,
+  setOriginalCwd,
+  getCwdState,
+  setCwdState,
+  getProjectRoot,
+  setProjectRoot,
+} from '../bootstrap/state.js'
+import { resetGetMemoryFilesCache } from '../utils/claudemd.js'
 
 export interface DaemonBootstrapOptions {
   cwd: string
@@ -85,6 +94,21 @@ export interface DaemonSessionContext {
 export async function bootstrapDaemonContext(
   opts: DaemonBootstrapOptions,
 ): Promise<DaemonSessionContext> {
+  // M-CWD-FIX：沙箱化全域 STATE，避免 getMemoryFiles / settings 等讀到
+  // daemon 啟動目錄而非此 project 的 cwd。多個 loadProject 同時跑時仍有
+  // TOCTOU 風險（STATE 是 process 級全域），但 daemon turn mutex 已序列化
+  // turn；此處只保護 bootstrap 階段的 reads。
+  const prevOriginalCwd = getOriginalCwd()
+  const prevCwdState = getCwdState()
+  const prevProjectRoot = getProjectRoot()
+  const prevProcessCwd = process.cwd()
+  setOriginalCwd(opts.cwd)
+  setCwdState(opts.cwd)
+  setProjectRoot(opts.cwd)
+  try { process.chdir(opts.cwd) } catch { /* ignore — cwd 不存在時沿用原目錄 */ }
+  resetGetMemoryFilesCache('session_start')
+
+  try {
   const mode: PermissionMode = opts.permissionMode ?? 'default'
   const { toolPermissionContext } = await initializeToolPermissionContext({
     allowedToolsCli: opts.allowedTools ?? [],
@@ -156,12 +180,17 @@ export async function bootstrapDaemonContext(
   }
 
   // buildTools 每 turn 呼叫；動態 MCP tools via AppState。
+  // M-TOOLS-PICKER：傳 disabledTools 讓 /tools picker 在 daemon-attached 模式
+  // 也能生效（REPL 側已透過 useMergedTools 吃 disabledTools，daemon 路徑要同步）。
   const buildTools = (): Tools => {
     const state = getAppState()
-    const baseTools = getTools(state.toolPermissionContext)
+    const baseTools = getTools(state.toolPermissionContext, {
+      disabledTools: state.disabledTools,
+    })
     const assembled = assembleToolPool(
       state.toolPermissionContext,
       state.mcp.tools,
+      { disabledTools: state.disabledTools },
     )
     return uniqBy(
       mergeAndFilterTools(
@@ -195,5 +224,13 @@ export async function bootstrapDaemonContext(
     setReadFileCache,
     buildTools,
     dispose,
+  }
+  } finally {
+    // M-CWD-FIX：還原全域 STATE，讓其他 bootstrap / daemon 主迴路不受汙染。
+    try { process.chdir(prevProcessCwd) } catch { /* ignore */ }
+    setOriginalCwd(prevOriginalCwd)
+    setCwdState(prevCwdState)
+    setProjectRoot(prevProjectRoot)
+    resetGetMemoryFilesCache('session_start')
   }
 }

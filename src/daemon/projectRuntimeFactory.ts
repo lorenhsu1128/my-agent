@@ -95,6 +95,7 @@ export function createDefaultProjectRuntimeFactory(
         context,
         runner: wrappedRunner,
         sessionHandle,
+        projectId,
       })
       brokerRef.current = broker
 

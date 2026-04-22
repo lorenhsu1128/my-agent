@@ -48,6 +48,7 @@
     "@opentelemetry/sdk-metrics": "^2.6.1",
     "@opentelemetry/sdk-trace-base": "^2.6.1",
     "@opentelemetry/semantic-conventions": "^1.40.0",
+    "@pondwader/socks5-server": "^1.0.10",
     "@smithy/core": "^3.23.13",
     "@smithy/node-http-handler": "^4.5.1",
     "ajv": "^8.18.0",

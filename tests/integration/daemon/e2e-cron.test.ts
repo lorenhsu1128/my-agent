@@ -76,10 +76,14 @@ describe('daemon + cron wiring E2E', () => {
       context: fakeCtx,
       runner: echoRunner,
       sessionHandle: fakeSessionHandle,
+      projectId: 'cron-test-project',
     })
     onMessage = (c, m): void =>
       handleClientMessage(broker, c, m, () => {})
-    onConnect = (c): void => sendHelloFrame(broker, handle!.server!, c.id)
+    onConnect = (c): void => {
+      handle!.server!.registry.setClientProjectId(c.id, 'cron-test-project')
+      sendHelloFrame(broker, handle!.server!, c.id)
+    }
 
     // 3. 裝 cron wiring；inject fake scheduler module 讓我們能直接 onFire。
     let capturedOnFire: ((prompt: string) => void) | null = null

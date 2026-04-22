@@ -7,6 +7,7 @@
  *   - 檔案不存在 / JSON 壞 / schema 失敗 → 走 DEFAULT_LLAMACPP_CONFIG + stderr warn
  */
 import { readFile } from 'fs/promises'
+import { readFileSync } from 'fs'
 import { getLlamaCppConfigPath } from './paths.js'
 import {
   DEFAULT_LLAMACPP_CONFIG,
@@ -63,7 +64,20 @@ export async function loadLlamaCppConfigSnapshot(): Promise<LlamaCppConfig> {
 }
 
 export function getLlamaCppConfigSnapshot(): LlamaCppConfig {
-  return cached ?? DEFAULT_LLAMACPP_CONFIG
+  if (cached) return cached
+  // setup.ts 的 fire-and-forget 載入可能還沒跑完，同步讀檔避免拿到錯誤的預設值
+  try {
+    const raw = readFileSync(getLlamaCppConfigPath(), 'utf-8')
+    const parsed = JSON.parse(raw.replace(/^﻿/, ''))
+    const result = LlamaCppConfigSchema.safeParse(parsed)
+    if (result.success) {
+      cached = result.data
+      return cached
+    }
+  } catch {
+    // 檔案不存在或解析失敗，走預設
+  }
+  return DEFAULT_LLAMACPP_CONFIG
 }
 
 /**

@@ -1500,9 +1500,21 @@
 
 - 2026-04-20 21:47: Session 結束 | 進度：404/423 任務 | 882a687 feat(daemon): /daemon attach + detach slash commands
 
+- 2026-04-21 16:32: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-21 16:35: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-21 16:37: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
 - 2026-04-21 16:51: Session 結束 | 進度：428/448 任務 | 9268755 refactor(discord): flatten slash commands from /discord <sub> to 14 top-level
 
+- 2026-04-21 16:52: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
 - 2026-04-21 16:57: Session 結束 | 進度：428/448 任務 | 9268755 refactor(discord): flatten slash commands from /discord <sub> to 14 top-level
+
+- 2026-04-21 17:01: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-21 17:03: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
 
 - 2026-04-21 18:29: Session 結束 | 進度：428/448 任務 | 9268755 refactor(discord): flatten slash commands from /discord <sub> to 14 top-level
 
@@ -1548,6 +1560,8 @@
 
 - 2026-04-22 10:32: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
 
+- 2026-04-22 10:36: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
 - 2026-04-22 10:36: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
 
 - 2026-04-22 10:39: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
@@ -1555,3 +1569,60 @@
 - 2026-04-22 10:42: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
 
 - 2026-04-22 10:44: Session 結束 | 進度：446/466 任務 | 995c1fd docs(TODO): M-TOOLS-PICKER all 18 tasks complete
+
+- 2026-04-22 10:52: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 10:53: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:00: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:02: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:04: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:05: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:08: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:14: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:18: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:30: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:34: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:38: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:41: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:45: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:51: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:54: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 12:02: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 13:18: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 13:43: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 13:45: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 13:47: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 13:51: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 13:58: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 14:05: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 14:07: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 14:12: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 14:21: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+
+- 2026-04-22 14:31: Session 結束 | 進度：428/448 任務 | 8531f1d feat(daemon): REPL 連線自動 lazy-load 未載入的 project 支援多目錄 daemon
+

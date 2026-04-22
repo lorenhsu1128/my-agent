@@ -33,6 +33,13 @@ export type InboundFrame =
   | { type: 'runnerEvent'; inputId: string; event: unknown }
   | {
       /**
+       * M-CWD-FIX：daemon 正在載入 project runtime，REPL 應等待 hello frame。
+       */
+      type: 'projectLoading'
+      cwd?: string
+    }
+  | {
+      /**
        * M-DISCORD-2：daemon 沒有 load 這個 project 的 runtime，拒絕 attach。
        * REPL 應 fallback 到 standalone 並告知使用者。
        */

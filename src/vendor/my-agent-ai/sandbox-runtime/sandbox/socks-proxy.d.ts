@@ -1,5 +1,5 @@
-import type { Socks5Server } from '@pondwader/socks5-server';
 import type { ResolvedParentProxy } from './parent-proxy.js';
+type Socks5Server = any;
 export interface SocksProxyServerOptions {
     filter(port: number, host: string): Promise<boolean> | boolean;
     /**
