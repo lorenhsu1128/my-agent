@@ -18,8 +18,16 @@
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { getProjectDir } from '../sessionStoragePortable.js'
-import { moveToTrash, restoreFromTrash, type TrashMeta } from './index.js'
-import { deleteSession } from '../../services/sessionIndex/delete.js'
+import {
+  moveToTrash,
+  restoreFromTrash,
+  type TrashDetails,
+  type TrashMeta,
+} from './index.js'
+import {
+  deleteSession,
+  listSessions,
+} from '../../services/sessionIndex/delete.js'
 
 export type TrashSessionResult = {
   sessionId: string
@@ -62,6 +70,25 @@ export function trashSession(
   const transcriptPath = getSessionTranscriptPath(cwd, sessionId)
   const toolResultsPath = getSessionToolResultsDir(cwd, sessionId)
 
+  // 在刪 DB 前先撈 session 詳情，凍結到 TrashMeta.details 供 /trash picker 顯示。
+  let sessionDetails: TrashDetails | undefined
+  try {
+    const rows = listSessions(cwd, { keyword: sessionId, limit: 1 })
+    const row = rows.find(r => r.sessionId === sessionId)
+    if (row) {
+      sessionDetails = {
+        sessionId,
+        firstUserMessage: row.firstUserMessage ?? undefined,
+        model: row.model ?? undefined,
+        messageCount: row.messageCount,
+        startedAt: row.startedAt,
+        estimatedCostUsd: row.estimatedCostUsd,
+      }
+    }
+  } catch {
+    // listSessions 失敗不阻塞軟刪
+  }
+
   let transcriptTrashId: string | null = null
   let toolResultsTrashId: string | null = null
 
@@ -71,6 +98,7 @@ export function trashSession(
       kind: 'session',
       sourcePath: transcriptPath,
       label: `${sessionId}.jsonl`,
+      details: { ...(sessionDetails ?? { sessionId }), subKind: 'transcript' },
     })
     transcriptTrashId = meta.id
   }
@@ -81,6 +109,10 @@ export function trashSession(
       kind: 'session',
       sourcePath: toolResultsPath,
       label: `${sessionId}/tool-results`,
+      details: {
+        ...(sessionDetails ?? { sessionId }),
+        subKind: 'tool-results',
+      },
     })
     toolResultsTrashId = meta.id
   }

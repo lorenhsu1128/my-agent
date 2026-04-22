@@ -40,6 +40,32 @@ export type TrashMeta = {
   createdAt: number
   /** payload 總大小（bytes）— 近似值供 UI 顯示 */
   sizeBytes?: number
+  /**
+   * 凍結在軟刪當下的豐富資訊，供 /trash picker 顯示得跟 /session-delete /
+   * /memory-delete 一樣詳細（不會因 DB 已刪或檔已移走而失落）。
+   */
+  details?: TrashDetails
+}
+
+export type TrashDetails = {
+  /** Session 專用：原 sessionId */
+  sessionId?: string
+  /** Session 專用：第一條 user message（truncate） */
+  firstUserMessage?: string
+  /** Session 專用：model name */
+  model?: string
+  /** Session 專用：total message count */
+  messageCount?: number
+  /** Session 專用：startedAt epoch ms */
+  startedAt?: number
+  /** Session 專用：estimated cost usd */
+  estimatedCostUsd?: number | null
+  /** Memory 專用：picker 顯示名（例如 "[feedback] user_role"） */
+  displayName?: string
+  /** Memory 專用：frontmatter description */
+  description?: string
+  /** Memory / Session 分類輔助：子類（auto-memory / project-memory / local-config / daily-log / transcript / tool-results） */
+  subKind?: string
 }
 
 /** 取得 `<projectDir>/.trash` 絕對路徑（不保證已建立）。 */
@@ -83,8 +109,9 @@ export function moveToTrash(params: {
   kind: TrashKind
   sourcePath: string
   label?: string
+  details?: TrashDetails
 }): TrashMeta {
-  const { cwd, kind, sourcePath, label } = params
+  const { cwd, kind, sourcePath, label, details } = params
   if (!existsSync(sourcePath)) {
     throw new Error(`moveToTrash: source not found: ${sourcePath}`)
   }
@@ -117,6 +144,7 @@ export function moveToTrash(params: {
     label,
     createdAt: Date.now(),
     sizeBytes: directorySize(destPath),
+    ...(details ? { details } : {}),
   }
   writeFileSync(join(entryDir, 'meta.json'), JSON.stringify(meta, null, 2))
   return meta

@@ -54,6 +54,61 @@ function formatDate(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+function truncate(s: string | undefined | null, n: number): string {
+  if (!s) return ''
+  if (s.length <= n) return s
+  return s.slice(0, n - 1) + '…'
+}
+
+function formatCost(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return ''
+  if (v < 0.01) return ` $${v.toFixed(3)}`
+  return ` $${v.toFixed(2)}`
+}
+
+/**
+ * 把 TrashMeta 組成豐富的顯示字串，格式類似 /session-delete / /memory-delete。
+ * 優先用 details 凍結的資訊；沒 details 才 fallback 到 label。
+ */
+function buildRichLabel(meta: TrashMeta): {
+  left: string
+  right: string
+} {
+  const d = meta.details
+  if (meta.kind === 'session') {
+    const sub = d?.subKind === 'tool-results' ? 'tool-results' : 'transcript'
+    const tag = `[session/${sub}]`
+    if (d?.firstUserMessage) {
+      const msg = truncate(d.firstUserMessage, 50)
+      const count = d.messageCount ? ` msg=${d.messageCount}` : ''
+      const cost = formatCost(d.estimatedCostUsd)
+      return {
+        left: `${tag} ${msg}`,
+        right: `${count}${cost}`,
+      }
+    }
+    const idShort = d?.sessionId ? d.sessionId.slice(0, 8) : ''
+    return { left: `${tag} ${idShort || meta.label || meta.id}`, right: '' }
+  }
+
+  if (
+    meta.kind === 'memory' ||
+    meta.kind === 'project-memory' ||
+    meta.kind === 'daily-log'
+  ) {
+    const tag = `[${d?.subKind ?? meta.kind}]`
+    const display = d?.displayName ?? meta.label ?? ''
+    const desc = d?.description ? ` — ${truncate(d.description, 50)}` : ''
+    return { left: `${tag} ${display}${desc}`, right: '' }
+  }
+
+  // unknown kind → fallback
+  return {
+    left: `[${meta.kind}] ${meta.label ?? meta.id}`,
+    right: '',
+  }
+}
+
 export function TrashPicker({ onExit }: Props): React.ReactNode {
   const cwd = getOriginalCwd()
   const [keyword, setKeyword] = useState('')
@@ -320,6 +375,7 @@ export function TrashPicker({ onExit }: Props): React.ReactNode {
           const isCur = i === safeCursor
           const mark = isSel ? '[✓]' : '[ ]'
           const color = isSel ? 'yellow' : undefined
+          const rich = buildRichLabel(row)
           return (
             <Box key={row.id}>
               <Text color={isCur ? 'cyan' : undefined}>
@@ -328,9 +384,8 @@ export function TrashPicker({ onExit }: Props): React.ReactNode {
               <Text color={color}> {mark} </Text>
               <Text dimColor>{formatDate(row.createdAt)} </Text>
               <Text dimColor>{formatSize(row.sizeBytes)} </Text>
-              <Text>
-                [{row.kind}] {row.label ?? row.id}
-              </Text>
+              <Text>{rich.left}</Text>
+              <Text dimColor>{rich.right}</Text>
             </Box>
           )
         })}

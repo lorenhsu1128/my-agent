@@ -15,7 +15,7 @@ import {
   unlinkSync,
 } from 'fs'
 import { join, normalize, basename } from 'path'
-import { moveToTrash, type TrashMeta } from './trash/index.js'
+import { moveToTrash, type TrashDetails, type TrashMeta } from './trash/index.js'
 
 export const MEMORY_INDEX_FILENAME = 'MEMORY.md'
 
@@ -103,8 +103,9 @@ export function softDeleteMemoryEntry(params: {
   cwd: string
   memDir: string
   filename: string
+  details?: TrashDetails
 }): MemoryDeleteResult {
-  const { cwd, memDir, filename } = params
+  const { cwd, memDir, filename, details } = params
   const filePath = assertSafeMemoryFilename(filename, memDir)
   if (!existsSync(filePath)) {
     throw new Error(`memory file not found: ${filename}`)
@@ -114,6 +115,7 @@ export function softDeleteMemoryEntry(params: {
     kind: 'memory',
     sourcePath: filePath,
     label: filename,
+    details: { ...(details ?? {}), subKind: 'auto-memory' },
   })
   const indexLineRemoved = removeMemoryIndexLine(memDir, filename)
   return {
@@ -133,8 +135,9 @@ export function softDeleteStandaloneFile(params: {
   sourcePath: string
   kind: 'project-memory' | 'daily-log'
   label?: string
+  details?: TrashDetails
 }): { trashId: string; sourcePath: string } {
-  const { cwd, sourcePath, kind, label } = params
+  const { cwd, sourcePath, kind, label, details } = params
   if (!existsSync(sourcePath)) {
     throw new Error(`file not found: ${sourcePath}`)
   }
@@ -143,6 +146,7 @@ export function softDeleteStandaloneFile(params: {
     kind,
     sourcePath,
     label: label ?? basename(sourcePath),
+    details,
   })
   return { trashId: meta.id, sourcePath }
 }

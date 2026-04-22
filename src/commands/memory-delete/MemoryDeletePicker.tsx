@@ -45,6 +45,11 @@ function pickEditor(): string {
 }
 
 function deleteEntry(cwd: string, entry: MemoryEntry): { trashId: string } {
+  const details = {
+    displayName: entry.displayName,
+    description: entry.description,
+    subKind: entry.kind,
+  }
   switch (entry.kind) {
     case 'auto-memory':
       if (!entry.filename) throw new Error('auto-memory entry missing filename')
@@ -52,6 +57,7 @@ function deleteEntry(cwd: string, entry: MemoryEntry): { trashId: string } {
         cwd,
         memDir: getAutoMemPath(),
         filename: entry.filename,
+        details,
       })
     case 'project-memory':
       return softDeleteStandaloneFile({
@@ -59,6 +65,7 @@ function deleteEntry(cwd: string, entry: MemoryEntry): { trashId: string } {
         sourcePath: entry.absolutePath,
         kind: 'project-memory',
         label: entry.displayName,
+        details,
       })
     case 'local-config':
       return softDeleteStandaloneFile({
@@ -66,6 +73,7 @@ function deleteEntry(cwd: string, entry: MemoryEntry): { trashId: string } {
         sourcePath: entry.absolutePath,
         kind: 'project-memory',
         label: entry.displayName,
+        details,
       })
     case 'daily-log':
       return softDeleteStandaloneFile({
@@ -73,6 +81,7 @@ function deleteEntry(cwd: string, entry: MemoryEntry): { trashId: string } {
         sourcePath: entry.absolutePath,
         kind: 'daily-log',
         label: entry.displayName,
+        details,
       })
   }
 }
