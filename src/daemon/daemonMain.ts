@@ -183,10 +183,15 @@ export async function startDaemon(
     resolveStopped()
   }
 
-  // 5. Signal handlers
-  const sigintHandler = (): void => void stop('signal-SIGINT')
-  const sigtermHandler = (): void => void stop('signal-SIGTERM')
-  const sigbreakHandler = (): void => void stop('signal-SIGBREAK')
+  // 5. Signal handlers — stop + 強制退出兜底（避免 server.stop() hang 住）
+  const signalStop = (reason: DaemonStopReason): void => {
+    void stop(reason).finally(() => process.exit(0))
+    // 若 stop() 本身 hang（WS close 卡住等），3 秒後強制退出
+    setTimeout(() => process.exit(0), 3_000).unref()
+  }
+  const sigintHandler = (): void => signalStop('signal-SIGINT')
+  const sigtermHandler = (): void => signalStop('signal-SIGTERM')
+  const sigbreakHandler = (): void => signalStop('signal-SIGBREAK')
 
   const unregister = (): void => {
     process.off('SIGINT', sigintHandler)
