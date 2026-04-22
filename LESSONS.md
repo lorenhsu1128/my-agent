@@ -299,6 +299,17 @@
 - **相關檔案**：`src/daemon/authToken.ts`、`tests/integration/daemon/thin-client.test.ts`
 - **日期**：2026-04-20
 
+### 任何把 client-side 輸入送到 server/daemon 的新路徑都要 expandPastedTextRefs
+
+- **發生什麼事**：使用者在 daemon attached 模式 TUI 貼多行文字（觸發 `[Pasted text #1 +3 lines]` 摺疊），daemon 端 LLM 收到的是字面 placeholder 字串而非實際貼上內容，LLM 回「請你把完整內容貼出來」。
+- **根本原因**：`src/screens/REPL.tsx:3187` 的 daemon attached 分支直接 `mgr.sendInput(input, 'interactive')` 把 raw 字串送給 daemon，**跳過了** `expandPastedTextRefs(input, pastedContents)`。pastedContents 映射只存在 client 端，daemon 端無從還原 placeholder。同檔 slash command 路徑（line 3208）、`handlePromptSubmit.ts:216`、`promptEditor.ts:148` 都有展開；唯獨 daemon 這條漏掉。
+- **正確做法**：
+  1. 未來新增任何「把 TUI 輸入送到遠端」的路徑（daemon、SSH、bridge、Discord DM sidecar 等）前先 grep 既有 `expandPastedTextRefs` 呼叫點，每條 client → remote 的 input 路徑都要在出邊界前展開。
+  2. 同時更新 `setMessages` 顯示內容為展開後版本，避免 UI 顯示 placeholder 但送出的是完整文字、兩邊不一致造成除錯混亂。
+  3. 檢查清單：slash command 路徑、speculation 路徑、queue 路徑、daemon 路徑、bridge 路徑 — 每個分支開頭都該問「這條會把 input 送到誰？收件人看得到 pastedContents 嗎？」
+- **相關檔案**：`src/screens/REPL.tsx`（fix commit `873a74e`）、`src/history.ts`（`expandPastedTextRefs` 定義）、`src/utils/handlePromptSubmit.ts:216`（canonical 展開時機）
+- **日期**：2026-04-22
+
 ---
 
 ## Discord 整合（M-DISCORD）
