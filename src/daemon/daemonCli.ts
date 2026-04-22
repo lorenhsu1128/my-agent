@@ -253,36 +253,48 @@ export async function runDaemonStart(
         })
       }
       onConnect = (c): void => {
-        // M-DISCORD-2：解析 client 的 cwd → projectId。
-        //   - c.cwd 給了：registry.getProjectByCwd；有 → attach，無 → attachRejected
+        // 解析 client 的 cwd → projectId。
+        //   - c.cwd 給了：registry 查找；有 → attach，無 → auto-load 再 attach
         //   - c.cwd 沒給：fallback 到 default runtime（backward compat）
-        let runtime: typeof defaultRuntime | null = null
+        const attachRuntime = (runtime: typeof defaultRuntime): void => {
+          handle.server!.registry.setClientProjectId(c.id, runtime.projectId)
+          if (c.source === 'repl') runtime.attachRepl(c.id)
+          runtime.touch()
+          sendHelloFrame(runtime.broker, handle.server!, c.id)
+        }
         if (c.cwd) {
           const found = registry.getProjectByCwd(c.cwd)
-          if (!found) {
-            // Reject: daemon 沒 load 這個 project。傳 attachRejected + 鎖 message。
-            rejectedClients.add(c.id)
-            handle.server!.send(c.id, {
-              type: 'attachRejected',
-              reason: 'projectNotLoaded',
-              cwd: c.cwd,
-              hint: `project at ${c.cwd} is not loaded in this daemon (started from ${baseCwd}). Run \`my-agent daemon load ${c.cwd}\` (TBD) or launch a new daemon in that cwd.`,
-            })
-            void handle.logger.info('client attach rejected: project not loaded', {
-              clientId: c.id,
-              cwd: c.cwd,
-            })
+          if (found) {
+            attachRuntime(found)
             return
           }
-          runtime = found
-          handle.server!.registry.setClientProjectId(c.id, runtime.projectId)
+          // Project 未載入 → lazy-load（與 Discord 路徑一致）
+          void handle.logger.info('auto-loading project for REPL client', {
+            clientId: c.id,
+            cwd: c.cwd,
+          })
+          registry.loadProject(c.cwd).then(
+            (loaded) => {
+              attachRuntime(loaded)
+            },
+            (err) => {
+              rejectedClients.add(c.id)
+              handle.server!.send(c.id, {
+                type: 'attachRejected',
+                reason: 'projectLoadFailed',
+                cwd: c.cwd,
+                hint: `failed to load project at ${c.cwd}: ${err instanceof Error ? err.message : String(err)}`,
+              })
+              void handle.logger.warn('auto-load project failed', {
+                clientId: c.id,
+                cwd: c.cwd,
+                err: err instanceof Error ? err.message : String(err),
+              })
+            },
+          )
         } else {
-          runtime = defaultRuntime
-          handle.server!.registry.setClientProjectId(c.id, runtime.projectId)
+          attachRuntime(defaultRuntime)
         }
-        if (c.source === 'repl') runtime.attachRepl(c.id)
-        runtime.touch()
-        sendHelloFrame(runtime.broker, handle.server!, c.id)
       }
       onDisconnect = (c): void => {
         rejectedClients.delete(c.id)

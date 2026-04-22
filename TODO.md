@@ -1406,3 +1406,53 @@
 - 2026-04-20 21:44: Session 結束 | 進度：404/423 任務 | 882a687 feat(daemon): /daemon attach + detach slash commands
 
 - 2026-04-20 21:47: Session 結束 | 進度：404/423 任務 | 882a687 feat(daemon): /daemon attach + detach slash commands
+
+- 2026-04-21 16:32: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-21 16:35: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-21 16:37: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-21 16:52: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-21 17:01: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-21 17:03: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 10:36: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 10:52: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 10:52: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 10:53: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:00: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:02: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:04: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:05: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:08: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:14: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:18: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:30: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:34: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:38: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:41: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:45: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:51: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 11:54: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
+
+- 2026-04-22 12:02: Session 結束 | 進度：428/448 任務 | 986a000 feat(ui): add always-visible context progress bar to REPL footer
