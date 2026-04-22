@@ -32,13 +32,16 @@ function buildBar(pct: number): { filled: string; empty: string } {
 }
 
 /**
- * Always-visible context progress bar. 讀取上一輪 API response 的實際
- * prompt token 數（經 Notifications.tokenCountFromLastAPIResponse 上行），
- * 對比模型 context window 大小算百分比，渲染彩色 bar。
+ * Context progress bar. 讀取上一輪 API response 的實際 prompt token 數
+ * （經 Notifications.tokenCountFromLastAPIResponse 上行），對比模型
+ * context window 算百分比，渲染彩色 bar。
  *
- * 沒資料（沒跑過任何 turn）時 tokenUsage 為 0 → 顯示 0% 綠色空條。
+ * tokenUsage 為 0（還沒跑任何 turn、或 provider 不回報 token 如 llama.cpp）
+ * 時隱藏整個 bar — 永遠顯示 0% 的空條對使用者沒資訊價值。跑過第一輪且
+ * provider 有回 usage 時才會出現。
  */
 export function ContextProgressBar({ tokenUsage, model }: Props): React.ReactNode {
+  if (tokenUsage <= 0) return null
   const windowSize = getContextWindowForModel(model, getSdkBetas())
   if (!windowSize || windowSize <= 0) return null
 
