@@ -45,6 +45,7 @@ export interface SessionBrokerOptions {
   context: DaemonSessionContext
   runner: SessionRunner
   sessionHandle: DaemonSessionHandle
+  projectId: string
   interruptGraceMs?: number
   /** 無效 frame 時的 warn 管道（預設 console.error，測試可 inject）。 */
   onProtocolError?: (err: string, raw: unknown) => void
@@ -86,7 +87,7 @@ function parseInbound(msg: unknown): InboundInputFrame | null {
 export function createSessionBroker(
   opts: SessionBrokerOptions,
 ): SessionBroker {
-  const { server, runner, sessionHandle } = opts
+  const { server, runner, sessionHandle, projectId } = opts
   const onProtocolError =
     opts.onProtocolError ??
     ((err, raw): void => {
@@ -99,9 +100,9 @@ export function createSessionBroker(
     interruptGraceMs: opts.interruptGraceMs,
   })
 
-  // 廣播 helper — 包一層讓測試能 mock。
+  // 廣播 helper — 只送給同 project 的 client，避免跨 project 洩漏。
   const broadcast = (payload: Record<string, unknown>): void => {
-    server.broadcast(payload)
+    server.broadcast(payload, c => c.projectId === projectId)
   }
 
   // --- Queue events → WS outbound ---

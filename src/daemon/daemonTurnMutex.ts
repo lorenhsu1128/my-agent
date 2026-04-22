@@ -18,6 +18,15 @@
  *   - 正確順序：broker 從 InputQueue 拿到下一 input → 送進 ProjectRuntime.runTurn
  *     → 後者先 `await turnMutex.acquire()` → 再 chdir + runner.run → finally release
  */
+import { resetGetMemoryFilesCache } from '../utils/claudemd.js'
+import { getUserContext, getSystemContext, getGitStatus } from '../context.js'
+import { getProjectPathForConfig } from '../utils/config.js'
+import { getAutoMemPath } from '../memdir/paths.js'
+import { getResolvedWorkingDirPaths } from '../utils/permissions/filesystem.js'
+import { clearCommandMemoizationCaches } from '../commands.js'
+import { clearSystemPromptSections } from '../constants/systemPromptSections.js'
+import { isLlamaCppActive } from '../utils/model/providers.js'
+import { setSkipPromptCacheOnce } from '../services/api/llamacpp-fetch-adapter.js'
 
 export interface MutexLease {
   /** 呼叫 release() 釋放鎖。冪等 — 多呼叫無害。 */
@@ -137,6 +146,49 @@ export function createDaemonTurnMutex(): DaemonTurnMutex {
   }
 }
 
+let lastTurnProjectId: string | null = null
+
+/**
+ * 當 daemon 切換到不同 project 時，標記 adapter 下次 request 跳過 prompt cache。
+ * llama.cpp server 的 KV cache 會殘留前一個 project 的 attention pattern，
+ * 導致 LLM 生成時傾向引用前一個 project 的檔案。cache_prompt:false 強制
+ * 重新計算完整 prompt，消除跨 project 汙染。
+ * 同 project 連續 turn 不觸發，保留 prompt cache 加速。
+ */
+function invalidateLlamaCppCacheIfProjectChanged(projectId: string): void {
+  if (!isLlamaCppActive()) return
+  if (lastTurnProjectId === projectId) return
+  const prev = lastTurnProjectId
+  lastTurnProjectId = projectId
+  if (prev === null) return
+  setSkipPromptCacheOnce()
+}
+
+/**
+ * M-CWD-FIX：清除所有影響 system prompt 的 memoize cache。
+ * daemon 切換 project cwd 後必須清除，否則 system prompt 會沿用
+ * 首次 cache 的結果（錯誤的 CLAUDE.md / git status）。
+ */
+function clearAllContextCaches(): void {
+  try {
+    resetGetMemoryFilesCache('session_start')
+  } catch {
+    // ignore
+  }
+  try {
+    getUserContext.cache?.clear?.()
+    getSystemContext.cache?.clear?.()
+    getGitStatus.cache?.clear?.()
+    getProjectPathForConfig.cache?.clear?.()
+    getAutoMemPath.cache?.clear?.()
+    getResolvedWorkingDirPaths.cache?.clear?.()
+    clearCommandMemoizationCaches()
+    clearSystemPromptSections()
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * 套用鎖 + chdir + originalCwd 切換 + chdir-back 的 helper。
  *
@@ -171,10 +223,14 @@ export async function withProjectCwd<T>(
   const state = require('../bootstrap/state.js') as typeof import('../bootstrap/state.js')
   const prevCwd = process.cwd()
   const prevOriginalCwd = state.getOriginalCwd()
+  const prevProjectRoot = state.getProjectRoot()
   try {
     try {
       process.chdir(opts.cwd)
       state.setOriginalCwd(opts.cwd)
+      state.setCwdState(opts.cwd)
+      state.setProjectRoot(opts.cwd)
+      clearAllContextCaches()
     } catch (e) {
       throw new Error(
         `failed to chdir to ${opts.cwd}: ${e instanceof Error ? e.message : String(e)}`,
@@ -193,6 +249,7 @@ export async function withProjectCwd<T>(
     }
     try {
       state.setOriginalCwd(prevOriginalCwd)
+      state.setProjectRoot(prevProjectRoot)
     } catch {
       // ignore
     }
@@ -236,11 +293,16 @@ export function wrapRunnerWithProjectCwd(
       const state = require('../bootstrap/state.js') as typeof import('../bootstrap/state.js')
       const prevCwd = process.cwd()
       const prevOriginalCwd = state.getOriginalCwd()
+      const prevProjectRoot = state.getProjectRoot()
       let chdirOk = false
       try {
         try {
           process.chdir(opts.cwd)
           state.setOriginalCwd(opts.cwd)
+          state.setCwdState(opts.cwd)
+          state.setProjectRoot(opts.cwd)
+          clearAllContextCaches()
+          invalidateLlamaCppCacheIfProjectChanged(opts.projectId)
           chdirOk = true
         } catch (e) {
           yield {
@@ -263,6 +325,7 @@ export function wrapRunnerWithProjectCwd(
           }
           try {
             state.setOriginalCwd(prevOriginalCwd)
+            state.setProjectRoot(prevProjectRoot)
           } catch {
             // ignore
           }

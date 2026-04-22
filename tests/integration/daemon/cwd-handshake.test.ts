@@ -60,7 +60,11 @@ describe('cwd handshake', () => {
       baseDir: tmpDir,
       agentVersion: 'cwd-hs',
       port: 0,
-      onClientConnect: c => connects.push(c),
+      onClientConnect: c => {
+        connects.push(c)
+        // M-CWD-FIX：帶 cwd 的 client 需要 hello 才會切 attached
+        handle!.server!.send(c.id, { type: 'hello', sessionId: 'test', state: 'IDLE' })
+      },
       registerSignalHandlers: false,
     })
 
@@ -158,7 +162,10 @@ describe('cwd handshake', () => {
       baseDir: tmpDir,
       agentVersion: 'cwd-hs',
       port: 0,
-      onClientConnect: c => connects.push(c),
+      onClientConnect: c => {
+        connects.push(c)
+        handle!.server!.send(c.id, { type: 'hello', sessionId: 'test', state: 'IDLE' })
+      },
       registerSignalHandlers: false,
     })
 

@@ -4101,6 +4101,7 @@ export function REPL({
   // 到訊息陣列，重用現有 rendering（tool_use content block 也跟著顯示）。
   // onModeChange：attached → 其他時顯示 system banner，告知使用者切換。
   const daemonModeHandle = useDaemonMode({
+    cwd: getOriginalCwd(),
     onAutostart: (info): void => {
       // M-DAEMON-AUTO-B：REPL 首次偵測 no-daemon 時會 auto-spawn 一個 detached
       // daemon（可用 `/daemon off` 或 `my-agent daemon autostart off` 關閉）。

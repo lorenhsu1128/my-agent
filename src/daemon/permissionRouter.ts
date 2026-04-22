@@ -360,7 +360,7 @@ export function createPermissionRouter(
       return autoAllow(input)
     }
 
-    // 廣播 permissionPending 給其他 attached clients（Q2=b）
+    // 廣播 permissionPending 給同 project 的其他 attached clients（Q2=b）
     server.broadcast(
       {
         type: 'permissionPending',
@@ -371,7 +371,9 @@ export function createPermissionRouter(
         riskLevel: meta.riskLevel,
         description: meta.description,
       },
-      (c: ClientInfo) => c.id !== sourceId,
+      (c: ClientInfo) =>
+        c.id !== sourceId &&
+        (!opts.projectId || c.projectId === opts.projectId),
     )
 
     // 等 response — timeout 則 auto-allow。

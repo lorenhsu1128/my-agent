@@ -148,9 +148,19 @@ export async function runDaemonStart(
       // runtime；成功 → setClientProjectId；失敗 → 送 attachRejected + 在此 set
       // 記錄不派訊息。此 map 記錄所有被拒的 clientId。
       const rejectedClients = new Set<string>()
+      // M-CWD-FIX：loadProject 異步期間暫存 client，避免 input 被 fallback 到 defaultRuntime。
+      const pendingClients = new Map<string, string>()
       onMessage = (c, m): void => {
         if (rejectedClients.has(c.id)) {
           // 被拒的 client 送 input 一律忽略；REPL 已 fallback standalone，不該還在送。
+          return
+        }
+        if (pendingClients.has(c.id)) {
+          // Project 正在載入中，通知 REPL 不要送 input。
+          handle.server!.send(c.id, {
+            type: 'projectLoading',
+            cwd: pendingClients.get(c.id),
+          })
           return
         }
         // M-DISCORD-AUTOBIND：/discord-bind RPC dispatch — 不屬於任何 project runtime。
@@ -269,15 +279,19 @@ export async function runDaemonStart(
             return
           }
           // Project 未載入 → lazy-load（與 Discord 路徑一致）
+          // M-CWD-FIX：標記 pending 防止 loadProject 期間 input 被 fallback 到 defaultRuntime。
+          pendingClients.set(c.id, c.cwd)
           void handle.logger.info('auto-loading project for REPL client', {
             clientId: c.id,
             cwd: c.cwd,
           })
           registry.loadProject(c.cwd).then(
             (loaded) => {
+              pendingClients.delete(c.id)
               attachRuntime(loaded)
             },
             (err) => {
+              pendingClients.delete(c.id)
               rejectedClients.add(c.id)
               handle.server!.send(c.id, {
                 type: 'attachRejected',
@@ -298,6 +312,7 @@ export async function runDaemonStart(
       }
       onDisconnect = (c): void => {
         rejectedClients.delete(c.id)
+        pendingClients.delete(c.id)
         if (c.projectId && c.source === 'repl') {
           const runtime = registry.getProject(c.projectId)
           runtime?.detachRepl(c.id)
