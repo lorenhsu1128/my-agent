@@ -37,6 +37,12 @@ Hermes Agent 的原始碼作為唯讀參考資料放在 `reference/hermes-agent/
 
    人類也可以隨時指示你建立 skill，此時直接執行不需評估。
 
+10. **所有規劃與開發必須跨 Windows / macOS 相容。** 任何新功能、腳本、測試、設定流程，預設就要同時能在 Windows（bash via Git Bash / WSL 或 pwsh）和 macOS 下運作。遇到平台差異時：
+    - 優先尋找跨平台寫法（Node/Bun API、forward-slash 路徑、`path.join`、`os.tmpdir()` 等）
+    - 若不可避免要用平台特定指令或二進位（例如 `taskkill` vs `kill`、`.exe` vs 無副檔名、`serve.sh` vs `.ps1`），**必須提供兩套對應方案**，並在檔名或 code path 以 `-windows` / `-macos` 或 `process.platform` 分支清楚標示
+    - 驗證時：PR / commit 前至少說明清楚該改動在另一個平台的預期行為；實際 E2E 由持有對應機器的人完成
+    - 文件範例（指令、路徑、環境變數）盡量用 Unix shell 語法為預設，Windows 特殊情況另列
+
 ## 倉庫結構
 
 ```
