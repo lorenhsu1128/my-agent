@@ -622,13 +622,89 @@
 ### 完成標準
 - [x] `bun run typecheck` 綠
 - [x] `tests/integration/daemon/cron-wiring.test.ts` 既有測試全綠
-- [ ] 新增單元測試（cronNlParser / cronFailureClassifier / cronCondition / cronHistory / catch-up helpers）
-- [ ] 端到端：daemon 跑 cron 失敗 retry 正確、condition skip 正確、catchupMax 限制正確
-- [ ] Discord home channel 收到 cron fire 通知（已 redactSecrets + truncate）
-- [ ] REPL toast + StatusBadge 顯示正確
-- [ ] `/cron-create` 經 LLM 觸發出 wizard、使用者改欄位 / 確認 / 取消三條路徑都正確
-- [ ] NL：`「每週一早上 9 點」` 正確翻譯成 `0 9 * * 1`
-- [ ] `./cli -p "hi"` 冒煙不壞
+- [x] 新增單元測試（cronNlParser / cronFailureClassifier / cronCondition / cronHistory / catch-up helpers — tests/integration/cron/ 下 11 檔 + picker-logic 22 tests）
+- [ ] 端到端：daemon 跑 cron 失敗 retry 正確、condition skip 正確、catchupMax 限制正確（待使用者實機驗證）
+- [ ] Discord home channel 收到 cron fire 通知（已 redactSecrets + truncate）（待使用者實機驗證）
+- [ ] REPL toast + StatusBadge 顯示正確（待使用者實機驗證）
+- [ ] `/cron-create` 經 LLM 觸發出 wizard、使用者改欄位 / 確認 / 取消三條路徑都正確（待使用者實機驗證）
+- [ ] NL：`「每週一早上 9 點」` 正確翻譯成 `0 9 * * 1`（待使用者實機驗證）
+- [x] `./cli -p "hi"` 冒煙不壞（每個 commit 都跑）
+
+---
+
+## 已完成里程碑：M-CRON-W4 — `/cron` TUI + daemon WS 寫入（2026-04-23 啟動、2026-04-24 完成）
+
+**目標**：Wave 3 只有 agent tool 層（LLM 呼叫 CronCreate / CronList / ...）；Wave 4 給人類一個互動式 TUI。打開 `/cron` 一鍵瀏覽 / 建立 / 編輯 / 暫停 / 執行 / 查 history，不必每次請 LLM。並補 daemon attached 時的即時寫入同步（chokidar ~200ms 改 WS 直接 RPC，broadcast 給所有 attached client）。
+
+**使用者已定案的決策**：
+- Q1 單一 `/cron` command
+- Q2 基本 inline + `a` toggle advanced 欄位
+- Q3 擴充既有 `CronCreateWizard` 支援 inline edit，create / LLM-gate 共用
+- Q3′ (b) 擴 wizard 加 edit-field mode（不是寫新 form）
+- Q4 attached 時寫 daemon WS，standalone 走本機
+- Q5 run-now 走 REPL queue（沿用 `CronRunNowTool` 行為，不經 daemon）
+- Q6 刪除 `y/N` confirm
+- Q7 全部顯示（含 completed / agent-owned）
+- Q8 sort by state rank + next-fire
+
+**Schedule editor UX**（使用者回饋「打 `*/2 * * * *` 不友善」）：
+- Q1 preset 清單 14 項夠用
+- Q2 (a) 加 One-shot YYYY-MM-DD HH:MM preset
+- Q3 preview 要顯示下次 fire 時間
+
+**commit 序列**（11 個獨立可交付）：
+
+### 核心 `/cron` TUI（commit 1-7）
+- [x] commit 1 `f394fa6` read-only list + detail（master-detail、sort、inline 最近 5 筆 history、10s now tick、5s polls listAllCronTasks）
+- [x] commit 2 `692cd1f` pause/resume/delete + y/N confirm + 2.5s auto-fade flash
+- [x] commit 3 `5012e7b` run-now（走 CronRunNowTool 的 enqueuePendingNotification 路徑）
+- [x] commit 4 `9057a1f` wizard inline edit mode（E / a 鍵 + 10 欄位 + text/bool/number/JSON editor）
+- [x] commit 5 `33d183f` /cron create flow（n 鍵 → wizard + parseSchedule/parseScheduleNL）
+- [x] commit 6 `5601828` /cron edit flow（e 鍵 → wizard 預帶 task 全欄位）
+- [x] commit 7 `a6c309c` full history 捲動畫面（H 鍵 + 20/頁 PgUp/PgDn）
+
+### Schedule preset picker（commit 8）
+- [x] commit 8 `1a0cea9` `CronScheduleEditor` 14 preset + 參數 form + NL + custom + next-fire preview
+
+### B1 daemon WS 寫入（commit 9-11）
+- [x] commit B1a `df45fb1` `daemon/cronMutationRpc.ts` — frame protocol + handler + daemonCli dispatch
+- [x] commit B1b `ebe1edd` `fallbackManager.sendCronMutation` + cron.mutationResult / cron.tasksChanged 處理
+- [x] commit B1c `5639761` CronPicker 偵測 attached 走 WS / standalone 走本機；訂閱 cron.tasksChanged broadcast 立即 reload
+
+### B2-B6 小收尾（commit 12-15）
+- [x] commit B4 `3174388` /cron list 多一欄顯示 scheduleSpec.raw（NL 建的原始語意）
+- [x] commit B2 `44d8f5c` CronListTool 輸出 scheduleRaw / scheduleKind；LLM 看得到使用者 NL 語意
+- [x] commit B5 `272415d` wizard prompt 專屬 multi-line editor（同 schedule editor 模式）
+- [x] commit B6 `1f88ef3` 抽 cronPickerLogic + 22 個單元測試（sort / label / icon / next-fire / last-run / truncate）
+
+**主動跳過**：
+- B3 `/cron-history` 獨立 slash command — `/cron` 的 H 鍵已覆蓋 95%，獨立 slash 只在 headless 有微邊際價值（LLM 已可呼 CronHistoryTool），不值得新 command
+
+**新模組**：
+- `src/commands/cron/{index.ts, cron.tsx, CronPicker.tsx, cronPickerLogic.ts}` — 1 個新 slash command
+- `src/components/{CronScheduleEditor.tsx}` — 14 preset schedule editor
+- `src/daemon/cronMutationRpc.ts` — WS frame protocol + handler
+- `tests/integration/cron/picker-logic.test.ts` — 22 個 pure-fn tests
+
+**改造既有**：
+- `src/commands.ts` — 註冊 /cron
+- `src/components/CronCreateWizard.tsx` — 從 display-only summary card 擴成全互動 wizard（view / selecting / editing / editing-schedule / editing-prompt 5 個 mode）
+- `src/daemon/daemonCli.ts` — dispatch cron.mutation frame
+- `src/repl/thinClient/fallbackManager.ts` — 加 CronMutationPayload type + sendCronMutation + pending map + cleanup
+- `src/hooks/useDaemonMode.ts` — 加 sendCronMutationToDaemon helper
+- `src/tools/ScheduleCronTool/CronListTool.ts` — output schema 加 scheduleRaw / scheduleKind
+
+**E2E 驗收清單**（待使用者跑一輪）：
+- [ ] `/cron` 開啟 → 看得到現有 tasks（含 daemon 建的 W3 test task）
+- [ ] `n` 建「每 2 分鐘」→ list 立刻出現 → 等 2 分鐘 → REPL 彈 toast + StatusLine badge
+- [ ] `p` 暫停 → icon 切 ⏸ → daemon 下 tick 不 fire
+- [ ] `r` 立即執行 → REPL 在下個 turn gap 跑 prompt
+- [ ] `e` 改 prompt → 再 `r` 驗證新 prompt 生效
+- [ ] `h` inline history、`H` full history scroll
+- [ ] `d` → confirm y → 從 list 移除、tasks.jsonl 也消失
+- [ ] Schedule editor：preset 直接 commit、參數 form 填 c 確認、Custom/NL 輸入框 Enter commit
+- [ ] Attached 模式下兩個 REPL：一邊改另一邊立即看到（cron.tasksChanged broadcast）
+- [ ] Standalone 模式：daemon 停掉還能用（fallback 本機）
 
 ---
 
@@ -1731,3 +1807,49 @@
 - 2026-04-23 14:17: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
 
 - 2026-04-23 14:54: Session 結束 | 進度：464/510 任務 | 16646bd feat(cron): W3-6 — cronWiring emits CronFireEvent，daemon broadcast 到 WS
+
+- 2026-04-23 16:48: Session 結束 | 進度：478/510 任務 | 414c09e feat(discord): Wave 3 — Discord cronMirror 訂閱 cron.events 發通知
+
+- 2026-04-23 16:54: Session 結束 | 進度：478/510 任務 | 414c09e feat(discord): Wave 3 — Discord cronMirror 訂閱 cron.events 發通知
+
+- 2026-04-23 16:57: Session 結束 | 進度：478/510 任務 | 414c09e feat(discord): Wave 3 — Discord cronMirror 訂閱 cron.events 發通知
+
+- 2026-04-23 17:00: Session 結束 | 進度：478/510 任務 | 414c09e feat(discord): Wave 3 — Discord cronMirror 訂閱 cron.events 發通知
+
+- 2026-04-23 17:07: Session 結束 | 進度：478/510 任務 | 414c09e feat(discord): Wave 3 — Discord cronMirror 訂閱 cron.events 發通知
+
+- 2026-04-23 17:11: Session 結束 | 進度：478/510 任務 | 414c09e feat(discord): Wave 3 — Discord cronMirror 訂閱 cron.events 發通知
+
+- 2026-04-23 17:19: Session 結束 | 進度：478/510 任務 | 414c09e feat(discord): Wave 3 — Discord cronMirror 訂閱 cron.events 發通知
+
+- 2026-04-23 20:54: Session 結束 | 進度：478/510 任務 | 414c09e feat(discord): Wave 3 — Discord cronMirror 訂閱 cron.events 發通知
+
+- 2026-04-23 20:57: Session 結束 | 進度：478/510 任務 | 414c09e feat(discord): Wave 3 — Discord cronMirror 訂閱 cron.events 發通知
+
+- 2026-04-23 21:57: Session 結束 | 進度：478/510 任務 | 414c09e feat(discord): Wave 3 — Discord cronMirror 訂閱 cron.events 發通知
+
+- 2026-04-23 22:08: Session 結束 | 進度：478/510 任務 | 414c09e feat(discord): Wave 3 — Discord cronMirror 訂閱 cron.events 發通知
+
+- 2026-04-23 22:16: Session 結束 | 進度：478/510 任務 | f394fa6 feat(cron): /cron TUI — read-only list + detail
+
+- 2026-04-23 22:38: Session 結束 | 進度：478/510 任務 | a6c309c feat(cron): /cron — full history scrollable view
+
+- 2026-04-23 22:44: Session 結束 | 進度：478/510 任務 | a6c309c feat(cron): /cron — full history scrollable view
+
+- 2026-04-23 22:50: Session 結束 | 進度：478/510 任務 | a6c309c feat(cron): /cron — full history scrollable view
+
+- 2026-04-23 23:02: Session 結束 | 進度：478/510 任務 | 1a0cea9 feat(cron): schedule preset picker in wizard
+
+- 2026-04-23 23:10: Session 結束 | 進度：478/510 任務 | 1a0cea9 feat(cron): schedule preset picker in wizard
+
+- 2026-04-23 23:13: Session 結束 | 進度：478/510 任務 | 1a0cea9 feat(cron): schedule preset picker in wizard
+
+- 2026-04-23 23:18: Session 結束 | 進度：478/510 任務 | 1a0cea9 feat(cron): schedule preset picker in wizard
+
+- 2026-04-23 23:27: Session 結束 | 進度：478/510 任務 | f760fa2 docs(lessons): bun run dev 不跑 feature-gated 子系統
+
+- 2026-04-23 23:36: Session 結束 | 進度：478/510 任務 | cccaac5 build(dev): bun run dev 啟用 feature flags
+
+- 2026-04-23 23:48: Session 結束 | 進度：478/510 任務 | cccaac5 build(dev): bun run dev 啟用 feature flags
+
+- 2026-04-24 00:12: Session 結束 | 進度：478/510 任務 | 1f88ef3 test(cron): B6 — extract picker helpers + 22 unit tests

@@ -238,6 +238,88 @@ export CLAUDE_CONFIG_DIR=~/.claude
 
 ---
 
+### 2026-04-24 — M-CRON-W4：`/cron` TUI + daemon WS 寫入
+
+**範圍**：Wave 3 完成了 agent tool 層（8 個工具 LLM 可呼叫），Wave 4 給人類一個互動式 TUI — 一個 `/cron` slash command 涵蓋 list / create / edit / pause / resume / delete / run-now / history 全部操作，加上 daemon attached 時 mutation 走 WS RPC 立即 broadcast 同步（chokidar 200ms → ~即時）。
+
+**commit 序列**（15 個 commit，逐 commit 可用、可 revert）：
+1. `f394fa6` commit 1 — read-only list + detail（master-detail / sort / inline history / 5s poll）
+2. `692cd1f` commit 2 — pause/resume/delete + y/N confirm + 2.5s flash
+3. `5012e7b` commit 3 — run-now（沿用 CronRunNowTool enqueuePendingNotification）
+4. `9057a1f` commit 4 — wizard inline edit mode（E/a 鍵 + 10 欄位 + 4 kind editor）
+5. `33d183f` commit 5 — create flow（n 鍵 → wizard + parseSchedule/parseScheduleNL）
+6. `5601828` commit 6 — edit flow（e 鍵 → wizard 預帶 task 全欄位）
+7. `a6c309c` commit 7 — full history 捲動畫面（H 鍵 + 20/頁）
+8. `1a0cea9` commit 8 — `CronScheduleEditor` 14 preset + 參數 form + preview
+9. `df45fb1` B1a — `daemon/cronMutationRpc.ts` + daemonCli dispatch
+10. `ebe1edd` B1b — fallbackManager.sendCronMutation + tasksChanged broadcast
+11. `5639761` B1c — CronPicker attached 走 WS / standalone 走本機
+12. `3174388` B4 — list 多欄顯示 scheduleSpec.raw
+13. `44d8f5c` B2 — CronListTool 輸出 scheduleRaw + scheduleKind
+14. `272415d` B5 — wizard prompt 專屬 multi-line editor
+15. `1f88ef3` B6 — 抽 cronPickerLogic + 22 pure-fn tests
+
+**新模組**：
+- `src/commands/cron/{index.ts, cron.tsx, CronPicker.tsx, cronPickerLogic.ts}`
+- `src/components/CronScheduleEditor.tsx`（14 preset + 多層 mode）
+- `src/daemon/cronMutationRpc.ts`（WS frame protocol）
+- `tests/integration/cron/picker-logic.test.ts`
+
+**改造既有**：
+- `src/commands.ts` 註冊 `/cron`
+- `src/components/CronCreateWizard.tsx` 從 display-only summary card 擴成全互動 wizard（5 mode：view / selecting / editing / editing-schedule / editing-prompt）— 公開 API 不變，既有 daemon LLM-gate 呼叫點零修改
+- `src/daemon/daemonCli.ts` 加 cron.mutation dispatch + broadcast
+- `src/repl/thinClient/fallbackManager.ts` 加 CronMutationPayload / sendCronMutation / pending map / cleanup
+- `src/hooks/useDaemonMode.ts` 加 `sendCronMutationToDaemon` helper
+- `src/tools/ScheduleCronTool/CronListTool.ts` output schema 加 scheduleRaw / scheduleKind
+
+**關鍵決策 Q&A**（與使用者對齊）：
+- Q1 command 數量：單一 `/cron` 進 master-detail（不做 `/cron-list` / `/cron-new` 分裂）
+- Q2 編輯欄位：基本 inline + `a` toggle 進 advanced；advanced 欄位（retry/condition/catchupMax/notify 等）存在時自動展開
+- Q3 create 流程：reuse `CronCreateWizard` → 擴充支援 inline edit（Q3′=b），create / LLM-gate 共用；公開 API 不變
+- Q4 daemon attached 寫入：(c) 讀本機即時 + 寫入走 daemon WS；standalone fallback 本機
+- Q5 run-now：走 REPL queue（與 `CronRunNowTool` 一致），daemon 不介入
+- Q6 刪除：`d` → `y/N` confirm（不可逆操作一定要確認）
+- Q7 顯示：全部（含 completed / agent-owned）
+- Q8 排序：state rank (scheduled=0, paused=1, completed=2) × 1e15 + nextFireMs
+
+**Schedule editor 對話**（使用者指出「打 `*/2 * * * *` 不友善」）：
+- 先呈現 A/B/C/D 方案 → 使用者選 D（三層混合）
+- 交付 A preset 第一波（14 選項，涵蓋 80% 場景），未做 B 5-欄位 builder（需要再補）
+- One-shot YYYY-MM-DD HH:MM preset + 過去日期檢查
+- Every N hours 驗證 N 整除 24
+- 即時 preview：`nextCronRunMs + formatDuration` 顯示「下次 fire 2026-04-24 09:00 (in 2h 14m)」
+- Custom 5-field 有 `unreachable cron` 檢查；NL 走 `parseScheduleNL`（llama.cpp qwen3.5-9b-neo）
+
+**WS frame protocol (B1)**：
+
+| 方向 | Frame | 用途 |
+|---|---|---|
+| REPL → daemon | `cron.mutation` (requestId, op, payload) | 5 op：create / update / pause / resume / delete |
+| daemon → REPL (source) | `cron.mutationResult` (same requestId, ok, error?, taskId?, task?) | 結果 |
+| daemon → all same-project REPL | `cron.tasksChanged` (projectId) | broadcast 刷 UI |
+
+update patch whitelist 11 欄位（cron / prompt / name / recurring / scheduleSpec / retry / condition / catchupMax / notify / preRunScript / modelOverride），explicit undefined 清欄位。
+
+**踩坑 / 教訓**：
+1. `/cron` 新命令必須走 `local-jsx` 而非 `prompt` — 要長駐 React 樹等使用者互動
+2. `CronCreateWizard` 原本 display-only（Enter/Esc）不能直接給 slash create 用 — 需擴 edit-field mode；避免直接 mutate props 走 controlled state 複製成內部 working draft
+3. Schedule preset 的 One-shot 靠 pinned 5-field cron（`MM HH DD MM *`） + recurring=false，首次 fire 後 scheduler 自刪；過去日期要顯式驗證（5-field cron 本身不帶年份）
+4. `parseSchedule` 不接 NL，要 fallback 到 `parseScheduleNL`（LLM）— editor 包 `resolveScheduleOrFlash` helper 讓 create / edit 共用
+5. daemon 寫盤後不需呼叫 `scheduler.reload()` — 既有 chokidar watcher 200ms 內 pick up；broadcast `cron.tasksChanged` 是給 attached REPL 省輪詢而不是給 daemon scheduler 用
+6. CronHistoryEntry 的欄位是 `ts / attempt / errorMsg`，**不是** `firedAt / attemptCount / error`（commit 1 第一次寫錯過）
+7. 抽 pickerLogic 前 TUI 部分沒法單測（專案沒 ink-testing-library）— 把純函式抽出一個 module 同時解決測試缺口
+
+**主動跳過**：
+- B3 `/cron-history` 獨立 slash command — `/cron` H 鍵已覆蓋 95%，headless 場景 LLM 已可呼 CronHistoryTool，不值得新 command
+
+**未完成（延後）**：
+- Schedule editor 的 B 方案 5-欄位 builder（只有 preset + custom + NL 三條路，缺結構化 field 編輯）
+- Wizard 多個 REPL 同 project 在同一 task 上並發編輯 — 目前靠 daemon `updateCronTask` 原子寫，最後 winner wins
+- 實機 E2E 驗收（TODO.md 清單 10 項待使用者跑）
+
+---
+
 ### 2026-04-23 — M-CRON-W3：Cron 6 大功能擴充（Wave 3）
 
 **範圍**：本地 cron 從「會 fire 的 timer」升級成「可觀測 / 可確認 / 可恢復」的排程子系統。補齊 6 項：自然語言排程、結果通知（TUI toast + StatusLine badge + Discord 基礎建設）、run history、失敗重試 + exponential backoff、conditional 觸發、catch-up 策略。規劃見 `docs/cron-wave3-plan.md`、使用指南 `docs/cron-wave3.md`。
