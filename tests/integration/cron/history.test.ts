@@ -153,6 +153,47 @@ describe('cronHistory — append-only run history', () => {
     expect(entries[0]!.errorMsg).toBe('turn aborted')
   })
 
+  test('Wave 3 fields survive read/write round-trip', async () => {
+    const { readCronTasks, writeCronTasks } = await import(
+      '../../../src/utils/cronTasks'
+    )
+    const original = [
+      {
+        id: 'roundtrip',
+        cron: '*/5 * * * *',
+        prompt: 'p',
+        createdAt: Date.now(),
+        recurring: true,
+        scheduleSpec: { kind: 'nl' as const, raw: '每 5 分鐘' },
+        notify: {
+          tui: 'always' as const,
+          discord: 'home' as const,
+        },
+        history: { keepRuns: 25 },
+        retry: {
+          maxAttempts: 3,
+          backoffMs: 1000,
+          failureMode: { kind: 'turn-error' as const },
+          attemptCount: 0,
+        },
+        condition: { kind: 'lastRunOk' as const },
+        catchupMax: 5,
+      },
+    ]
+    await writeCronTasks(original, tmpDir)
+    const read = await readCronTasks(tmpDir)
+    expect(read.length).toBe(1)
+    const t = read[0]!
+    expect(t.scheduleSpec).toEqual({ kind: 'nl', raw: '每 5 分鐘' })
+    expect(t.notify).toEqual({ tui: 'always', discord: 'home' })
+    expect(t.history).toEqual({ keepRuns: 25 })
+    expect(t.retry?.maxAttempts).toBe(3)
+    expect(t.retry?.backoffMs).toBe(1000)
+    expect(t.retry?.failureMode.kind).toBe('turn-error')
+    expect(t.condition?.kind).toBe('lastRunOk')
+    expect(t.catchupMax).toBe(5)
+  })
+
   test('appendHistoryEntry uses task.history.keepRuns when truncate fires', async () => {
     // We can't deterministically force the probabilistic 10% truncate from
     // appendHistoryEntry, so call truncateHistory directly to validate the

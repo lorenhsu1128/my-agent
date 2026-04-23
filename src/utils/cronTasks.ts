@@ -276,6 +276,47 @@ export async function readCronTasks(dir?: string): Promise<CronTask[]> {
         ? { preRunScript: t.preRunScript }
         : {}),
       ...(typeof t.pausedAt === 'string' ? { pausedAt: t.pausedAt } : {}),
+      // ---- Wave 3 optional fields — whitelist-copy with shape guards. ----
+      ...(t.scheduleSpec &&
+      typeof t.scheduleSpec === 'object' &&
+      (t.scheduleSpec.kind === 'cron' || t.scheduleSpec.kind === 'nl') &&
+      typeof t.scheduleSpec.raw === 'string'
+        ? {
+            scheduleSpec: {
+              kind: t.scheduleSpec.kind,
+              raw: t.scheduleSpec.raw,
+            },
+          }
+        : {}),
+      ...(t.notify && typeof t.notify === 'object'
+        ? { notify: t.notify as CronTask['notify'] }
+        : {}),
+      ...(t.history &&
+      typeof t.history === 'object' &&
+      typeof (t.history as { keepRuns?: unknown }).keepRuns === 'number'
+        ? { history: { keepRuns: (t.history as { keepRuns: number }).keepRuns } }
+        : {}),
+      ...(t.retry &&
+      typeof t.retry === 'object' &&
+      typeof (t.retry as { maxAttempts?: unknown }).maxAttempts === 'number' &&
+      typeof (t.retry as { backoffMs?: unknown }).backoffMs === 'number' &&
+      (t.retry as { failureMode?: unknown }).failureMode
+        ? {
+            retry: {
+              maxAttempts: (t.retry as { maxAttempts: number }).maxAttempts,
+              backoffMs: (t.retry as { backoffMs: number }).backoffMs,
+              failureMode: (t.retry as { failureMode: CronTask['retry'] extends infer R ? R extends { failureMode: infer F } ? F : never : never }).failureMode as NonNullable<CronTask['retry']>['failureMode'],
+              attemptCount:
+                typeof (t.retry as { attemptCount?: unknown }).attemptCount === 'number'
+                  ? (t.retry as { attemptCount: number }).attemptCount
+                  : 0,
+            },
+          }
+        : {}),
+      ...(t.condition && typeof t.condition === 'object'
+        ? { condition: t.condition as CronTask['condition'] }
+        : {}),
+      ...(typeof t.catchupMax === 'number' ? { catchupMax: t.catchupMax } : {}),
     })
   }
   return out
