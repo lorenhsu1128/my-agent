@@ -47,6 +47,10 @@ import {
   handleAdminRequest,
   isDiscordAdminRequest,
 } from './discordAdminRpc.js'
+import {
+  handleCronMutation,
+  isCronMutationRequest,
+} from './cronMutationRpc.js'
 import { isVisionEnabled } from '../llamacppConfig/loader.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 
@@ -195,6 +199,36 @@ export async function runDaemonStart(
               getConfig: () => getDiscordConfigSnapshot(),
             })
             handle.server!.send(c.id, res)
+          })()
+          return
+        }
+        // B1：cron mutation RPC — 走當前 client 綁定的 project runtime（如果
+        // client 沒帶 cwd 則 fallback default runtime）。寫入後 broadcast 給
+        // 所有同 project 的 client 刷新 UI。
+        if (isCronMutationRequest(m)) {
+          const req = m
+          const runtime = c.projectId
+            ? (registry.getProject(c.projectId) ?? defaultRuntime)
+            : defaultRuntime
+          void (async () => {
+            const res = await handleCronMutation(req, {
+              projectRoot: runtime.cwd,
+              projectId: runtime.projectId,
+            })
+            handle.server!.send(c.id, res)
+            if (res.ok) {
+              try {
+                handle.server!.broadcast(
+                  {
+                    type: 'cron.tasksChanged',
+                    projectId: runtime.projectId,
+                  },
+                  x => x.projectId === runtime.projectId,
+                )
+              } catch {
+                // best-effort
+              }
+            }
           })()
           return
         }
