@@ -106,6 +106,11 @@ function formatTaskId(id: string): string {
   return id
 }
 
+function truncate(s: string, maxChars: number): string {
+  if (s.length <= maxChars) return s
+  return s.slice(0, maxChars - 1) + '…'
+}
+
 export function CronPicker({ onExit }: Props): React.ReactNode {
   const [mode, setMode] = useState<Mode>('list')
   const [tasks, setTasks] = useState<CronTask[]>([])
@@ -867,6 +872,14 @@ function CronList({
                 </Box>
                 <Box width={18}>
                   <Text dimColor>{e.task.cron}</Text>
+                </Box>
+                <Box width={20}>
+                  {e.task.scheduleSpec?.raw &&
+                  e.task.scheduleSpec.raw !== e.task.cron ? (
+                    <Text color="gray">“{truncate(e.task.scheduleSpec.raw, 18)}”</Text>
+                  ) : (
+                    <Text> </Text>
+                  )}
                 </Box>
                 <Box width={16}>
                   <Text>{nextFireLabel(e, now)}</Text>
