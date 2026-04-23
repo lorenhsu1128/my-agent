@@ -25,7 +25,14 @@ import {
   extractAssistantText,
   type StreamReplyMode,
 } from './streamOutput.js'
+import {
+  formatCronMirrorMessage,
+  pickCronMirrorTargets,
+  resolveCronNotifyMode,
+  type CronMirrorEvent,
+} from './cronMirror.js'
 import { truncateForDiscord } from './truncate.js'
+import { readCronTasks } from '../utils/cronTasks.js'
 import {
   formatMirrorHeader,
   pickAllMirrorTargets,
@@ -276,16 +283,65 @@ export function createDiscordGateway(
     }
   }
 
+  // M-CRON-W3 Discord cronMirror：訂閱 runtime.cron.events 把 CronFireEvent
+  // 鏡到 Discord。per-task 的 notify.discord 決定要不要發 + 發到哪。
+  // 每個 event 需查當前 task 才知 notify 設定；fire 頻率低，直接 readCronTasks
+  // 就行（scheduled_tasks.json 已是 mem-backed 的 fs write）。
+  const cronMirrorUnsubs = new Map<string, () => void>()
+  const ensureCronMirror = (runtime: ProjectRuntime): void => {
+    if (cronMirrorUnsubs.has(runtime.projectId)) return
+    if (!runtime.cron?.events) return
+    const handler = async (ev: CronMirrorEvent): Promise<void> => {
+      try {
+        const tasks = await readCronTasks(runtime.cwd)
+        const task = tasks.find(t => t.id === ev.taskId)
+        const mode = resolveCronNotifyMode(task?.notify, 'off')
+        const targets = pickCronMirrorTargets({
+          notify: mode,
+          cwd: runtime.cwd,
+          channelBindings: config.channelBindings,
+          homeChannelId: config.homeChannelId,
+        })
+        if (targets.length === 0) return
+        const chunks = formatCronMirrorMessage(ev)
+        for (const target of targets) {
+          try {
+            const sink = client.sinkForChannelId(target.channelId)
+            for (const c of chunks) await sink.send({ content: c })
+          } catch (e) {
+            void log?.warn?.('cron mirror post failed', {
+              projectId: runtime.projectId,
+              targetChannelId: target.channelId,
+              taskId: ev.taskId,
+              err: e instanceof Error ? e.message : String(e),
+            })
+          }
+        }
+      } catch (e) {
+        void log?.warn?.('cron mirror handler threw', {
+          projectId: runtime.projectId,
+          err: e instanceof Error ? e.message : String(e),
+        })
+      }
+    }
+    runtime.cron.events.on('cronFireEvent', handler)
+    cronMirrorUnsubs.set(runtime.projectId, () => {
+      runtime.cron.events.off('cronFireEvent', handler as never)
+    })
+  }
+
   // M-DISCORD-5：監聽 registry load 事件，新 runtime 一建好就自動掛 permission
   // tracking + home mirror；現有 runtime（gateway 啟動前就 load 的）也補掛一次。
   // 放在 ensureHomeMirror / postHomeMirror 宣告之後以避免 TDZ。
   const unsubRegistryLoad = registry.onLoad(r => {
     ensurePermissionTracking(r)
     ensureHomeMirror(r)
+    ensureCronMirror(r)
   })
   for (const existing of registry.listProjects()) {
     ensurePermissionTracking(existing)
     ensureHomeMirror(existing)
+    ensureCronMirror(existing)
   }
 
   const handleIncoming = async (
@@ -647,6 +703,14 @@ export function createDiscordGateway(
         }
       }
       homeMirrorUnsubs.clear()
+      for (const u of cronMirrorUnsubs.values()) {
+        try {
+          u()
+        } catch {
+          // ignore
+        }
+      }
+      cronMirrorUnsubs.clear()
       try {
         unsubRegistryLoad()
       } catch {

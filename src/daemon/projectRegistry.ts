@@ -319,7 +319,8 @@ export function createFakeProjectRuntime(opts: {
     broker: {} as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     permissionRouter: {} as any,
-    cron: { scheduler: null, stop: () => {} },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    cron: { scheduler: null, events: new (require('events').EventEmitter)(), stop: () => {} } as any,
     lastActivityAt: Date.now(),
     attachedReplIds,
     hasAttachedRepl: () => attachedReplIds.size > 0,
