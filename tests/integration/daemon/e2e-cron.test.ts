@@ -94,6 +94,7 @@ describe('daemon + cron wiring E2E', () => {
     }
     const cronHandle = startDaemonCronWiring({
       broker,
+      cwd: '/tmp/e2e-cron-test',
       isEnabled: () => true,
       modules: {
         createCronScheduler: opts => {

@@ -240,7 +240,13 @@ export async function writeCronTasks(
   dir?: string,
 ): Promise<void> {
   const root = dir ?? getProjectRoot()
-  await mkdir(join(root, '.my-agent'), { recursive: true })
+  // Windows + bun：對已存在目錄 `recursive: true` 仍會 throw EEXIST（跟 Node
+  // 規範相反）。`mode: EEXIST` 忽略掉即可；其他錯誤（EACCES / ENOSPC）才 rethrow。
+  try {
+    await mkdir(join(root, '.my-agent'), { recursive: true })
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code !== 'EEXIST') throw e
+  }
   // Strip runtime-only flags — `durable` (session-only marker) and `agentId`
   // (teammate route) never belong on disk. Everything on disk is durable,
   // non-teammate by definition.

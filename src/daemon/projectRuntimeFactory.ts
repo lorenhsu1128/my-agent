@@ -99,7 +99,7 @@ export function createDefaultProjectRuntimeFactory(
       })
       brokerRef.current = broker
 
-      cron = cronWire({ broker })
+      cron = cronWire({ broker, cwd })
     } catch (e) {
       // Bootstrap 失敗路徑：盡可能 cleanup 已建好的 resources
       try {

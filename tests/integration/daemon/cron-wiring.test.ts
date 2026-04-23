@@ -85,6 +85,7 @@ describe('startDaemonCronWiring', () => {
     const cap = { started: false, stopped: false }
     const handle = startDaemonCronWiring({
       broker,
+      cwd: '/tmp/cron-wiring-test',
       isEnabled: () => false,
       modules: makeFakeModules(cap),
     })
@@ -100,6 +101,7 @@ describe('startDaemonCronWiring', () => {
     const cap = { started: false, stopped: false }
     const handle = startDaemonCronWiring({
       broker,
+      cwd: '/tmp/cron-wiring-test',
       isEnabled: () => true,
       modules: makeFakeModules(cap),
     })
@@ -116,6 +118,7 @@ describe('startDaemonCronWiring', () => {
     const cap = { started: false, stopped: false }
     startDaemonCronWiring({
       broker,
+      cwd: '/tmp/cron-wiring-test',
       isEnabled: () => true,
       modules: makeFakeModules(cap),
     })
@@ -133,6 +136,7 @@ describe('startDaemonCronWiring', () => {
     const cap = { started: false, stopped: false }
     startDaemonCronWiring({
       broker,
+      cwd: '/tmp/cron-wiring-test',
       isEnabled: () => true,
       modules: makeFakeModules(cap),
     })
@@ -157,6 +161,7 @@ describe('startDaemonCronWiring', () => {
     let enabled = true
     startDaemonCronWiring({
       broker,
+      cwd: '/tmp/cron-wiring-test',
       isEnabled: () => enabled,
       modules: makeFakeModules(cap),
     })

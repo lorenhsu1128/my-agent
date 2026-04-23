@@ -24,6 +24,16 @@ export interface CronWiringHandle {
 
 export interface CronWiringOptions {
   broker: SessionBroker
+  /**
+   * Project cwd — 會當作 `createCronScheduler` 的 `dir` 傳入，讓 scheduler 走
+   * daemon path（立即 enable，不靠 bootstrap state flag）。
+   *
+   * 必填：`bootstrapDaemonContext` 的 finally 會把 `STATE.projectRoot` 還原
+   * 成 daemon 啟動前的值（M-CWD-FIX sandbox），此時 scheduler 若沒 `dir`
+   * 就會讀到錯的 project root，`hasCronTasksSync()` 永遠 false，`enablePoll`
+   * 的 flag 永遠翻不起來 → 永遠不 fire。
+   */
+  cwd: string
   /** 覆寫 gate（測試用）。預設讀 `isKairosCronEnabled`。 */
   isEnabled?: () => boolean
   /** 覆寫 module 載入（測試 inject fake scheduler）。 */
@@ -124,6 +134,8 @@ export function startDaemonCronWiring(
     isLoading: () => false,
     getJitterConfig: mods.getCronJitterConfig,
     isKilled: () => !gate(),
+    // 走 daemon path（立即 enable，不依賴 bootstrap state flag）。
+    dir: opts.cwd,
   })
   scheduler.start()
 
