@@ -96,6 +96,17 @@
 - **相關檔案**：node_modules/
 - **日期**：2026-04-16
 
+### `bun run dev` 不執行 feature-gated 子系統（cron scheduler / tools 啟用等）
+- **發生什麼事**：`/cron` 建立 task → run-now 正常 → 時間到了 scheduler 卻完全沒 fire，`lastFiredAt` 始終 `undefined`、`history/*.jsonl` 空空。debug 路徑：daemon 確認停掉、lock 檔不存在、cron schedule 正確、REPL 開著在 `/cron` — 明明該跑。
+- **根本原因**：`bun run dev` = `bun run ./src/entrypoints/cli.tsx`，**直接跑原始碼、沒過 bundler**。`feature('X')` 是 `bun:bundle` 的 **build-time 巨集**，需要 `scripts/build.ts` 把它替換成 `true`/`false` 常數。runtime 下 `feature()` 回傳 falsy，所以 `isKairosCronEnabled()` = false → `useScheduledTasks` 第 74 行 `if (!isKairosCronEnabled()) return` 直接退出，scheduler 從未 start。但 `/cron` picker 直接讀寫 `scheduled_tasks.json`、run-now 直接 `enqueuePendingNotification`，**完全繞過 feature gate** — 所以 UI 看起來都正常，只有時間觸發不會發生，症狀極具欺騙性。
+- **正確做法**：
+  1. 驗證 feature-gated 行為（cron schedule、betas tools、某些 model gating）**必須用 built binary**：`bun run build:dev` → `./cli`。
+  2. 或同時起 `./cli daemon start`（daemon 是另起 built-binary process，feature 已替換），讓 daemon 接管 scheduler；REPL 端走 `bun run dev` 也 OK（它本來就不跑 scheduler）。
+  3. 受此坑影響的子系統：`AGENT_TRIGGERS`（cron）、`KAIROS_*`、所有 `bun:bundle` import 的 gate — grep `feature(` 可列出。
+  4. 未來類似 bug 的診斷線索：「UI 動作正常但定時 / 背景 / 非同步的部分完全靜默」是 build-time gate 的典型指紋。
+- **相關檔案**：`src/utils/featureFlags.ts`（feature() 來源）、`scripts/build.ts:13-60`（build-time feature list）、`src/hooks/useScheduledTasks.ts:74`（gate 退出點）、`src/tools/ScheduleCronTool/prompt.ts:36`（`isKairosCronEnabled`）。
+- **日期**：2026-04-23
+
 ---
 
 ## 型別與編譯相關
