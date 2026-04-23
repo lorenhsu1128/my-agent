@@ -16,6 +16,11 @@ import {
   CronCreateWizard,
   type CronWizardDraft,
 } from '../../components/CronCreateWizard.js'
+import {
+  getCurrentDaemonManager,
+  sendCronMutationToDaemon,
+} from '../../hooks/useDaemonMode.js'
+import type { CronMutationPayload } from '../../repl/thinClient/fallbackManager.js'
 import { readHistory, type CronHistoryEntry } from '../../utils/cronHistory.js'
 import { formatDuration } from '../../utils/format.js'
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js'
@@ -153,6 +158,40 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     return () => clearTimeout(t)
   }, [flash])
 
+  // Subscribe to daemon broadcasts — cron.tasksChanged → immediate reload
+  // (avoids waiting for the 5s poll when another client mutates).
+  useEffect(() => {
+    const mgr = getCurrentDaemonManager()
+    if (!mgr) return
+    const handler = (f: { type: string }) => {
+      if (f.type === 'cron.tasksChanged') {
+        setReloadToken(n => n + 1)
+      }
+    }
+    mgr.on('frame', handler as never)
+    return () => mgr.off('frame', handler as never)
+  }, [])
+
+  /**
+   * Try daemon first (if attached); return true if daemon handled it. false
+   * means caller should run the local fallback. Daemon success → flash + reload
+   * handled here; daemon failure → error flash, no reload.
+   */
+  async function daemonMutate(
+    req: CronMutationPayload,
+    successText: string,
+  ): Promise<'daemon-ok' | 'daemon-err' | 'not-attached'> {
+    const res = await sendCronMutationToDaemon(req, 10_000)
+    if (res === null) return 'not-attached'
+    if (res.ok) {
+      setFlash({ text: successText, tone: 'info' })
+      reload()
+      return 'daemon-ok'
+    }
+    setFlash({ text: `Daemon rejected: ${res.error}`, tone: 'error' })
+    return 'daemon-err'
+  }
+
   const enriched = useMemo(() => {
     return tasks.map(t => enrich(t, now)).sort(sortEnriched)
   }, [tasks, now])
@@ -213,6 +252,12 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     }
     const nextState: CronTask['state'] =
       currentState === 'paused' ? 'scheduled' : 'paused'
+    const successText = `${nextState === 'paused' ? '⏸ Paused' : '▶ Resumed'} ${taskLabel(selected)}`
+    // Try daemon first
+    const op: 'pause' | 'resume' = nextState === 'paused' ? 'pause' : 'resume'
+    const d = await daemonMutate({ op, id: selected.id }, successText)
+    if (d !== 'not-attached') return
+    // Local fallback
     try {
       await updateCronTask(selected.id, t => {
         if (nextState === 'paused') {
@@ -221,10 +266,7 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
         const { pausedAt: _p, ...rest } = t
         return { ...rest, state: 'scheduled' }
       })
-      setFlash({
-        text: `${nextState === 'paused' ? '⏸ Paused' : '▶ Resumed'} ${taskLabel(selected)}`,
-        tone: 'info',
-      })
+      setFlash({ text: successText, tone: 'info' })
       reload()
     } catch (err) {
       setFlash({ text: `Failed: ${(err as Error).message}`, tone: 'error' })
@@ -286,6 +328,43 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     const resolved = await resolveScheduleOrFlash(rawSchedule)
     if (!resolved) return
 
+    // Try daemon first — build a full patch with clears for advanced fields
+    // the user removed.
+    const patch: Record<string, unknown> = {
+      cron: resolved.cron,
+      prompt,
+      name: draft.name,
+      scheduleSpec: resolved.scheduleSpec,
+      recurring: draft.recurring ? true : undefined,
+      retry: draft.retry,
+      condition: draft.condition,
+      catchupMax: draft.catchupMax,
+      notify: draft.notify,
+      preRunScript:
+        draft.preRunScript && draft.preRunScript !== ''
+          ? draft.preRunScript
+          : undefined,
+      modelOverride:
+        draft.modelOverride && draft.modelOverride !== ''
+          ? draft.modelOverride
+          : undefined,
+    }
+    const d = await sendCronMutationToDaemon(
+      { op: 'update', id: originalId, patch },
+      10_000,
+    )
+    if (d !== null) {
+      setMode('list')
+      if (d.ok) {
+        setFlash({ text: `✓ Updated ${originalId}`, tone: 'info' })
+        reload()
+      } else {
+        setFlash({ text: `Daemon rejected: ${d.error}`, tone: 'error' })
+      }
+      return
+    }
+
+    // Local fallback
     try {
       const result = await updateCronTask(originalId, t => {
         const next: CronTask = {
@@ -359,6 +438,38 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     }
     const resolved = await resolveScheduleOrFlash(rawSchedule)
     if (!resolved) return
+    // Try daemon first
+    const d = await sendCronMutationToDaemon(
+      {
+        op: 'create',
+        cron: resolved.cron,
+        prompt,
+        recurring: draft.recurring ?? true,
+        name: draft.name,
+        modelOverride: draft.modelOverride,
+        preRunScript: draft.preRunScript,
+        scheduleSpec: resolved.scheduleSpec,
+        retry: draft.retry,
+        condition: draft.condition,
+        catchupMax: draft.catchupMax,
+        notify: draft.notify,
+      },
+      10_000,
+    )
+    if (d !== null) {
+      setMode('list')
+      if (d.ok) {
+        setFlash({
+          text: `✓ Created ${d.taskId ?? '?'} (${resolved.cron})`,
+          tone: 'info',
+        })
+        reload()
+      } else {
+        setFlash({ text: `Daemon rejected: ${d.error}`, tone: 'error' })
+      }
+      return
+    }
+    // Local fallback
     try {
       const id = await addCronTask(
         resolved.cron,
@@ -402,14 +513,19 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
 
   async function deleteSelected(): Promise<void> {
     if (!selected) return
+    const successText = `✗ Deleted ${taskLabel(selected)}`
+    const d = await daemonMutate(
+      { op: 'delete', ids: [selected.id] },
+      successText,
+    )
+    setMode('list')
+    if (d !== 'not-attached') return
     try {
       await removeCronTasks([selected.id])
-      setFlash({ text: `✗ Deleted ${taskLabel(selected)}`, tone: 'info' })
-      setMode('list')
+      setFlash({ text: successText, tone: 'info' })
       reload()
     } catch (err) {
       setFlash({ text: `Delete failed: ${(err as Error).message}`, tone: 'error' })
-      setMode('list')
     }
   }
 

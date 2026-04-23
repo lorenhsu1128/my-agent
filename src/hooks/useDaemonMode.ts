@@ -177,6 +177,23 @@ export function respondToPermission(
 }
 
 /**
+ * B1：發 cron mutation 到 daemon。attached 時走 WS，否則回 null 讓 caller
+ * fallback 本機寫入。
+ */
+export async function sendCronMutationToDaemon(
+  req: import('../repl/thinClient/fallbackManager.js').CronMutationPayload,
+  timeoutMs?: number,
+): Promise<
+  | { ok: true; taskId?: string; task?: unknown }
+  | { ok: false; error: string }
+  | null
+> {
+  const mgr = currentManager
+  if (!mgr || mgr.state.mode !== 'attached') return null
+  return mgr.sendCronMutation(req, timeoutMs)
+}
+
+/**
  * M-CRON-W3-8b：回 cron wizard 決定。attached 才真送；回 true 表送出。
  */
 export function respondToCronWizard(
