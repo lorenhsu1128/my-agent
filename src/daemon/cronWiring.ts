@@ -14,8 +14,10 @@
  *   - Missed-task notification UI — daemon 沒有使用者面板，missed 仍會直接 fire
  */
 import type { SessionBroker } from './sessionBroker.js'
+import { evaluateCondition } from '../utils/cronCondition.js'
 import type { CronScheduler } from '../utils/cronScheduler.js'
 import type { CronTask } from '../utils/cronTasks.js'
+import { logForDebugging } from '../utils/debug.js'
 
 export interface CronWiringHandle {
   readonly scheduler: CronScheduler | null
@@ -115,6 +117,20 @@ export function startDaemonCronWiring(
   }
 
   const handleFire = async (task: CronTask): Promise<void> => {
+    // Wave 3 — condition gate. When the gate blocks, we suppress submit()
+    // but the scheduler still treats this as a fire (lastFiredAt advances)
+    // so we don't tick-loop re-evaluate every second. Re-check happens on
+    // the next normal schedule. The suppressed event will surface as
+    // status='skipped' in run history once W3-6 wires emit().
+    if (task.condition) {
+      const cond = await evaluateCondition(task)
+      if (!cond.pass) {
+        logForDebugging(
+          `[cronWiring] skipping ${task.id} — condition '${task.condition.kind}' blocked: ${cond.reason}`,
+        )
+        return
+      }
+    }
     let prompt = task.prompt
     if (task.preRunScript && mods!.runPreRunScript) {
       try {
