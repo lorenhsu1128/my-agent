@@ -224,6 +224,13 @@ export async function runDaemonStart(
           : defaultRuntime
         // permissionResponse 命中就 route 給該 runtime 的 router。
         if (runtime.permissionRouter.handleResponse(c.id, m)) return
+        // M-CRON-W3-8a：cronCreateWizardResult 走 wizard router（singleton map）。
+        {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const wizardMod = require('./cronCreateWizardRouter.js') as typeof import('./cronCreateWizardRouter.js')
+          const wr = wizardMod.getActiveCronWizardRouter(runtime.projectId)
+          if (wr && wr.handleResponse(c.id, m)) return
+        }
         // permissionContextSync（M-DAEMON-PERMS-B）同步 mode → 當前 runtime 的
         // toolPermissionContext.mode。
         if (

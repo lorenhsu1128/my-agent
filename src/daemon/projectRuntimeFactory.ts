@@ -26,6 +26,12 @@ import {
   createPermissionRouter,
   type PermissionRouter,
 } from './permissionRouter.js'
+import {
+  createCronCreateWizardRouter,
+  registerCronWizardRouter,
+  unregisterCronWizardRouter,
+  type CronCreateWizardRouter,
+} from './cronCreateWizardRouter.js'
 import { startDaemonCronWiring, type CronWiringHandle } from './cronWiring.js'
 import {
   wrapRunnerWithProjectCwd,
@@ -61,6 +67,7 @@ export function createDefaultProjectRuntimeFactory(
     let broker: SessionBroker | null = null
     let cron: CronWiringHandle | null = null
     let permissionRouter: PermissionRouter | null = null
+    let wizardRouter: CronCreateWizardRouter | null = null
 
     try {
       context = await bootstrap({
@@ -99,6 +106,14 @@ export function createDefaultProjectRuntimeFactory(
       })
       brokerRef.current = broker
 
+      // M-CRON-W3-8a：建 wizard router 並註冊到 active map，讓 CronCreateTool
+      // 透過 getActiveCronWizardRouter(projectId) 取得而不需 prop drilling。
+      wizardRouter = createCronCreateWizardRouter({
+        server: deps.server,
+        projectId,
+      })
+      registerCronWizardRouter(projectId, wizardRouter)
+
       cron = cronWire({ broker, cwd })
       // Wave 3 — broadcast cronFireEvent frames to all same-project clients
       // (REPL toast/badge, Discord mirror). Subscription lifecycle tied to
@@ -127,6 +142,12 @@ export function createDefaultProjectRuntimeFactory(
       }
       try {
         permissionRouter?.cancelAll('factory-failed')
+      } catch {
+        // ignore
+      }
+      try {
+        wizardRouter?.cancelAll('factory-failed')
+        unregisterCronWizardRouter(projectId)
       } catch {
         // ignore
       }
@@ -179,6 +200,12 @@ export function createDefaultProjectRuntimeFactory(
         }
         try {
           permissionRouter?.cancelAll('runtime-disposed')
+        } catch {
+          // ignore
+        }
+        try {
+          wizardRouter?.cancelAll('runtime-disposed')
+          unregisterCronWizardRouter(projectId)
         } catch {
           // ignore
         }
