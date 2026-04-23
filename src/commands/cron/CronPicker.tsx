@@ -11,6 +11,8 @@ import {
 } from '../../utils/cronTasks.js'
 import { readHistory, type CronHistoryEntry } from '../../utils/cronHistory.js'
 import { formatDuration } from '../../utils/format.js'
+import { enqueuePendingNotification } from '../../utils/messageQueueManager.js'
+import { WORKLOAD_CRON } from '../../utils/workloadContext.js'
 
 type Props = {
   onExit: (summary: string) => void
@@ -194,6 +196,25 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     }
   }
 
+  function runNowSelected(): void {
+    if (!selected) return
+    try {
+      enqueuePendingNotification({
+        value: selected.prompt,
+        mode: 'prompt',
+        priority: 'later',
+        isMeta: true,
+        workload: WORKLOAD_CRON,
+      })
+      setFlash({
+        text: `✓ Enqueued ${taskLabel(selected)} — will run at next turn gap`,
+        tone: 'info',
+      })
+    } catch (err) {
+      setFlash({ text: `Run-now failed: ${(err as Error).message}`, tone: 'error' })
+    }
+  }
+
   async function deleteSelected(): Promise<void> {
     if (!selected) return
     try {
@@ -240,6 +261,10 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
         void togglePauseSelected()
         return
       }
+      if (input === 'r') {
+        runNowSelected()
+        return
+      }
       if (input === 'd') {
         if (!selected) return
         setMode('confirmDelete')
@@ -255,6 +280,10 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     }
     if (input === 'p') {
       void togglePauseSelected()
+      return
+    }
+    if (input === 'r') {
+      runNowSelected()
       return
     }
     if (input === 'd') {
@@ -390,7 +419,7 @@ function CronList({
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
-          ↑/↓ move · Enter = detail · p = pause/resume · d = delete · q/Esc = close
+          ↑/↓ move · Enter = detail · r = run now · p = pause/resume · d = delete · q/Esc = close
         </Text>
       </Box>
     </Box>
@@ -497,7 +526,7 @@ function CronDetail({
         })
       )}
       <Box marginTop={1}>
-        <Text dimColor>p = pause/resume · d = delete · q/Esc/← = back</Text>
+        <Text dimColor>r = run now · p = pause/resume · d = delete · q/Esc/← = back</Text>
       </Box>
     </Box>
   )
