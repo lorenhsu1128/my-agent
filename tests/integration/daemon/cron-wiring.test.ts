@@ -38,6 +38,8 @@ function makeFakeBroker(submits: Submitted[]): SessionBroker {
         })
         return 'fake-id'
       },
+      on: (_event: string, _handler: unknown) => {},
+      off: (_event: string, _handler: unknown) => {},
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any,
     sessionId: 'fake-session',

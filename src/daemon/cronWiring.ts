@@ -15,6 +15,12 @@
  */
 import type { SessionBroker } from './sessionBroker.js'
 import { evaluateCondition } from '../utils/cronCondition.js'
+import {
+  classifyFireResult,
+  computeBackoffMs,
+  extractRunnerOutputText,
+  type FireOutcomeInputs,
+} from '../utils/cronFailureClassifier.js'
 import type { CronScheduler } from '../utils/cronScheduler.js'
 import {
   enumerateMissedFires,
@@ -103,13 +109,43 @@ export function startDaemonCronWiring(
   }
 
   const { broker } = opts
-  const submit = (prompt: string): void => {
-    broker.queue.submit(prompt, {
+  const submit = (prompt: string): string => {
+    return broker.queue.submit(prompt, {
       clientId: 'daemon-cron',
       source: 'cron',
       intent: 'background',
     })
   }
+
+  // Wave 3 — retry watcher. When a task has retry config, we capture
+  // runnerEvent text + turnEnd by inputId, then resolve to the classifier.
+  // Map<inputId, { task, attempt, output[], resolve }>.
+  type RetryWatch = {
+    task: CronTask
+    attempt: number
+    chunks: string[]
+    preRunFailed: boolean
+    resolve: (r: { reason: string; error?: string; output: string }) => void
+  }
+  const retryWatch = new Map<string, RetryWatch>()
+  broker.queue.on('runnerEvent', e => {
+    const w = retryWatch.get(e.input.id)
+    if (!w) return
+    if (e.event.type === 'output') {
+      const text = extractRunnerOutputText(e.event.payload)
+      if (text) w.chunks.push(text)
+    }
+  })
+  broker.queue.on('turnEnd', e => {
+    const w = retryWatch.get(e.input.id)
+    if (!w) return
+    retryWatch.delete(e.input.id)
+    w.resolve({
+      reason: e.reason,
+      error: e.error,
+      output: w.chunks.join(''),
+    })
+  })
 
   // 同 REPL useScheduledTasks：同 id 的多次 fire 走 promise lane 避免 race。
   const fireLanes = new Map<string, Promise<void>>()
@@ -122,13 +158,13 @@ export function startDaemonCronWiring(
     })
   }
 
-  const handleFire = async (task: CronTask): Promise<void> => {
+  const handleFire = async (task: CronTask, attempt = 1): Promise<void> => {
     // Wave 3 — condition gate. When the gate blocks, we suppress submit()
     // but the scheduler still treats this as a fire (lastFiredAt advances)
     // so we don't tick-loop re-evaluate every second. Re-check happens on
     // the next normal schedule. The suppressed event will surface as
     // status='skipped' in run history once W3-6 wires emit().
-    if (task.condition) {
+    if (attempt === 1 && task.condition) {
       const cond = await evaluateCondition(task)
       if (!cond.pass) {
         logForDebugging(
@@ -138,15 +174,64 @@ export function startDaemonCronWiring(
       }
     }
     let prompt = task.prompt
-    if (task.preRunScript && mods!.runPreRunScript) {
+    let preRunFailed = false
+    // preRunScript runs once per fire, not per retry (it's data collection,
+    // re-running wastes resources; the prompt stays the same across retries).
+    if (attempt === 1 && task.preRunScript && mods!.runPreRunScript) {
       try {
         const result = await mods!.runPreRunScript(task.preRunScript)
+        preRunFailed = !result.ok
         prompt = mods!.augmentPromptWithPreRun(prompt, result)
       } catch {
+        preRunFailed = true
         // preRunScript 失敗也送原始 prompt，不吞掉 fire。
       }
     }
-    submit(prompt)
+
+    // No retry config → fire-and-forget (legacy path).
+    if (!task.retry || task.retry.maxAttempts <= 1) {
+      submit(prompt)
+      return
+    }
+
+    // Retry path — submit, observe turnEnd, classify, maybe setTimeout retry.
+    const maxAttempts = task.retry.maxAttempts
+    const inputId = submit(prompt)
+    const outcome = await new Promise<FireOutcomeInputs>(resolve => {
+      retryWatch.set(inputId, {
+        task,
+        attempt,
+        chunks: [],
+        preRunFailed,
+        resolve: r =>
+          resolve({
+            turnReason: r.reason,
+            turnError: r.error,
+            output: r.output,
+            preRunFailed,
+          }),
+      })
+    })
+    const verdict = classifyFireResult(outcome, task.retry.failureMode)
+    if (verdict === 'ok') {
+      logForDebugging(
+        `[cronWiring] ${task.id} attempt ${attempt}/${maxAttempts} ok`,
+      )
+      return
+    }
+    if (attempt >= maxAttempts) {
+      logForDebugging(
+        `[cronWiring] ${task.id} exhausted retries (${maxAttempts} attempts); giving up`,
+      )
+      return
+    }
+    const backoff = computeBackoffMs(task.retry.backoffMs, attempt)
+    logForDebugging(
+      `[cronWiring] ${task.id} attempt ${attempt} failed; retrying in ${backoff}ms`,
+    )
+    setTimeout(() => {
+      runLane(task.id, () => handleFire(task, attempt + 1))
+    }, backoff).unref()
   }
 
   const scheduler = mods.createCronScheduler({
