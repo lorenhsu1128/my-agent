@@ -53,6 +53,27 @@ export interface FallbackManagerOptions {
   createSocket?: (opts: ThinClientSocketOptions) => ThinClientSocket
 }
 
+/** B1：cron mutation request payload — see daemon/cronMutationRpc.ts for schema. */
+export type CronMutationPayload =
+  | {
+      op: 'create'
+      cron: string
+      prompt: string
+      recurring: boolean
+      name?: string
+      scheduleSpec?: { kind: 'cron' | 'nl'; raw: string }
+      preRunScript?: string
+      modelOverride?: string
+      retry?: unknown
+      condition?: unknown
+      catchupMax?: number
+      notify?: unknown
+    }
+  | { op: 'update'; id: string; patch: Record<string, unknown> }
+  | { op: 'pause'; id: string }
+  | { op: 'resume'; id: string }
+  | { op: 'delete'; ids: string[] }
+
 export interface FallbackManager {
   readonly state: FallbackManagerState
   /** M-DISCORD-2：最近一次 daemon 拒 attach 的理由（project 未 load 等）；連成功一次 reset。 */
@@ -87,6 +108,18 @@ export interface FallbackManager {
     decision: 'confirm' | 'cancel',
     opts?: { task?: Record<string, unknown>; reason?: string },
   ): void
+  /**
+   * B1：送 cron mutation 到 daemon，daemon 寫盤後 broadcast tasksChanged。
+   * 非 attached / timeout 回 null，caller 自己 fallback 本機寫入。
+   */
+  sendCronMutation(
+    req: CronMutationPayload,
+    timeoutMs?: number,
+  ): Promise<
+    | { ok: true; taskId?: string; task?: unknown }
+    | { ok: false; error: string }
+    | null
+  >
   /**
    * 立刻嘗試 attach（不等 detector poll）。清除 suppressAutoReattach flag。
    * 若 daemon 不 alive 或 connect 失敗回 ok:false + reason。
@@ -257,6 +290,17 @@ export function createFallbackManager(
     string,
     { resolve: DiscordAdminResolve; timer: ReturnType<typeof setTimeout> }
   >()
+  /** B1：pending cron.mutation response */
+  type CronMutationResolve = (
+    v:
+      | { ok: true; taskId?: string; task?: unknown }
+      | { ok: false; error: string }
+      | null,
+  ) => void
+  const pendingCronMutation = new Map<
+    string,
+    { resolve: CronMutationResolve; timer: ReturnType<typeof setTimeout> }
+  >()
 
   // M-CWD-FIX：帶 cwd 連線時等 hello frame 才切 attached。daemon 的
   // loadProject 是異步的；在 hello 到達前 input 會被 fallback 到 defaultRuntime。
@@ -326,6 +370,32 @@ export function createFallbackManager(
             })
           }
         }
+        return
+      }
+      // B1：cron mutation response → resolve pending promise
+      if (f.type === 'cron.mutationResult') {
+        const rid = String((f as { requestId?: unknown }).requestId ?? '')
+        const pending = pendingCronMutation.get(rid)
+        if (pending) {
+          clearTimeout(pending.timer)
+          pendingCronMutation.delete(rid)
+          const p = f as unknown as {
+            ok?: boolean
+            error?: string
+            taskId?: string
+            task?: unknown
+          }
+          if (p.ok) {
+            pending.resolve({ ok: true, taskId: p.taskId, task: p.task })
+          } else {
+            pending.resolve({ ok: false, error: String(p.error ?? 'unknown') })
+          }
+        }
+        return
+      }
+      // B1：cron.tasksChanged broadcast → bubble up to REPL for list refresh
+      if (f.type === 'cron.tasksChanged') {
+        emitter.emit('frame', f)
         return
       }
       if (f.type === 'discord.adminResult') {
@@ -669,6 +739,11 @@ export function createFallbackManager(
         p.resolve(null)
       }
       pendingDiscordUnbind.clear()
+      for (const p of pendingCronMutation.values()) {
+        clearTimeout(p.timer)
+        p.resolve(null)
+      }
+      pendingCronMutation.clear()
       cleanupSocket()
       setMode('standalone')
     },
@@ -755,6 +830,32 @@ export function createFallbackManager(
         }
       })
     },
+    async sendCronMutation(req, timeoutMs = 10_000) {
+      if (mode !== 'attached' || !socket) return null
+      const requestId = `cronMut${nextQueryId++}-${Date.now()}`
+      return await new Promise<
+        | { ok: true; taskId?: string; task?: unknown }
+        | { ok: false; error: string }
+        | null
+      >(resolve => {
+        const timer = setTimeout(() => {
+          pendingCronMutation.delete(requestId)
+          resolve(null)
+        }, timeoutMs)
+        pendingCronMutation.set(requestId, { resolve, timer })
+        try {
+          ;(
+            socket as unknown as {
+              send: (f: Record<string, unknown>) => void
+            }
+          ).send({ type: 'cron.mutation', requestId, ...req })
+        } catch {
+          clearTimeout(timer)
+          pendingCronMutation.delete(requestId)
+          resolve(null)
+        }
+      })
+    },
     async discordAdmin(req, timeoutMs = 10_000) {
       if (mode !== 'attached' || !socket) return null
       const requestId = `dadm${nextQueryId++}-${Date.now()}`
@@ -821,6 +922,11 @@ export function createFallbackManager(
         p.resolve(null)
       }
       pendingDiscordUnbind.clear()
+      for (const p of pendingCronMutation.values()) {
+        clearTimeout(p.timer)
+        p.resolve(null)
+      }
+      pendingCronMutation.clear()
       cleanupSocket()
       emitter.removeAllListeners()
     },
