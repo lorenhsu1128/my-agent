@@ -201,19 +201,76 @@ export const CronCreateTool = buildTool({
     const parsed = resolveSchedule(rest)
     // Kill switch forces session-only; schema stays stable so the model sees
     // no validation errors when the gate flips mid-session.
-    const effectiveDurable = durable && isDurableCronEnabled()
+    let effectiveDurable = durable && isDurableCronEnabled()
+    let finalPrompt = prompt
+    let finalName = name
+    let finalCron = parsed.cron
+    let finalRecurring = parsed.recurring
+    let finalRepeat = repeat
+    let finalDisplay = parsed.display
+
+    // M-CRON-W3-8b：If a wizard router is active (we're inside daemon
+    // context), gate this write behind user confirmation in REPL.
+    // No router = standalone path = direct write (legacy behavior).
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const wmod = require('../../daemon/cronCreateWizardRouter.js') as
+        | typeof import('../../daemon/cronCreateWizardRouter.js')
+        | undefined
+      const router = wmod?.getAnyActiveCronWizardRouter()
+      if (router) {
+        const draft = {
+          cron: parsed.cron,
+          prompt,
+          recurring: parsed.recurring,
+          ...(name ? { name } : {}),
+          ...(typeof repeat === 'number' ? { repeat } : {}),
+          ...(effectiveDurable ? { durable: true } : {}),
+          scheduleSpec: { kind: 'cron' as const, raw: parsed.cron },
+        }
+        const verdict = await router.requestWizard(draft)
+        if (verdict.kind === 'cancel') {
+          throw new Error(`Wizard cancelled: ${verdict.reason}`)
+        }
+        if (verdict.kind === 'timeout') {
+          throw new Error('Wizard timed out (no user response within 5min)')
+        }
+        if (verdict.kind === 'no-clients') {
+          throw new Error(
+            'No attached REPL to confirm cron creation. Open a REPL session and retry.',
+          )
+        }
+        // confirm — apply user-edited values back. Be conservative: only
+        // accept fields we recognize.
+        const t = verdict.task as Record<string, unknown>
+        if (typeof t.prompt === 'string') finalPrompt = t.prompt
+        if (typeof t.name === 'string') finalName = t.name
+        if (typeof t.cron === 'string') {
+          finalCron = t.cron
+          finalDisplay = cronToHuman(t.cron)
+        }
+        if (typeof t.recurring === 'boolean') finalRecurring = t.recurring
+        if (typeof t.repeat === 'number') finalRepeat = t.repeat
+        if (typeof t.durable === 'boolean') {
+          effectiveDurable = t.durable && isDurableCronEnabled()
+        }
+      }
+    } catch (e) {
+      // Surface wizard errors to the LLM verbatim — confirms / cancellations
+      // travel as Error to keep the tool's Result type unchanged.
+      throw e
+    }
+
     const id = await addCronTask(
-      parsed.cron,
-      prompt,
-      parsed.recurring,
+      finalCron,
+      finalPrompt,
+      finalRecurring,
       effectiveDurable,
       getTeammateContext()?.agentId,
       {
-        ...(name ? { name } : {}),
-        // repeat only makes sense on recurring tasks; addCronTask also
-        // guards this, but filtering here keeps the data shape clean.
-        ...(parsed.recurring && typeof repeat === 'number'
-          ? { repeatTimes: repeat }
+        ...(finalName ? { name: finalName } : {}),
+        ...(finalRecurring && typeof finalRepeat === 'number'
+          ? { repeatTimes: finalRepeat }
           : {}),
       },
     )
@@ -221,11 +278,13 @@ export const CronCreateTool = buildTool({
     return {
       data: {
         id,
-        humanSchedule: parsed.display || cronToHuman(parsed.cron),
-        recurring: parsed.recurring,
+        humanSchedule: finalDisplay || cronToHuman(finalCron),
+        recurring: finalRecurring,
         durable: effectiveDurable,
-        ...(name ? { name } : {}),
-        ...(parsed.recurring && typeof repeat === 'number' ? { repeat } : {}),
+        ...(finalName ? { name: finalName } : {}),
+        ...(finalRecurring && typeof finalRepeat === 'number'
+          ? { repeat: finalRepeat }
+          : {}),
       },
     }
   },

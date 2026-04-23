@@ -90,7 +90,8 @@ import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js';
 import { getShortcutDisplay } from '../keybindings/shortcutFormat.js';
 import { CancelRequestHandler } from '../hooks/useCancelRequest.js';
 import { useBackgroundTaskNavigation } from '../hooks/useBackgroundTaskNavigation.js';
-import { useDaemonMode, getCurrentDaemonManager, getLatestPendingPermission, respondToPermission, syncPermissionModeToDaemon } from '../hooks/useDaemonMode.js';
+import { useDaemonMode, getCurrentDaemonManager, getLatestPendingPermission, respondToCronWizard, respondToPermission, syncPermissionModeToDaemon } from '../hooks/useDaemonMode.js';
+import { CronCreateWizard, type CronWizardDraft } from '../components/CronCreateWizard.js';
 import type { BetaContentBlock } from 'my-agent-ai/sdk/resources/beta/messages/messages';
 import { useSwarmInitialization } from '../hooks/useSwarmInitialization.js';
 import { useTeammateViewAutoExit } from '../hooks/useTeammateViewAutoExit.js';
@@ -826,6 +827,11 @@ export function REPL({
   useIdeLogging(isRemoteSession ? EMPTY_MCP_CLIENTS : mcp.clients);
   useIdeSelection(isRemoteSession ? EMPTY_MCP_CLIENTS : mcp.clients, setIDESelection);
   const [streamMode, setStreamMode] = useState<SpinnerMode>('responding');
+  // M-CRON-W3-8b：currently displayed wizard (set by daemon broadcast).
+  const [activeCronWizard, setActiveCronWizard] = useState<{
+    wizardId: string;
+    draft: CronWizardDraft;
+  } | null>(null);
   // Ref mirror so onSubmit can read the latest value without adding
   // streamMode to its deps. streamMode flips between
   // requesting/responding/tool-use ~10x per turn during streaming; having it
@@ -4217,6 +4223,18 @@ export function REPL({
         )
       ]);
     },
+    onCronCreateWizard: (info): void => {
+      setActiveCronWizard({
+        wizardId: info.wizardId,
+        draft: info.draft as CronWizardDraft,
+      });
+    },
+    onCronCreateWizardResolved: (info): void => {
+      // Peer client (or our own confirm/cancel) finalized — close UI.
+      setActiveCronWizard(prev =>
+        prev?.wizardId === info.wizardId ? null : prev
+      );
+    },
     onCronFireEvent: (e): void => {
       // M-CRON-W3-7：toast + badge state。toast 走 ephemeral notification queue，
       // badge 經 AppState.lastCronFire 由 StatusLine 條件渲染。
@@ -4790,7 +4808,24 @@ export function REPL({
   // (immediate: /model, /mcp, /btw, ...) and scrollable (non-immediate:
   // /config, /theme, /diff, ...) both go here now.
   const toolJsxCentered = isFullscreenEnvEnabled() && toolJSX?.isLocalJSXCommand === true;
-  const centeredModal: React.ReactNode = toolJsxCentered ? toolJSX!.jsx : null;
+  // M-CRON-W3-8b：wizard claims modal slot when active (overrides toolJSX so
+  // user can't ignore it). centeredModal is null otherwise.
+  const cronWizardElement = activeCronWizard ? (
+    <CronCreateWizard
+      key={activeCronWizard.wizardId}
+      wizardId={activeCronWizard.wizardId}
+      draft={activeCronWizard.draft}
+      onConfirm={task => {
+        respondToCronWizard(activeCronWizard.wizardId, 'confirm', { task });
+        setActiveCronWizard(null);
+      }}
+      onCancel={reason => {
+        respondToCronWizard(activeCronWizard.wizardId, 'cancel', { reason });
+        setActiveCronWizard(null);
+      }}
+    />
+  ) : null;
+  const centeredModal: React.ReactNode = cronWizardElement ?? (toolJsxCentered ? toolJSX!.jsx : null);
 
   // <AlternateScreen> at the root: everything below is inside its
   // <Box height={rows}>. Handlers/contexts are zero-height so ScrollBox's

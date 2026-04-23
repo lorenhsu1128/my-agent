@@ -68,6 +68,16 @@ export interface UseDaemonModeOptions {
     mode: import('../types/permissions.js').PermissionMode
   }) => void
   /**
+   * M-CRON-W3-8b：收到 cronCreateWizard 時呼叫。REPL 用來彈 wizard 元件。
+   * draft 是 LLM 推斷的完整 task，使用者確認後回 cronCreateWizardResult。
+   */
+  onCronCreateWizard?: (info: {
+    wizardId: string
+    draft: Record<string, unknown>
+  }) => void
+  /** 收到 cronCreateWizardResolved 時呼叫（peer 已決定 → 關 UI）。 */
+  onCronCreateWizardResolved?: (info: { wizardId: string }) => void
+  /**
    * M-CRON-W3-7：daemon 廣播 cronFireEvent 時呼叫。REPL 用來彈 toast
    * + 更新 StatusLine 的 cron badge。payload 已含 redacted errorMsg。
    */
@@ -166,6 +176,24 @@ export function respondToPermission(
   }
 }
 
+/**
+ * M-CRON-W3-8b：回 cron wizard 決定。attached 才真送；回 true 表送出。
+ */
+export function respondToCronWizard(
+  wizardId: string,
+  decision: 'confirm' | 'cancel',
+  opts?: { task?: Record<string, unknown>; reason?: string },
+): boolean {
+  const mgr = currentManager
+  if (!mgr || mgr.state.mode !== 'attached') return false
+  try {
+    mgr.sendCronCreateWizardResult(wizardId, decision, opts)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function useDaemonMode(
   opts: UseDaemonModeOptions = {},
 ): UseDaemonModeResult {
@@ -197,6 +225,14 @@ export function useDaemonMode(
     opts.onCronFireEvent,
   )
   onCronFireEventRef.current = opts.onCronFireEvent
+  const onCronWizardRef = useRef<typeof opts.onCronCreateWizard>(
+    opts.onCronCreateWizard,
+  )
+  onCronWizardRef.current = opts.onCronCreateWizard
+  const onCronWizardResolvedRef = useRef<
+    typeof opts.onCronCreateWizardResolved
+  >(opts.onCronCreateWizardResolved)
+  onCronWizardResolvedRef.current = opts.onCronCreateWizardResolved
   const cwdRef = useRef<string | undefined>(opts.cwd)
   cwdRef.current = opts.cwd
 
@@ -278,6 +314,17 @@ export function useDaemonMode(
           f as unknown as Parameters<
             NonNullable<UseDaemonModeOptions['onCronFireEvent']>
           >[0],
+        )
+      } else if (f.type === 'cronCreateWizard') {
+        onCronWizardRef.current?.(
+          f as unknown as {
+            wizardId: string
+            draft: Record<string, unknown>
+          },
+        )
+      } else if (f.type === 'cronCreateWizardResolved') {
+        onCronWizardResolvedRef.current?.(
+          f as unknown as { wizardId: string },
         )
       }
       onFrameRef.current?.(f)

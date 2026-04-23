@@ -81,6 +81,12 @@ export interface FallbackManager {
   sendPermissionContextSync(
     mode: import('../../types/permissions.js').PermissionMode,
   ): void
+  /** M-CRON-W3-8b：回 wizard 確認 / 取消；只在 attached 時可用。 */
+  sendCronCreateWizardResult(
+    wizardId: string,
+    decision: 'confirm' | 'cancel',
+    opts?: { task?: Record<string, unknown>; reason?: string },
+  ): void
   /**
    * 立刻嘗試 attach（不等 detector poll）。清除 suppressAutoReattach flag。
    * 若 daemon 不 alive 或 connect 失敗回 ok:false + reason。
@@ -602,6 +608,22 @@ export function createFallbackManager(
       } catch {
         // ignore transient send error
       }
+    },
+    sendCronCreateWizardResult(wizardId, decision, wopts) {
+      if (mode !== 'attached' || !socket) {
+        throw new Error(
+          `cannot send cronCreateWizardResult in mode=${mode}`,
+        )
+      }
+      const payload: Record<string, unknown> = {
+        type: 'cronCreateWizardResult',
+        wizardId,
+        decision,
+      }
+      if (decision === 'confirm' && wopts?.task) payload.task = wopts.task
+      if (decision === 'cancel' && wopts?.reason) payload.reason = wopts.reason
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(socket as unknown as { send: (f: unknown) => void }).send(payload)
     },
     async forceAttach() {
       if (disposed) return { ok: false as const, reason: 'disposed' }
