@@ -16,7 +16,13 @@
 import type { SessionBroker } from './sessionBroker.js'
 import { evaluateCondition } from '../utils/cronCondition.js'
 import type { CronScheduler } from '../utils/cronScheduler.js'
-import type { CronTask } from '../utils/cronTasks.js'
+import {
+  enumerateMissedFires,
+  readCronTasks,
+  selectCatchUpFires,
+  writeCronTasks,
+  type CronTask,
+} from '../utils/cronTasks.js'
 import { logForDebugging } from '../utils/debug.js'
 
 export interface CronWiringHandle {
@@ -153,10 +159,99 @@ export function startDaemonCronWiring(
     // 走 daemon path（立即 enable，不依賴 bootstrap state flag）。
     dir: opts.cwd,
   })
+
+  // Wave 3 — explicit catch-up. Run BEFORE scheduler.start() so any
+  // lastFiredAt advances we make are picked up by the first scheduler load.
+  // Failures here are non-fatal (cron still starts, scheduler does its
+  // implicit single fire-on-load).
+  void applyCatchUpPolicy(opts.cwd, handleFire).catch(e =>
+    logForDebugging(
+      `[cronWiring] catch-up policy failed: ${(e as Error).message}`,
+    ),
+  )
+
   scheduler.start()
 
   return {
     scheduler,
     stop: () => scheduler.stop(),
+  }
+}
+
+/**
+ * Wave 3 — explicit catch-up driver. For each recurring task in
+ * scheduled_tasks.json:
+ *   - count missed fires between (lastFiredAt ?? createdAt, now]
+ *   - apply task.catchupMax (default 1)
+ *   - desired === 0 ⇒ stamp lastFiredAt = now (skip the implicit fire)
+ *   - desired === 1 ⇒ no-op (scheduler's natural fire-on-load handles it)
+ *   - desired  > 1 ⇒ submit (desired - 1) extra fires immediately, spaced
+ *     by 2s jitter; scheduler still does the natural one
+ *
+ * Skipped tasks bypass condition gate (catch-up is "I want to backfill",
+ * the gate is "is now a good moment" — these are independent concerns and
+ * the user's explicit catch-up intent wins).
+ */
+async function applyCatchUpPolicy(
+  cwd: string,
+  fire: (task: CronTask) => Promise<void>,
+): Promise<void> {
+  const tasks = await readCronTasks(cwd)
+  const now = Date.now()
+  let mutated = false
+  const extraFires: { task: CronTask; remaining: number }[] = []
+
+  for (const t of tasks) {
+    if (!t.recurring) continue
+    const anchor = t.lastFiredAt ?? t.createdAt
+    const missed = enumerateMissedFires(t.cron, anchor, now)
+    if (missed === 0) continue
+    const desired = selectCatchUpFires(t, missed)
+
+    if (desired === 0) {
+      // Skip-all mode: pre-stamp lastFiredAt so scheduler's first-load fire
+      // sees nothing pending.
+      t.lastFiredAt = now
+      mutated = true
+      logForDebugging(
+        `[cronWiring] catch-up skip ${t.id}: ${missed} missed, catchupMax=0`,
+      )
+    } else if (desired > 1) {
+      extraFires.push({ task: t, remaining: desired - 1 })
+      logForDebugging(
+        `[cronWiring] catch-up ${t.id}: ${missed} missed, will fire ${desired} (1 natural + ${desired - 1} extra)`,
+      )
+    } else {
+      // desired === 1 — nothing to do, scheduler handles it.
+      logForDebugging(
+        `[cronWiring] catch-up ${t.id}: 1 fire (natural), ${missed} missed total`,
+      )
+    }
+  }
+
+  if (mutated) {
+    try {
+      await writeCronTasks(tasks, cwd)
+    } catch (e) {
+      logForDebugging(
+        `[cronWiring] catch-up writeback failed: ${(e as Error).message}`,
+      )
+    }
+  }
+
+  // Spread extra fires with 2s spacing — scheduler tick is 1s, this gives
+  // breathing room and respects InputQueue's background FIFO.
+  let delay = 0
+  for (const { task, remaining } of extraFires) {
+    for (let i = 0; i < remaining; i++) {
+      delay += 2000
+      setTimeout(() => {
+        void fire(task).catch(e =>
+          logForDebugging(
+            `[cronWiring] catch-up extra fire failed for ${task.id}: ${(e as Error).message}`,
+          ),
+        )
+      }, delay).unref()
+    }
   }
 }

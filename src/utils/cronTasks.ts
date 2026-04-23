@@ -644,6 +644,44 @@ export function findMissedTasks(tasks: CronTask[], nowMs: number): CronTask[] {
   })
 }
 
+/**
+ * Wave 3 — count how many cron-scheduled fires fall within (anchorMs, nowMs].
+ * Walks forward from anchor using nextCronRunMs; capped at MAX_ENUMERATE to
+ * defend against pathological crons (e.g. * * * * * with anchor a year ago →
+ * 525,600 iterations). Cap reached = returns MAX_ENUMERATE; caller can treat
+ * that as "essentially infinite" and apply catchupMax.
+ */
+const MAX_ENUMERATE_MISSED = 10_000
+export function enumerateMissedFires(
+  cron: string,
+  anchorMs: number,
+  nowMs: number,
+): number {
+  let cursor = anchorMs
+  let count = 0
+  for (let i = 0; i < MAX_ENUMERATE_MISSED; i++) {
+    const next = nextCronRunMs(cron, cursor)
+    if (next === null || next > nowMs) return count
+    count++
+    cursor = next
+  }
+  return MAX_ENUMERATE_MISSED
+}
+
+/**
+ * Wave 3 — apply CronTask.catchupMax. Default = 1 (matches Wave 2 implicit
+ * behavior of firing once on startup if missed). 0 = skip all missed fires.
+ * N > 1 = catch up the most recent N fires.
+ */
+export function selectCatchUpFires(
+  task: CronTask,
+  missedCount: number,
+): number {
+  const cap = typeof task.catchupMax === 'number' ? task.catchupMax : 1
+  if (cap <= 0) return 0
+  return Math.min(missedCount, Math.floor(cap))
+}
+
 // ===========================================================================
 // Wave 1 — Hermes-inspired helpers
 // ===========================================================================
