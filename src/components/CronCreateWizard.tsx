@@ -42,7 +42,12 @@ export interface CronCreateWizardProps {
   onCancel: (reason?: string) => void
 }
 
-type Mode = 'view' | 'selecting' | 'editing' | 'editing-schedule'
+type Mode =
+  | 'view'
+  | 'selecting'
+  | 'editing'
+  | 'editing-schedule'
+  | 'editing-prompt'
 
 type FieldKind = 'string' | 'boolean' | 'number' | 'json'
 
@@ -233,8 +238,16 @@ export function CronCreateWizard(
   }, [visibleFields.length, cursor])
 
   useInput((input, key) => {
-    // ScheduleEditor owns input while open.
+    // ScheduleEditor / prompt editor own input while open.
     if (mode === 'editing-schedule') return
+    if (mode === 'editing-prompt') {
+      // TextInput owns character input; only Esc aborts here.
+      if (key.escape) {
+        setMode('selecting')
+        setError(null)
+      }
+      return
+    }
 
     if (mode === 'view') {
       if (key.return) {
@@ -298,6 +311,15 @@ export function CronCreateWizard(
           setError(null)
           return
         }
+        // Special-case prompt — open dedicated multi-line editor.
+        if (field.key === 'prompt') {
+          const cur = toEditBuffer(field.get(working), field.kind)
+          setEditBuffer(cur)
+          setEditCursor(cur.length)
+          setMode('editing-prompt')
+          setError(null)
+          return
+        }
         setEditBuffer(toEditBuffer(field.get(working), field.kind))
         setEditCursor(toEditBuffer(field.get(working), field.kind).length)
         setMode('editing')
@@ -330,6 +352,50 @@ export function CronCreateWizard(
   }
 
   const hasAdvanced = FIELDS.some(f => f.advanced && working[f.key] !== undefined)
+
+  // Prompt editor overlay — dedicated multi-line input when user picks
+  // "Prompt" field. Supports backslash-newline (Enter commits, `\` at EOL
+  // then Enter starts a new line — the TextInput convention).
+  if (mode === 'editing-prompt') {
+    const lineCount = editBuffer.split('\n').length
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
+        <Text bold color="yellow">
+          Editing Prompt
+        </Text>
+        <Box marginTop={1}>
+          <Text dimColor>
+            Multi-line: end a line with `\` then Enter to go to the next line.
+            Plain Enter commits.
+          </Text>
+        </Box>
+        <Box marginTop={1} flexDirection="column">
+          <TextInput
+            value={editBuffer}
+            onChange={setEditBuffer}
+            onSubmit={submitEdit}
+            cursorOffset={editCursor}
+            onChangeCursorOffset={setEditCursor}
+            columns={100}
+            multiline
+            focus
+            showCursor
+            placeholder="e.g. bun run build && bun test"
+          />
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>
+            {lineCount} line{lineCount === 1 ? '' : 's'} · Enter = commit · Esc = abort
+          </Text>
+        </Box>
+        {error && (
+          <Box marginTop={1}>
+            <Text color="red">✗ {error}</Text>
+          </Box>
+        )}
+      </Box>
+    )
+  }
 
   // Schedule editor overlay: launched when user picks the "Schedule" field
   // in selecting mode. Fully replaces the summary card while active.
