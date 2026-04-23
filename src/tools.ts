@@ -40,6 +40,7 @@ const cronTools = feature('AGENT_TRIGGERS')
       require('./tools/ScheduleCronTool/CronResumeTool.js').CronResumeTool,
       require('./tools/ScheduleCronTool/CronUpdateTool.js').CronUpdateTool,
       require('./tools/ScheduleCronTool/CronRunNowTool.js').CronRunNowTool,
+      require('./tools/ScheduleCronTool/CronHistoryTool.js').CronHistoryTool,
     ]
   : []
 const RemoteTriggerTool = feature('AGENT_TRIGGERS_REMOTE')

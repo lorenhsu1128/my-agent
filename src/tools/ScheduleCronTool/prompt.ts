@@ -68,6 +68,14 @@ export const CRON_PAUSE_TOOL_NAME = 'CronPause'
 export const CRON_RESUME_TOOL_NAME = 'CronResume'
 export const CRON_UPDATE_TOOL_NAME = 'CronUpdate'
 export const CRON_RUN_NOW_TOOL_NAME = 'CronRunNow'
+export const CRON_HISTORY_TOOL_NAME = 'CronHistory'
+
+export const CRON_HISTORY_DESCRIPTION =
+  'Read the run history of a scheduled cron job — recent fires with status, duration, and error.'
+
+export function buildCronHistoryPrompt(): string {
+  return `Read recent fire history for a cron job. Returns up to N entries (default 20) ordered newest-first, with timestamp, status (ok / error / skipped / retrying), optional duration / attempt / error message. Use ${CRON_LIST_TOOL_NAME} first to find the job ID.`
+}
 
 export const CRON_PAUSE_DESCRIPTION =
   'Temporarily pause a scheduled cron job — the task stays in the list but does not fire until CronResume.'

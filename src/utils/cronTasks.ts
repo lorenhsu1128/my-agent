@@ -20,6 +20,7 @@ import {
   removeSessionCronTasks,
 } from '../bootstrap/state.js'
 import { computeNextCronRun, parseCronExpression } from './cron.js'
+import { appendHistoryEntry } from './cronHistory.js'
 import { logForDebugging } from './debug.js'
 import { isFsInaccessible } from './errors.js'
 import { getFsImplementation } from './fsOperations.js'
@@ -917,6 +918,30 @@ export async function markCronFiredBatch(
   }
   if (!changed) return
   await writeCronTasks(kept, dir)
+  // Wave 3 — append history rows. Keep this after the write so disk state
+  // for scheduled_tasks.json is committed before history sees the entry;
+  // history failures must never block the fire path.
+  await Promise.all(
+    records.map(async r => {
+      // Look up keepRuns from the (possibly removed) task; fall back to default.
+      const t = tasks.find(x => x.id === r.id)
+      try {
+        await appendHistoryEntry(
+          r.id,
+          {
+            ts: r.firedAt,
+            status: r.success ? 'ok' : 'error',
+            ...(r.error ? { errorMsg: r.error.slice(0, 500) } : {}),
+          },
+          { keepRuns: t?.history?.keepRuns, dir },
+        )
+      } catch (e) {
+        logForDebugging(
+          `[cronTasks] history append failed for ${r.id}: ${(e as Error).message}`,
+        )
+      }
+    }),
+  )
 }
 
 /**
