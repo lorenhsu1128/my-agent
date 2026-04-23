@@ -22,6 +22,7 @@ import {
   extractRunnerOutputText,
   type FireOutcomeInputs,
 } from '../utils/cronFailureClassifier.js'
+import { appendHistoryEntry } from '../utils/cronHistory.js'
 import type { CronScheduler } from '../utils/cronScheduler.js'
 import {
   enumerateMissedFires,
@@ -199,7 +200,7 @@ export function startDaemonCronWiring(
     })
   }
 
-  const emit = (e: CronFireEvent): void => {
+  const emit = (e: CronFireEvent, task?: CronTask): void => {
     try {
       events.emit('cronFireEvent', e)
     } catch (err) {
@@ -207,6 +208,33 @@ export function startDaemonCronWiring(
         `[cronWiring] emit failed: ${(err as Error).message}`,
       )
     }
+    // Wave 3 — also append to on-disk run history so it reflects real
+    // lifecycle outcome (scheduler's markCronFiredBatch no longer writes
+    // history). Map CronFireStatus → CronHistoryEntry.status.
+    const historyStatus =
+      e.status === 'completed' || e.status === 'fired'
+        ? 'ok'
+        : e.status === 'failed'
+          ? 'error'
+          : e.status // 'retrying' / 'skipped' pass through verbatim
+    void appendHistoryEntry(
+      e.taskId,
+      {
+        ts: e.startedAt,
+        status: historyStatus as 'ok' | 'error' | 'skipped' | 'retrying',
+        ...(e.durationMs !== undefined ? { durationMs: e.durationMs } : {}),
+        ...(e.attempt !== undefined ? { attempt: e.attempt } : {}),
+        ...(e.errorMsg ? { errorMsg: e.errorMsg } : {}),
+      },
+      {
+        keepRuns: task?.history?.keepRuns,
+        dir: opts.cwd,
+      },
+    ).catch(err =>
+      logForDebugging(
+        `[cronWiring] history append failed for ${e.taskId}: ${(err as Error).message}`,
+      ),
+    )
   }
   const baseEvent = (task: CronTask, startedAt: number): CronFireEvent => ({
     type: 'cronFireEvent',
@@ -230,13 +258,16 @@ export function startDaemonCronWiring(
         logForDebugging(
           `[cronWiring] skipping ${task.id} — condition '${task.condition.kind}' blocked: ${cond.reason}`,
         )
-        emit({
-          ...baseEvent(task, startedAt),
-          status: 'skipped',
-          skipReason: cond.reason,
-          finishedAt: Date.now(),
-          durationMs: Date.now() - startedAt,
-        })
+        emit(
+          {
+            ...baseEvent(task, startedAt),
+            status: 'skipped',
+            skipReason: cond.reason,
+            finishedAt: Date.now(),
+            durationMs: Date.now() - startedAt,
+          },
+          task,
+        )
         return
       }
     }
@@ -261,12 +292,12 @@ export function startDaemonCronWiring(
     // from sessionBroker's turnEnd broadcast.
     if (!task.retry || task.retry.maxAttempts <= 1) {
       submit(prompt)
-      emit({ ...baseEvent(task, startedAt), status: 'fired' })
+      emit({ ...baseEvent(task, startedAt), status: 'fired' }, task)
       return
     }
     // Retry path — emit 'fired' on first attempt only.
     if (attempt === 1) {
-      emit({ ...baseEvent(task, startedAt), status: 'fired' })
+      emit({ ...baseEvent(task, startedAt), status: 'fired' }, task)
     }
 
     // Retry path — submit, observe turnEnd, classify, maybe setTimeout retry.
@@ -294,45 +325,54 @@ export function startDaemonCronWiring(
       logForDebugging(
         `[cronWiring] ${task.id} attempt ${attempt}/${maxAttempts} ok`,
       )
-      emit({
-        ...base,
-        status: 'completed',
-        finishedAt,
-        durationMs: finishedAt - startedAt,
-        attempt,
-      })
+      emit(
+        {
+          ...base,
+          status: 'completed',
+          finishedAt,
+          durationMs: finishedAt - startedAt,
+          attempt,
+        },
+        task,
+      )
       return
     }
     if (attempt >= maxAttempts) {
       logForDebugging(
         `[cronWiring] ${task.id} exhausted retries (${maxAttempts} attempts); giving up`,
       )
-      emit({
-        ...base,
-        status: 'failed',
-        finishedAt,
-        durationMs: finishedAt - startedAt,
-        attempt,
-        ...(outcome.turnError
-          ? { errorMsg: outcome.turnError.slice(0, 500) }
-          : {}),
-      })
+      emit(
+        {
+          ...base,
+          status: 'failed',
+          finishedAt,
+          durationMs: finishedAt - startedAt,
+          attempt,
+          ...(outcome.turnError
+            ? { errorMsg: outcome.turnError.slice(0, 500) }
+            : {}),
+        },
+        task,
+      )
       return
     }
     const backoff = computeBackoffMs(task.retry.backoffMs, attempt)
     logForDebugging(
       `[cronWiring] ${task.id} attempt ${attempt} failed; retrying in ${backoff}ms`,
     )
-    emit({
-      ...base,
-      status: 'retrying',
-      finishedAt,
-      durationMs: finishedAt - startedAt,
-      attempt,
-      ...(outcome.turnError
-        ? { errorMsg: outcome.turnError.slice(0, 500) }
-        : {}),
-    })
+    emit(
+      {
+        ...base,
+        status: 'retrying',
+        finishedAt,
+        durationMs: finishedAt - startedAt,
+        attempt,
+        ...(outcome.turnError
+          ? { errorMsg: outcome.turnError.slice(0, 500) }
+          : {}),
+      },
+      task,
+    )
     setTimeout(() => {
       runLane(task.id, () => handleFire(task, attempt + 1))
     }, backoff).unref()

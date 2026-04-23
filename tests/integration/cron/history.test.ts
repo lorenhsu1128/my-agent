@@ -100,7 +100,12 @@ describe('cronHistory — append-only run history', () => {
     expect(entries.length).toBe(3)
   })
 
-  test('markCronFiredBatch appends to history (success path)', async () => {
+  test('markCronFiredBatch does NOT write history — ownership moved to cronWiring', async () => {
+    // Wave 3 design: scheduler's markCronFiredBatch only persists
+    // lastFiredAt/lastStatus/repeat.completed on scheduled_tasks.json.
+    // History is owned by cronWiring which has visibility into retry /
+    // condition / turn outcome. Scheduler writing 'ok' for every tick
+    // would disagree with cronWiring's real verdict.
     await writeCronTasks(
       [
         {
@@ -118,39 +123,7 @@ describe('cronHistory — append-only run history', () => {
       tmpDir,
     )
     const entries = await readHistory('j-success', tmpDir)
-    expect(entries.length).toBe(1)
-    expect(entries[0]!.status).toBe('ok')
-    expect(entries[0]!.ts).toBe(1735000000000)
-  })
-
-  test('markCronFiredBatch appends history with error message', async () => {
-    await writeCronTasks(
-      [
-        {
-          id: 'j-fail',
-          cron: '*/5 * * * *',
-          prompt: 'hi',
-          createdAt: Date.now() - 60_000,
-          recurring: true,
-        },
-      ],
-      tmpDir,
-    )
-    await markCronFiredBatch(
-      [
-        {
-          id: 'j-fail',
-          firedAt: 1735000001000,
-          success: false,
-          error: 'turn aborted',
-        },
-      ],
-      tmpDir,
-    )
-    const entries = await readHistory('j-fail', tmpDir)
-    expect(entries.length).toBe(1)
-    expect(entries[0]!.status).toBe('error')
-    expect(entries[0]!.errorMsg).toBe('turn aborted')
+    expect(entries.length).toBe(0)
   })
 
   test('Wave 3 fields survive read/write round-trip', async () => {

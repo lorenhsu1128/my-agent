@@ -242,6 +242,51 @@ describe('daemon cron retry path', () => {
     ])
   })
 
+  test('history.jsonl reflects emitted lifecycle (fired + retrying + completed)', async () => {
+    const { broker, emitter, submits } = makeBrokerWithEvents()
+    const { modules, captured } = makeFakeSchedulerModules()
+    startDaemonCronWiring({
+      broker,
+      cwd: tmpDir,
+      isEnabled: () => true,
+      modules: modules as never,
+    })
+    const task: CronTask = {
+      id: 'hist-life',
+      cron: '*/5 * * * *',
+      prompt: 'x',
+      createdAt: Date.now(),
+      recurring: true,
+      retry: {
+        maxAttempts: 2,
+        backoffMs: 5,
+        failureMode: { kind: 'turn-error' },
+        attemptCount: 0,
+      },
+    }
+    void captured.onFireTask!(task)
+    await sleep(15)
+    emitter.emit('turnEnd', {
+      input: { id: submits[0]!.id },
+      endedAt: Date.now(),
+      reason: 'error',
+    })
+    await sleep(30)
+    emitter.emit('turnEnd', {
+      input: { id: submits[1]!.id },
+      endedAt: Date.now(),
+      reason: 'done',
+    })
+    await sleep(40)
+    const {
+      readHistory,
+    } = await import('../../../src/utils/cronHistory')
+    const entries = await readHistory('hist-life', tmpDir)
+    const statuses = entries.map(e => e.status)
+    expect(statuses).toContain('ok') // fired + completed both → 'ok'
+    expect(statuses).toContain('retrying')
+  })
+
   test('emits cronFireEvent status=skipped when condition blocks', async () => {
     const { broker } = makeBrokerWithEvents()
     const { modules, captured } = makeFakeSchedulerModules()
