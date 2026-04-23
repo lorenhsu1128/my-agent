@@ -68,6 +68,24 @@ export interface UseDaemonModeOptions {
     mode: import('../types/permissions.js').PermissionMode
   }) => void
   /**
+   * M-CRON-W3-7：daemon 廣播 cronFireEvent 時呼叫。REPL 用來彈 toast
+   * + 更新 StatusLine 的 cron badge。payload 已含 redacted errorMsg。
+   */
+  onCronFireEvent?: (event: {
+    type: 'cronFireEvent'
+    taskId: string
+    taskName?: string
+    schedule: string
+    status: 'fired' | 'completed' | 'failed' | 'retrying' | 'skipped'
+    startedAt: number
+    finishedAt?: number
+    durationMs?: number
+    errorMsg?: string
+    attempt?: number
+    skipReason?: string
+    source: 'cron'
+  }) => void
+  /**
    * M-DISCORD-2：REPL 的 cwd，handshake 時送給 daemon。未指定 = backward
    * compat，fallback 到 daemon 的 default runtime。
    */
@@ -175,6 +193,10 @@ export function useDaemonMode(
     opts.onPermissionModeChanged,
   )
   onPermModeChangedRef.current = opts.onPermissionModeChanged
+  const onCronFireEventRef = useRef<typeof opts.onCronFireEvent>(
+    opts.onCronFireEvent,
+  )
+  onCronFireEventRef.current = opts.onCronFireEvent
   const cwdRef = useRef<string | undefined>(opts.cwd)
   cwdRef.current = opts.cwd
 
@@ -250,6 +272,12 @@ export function useDaemonMode(
             riskLevel: 'read' | 'write' | 'destructive'
             description?: string
           },
+        )
+      } else if (f.type === 'cronFireEvent') {
+        onCronFireEventRef.current?.(
+          f as unknown as Parameters<
+            NonNullable<UseDaemonModeOptions['onCronFireEvent']>
+          >[0],
         )
       }
       onFrameRef.current?.(f)

@@ -4217,6 +4217,43 @@ export function REPL({
         )
       ]);
     },
+    onCronFireEvent: (e): void => {
+      // M-CRON-W3-7：toast + badge state。toast 走 ephemeral notification queue，
+      // badge 經 AppState.lastCronFire 由 StatusLine 條件渲染。
+      const label = e.taskName ?? e.taskId.slice(0, 8);
+      const dur = e.durationMs !== undefined
+        ? ` in ${(e.durationMs / 1000).toFixed(1)}s`
+        : '';
+      const att = e.attempt !== undefined && e.attempt > 1
+        ? ` (att ${e.attempt})`
+        : '';
+      const icon =
+        e.status === 'completed' ? '✓'
+        : e.status === 'failed' ? '✗'
+        : e.status === 'retrying' ? '↻'
+        : e.status === 'skipped' ? '↷'
+        : '⏰';
+      const text = e.status === 'failed' && e.errorMsg
+        ? `⏰ ${label} ${icon}${dur}${att} — ${e.errorMsg.slice(0, 80)}`
+        : e.status === 'skipped' && e.skipReason
+          ? `⏰ ${label} ${icon} (${e.skipReason})`
+          : `⏰ ${label} ${icon}${dur}${att}`;
+      addNotification({
+        key: `cron-${e.taskId}-${e.status}`,
+        text,
+        priority: e.status === 'failed' ? 'high' : 'medium',
+        timeoutMs: e.status === 'failed' ? 12000 : 6000,
+      });
+      setAppState(prev => ({
+        ...prev,
+        lastCronFire: {
+          taskId: e.taskId,
+          ...(e.taskName ? { taskName: e.taskName } : {}),
+          status: e.status,
+          at: e.startedAt,
+        },
+      }));
+    },
     onModeChange: (mode): void => {
       // M-DAEMON-PERMS-B：剛切 attached 時立刻推當下 permission mode 給 daemon。
       if (mode === 'attached') {

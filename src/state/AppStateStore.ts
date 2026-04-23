@@ -159,6 +159,16 @@ export type AppState = DeepImmutable<{
   daemonMode: 'standalone' | 'attached' | 'reconnecting'
   // M-DAEMON-6：最後一次偵測到的 daemon port（attached/reconnecting 時顯示）
   daemonPort: number | undefined
+  // M-CRON-W3-7：最近一次 cron fire 的簡要狀態（StatusLine badge 用）。
+  // 由 REPL.tsx 的 onCronFireEvent 寫入；5 分鐘 TTL 由 badge 自行 fade。
+  lastCronFire:
+    | {
+        taskId: string
+        taskName?: string
+        status: 'fired' | 'completed' | 'failed' | 'retrying' | 'skipped'
+        at: number
+      }
+    | undefined
 }> & {
   // Unified task state - excluded from DeepImmutable because TaskState contains function types
   tasks: { [taskId: string]: TaskState }
@@ -530,6 +540,7 @@ export function getDefaultAppState(): AppState {
     showRemoteCallout: false,
     daemonMode: 'standalone',
     daemonPort: undefined,
+    lastCronFire: undefined,
     toolPermissionContext: {
       ...getEmptyToolPermissionContext(),
       mode: initialMode,
