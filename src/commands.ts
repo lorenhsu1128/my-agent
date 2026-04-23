@@ -177,6 +177,7 @@ import exit from './commands/exit/index.js'
 import exportCommand from './commands/export/index.js'
 import model from './commands/model/index.js'
 import toolsCommand from './commands/tools/index.js'
+import cronCommand from './commands/cron/index.js'
 import sessionDeleteCommand from './commands/session-delete/index.js'
 import memoryDeleteCommand from './commands/memory-delete/index.js'
 import trashCommand from './commands/trash/index.js'
@@ -293,6 +294,7 @@ const COMMANDS = memoize((): Command[] => [
   mobile,
   model,
   toolsCommand,
+  cronCommand,
   sessionDeleteCommand,
   memoryDeleteCommand,
   trashCommand,

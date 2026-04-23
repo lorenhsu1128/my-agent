@@ -1,0 +1,385 @@
+import figures from 'figures'
+import * as React from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Box, Text, useInput } from '../../ink.js'
+import {
+  type CronTask,
+  listAllCronTasks,
+  nextCronRunMs,
+} from '../../utils/cronTasks.js'
+import { readHistory, type CronHistoryEntry } from '../../utils/cronHistory.js'
+import { formatDuration } from '../../utils/format.js'
+
+type Props = {
+  onExit: (summary: string) => void
+}
+
+type Mode = 'list' | 'detail'
+
+type Enriched = {
+  task: CronTask
+  nextFireMs: number | null
+  stateRank: number
+}
+
+const STATE_RANK: Record<NonNullable<CronTask['state']> | 'scheduled', number> = {
+  scheduled: 0,
+  paused: 1,
+  completed: 2,
+}
+
+function enrich(t: CronTask, nowMs: number): Enriched {
+  const state = t.state ?? 'scheduled'
+  const next =
+    state === 'scheduled'
+      ? nextCronRunMs(t.cron, Math.max(nowMs, t.lastFiredAt ?? 0))
+      : null
+  return {
+    task: t,
+    nextFireMs: next,
+    stateRank: STATE_RANK[state] ?? 99,
+  }
+}
+
+function sortEnriched(a: Enriched, b: Enriched): number {
+  if (a.stateRank !== b.stateRank) return a.stateRank - b.stateRank
+  const an = a.nextFireMs ?? Number.POSITIVE_INFINITY
+  const bn = b.nextFireMs ?? Number.POSITIVE_INFINITY
+  return an - bn
+}
+
+function stateIcon(t: CronTask): { icon: string; color: string } {
+  const s = t.state ?? 'scheduled'
+  if (s === 'paused') return { icon: '⏸', color: 'yellow' }
+  if (s === 'completed') return { icon: '☑', color: 'gray' }
+  if (t.lastStatus === 'error') return { icon: '✗', color: 'red' }
+  return { icon: '✓', color: 'green' }
+}
+
+function taskLabel(t: CronTask): string {
+  if (t.name) return t.name
+  const firstLine = t.prompt.split('\n')[0] ?? ''
+  return firstLine.length > 40 ? firstLine.slice(0, 37) + '...' : firstLine
+}
+
+function nextFireLabel(e: Enriched, nowMs: number): string {
+  const s = e.task.state ?? 'scheduled'
+  if (s === 'paused') return 'paused'
+  if (s === 'completed') return 'completed'
+  if (e.nextFireMs === null) return 'n/a'
+  const delta = e.nextFireMs - nowMs
+  if (delta <= 0) return 'overdue'
+  return `in ${formatDuration(delta, { mostSignificantOnly: true })}`
+}
+
+function lastRunLabel(t: CronTask): string {
+  if (!t.lastFiredAt) return 'never'
+  const ago = Date.now() - t.lastFiredAt
+  const dur = formatDuration(ago, { mostSignificantOnly: true })
+  const mark = t.lastStatus === 'error' ? '✗' : t.lastStatus === 'ok' ? '✓' : '·'
+  return `${mark} ${dur} ago`
+}
+
+function formatTaskId(id: string): string {
+  // 8 chars short id; keep as-is
+  return id
+}
+
+export function CronPicker({ onExit }: Props): React.ReactNode {
+  const [mode, setMode] = useState<Mode>('list')
+  const [tasks, setTasks] = useState<CronTask[]>([])
+  const [cursor, setCursor] = useState(0)
+  const [now, setNow] = useState(() => Date.now())
+  const [history, setHistory] = useState<CronHistoryEntry[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  // Refresh now every 10s so "in 2h 14m" counts down
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 10_000)
+    return () => clearInterval(t)
+  }, [])
+
+  // Initial load + poll every 5s for external changes (daemon writes)
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const list = await listAllCronTasks()
+        if (!cancelled) {
+          setTasks(list)
+          setLoadError(null)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError((err as Error).message)
+        }
+      }
+    }
+    load()
+    const t = setInterval(load, 5000)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+    }
+  }, [])
+
+  const enriched = useMemo(() => {
+    return tasks.map(t => enrich(t, now)).sort(sortEnriched)
+  }, [tasks, now])
+
+  // Clamp cursor
+  const clampedCursor = Math.min(Math.max(0, cursor), Math.max(0, enriched.length - 1))
+
+  const selected = enriched[clampedCursor]?.task
+
+  // Load history for currently-selected task when entering detail mode
+  useEffect(() => {
+    let cancelled = false
+    if (mode !== 'detail' || !selected) {
+      setHistory([])
+      return
+    }
+    readHistory(selected.id, 5)
+      .then(h => {
+        if (!cancelled) setHistory(h)
+      })
+      .catch(() => {
+        if (!cancelled) setHistory([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mode, selected?.id])
+
+  useInput((input, key) => {
+    if (mode === 'list') {
+      if (key.escape || input === 'q') {
+        onExit(`Cron picker closed — ${tasks.length} task(s)`)
+        return
+      }
+      if (key.upArrow) {
+        setCursor(c => Math.max(0, c - 1))
+        return
+      }
+      if (key.downArrow) {
+        setCursor(c => Math.min(enriched.length - 1, c + 1))
+        return
+      }
+      if (key.return) {
+        if (enriched.length === 0) return
+        setMode('detail')
+        return
+      }
+      return
+    }
+
+    // detail mode
+    if (key.escape || key.leftArrow || input === 'q') {
+      setMode('list')
+      return
+    }
+  })
+
+  if (loadError !== null) {
+    return (
+      <Box flexDirection="column">
+        <Text color="red">Failed to load cron tasks: {loadError}</Text>
+        <Text dimColor>Press Esc to close</Text>
+      </Box>
+    )
+  }
+
+  if (mode === 'detail' && selected) {
+    return (
+      <CronDetail
+        task={selected}
+        history={history}
+        enriched={enriched[clampedCursor]!}
+        now={now}
+      />
+    )
+  }
+
+  return (
+    <CronList
+      enriched={enriched}
+      cursor={clampedCursor}
+      now={now}
+    />
+  )
+}
+
+function CronList({
+  enriched,
+  cursor,
+  now,
+}: {
+  enriched: Enriched[]
+  cursor: number
+  now: number
+}): React.ReactNode {
+  const counts = useMemo(() => {
+    const c = { scheduled: 0, paused: 0, completed: 0 }
+    for (const e of enriched) {
+      const s = e.task.state ?? 'scheduled'
+      c[s] = (c[s] ?? 0) + 1
+    }
+    return c
+  }, [enriched])
+
+  return (
+    <Box flexDirection="column">
+      <Box>
+        <Text bold>Cron Tasks</Text>
+        <Text dimColor>
+          {' '}
+          · {enriched.length} total ({counts.scheduled} scheduled, {counts.paused} paused, {counts.completed} completed)
+        </Text>
+      </Box>
+      <Box flexDirection="column" marginTop={1}>
+        {enriched.length === 0 ? (
+          <Text dimColor>(no cron tasks)</Text>
+        ) : (
+          enriched.map((e, i) => {
+            const selected = i === cursor
+            const { icon, color } = stateIcon(e.task)
+            return (
+              <Box key={e.task.id}>
+                <Text color={selected ? 'cyan' : undefined}>
+                  {selected ? figures.pointer : ' '}
+                </Text>
+                <Text color={color}> {icon} </Text>
+                <Box width={10}>
+                  <Text dimColor>{formatTaskId(e.task.id)}</Text>
+                </Box>
+                <Box width={28}>
+                  <Text color={selected ? 'cyan' : undefined}>
+                    {taskLabel(e.task)}
+                  </Text>
+                </Box>
+                <Box width={18}>
+                  <Text dimColor>{e.task.cron}</Text>
+                </Box>
+                <Box width={16}>
+                  <Text>{nextFireLabel(e, now)}</Text>
+                </Box>
+                <Text dimColor>{lastRunLabel(e.task)}</Text>
+              </Box>
+            )
+          })
+        )}
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>
+          ↑/↓ move · Enter = detail · q/Esc = close
+        </Text>
+      </Box>
+    </Box>
+  )
+}
+
+function CronDetail({
+  task,
+  history,
+  enriched,
+  now,
+}: {
+  task: CronTask
+  history: CronHistoryEntry[]
+  enriched: Enriched
+  now: number
+}): React.ReactNode {
+  const { icon, color } = stateIcon(task)
+  const state = task.state ?? 'scheduled'
+
+  const row = (label: string, value: React.ReactNode): React.ReactNode => (
+    <Box key={label}>
+      <Box width={14}>
+        <Text dimColor>{label}</Text>
+      </Box>
+      <Text>{value}</Text>
+    </Box>
+  )
+
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
+      <Box>
+        <Text color={color}>{icon} </Text>
+        <Text bold>{formatTaskId(task.id)}</Text>
+        <Text> · </Text>
+        <Text>{taskLabel(task)}</Text>
+      </Box>
+      <Box flexDirection="column" marginTop={1}>
+        {row('Schedule', task.cron)}
+        {task.scheduleSpec?.raw
+          ? row('  raw', task.scheduleSpec.raw)
+          : null}
+        {row(
+          'State',
+          `${state}${state === 'scheduled' ? ` · next ${nextFireLabel(enriched, now)}` : ''}`,
+        )}
+        {row(
+          'Recurring',
+          task.recurring
+            ? task.repeat
+              ? `yes · ${task.repeat.completed}/${task.repeat.times ?? '∞'}`
+              : 'yes'
+            : 'no (one-shot)',
+        )}
+        {row('Last run', lastRunLabel(task))}
+        {task.lastError
+          ? row('Last error', <Text color="red">{task.lastError}</Text>)
+          : null}
+        {row('Prompt', task.prompt)}
+        {task.retry ? row('Retry', JSON.stringify(task.retry)) : null}
+        {task.condition ? row('Condition', JSON.stringify(task.condition)) : null}
+        {task.catchupMax !== undefined
+          ? row('Catch-up max', String(task.catchupMax))
+          : null}
+        {task.preRunScript ? row('Pre-run', task.preRunScript) : null}
+        {task.modelOverride ? row('Model', task.modelOverride) : null}
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>── History (last {history.length}) ──</Text>
+      </Box>
+      {history.length === 0 ? (
+        <Text dimColor>(no history)</Text>
+      ) : (
+        history.map(h => {
+          const mark =
+            h.status === 'error'
+              ? '✗'
+              : h.status === 'ok'
+                ? '✓'
+                : h.status === 'retrying'
+                  ? '↻'
+                  : h.status === 'skipped'
+                    ? '↷'
+                    : '·'
+          const color =
+            h.status === 'error'
+              ? 'red'
+              : h.status === 'ok'
+                ? 'green'
+                : h.status === 'retrying'
+                  ? 'yellow'
+                  : undefined
+          return (
+            <Box key={h.ts}>
+              <Text color={color}>{mark} </Text>
+              <Text dimColor>{new Date(h.ts).toISOString()} </Text>
+              <Text>
+                {typeof h.durationMs === 'number' ? `${h.durationMs}ms ` : ''}
+                att={h.attempt ?? 1}
+                {h.errorMsg ? ` err="${h.errorMsg}"` : ''}
+              </Text>
+            </Box>
+          )
+        })
+      )}
+      <Box marginTop={1}>
+        <Text dimColor>q/Esc/← = back to list</Text>
+      </Box>
+    </Box>
+  )
+}
