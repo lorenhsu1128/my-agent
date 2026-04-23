@@ -14,6 +14,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Box, Text, useInput } from '../ink.js'
 import TextInput from './TextInput.js'
+import { CronScheduleEditor } from './CronScheduleEditor.js'
 
 export type CronWizardDraft = {
   cron?: string
@@ -41,7 +42,7 @@ export interface CronCreateWizardProps {
   onCancel: (reason?: string) => void
 }
 
-type Mode = 'view' | 'selecting' | 'editing'
+type Mode = 'view' | 'selecting' | 'editing' | 'editing-schedule'
 
 type FieldKind = 'string' | 'boolean' | 'number' | 'json'
 
@@ -232,6 +233,9 @@ export function CronCreateWizard(
   }, [visibleFields.length, cursor])
 
   useInput((input, key) => {
+    // ScheduleEditor owns input while open.
+    if (mode === 'editing-schedule') return
+
     if (mode === 'view') {
       if (key.return) {
         onConfirm(working)
@@ -287,6 +291,13 @@ export function CronCreateWizard(
           setWorking(d => field.set(d, !cur))
           return
         }
+        // Special-case the schedule (cron) field — launch the preset picker
+        // instead of dropping into raw text input.
+        if (field.key === 'cron') {
+          setMode('editing-schedule')
+          setError(null)
+          return
+        }
         setEditBuffer(toEditBuffer(field.get(working), field.kind))
         setEditCursor(toEditBuffer(field.get(working), field.kind).length)
         setMode('editing')
@@ -319,6 +330,33 @@ export function CronCreateWizard(
   }
 
   const hasAdvanced = FIELDS.some(f => f.advanced && working[f.key] !== undefined)
+
+  // Schedule editor overlay: launched when user picks the "Schedule" field
+  // in selecting mode. Fully replaces the summary card while active.
+  if (mode === 'editing-schedule') {
+    return (
+      <CronScheduleEditor
+        initial={{
+          cron: (working.cron ?? working.schedule) as string | undefined,
+          raw: working.scheduleSpec?.raw,
+        }}
+        onConfirm={r => {
+          setWorking(d => ({
+            ...d,
+            cron: r.cron,
+            scheduleSpec: r.scheduleSpec,
+            recurring: r.recurring,
+          }))
+          setMode('selecting')
+          setError(null)
+        }}
+        onCancel={() => {
+          setMode('selecting')
+          setError(null)
+        }}
+      />
+    )
+  }
 
   const fieldRow = (
     field: FieldDef,
