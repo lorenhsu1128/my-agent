@@ -29,6 +29,11 @@ const outputSchema = lazySchema(() =>
         durable: z.boolean().optional(),
         name: z.string().optional(),
         nextRunAt: z.string().optional(),
+        /** Raw schedule string the user originally supplied (5-field cron
+         * or NL phrase like "每週一早上 9 點"). Only present when the task
+         * was created with a scheduleSpec (Wave 3+). */
+        scheduleRaw: z.string().optional(),
+        scheduleKind: z.enum(['cron', 'nl']).optional(),
         lastStatus: z.enum(['ok', 'error']).optional(),
         lastError: z.string().optional(),
         repeat: z
@@ -92,6 +97,12 @@ export const CronListTool = buildTool({
         ...(anchored !== null
           ? { nextRunAt: new Date(anchored).toISOString() }
           : {}),
+        ...(t.scheduleSpec?.raw
+          ? {
+              scheduleRaw: t.scheduleSpec.raw,
+              scheduleKind: t.scheduleSpec.kind as 'cron' | 'nl',
+            }
+          : {}),
         ...(t.lastStatus ? { lastStatus: t.lastStatus } : {}),
         ...(t.lastError ? { lastError: t.lastError } : {}),
         ...(t.repeat ? { repeat: t.repeat } : {}),
@@ -115,7 +126,14 @@ export const CronListTool = buildTool({
                   ? ` reps=${j.repeat.completed}/${j.repeat.times ?? '∞'}`
                   : ''
                 const next = j.nextRunAt ? ` next=${j.nextRunAt}` : ''
-                return `${j.id}${label} — ${j.humanSchedule}${flavor}${session}${status}${reps}${next}: ${truncate(j.prompt, 80, true)}`
+                // When the user originally authored the schedule in NL
+                // ("每週一早上 9 點"), surface that phrase; otherwise the
+                // cronToHuman translation is enough.
+                const raw =
+                  j.scheduleRaw && j.scheduleKind === 'nl'
+                    ? ` "${j.scheduleRaw}"`
+                    : ''
+                return `${j.id}${label} — ${j.humanSchedule}${raw}${flavor}${session}${status}${reps}${next}: ${truncate(j.prompt, 80, true)}`
               })
               .join('\n')
           : 'No scheduled jobs.',
