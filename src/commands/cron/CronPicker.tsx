@@ -25,7 +25,10 @@ type Props = {
   onExit: (summary: string) => void
 }
 
-type Mode = 'list' | 'detail' | 'confirmDelete' | 'create' | 'edit'
+type Mode = 'list' | 'detail' | 'confirmDelete' | 'create' | 'edit' | 'history'
+
+const HISTORY_PAGE_SIZE = 20
+const HISTORY_MAX = 200
 
 type Flash = { text: string; tone: 'info' | 'error' }
 
@@ -104,6 +107,8 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
   const [cursor, setCursor] = useState(0)
   const [now, setNow] = useState(() => Date.now())
   const [history, setHistory] = useState<CronHistoryEntry[]>([])
+  const [fullHistory, setFullHistory] = useState<CronHistoryEntry[]>([])
+  const [historyOffset, setHistoryOffset] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [flash, setFlash] = useState<Flash | null>(null)
 
@@ -170,6 +175,29 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
       })
       .catch(() => {
         if (!cancelled) setHistory([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mode, selected?.id])
+
+  // Load full history when entering history mode
+  useEffect(() => {
+    let cancelled = false
+    if (mode !== 'history' || !selected) {
+      setFullHistory([])
+      setHistoryOffset(0)
+      return
+    }
+    readHistory(selected.id, HISTORY_MAX)
+      .then(h => {
+        if (!cancelled) {
+          setFullHistory(h)
+          setHistoryOffset(0)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFullHistory([])
       })
     return () => {
       cancelled = true
@@ -389,6 +417,37 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     // In create/edit modes the wizard owns input. Do nothing here.
     if (mode === 'create' || mode === 'edit') return
 
+    if (mode === 'history') {
+      if (key.escape || key.leftArrow || input === 'q') {
+        setMode('detail')
+        return
+      }
+      if (key.upArrow) {
+        setHistoryOffset(o => Math.max(0, o - 1))
+        return
+      }
+      if (key.downArrow) {
+        setHistoryOffset(o =>
+          Math.min(Math.max(0, fullHistory.length - HISTORY_PAGE_SIZE), o + 1),
+        )
+        return
+      }
+      if (key.pageUp) {
+        setHistoryOffset(o => Math.max(0, o - HISTORY_PAGE_SIZE))
+        return
+      }
+      if (key.pageDown) {
+        setHistoryOffset(o =>
+          Math.min(
+            Math.max(0, fullHistory.length - HISTORY_PAGE_SIZE),
+            o + HISTORY_PAGE_SIZE,
+          ),
+        )
+        return
+      }
+      return
+    }
+
     if (mode === 'confirmDelete') {
       if (input === 'y' || input === 'Y') {
         void deleteSelected()
@@ -460,6 +519,11 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
       setMode('edit')
       return
     }
+    if (input === 'H') {
+      if (!selected) return
+      setMode('history')
+      return
+    }
     if (input === 'd') {
       if (!selected) return
       setMode('confirmDelete')
@@ -518,6 +582,66 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
             <Text color={flash.tone === 'error' ? 'red' : 'green'}>{flash.text}</Text>
           </Box>
         )}
+      </Box>
+    )
+  }
+
+  if (mode === 'history' && selected) {
+    const total = fullHistory.length
+    const page = fullHistory.slice(historyOffset, historyOffset + HISTORY_PAGE_SIZE)
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
+        <Box>
+          <Text bold>History · {formatTaskId(selected.id)} · {taskLabel(selected)}</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>
+            Showing {total === 0 ? 0 : historyOffset + 1}-
+            {Math.min(total, historyOffset + HISTORY_PAGE_SIZE)} of {total}
+          </Text>
+        </Box>
+        <Box flexDirection="column" marginTop={1}>
+          {page.length === 0 ? (
+            <Text dimColor>(no history)</Text>
+          ) : (
+            page.map(h => {
+              const mark =
+                h.status === 'error'
+                  ? '✗'
+                  : h.status === 'ok'
+                    ? '✓'
+                    : h.status === 'retrying'
+                      ? '↻'
+                      : h.status === 'skipped'
+                        ? '↷'
+                        : '·'
+              const color =
+                h.status === 'error'
+                  ? 'red'
+                  : h.status === 'ok'
+                    ? 'green'
+                    : h.status === 'retrying'
+                      ? 'yellow'
+                      : h.status === 'skipped'
+                        ? 'gray'
+                        : undefined
+              return (
+                <Box key={h.ts}>
+                  <Text color={color}>{mark} </Text>
+                  <Text dimColor>{new Date(h.ts).toISOString()} </Text>
+                  <Text>
+                    {typeof h.durationMs === 'number' ? `${h.durationMs}ms ` : ''}
+                    att={h.attempt ?? 1}
+                    {h.errorMsg ? ` err="${h.errorMsg}"` : ''}
+                  </Text>
+                </Box>
+              )
+            })
+          )}
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>↑/↓ scroll · PgUp/PgDn page · q/Esc/← = back to detail</Text>
+        </Box>
       </Box>
     )
   }
@@ -746,7 +870,7 @@ function CronDetail({
         })
       )}
       <Box marginTop={1}>
-        <Text dimColor>e=edit · r=run · p=pause/resume · d=delete · q/Esc/←=back</Text>
+        <Text dimColor>e=edit · r=run · p=pause/resume · H=full history · d=delete · q/Esc/←=back</Text>
       </Box>
     </Box>
   )
