@@ -25,7 +25,7 @@ type Props = {
   onExit: (summary: string) => void
 }
 
-type Mode = 'list' | 'detail' | 'confirmDelete' | 'create'
+type Mode = 'list' | 'detail' | 'confirmDelete' | 'create' | 'edit'
 
 type Flash = { text: string; tone: 'info' | 'error' }
 
@@ -203,7 +203,47 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     }
   }
 
-  async function createTaskFromDraft(draft: CronWizardDraft): Promise<void> {
+  function taskToDraft(t: CronTask): CronWizardDraft {
+    return {
+      cron: t.cron,
+      prompt: t.prompt,
+      name: t.name,
+      recurring: t.recurring ?? false,
+      retry: t.retry,
+      condition: t.condition,
+      catchupMax: t.catchupMax,
+      notify: t.notify,
+      preRunScript: t.preRunScript,
+      modelOverride: t.modelOverride,
+      scheduleSpec: t.scheduleSpec,
+    }
+  }
+
+  async function resolveScheduleOrFlash(
+    rawSchedule: string,
+  ): Promise<{ cron: string; scheduleSpec: { kind: 'cron' | 'nl'; raw: string } } | null> {
+    try {
+      const parsed = parseSchedule(rawSchedule)
+      return { cron: parsed.cron, scheduleSpec: { kind: 'cron', raw: rawSchedule } }
+    } catch {
+      try {
+        const ctrl = new AbortController()
+        const nl = await parseScheduleNL(rawSchedule, { signal: ctrl.signal })
+        return { cron: nl.cron, scheduleSpec: { kind: 'nl', raw: rawSchedule } }
+      } catch (err) {
+        setFlash({
+          text: `Schedule parse failed: ${(err as Error).message}`,
+          tone: 'error',
+        })
+        return null
+      }
+    }
+  }
+
+  async function editTaskFromDraft(
+    originalId: string,
+    draft: CronWizardDraft,
+  ): Promise<void> {
     const rawSchedule = (draft.cron ?? draft.schedule ?? '').trim()
     const prompt = (draft.prompt ?? '').trim()
     if (!rawSchedule) {
@@ -215,44 +255,97 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
       return
     }
 
-    // Resolve schedule — try local parseSchedule (5-field cron / "every Nm")
-    // first; fall back to LLM NL parser.
-    let cron: string
-    let scheduleSpec: { kind: 'cron' | 'nl'; raw: string } | undefined
-    let recurring: boolean = draft.recurring ?? true
-    try {
-      const parsed = parseSchedule(rawSchedule)
-      cron = parsed.cron
-      scheduleSpec = { kind: 'cron', raw: rawSchedule }
-      // parseSchedule always returns recurring: true (interval forms are
-      // always recurring). Respect user override only for one-shots, which
-      // must go through NL parser or explicit 5-field crons.
-      if (draft.recurring !== undefined) recurring = draft.recurring
-    } catch {
-      setFlash({ text: 'Resolving schedule via LLM…', tone: 'info' })
-      try {
-        const ctrl = new AbortController()
-        const nl = await parseScheduleNL(rawSchedule, { signal: ctrl.signal })
-        cron = nl.cron
-        scheduleSpec = { kind: 'nl', raw: rawSchedule }
-        if (draft.recurring === undefined) recurring = nl.recurring
-      } catch (err) {
-        setFlash({
-          text: `Schedule parse failed: ${(err as Error).message}`,
-          tone: 'error',
-        })
-        return
-      }
-    }
+    const resolved = await resolveScheduleOrFlash(rawSchedule)
+    if (!resolved) return
 
     try {
-      const id = await addCronTask(cron, prompt, recurring, true, undefined, {
-        name: draft.name,
-        modelOverride: draft.modelOverride,
-        preRunScript: draft.preRunScript,
-        scheduleSpec,
+      const result = await updateCronTask(originalId, t => {
+        const next: CronTask = {
+          ...t,
+          cron: resolved.cron,
+          prompt,
+          name: draft.name,
+          scheduleSpec: resolved.scheduleSpec,
+        }
+        // Recurring toggle — preserve undefined-vs-false semantics of schema
+        if (draft.recurring) {
+          next.recurring = true
+        } else {
+          delete (next as Partial<CronTask>).recurring
+        }
+        // Advanced — only overwrite when user explicitly set; undefined clears.
+        if (draft.retry !== undefined) {
+          next.retry = draft.retry as CronTask['retry']
+        } else {
+          delete (next as Partial<CronTask>).retry
+        }
+        if (draft.condition !== undefined) {
+          next.condition = draft.condition as CronTask['condition']
+        } else {
+          delete (next as Partial<CronTask>).condition
+        }
+        if (draft.catchupMax !== undefined) {
+          next.catchupMax = draft.catchupMax
+        } else {
+          delete (next as Partial<CronTask>).catchupMax
+        }
+        if (draft.notify !== undefined) {
+          next.notify = draft.notify as CronTask['notify']
+        } else {
+          delete (next as Partial<CronTask>).notify
+        }
+        if (draft.preRunScript !== undefined && draft.preRunScript !== '') {
+          next.preRunScript = draft.preRunScript
+        } else {
+          delete (next as Partial<CronTask>).preRunScript
+        }
+        if (draft.modelOverride !== undefined && draft.modelOverride !== '') {
+          next.modelOverride = draft.modelOverride
+        } else {
+          delete (next as Partial<CronTask>).modelOverride
+        }
+        return next
       })
-      setFlash({ text: `✓ Created ${id} (${cron})`, tone: 'info' })
+      if (!result) {
+        setFlash({ text: 'Task not found (concurrent delete?)', tone: 'error' })
+      } else {
+        setFlash({ text: `✓ Updated ${originalId}`, tone: 'info' })
+      }
+      setMode('list')
+      reload()
+    } catch (err) {
+      setFlash({ text: `Update failed: ${(err as Error).message}`, tone: 'error' })
+    }
+  }
+
+  async function createTaskFromDraft(draft: CronWizardDraft): Promise<void> {
+    const rawSchedule = (draft.cron ?? draft.schedule ?? '').trim()
+    const prompt = (draft.prompt ?? '').trim()
+    if (!rawSchedule) {
+      setFlash({ text: 'Schedule is required', tone: 'error' })
+      return
+    }
+    if (!prompt) {
+      setFlash({ text: 'Prompt is required', tone: 'error' })
+      return
+    }
+    const resolved = await resolveScheduleOrFlash(rawSchedule)
+    if (!resolved) return
+    try {
+      const id = await addCronTask(
+        resolved.cron,
+        prompt,
+        draft.recurring ?? true,
+        true,
+        undefined,
+        {
+          name: draft.name,
+          modelOverride: draft.modelOverride,
+          preRunScript: draft.preRunScript,
+          scheduleSpec: resolved.scheduleSpec,
+        },
+      )
+      setFlash({ text: `✓ Created ${id} (${resolved.cron})`, tone: 'info' })
       setMode('list')
       reload()
     } catch (err) {
@@ -293,8 +386,8 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
   }
 
   useInput((input, key) => {
-    // In create mode the wizard owns input (its own useInput). Do nothing here.
-    if (mode === 'create') return
+    // In create/edit modes the wizard owns input. Do nothing here.
+    if (mode === 'create' || mode === 'edit') return
 
     if (mode === 'confirmDelete') {
       if (input === 'y' || input === 'Y') {
@@ -336,6 +429,11 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
         setMode('create')
         return
       }
+      if (input === 'e') {
+        if (!selected) return
+        setMode('edit')
+        return
+      }
       if (input === 'd') {
         if (!selected) return
         setMode('confirmDelete')
@@ -355,6 +453,11 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     }
     if (input === 'r') {
       runNowSelected()
+      return
+    }
+    if (input === 'e') {
+      if (!selected) return
+      setMode('edit')
       return
     }
     if (input === 'd') {
@@ -385,6 +488,29 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
           onCancel={() => {
             setMode('list')
             setFlash({ text: 'Create cancelled', tone: 'info' })
+          }}
+        />
+        {flash && (
+          <Box marginTop={1}>
+            <Text color={flash.tone === 'error' ? 'red' : 'green'}>{flash.text}</Text>
+          </Box>
+        )}
+      </Box>
+    )
+  }
+
+  if (mode === 'edit' && selected) {
+    return (
+      <Box flexDirection="column">
+        <CronCreateWizard
+          wizardId={`local-edit-${selected.id}`}
+          draft={taskToDraft(selected)}
+          onConfirm={draft => {
+            void editTaskFromDraft(selected.id, draft)
+          }}
+          onCancel={() => {
+            setMode('list')
+            setFlash({ text: 'Edit cancelled', tone: 'info' })
           }}
         />
         {flash && (
@@ -513,7 +639,7 @@ function CronList({
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
-          ↑/↓ move · Enter = detail · n = new · r = run · p = pause/resume · d = delete · q/Esc = close
+          ↑/↓ · Enter=detail · n=new · e=edit · r=run · p=pause/resume · d=delete · q/Esc=close
         </Text>
       </Box>
     </Box>
@@ -620,7 +746,7 @@ function CronDetail({
         })
       )}
       <Box marginTop={1}>
-        <Text dimColor>r = run now · p = pause/resume · d = delete · q/Esc/← = back</Text>
+        <Text dimColor>e=edit · r=run · p=pause/resume · d=delete · q/Esc/←=back</Text>
       </Box>
     </Box>
   )
