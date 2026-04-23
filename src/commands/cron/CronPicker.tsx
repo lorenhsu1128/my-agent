@@ -6,11 +6,20 @@ import {
   addCronTask,
   type CronTask,
   listAllCronTasks,
-  nextCronRunMs,
   parseSchedule,
   removeCronTasks,
   updateCronTask,
 } from '../../utils/cronTasks.js'
+import {
+  enrich,
+  type Enriched,
+  lastRunLabel,
+  nextFireLabel,
+  sortEnriched,
+  stateIcon,
+  taskLabel,
+  truncate,
+} from './cronPickerLogic.js'
 import { parseScheduleNL } from '../../utils/cronNlParser.js'
 import {
   CronCreateWizard,
@@ -22,7 +31,6 @@ import {
 } from '../../hooks/useDaemonMode.js'
 import type { CronMutationPayload } from '../../repl/thinClient/fallbackManager.js'
 import { readHistory, type CronHistoryEntry } from '../../utils/cronHistory.js'
-import { formatDuration } from '../../utils/format.js'
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js'
 import { WORKLOAD_CRON } from '../../utils/workloadContext.js'
 
@@ -37,78 +45,9 @@ const HISTORY_MAX = 200
 
 type Flash = { text: string; tone: 'info' | 'error' }
 
-type Enriched = {
-  task: CronTask
-  nextFireMs: number | null
-  stateRank: number
-}
-
-const STATE_RANK: Record<NonNullable<CronTask['state']> | 'scheduled', number> = {
-  scheduled: 0,
-  paused: 1,
-  completed: 2,
-}
-
-function enrich(t: CronTask, nowMs: number): Enriched {
-  const state = t.state ?? 'scheduled'
-  const next =
-    state === 'scheduled'
-      ? nextCronRunMs(t.cron, Math.max(nowMs, t.lastFiredAt ?? 0))
-      : null
-  return {
-    task: t,
-    nextFireMs: next,
-    stateRank: STATE_RANK[state] ?? 99,
-  }
-}
-
-function sortEnriched(a: Enriched, b: Enriched): number {
-  if (a.stateRank !== b.stateRank) return a.stateRank - b.stateRank
-  const an = a.nextFireMs ?? Number.POSITIVE_INFINITY
-  const bn = b.nextFireMs ?? Number.POSITIVE_INFINITY
-  return an - bn
-}
-
-function stateIcon(t: CronTask): { icon: string; color: string } {
-  const s = t.state ?? 'scheduled'
-  if (s === 'paused') return { icon: '⏸', color: 'yellow' }
-  if (s === 'completed') return { icon: '☑', color: 'gray' }
-  if (t.lastStatus === 'error') return { icon: '✗', color: 'red' }
-  return { icon: '✓', color: 'green' }
-}
-
-function taskLabel(t: CronTask): string {
-  if (t.name) return t.name
-  const firstLine = t.prompt.split('\n')[0] ?? ''
-  return firstLine.length > 40 ? firstLine.slice(0, 37) + '...' : firstLine
-}
-
-function nextFireLabel(e: Enriched, nowMs: number): string {
-  const s = e.task.state ?? 'scheduled'
-  if (s === 'paused') return 'paused'
-  if (s === 'completed') return 'completed'
-  if (e.nextFireMs === null) return 'n/a'
-  const delta = e.nextFireMs - nowMs
-  if (delta <= 0) return 'overdue'
-  return `in ${formatDuration(delta, { mostSignificantOnly: true })}`
-}
-
-function lastRunLabel(t: CronTask): string {
-  if (!t.lastFiredAt) return 'never'
-  const ago = Date.now() - t.lastFiredAt
-  const dur = formatDuration(ago, { mostSignificantOnly: true })
-  const mark = t.lastStatus === 'error' ? '✗' : t.lastStatus === 'ok' ? '✓' : '·'
-  return `${mark} ${dur} ago`
-}
-
 function formatTaskId(id: string): string {
   // 8 chars short id; keep as-is
   return id
-}
-
-function truncate(s: string, maxChars: number): string {
-  if (s.length <= maxChars) return s
-  return s.slice(0, maxChars - 1) + '…'
 }
 
 export function CronPicker({ onExit }: Props): React.ReactNode {
