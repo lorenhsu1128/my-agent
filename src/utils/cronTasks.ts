@@ -112,7 +112,75 @@ export type CronTask = {
    * informational; resume computes next fire from now regardless.
    */
   pausedAt?: string
+  // -- Wave 3 extensions (cron 6 大功能) — 全 optional，舊 task undefined 時行為與 Wave 2 一致 --
+  /**
+   * 原始排程輸入（自然語言或 cron 字串）。`cron` 欄位永遠存翻譯後的 5-field
+   * 字串供 scheduler 用；`scheduleSpec.raw` 留人類輸入原文供 list / edit 顯示。
+   * `kind: 'cron'` 表 raw 就是 cron 字串；`kind: 'nl'` 表 raw 是自然語言、
+   * 由 cronNlParser 翻譯成 `cron` 欄位。
+   */
+  scheduleSpec?: { kind: 'cron' | 'nl'; raw: string }
+  /**
+   * 通知投遞偏好。fire 完成 / 失敗 / skip / retry 時走這裡決定通知到哪。
+   * - tui: 'always' = 每次 fire 都 toast；'failure-only' = 只在失敗時；'off' = 完全不通知
+   * - discord: 'home' = 走 homeChannelId；'project' = 走 per-project binding（無則 fallback home）；'off' = 不發
+   * - desktop: OS notification（沿用 notification-session-end.sh 模式），預設 false
+   * undefined 視同 `{ tui: 'always', discord: 'off' }`。
+   */
+  notify?: CronNotifyConfig
+  /**
+   * Run history 設定。寫入 `.my-agent/cron/history/{id}.jsonl` append-only。
+   * `keepRuns` = 保留最舊的幾筆，超過 truncate；預設 50。
+   */
+  history?: { keepRuns: number }
+  /**
+   * 失敗重試設定。`maxAttempts` 含首次（3 = 首次 + 2 重試）。
+   * `backoffMs` 為基礎值，retry n 次走 exponential `backoffMs * 2^(n-1)`。
+   * `failureMode` 由 wizard 蒐集，決定 fire 結果如何被判定為失敗。
+   * `attemptCount` 為 runtime 計數，由 cronWiring 寫回；daemon restart 時若 >0
+   * 視同放棄並 reset 0、走下一次 schedule（pending setTimeout 跨不過 process）。
+   */
+  retry?: {
+    maxAttempts: number
+    backoffMs: number
+    failureMode: FailureMode
+    attemptCount: number
+  }
+  /**
+   * fire 前 gate。不通過則 emit `skipped` 不更新 lastFiredAt 也不算 retry，
+   * 下次 schedule 仍會看到並再次評估。`shell` 走既有 runPreRunScript 機制
+   * （10s timeout，看 exit code）；`fileChanged` 比 mtime 與 lastFiredAt。
+   */
+  condition?: CronCondition
+  /**
+   * Catch-up 上限：daemon 起時對 recurring task 計算錯過 fire 次數，
+   * 補跑 `min(actualMissed, catchupMax)` 次。0 = 完全不補；1（預設）=
+   * 只補最近一次，與 Wave 2 隱性行為相容；N = 累積型任務適用。
+   */
+  catchupMax?: number
 }
+
+/** Wave 3 — Notification 投遞偏好。詳見 CronTask.notify。 */
+export type CronNotifyConfig = {
+  tui: 'always' | 'failure-only' | 'off'
+  discord: 'home' | 'project' | 'off'
+  desktop?: boolean
+}
+
+/** Wave 3 — fire 結果如何被判定為失敗。由 wizard 蒐集。 */
+export type FailureMode =
+  | { kind: 'turn-error' }
+  | { kind: 'pre-run-exit' }
+  | { kind: 'output-regex'; pattern: string; flags?: string }
+  | { kind: 'output-missing'; pattern: string }
+  | { kind: 'composite'; modes: FailureMode[]; logic: 'any' | 'all' }
+
+/** Wave 3 — fire 前 gate。 */
+export type CronCondition =
+  | { kind: 'shell'; spec: string }
+  | { kind: 'lastRunOk' }
+  | { kind: 'lastRunFailed' }
+  | { kind: 'fileChanged'; path: string }
 
 type CronFile = { tasks: CronTask[] }
 

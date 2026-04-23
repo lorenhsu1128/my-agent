@@ -593,6 +593,45 @@
 
 ---
 
+## 當前里程碑：M-CRON-W3 — Cron 6 大功能擴充（2026-04-23 啟動）
+
+**目標**：把本地 cron 從「會 fire 的 timer」升級成「可觀測 / 可確認 / 可恢復」的排程子系統。補齊 Anthropic remote schedule 等 managed 服務有、本地缺的 6 項：自然語言排程、結果通知（TUI toast + StatusLine badge + Discord）、run history 觀測、失敗重試 + backoff、conditional 觸發、明確 catch-up 策略。詳見 `docs/cron-wave3-plan.md`。
+
+**核心決策**（與使用者對齊）：
+- Q1 NL 解析 = 純 LLM（不裝 chrono-node），失敗明確報錯不靜默 fallback
+- Q2 TUI 通知 = ephemeral toast + StatusLine 持久 badge
+- Q3 失敗條件 = 不寫死，CronCreate 走統一 wizard 蒐集
+- Q3+ Wizard 觸發 = LLM 呼叫 CronCreate 一律彈 wizard 預填讓使用者改/確認/取消
+- Q4 Catch-up = per-task `catchupMax: number`（預設 1）
+
+**架構原則**：擴 CronTask schema（全 optional）+ scheduler 邊界 hook，**不重寫核心邏輯**；保留 6105c6c 修的 batched write race；daemon 是唯一 fire 執行者。
+
+### 任務
+- [ ] M-CRON-W3-1 CronTask schema 擴充（scheduleSpec / notify / history / retry / condition / catchupMax 6 個 optional 欄位 + FailureMode type export + writeCronTasks strip 邏輯保持，typecheck 全綠）
+- [ ] M-CRON-W3-2 Run history store + `CronHistoryTool` + `/cron-history` slash（`.my-agent/cron/history/{id}.jsonl` append-only + keepRuns truncate）
+- [ ] M-CRON-W3-3 Condition gate（`src/utils/cronCondition.ts` 支援 shell/lastRunOk/lastRunFailed/fileChanged，cronWiring.handleFire 開頭 evaluateCondition 不通過 emit skipped）
+- [ ] M-CRON-W3-4 Catch-up 明確化（enumerateMissedFires + selectCatchUpFires，daemon startup spread jitter 連續 fire `min(actual, catchupMax)` 次）
+- [ ] M-CRON-W3-5 Retry / backoff（cronFailureClassifier 5 種 mode，handleFire 訂 turnEnd → setTimeout exponential backoff，daemon restart attemptCount&gt;0 視同放棄）
+- [ ] M-CRON-W3-6 Broker `cronFireEvent` + Discord cronMirror（sessionBroker emit + directConnectServer broadcast + 走 pickAllMirrorTargets + redactSecrets + truncateForDiscord）
+- [ ] M-CRON-W3-7 TUI toast + StatusBadge（useDaemonMode.onCronFireEvent → addNotification 重用 context/notifications.tsx + 新 useCronStatus hook + CronStatusBadge 掛 StatusLine）
+- [ ] M-CRON-W3-8a Wizard 後端（broker 三 frames + cronCreateWizardRouter mirror permissionRouter pattern + CronCreateTool 改 async 等 wizard 結果 + bypassWizard escape hatch）
+- [ ] M-CRON-W3-8b Wizard 前端（CronCreateWizard summary card + inline edit ink UI，REPL 推到 modal slot）
+- [ ] M-CRON-W3-9 NL parser（cronNlParser 走 services/api/client.ts 結構化 prompt + tz/now，retry 1 次，失敗 typed error；CronCreateTool 偵測非 cron 字串走 NL 路徑）
+- [ ] M-CRON-W3-10 Docs（更新 `docs/daemon-mode.md` cron 章節）+ 開發日誌 + LESSONS
+
+### 完成標準
+- [ ] `bun run typecheck` 綠
+- [ ] `tests/integration/daemon/cron-wiring.test.ts` 既有測試全綠
+- [ ] 新增單元測試（cronNlParser / cronFailureClassifier / cronCondition / cronHistory / catch-up helpers）
+- [ ] 端到端：daemon 跑 cron 失敗 retry 正確、condition skip 正確、catchupMax 限制正確
+- [ ] Discord home channel 收到 cron fire 通知（已 redactSecrets + truncate）
+- [ ] REPL toast + StatusBadge 顯示正確
+- [ ] `/cron-create` 經 LLM 觸發出 wizard、使用者改欄位 / 確認 / 取消三條路徑都正確
+- [ ] NL：`「每週一早上 9 點」` 正確翻譯成 `0 9 * * 1`
+- [ ] `./cli -p "hi"` 冒煙不壞
+
+---
+
 ## 已完成里程碑：M-TOOLS-PICKER — REPL 即時 tool 開關（2026-04-21 完成）
 
 **目標**：讓使用者在 REPL 用 `/tools` 開一個多選 picker 即時關閉 / 啟用工具，避免弱模型（qwen 9B）亂選 tool（例如硬用 curl 查 Google Maps）、或使用者想暫時關掉某些 tool。詳細規劃見 `docs/tools-picker.md`。
@@ -1640,3 +1679,53 @@
 - 2026-04-22 22:09: Session 結束 | 進度：464/490 任務 | f30dcc1 docs(LESSONS): 記錄 daemon attached paste-ref 未展開的教訓
 
 - 2026-04-22 22:19: Session 結束 | 進度：464/490 任務 | f30dcc1 docs(LESSONS): 記錄 daemon attached paste-ref 未展開的教訓
+
+- 2026-04-22 22:38: Session 結束 | 進度：464/490 任務 | 9137ddd fix(statusline): tokenUsage=0 時隱藏 ContextProgressBar
+
+- 2026-04-23 09:08: Session 結束 | 進度：464/490 任務 | 9137ddd fix(statusline): tokenUsage=0 時隱藏 ContextProgressBar
+
+- 2026-04-23 09:59: Session 結束 | 進度：464/490 任務 | 9137ddd fix(statusline): tokenUsage=0 時隱藏 ContextProgressBar
+
+- 2026-04-23 10:02: Session 結束 | 進度：464/490 任務 | 9137ddd fix(statusline): tokenUsage=0 時隱藏 ContextProgressBar
+
+- 2026-04-23 10:07: Session 結束 | 進度：464/490 任務 | 9137ddd fix(statusline): tokenUsage=0 時隱藏 ContextProgressBar
+
+- 2026-04-23 10:12: Session 結束 | 進度：464/490 任務 | 9137ddd fix(statusline): tokenUsage=0 時隱藏 ContextProgressBar
+
+- 2026-04-23 10:17: Session 結束 | 進度：464/490 任務 | 9137ddd fix(statusline): tokenUsage=0 時隱藏 ContextProgressBar
+
+- 2026-04-23 10:21: Session 結束 | 進度：464/490 任務 | 9137ddd fix(statusline): tokenUsage=0 時隱藏 ContextProgressBar
+
+- 2026-04-23 10:25: Session 結束 | 進度：464/490 任務 | 9137ddd fix(statusline): tokenUsage=0 時隱藏 ContextProgressBar
+
+- 2026-04-23 10:35: Session 結束 | 進度：464/490 任務 | 9137ddd fix(statusline): tokenUsage=0 時隱藏 ContextProgressBar
+
+- 2026-04-23 11:07: Session 結束 | 進度：464/490 任務 | 4741968 fix(cron): 修復三個導致 daemon cron 永不 fire 的疊加 bug
+
+- 2026-04-23 11:11: Session 結束 | 進度：464/490 任務 | 4741968 fix(cron): 修復三個導致 daemon cron 永不 fire 的疊加 bug
+
+- 2026-04-23 11:19: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 11:41: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 11:50: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 12:07: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 12:21: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 12:28: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 12:56: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 13:42: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 13:54: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 14:03: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 14:08: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 14:14: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 14:17: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
