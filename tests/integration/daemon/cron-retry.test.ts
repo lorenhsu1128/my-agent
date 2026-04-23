@@ -191,6 +191,84 @@ describe('daemon cron retry path', () => {
     expect(submits.length).toBe(2)
   })
 
+  test('emits cronFireEvent lifecycle: fired → retrying → completed', async () => {
+    const { broker, emitter, submits } = makeBrokerWithEvents()
+    const { modules, captured } = makeFakeSchedulerModules()
+    const handle = startDaemonCronWiring({
+      broker,
+      cwd: tmpDir,
+      isEnabled: () => true,
+      modules: modules as never,
+    })
+    const seen: Array<{ status: string; attempt?: number }> = []
+    handle.events.on(
+      'cronFireEvent',
+      (e: { status: string; attempt?: number }) => {
+        seen.push({ status: e.status, attempt: e.attempt })
+      },
+    )
+    const task: CronTask = {
+      id: 'life',
+      cron: '*/5 * * * *',
+      prompt: 'run',
+      createdAt: Date.now(),
+      recurring: true,
+      retry: {
+        maxAttempts: 3,
+        backoffMs: 5,
+        failureMode: { kind: 'turn-error' },
+        attemptCount: 0,
+      },
+    }
+    void captured.onFireTask!(task)
+    await sleep(15)
+    emitter.emit('turnEnd', {
+      input: { id: submits[0]!.id },
+      endedAt: Date.now(),
+      reason: 'error',
+      error: 'boom',
+    })
+    await sleep(30)
+    emitter.emit('turnEnd', {
+      input: { id: submits[1]!.id },
+      endedAt: Date.now(),
+      reason: 'done',
+    })
+    await sleep(30)
+    expect(seen.map(s => s.status)).toEqual([
+      'fired',
+      'retrying',
+      'completed',
+    ])
+  })
+
+  test('emits cronFireEvent status=skipped when condition blocks', async () => {
+    const { broker } = makeBrokerWithEvents()
+    const { modules, captured } = makeFakeSchedulerModules()
+    const handle = startDaemonCronWiring({
+      broker,
+      cwd: tmpDir,
+      isEnabled: () => true,
+      modules: modules as never,
+    })
+    const seen: string[] = []
+    handle.events.on('cronFireEvent', (e: { status: string }) =>
+      seen.push(e.status),
+    )
+    const task: CronTask = {
+      id: 'skip',
+      cron: '*/5 * * * *',
+      prompt: 'x',
+      createdAt: Date.now(),
+      recurring: true,
+      // lastRunFailed on first fire blocks.
+      condition: { kind: 'lastRunFailed' },
+    }
+    void captured.onFireTask!(task)
+    await sleep(20)
+    expect(seen).toEqual(['skipped'])
+  })
+
   test('output-regex failureMode: matching output triggers retry', async () => {
     const { broker, emitter, submits } = makeBrokerWithEvents()
     const { modules, captured } = makeFakeSchedulerModules()

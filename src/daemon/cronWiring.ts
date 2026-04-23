@@ -13,6 +13,7 @@
  *     infra；目前 daemon 的 AppState.tasks 空，只做 default enqueue
  *   - Missed-task notification UI — daemon 沒有使用者面板，missed 仍會直接 fire
  */
+import { EventEmitter } from 'events'
 import type { SessionBroker } from './sessionBroker.js'
 import { evaluateCondition } from '../utils/cronCondition.js'
 import {
@@ -31,8 +32,45 @@ import {
 } from '../utils/cronTasks.js'
 import { logForDebugging } from '../utils/debug.js'
 
+/**
+ * Wave 3 — cron fire lifecycle event. Emitted at each meaningful transition:
+ *   fired     — submit() was called; prompt is in-flight on the queue
+ *   completed — turnEnd with reason='done' + classifier said ok
+ *   failed    — attempts exhausted OR non-retry task ended with error
+ *   retrying  — attempt finished but retry is scheduled
+ *   skipped   — condition gate blocked the fire, submit suppressed
+ *
+ * Consumers: WS broadcast (TUI toast/badge) and Discord mirror subscribe
+ * via `CronWiringHandle.events.on('cronFireEvent', handler)`.
+ */
+export type CronFireStatus =
+  | 'fired'
+  | 'completed'
+  | 'failed'
+  | 'retrying'
+  | 'skipped'
+
+export type CronFireEvent = {
+  type: 'cronFireEvent'
+  taskId: string
+  taskName?: string
+  schedule: string
+  status: CronFireStatus
+  startedAt: number
+  finishedAt?: number
+  durationMs?: number
+  /** Populated when status in { failed, retrying, skipped }. Already redacted / truncated. */
+  errorMsg?: string
+  /** 1-indexed attempt number (retries only). */
+  attempt?: number
+  /** Reason string for skipped fires (e.g. 'shell-exit-1', 'file-missing'). */
+  skipReason?: string
+  source: 'cron'
+}
+
 export interface CronWiringHandle {
   readonly scheduler: CronScheduler | null
+  readonly events: EventEmitter
   stop(): void
 }
 
@@ -78,8 +116,11 @@ export function startDaemonCronWiring(
         return false
       }
     })
+  const events = new EventEmitter()
+  events.setMaxListeners(32)
+
   if (!gate()) {
-    return { scheduler: null, stop: () => {} }
+    return { scheduler: null, events, stop: () => {} }
   }
 
   let mods = opts.modules
@@ -104,7 +145,7 @@ export function startDaemonCronWiring(
         ).augmentPromptWithPreRun,
       }
     } catch {
-      return { scheduler: null, stop: () => {} }
+      return { scheduler: null, events, stop: () => {} }
     }
   }
 
@@ -158,18 +199,44 @@ export function startDaemonCronWiring(
     })
   }
 
+  const emit = (e: CronFireEvent): void => {
+    try {
+      events.emit('cronFireEvent', e)
+    } catch (err) {
+      logForDebugging(
+        `[cronWiring] emit failed: ${(err as Error).message}`,
+      )
+    }
+  }
+  const baseEvent = (task: CronTask, startedAt: number): CronFireEvent => ({
+    type: 'cronFireEvent',
+    taskId: task.id,
+    ...(task.name ? { taskName: task.name } : {}),
+    schedule: task.cron,
+    status: 'fired',
+    startedAt,
+    source: 'cron',
+  })
+
   const handleFire = async (task: CronTask, attempt = 1): Promise<void> => {
+    const startedAt = Date.now()
     // Wave 3 — condition gate. When the gate blocks, we suppress submit()
     // but the scheduler still treats this as a fire (lastFiredAt advances)
     // so we don't tick-loop re-evaluate every second. Re-check happens on
-    // the next normal schedule. The suppressed event will surface as
-    // status='skipped' in run history once W3-6 wires emit().
+    // the next normal schedule. Event status='skipped' informs UI/Discord.
     if (attempt === 1 && task.condition) {
       const cond = await evaluateCondition(task)
       if (!cond.pass) {
         logForDebugging(
           `[cronWiring] skipping ${task.id} — condition '${task.condition.kind}' blocked: ${cond.reason}`,
         )
+        emit({
+          ...baseEvent(task, startedAt),
+          status: 'skipped',
+          skipReason: cond.reason,
+          finishedAt: Date.now(),
+          durationMs: Date.now() - startedAt,
+        })
         return
       }
     }
@@ -188,10 +255,18 @@ export function startDaemonCronWiring(
       }
     }
 
-    // No retry config → fire-and-forget (legacy path).
+    // No retry config → fire-and-forget (legacy path). Emit 'fired' only —
+    // without retry watcher we can't observe turnEnd to emit 'completed' /
+    // 'failed'. TUI/Discord mirror will show the fire; final status follows
+    // from sessionBroker's turnEnd broadcast.
     if (!task.retry || task.retry.maxAttempts <= 1) {
       submit(prompt)
+      emit({ ...baseEvent(task, startedAt), status: 'fired' })
       return
+    }
+    // Retry path — emit 'fired' on first attempt only.
+    if (attempt === 1) {
+      emit({ ...baseEvent(task, startedAt), status: 'fired' })
     }
 
     // Retry path — submit, observe turnEnd, classify, maybe setTimeout retry.
@@ -213,22 +288,51 @@ export function startDaemonCronWiring(
       })
     })
     const verdict = classifyFireResult(outcome, task.retry.failureMode)
+    const finishedAt = Date.now()
+    const base = baseEvent(task, startedAt)
     if (verdict === 'ok') {
       logForDebugging(
         `[cronWiring] ${task.id} attempt ${attempt}/${maxAttempts} ok`,
       )
+      emit({
+        ...base,
+        status: 'completed',
+        finishedAt,
+        durationMs: finishedAt - startedAt,
+        attempt,
+      })
       return
     }
     if (attempt >= maxAttempts) {
       logForDebugging(
         `[cronWiring] ${task.id} exhausted retries (${maxAttempts} attempts); giving up`,
       )
+      emit({
+        ...base,
+        status: 'failed',
+        finishedAt,
+        durationMs: finishedAt - startedAt,
+        attempt,
+        ...(outcome.turnError
+          ? { errorMsg: outcome.turnError.slice(0, 500) }
+          : {}),
+      })
       return
     }
     const backoff = computeBackoffMs(task.retry.backoffMs, attempt)
     logForDebugging(
       `[cronWiring] ${task.id} attempt ${attempt} failed; retrying in ${backoff}ms`,
     )
+    emit({
+      ...base,
+      status: 'retrying',
+      finishedAt,
+      durationMs: finishedAt - startedAt,
+      attempt,
+      ...(outcome.turnError
+        ? { errorMsg: outcome.turnError.slice(0, 500) }
+        : {}),
+    })
     setTimeout(() => {
       runLane(task.id, () => handleFire(task, attempt + 1))
     }, backoff).unref()
@@ -259,6 +363,7 @@ export function startDaemonCronWiring(
 
   return {
     scheduler,
+    events,
     stop: () => scheduler.stop(),
   }
 }

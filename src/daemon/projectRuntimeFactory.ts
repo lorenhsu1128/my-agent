@@ -100,6 +100,24 @@ export function createDefaultProjectRuntimeFactory(
       brokerRef.current = broker
 
       cron = cronWire({ broker, cwd })
+      // Wave 3 — broadcast cronFireEvent frames to all same-project clients
+      // (REPL toast/badge, Discord mirror). Subscription lifecycle tied to
+      // cron handle; stop() below does not need to detach because the
+      // EventEmitter goes out of scope with the handle.
+      cron.events.on('cronFireEvent', evt => {
+        try {
+          deps.server.broadcast(
+            { ...evt },
+            client => client.projectId === projectId,
+          )
+        } catch (err) {
+          // Best-effort — broadcast failures must not break cron path.
+          // eslint-disable-next-line no-console
+          console.error(
+            `[projectRuntimeFactory] cronFireEvent broadcast failed: ${(err as Error).message}`,
+          )
+        }
+      })
     } catch (e) {
       // Bootstrap 失敗路徑：盡可能 cleanup 已建好的 resources
       try {
