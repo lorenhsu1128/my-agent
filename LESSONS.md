@@ -96,15 +96,17 @@
 - **相關檔案**：node_modules/
 - **日期**：2026-04-16
 
-### `bun run dev` 不執行 feature-gated 子系統（cron scheduler / tools 啟用等）
+### `bun run dev` 不執行 feature-gated 子系統（cron scheduler / tools 啟用等）—— 已修正
 - **發生什麼事**：`/cron` 建立 task → run-now 正常 → 時間到了 scheduler 卻完全沒 fire，`lastFiredAt` 始終 `undefined`、`history/*.jsonl` 空空。debug 路徑：daemon 確認停掉、lock 檔不存在、cron schedule 正確、REPL 開著在 `/cron` — 明明該跑。
-- **根本原因**：`bun run dev` = `bun run ./src/entrypoints/cli.tsx`，**直接跑原始碼、沒過 bundler**。`feature('X')` 是 `bun:bundle` 的 **build-time 巨集**，需要 `scripts/build.ts` 把它替換成 `true`/`false` 常數。runtime 下 `feature()` 回傳 falsy，所以 `isKairosCronEnabled()` = false → `useScheduledTasks` 第 74 行 `if (!isKairosCronEnabled()) return` 直接退出，scheduler 從未 start。但 `/cron` picker 直接讀寫 `scheduled_tasks.json`、run-now 直接 `enqueuePendingNotification`，**完全繞過 feature gate** — 所以 UI 看起來都正常，只有時間觸發不會發生，症狀極具欺騙性。
-- **正確做法**：
-  1. 驗證 feature-gated 行為（cron schedule、betas tools、某些 model gating）**必須用 built binary**：`bun run build:dev` → `./cli`。
-  2. 或同時起 `./cli daemon start`（daemon 是另起 built-binary process，feature 已替換），讓 daemon 接管 scheduler；REPL 端走 `bun run dev` 也 OK（它本來就不跑 scheduler）。
-  3. 受此坑影響的子系統：`AGENT_TRIGGERS`（cron）、`KAIROS_*`、所有 `bun:bundle` import 的 gate — grep `feature(` 可列出。
-  4. 未來類似 bug 的診斷線索：「UI 動作正常但定時 / 背景 / 非同步的部分完全靜默」是 build-time gate 的典型指紋。
-- **相關檔案**：`src/utils/featureFlags.ts`（feature() 來源）、`scripts/build.ts:13-60`（build-time feature list）、`src/hooks/useScheduledTasks.ts:74`（gate 退出點）、`src/tools/ScheduleCronTool/prompt.ts:36`（`isKairosCronEnabled`）。
+- **根本原因**：`bun run dev` = `bun run ./src/entrypoints/cli.tsx`，**直接跑原始碼、沒過 bundler**。`feature('X')` 是 `bun:bundle` 的 **build-time 巨集**，需要替換成 `true`/`false` 常數才會生效。原 dev 腳本沒傳任何 `--feature=`，runtime transpile 把全部替換成 `false` → `isKairosCronEnabled()` = false → `useScheduledTasks` 第 74 行 `if (!isKairosCronEnabled()) return` 直接退出，scheduler 從未 start。但 `/cron` picker 直接讀寫 `scheduled_tasks.json`、run-now 直接 `enqueuePendingNotification`，**完全繞過 feature gate** — 所以 UI 看起來都正常，只有時間觸發不會發生，症狀極具欺騙性。
+- **關鍵發現**：`bun run` 其實也支援 `--feature=FLAG`（`node_modules/bun-types/bundle.d.ts` 明列 `build` / `run` / `test` 三條等價路徑）。所以 dev 腳本只是沒傳 flag，不是 runtime 不支援。
+- **修法（2026-04-23 `f760fa2` 後續 commit）**：
+  1. 抽共用常數 `scripts/experimentalFeatures.ts` — 36 個 flag 一份清單
+  2. `scripts/build.ts` import 該清單（語意不變）
+  3. 新 `scripts/dev.ts` shim：讀清單 → `bun run --feature=F1 --feature=F2 ... ./src/entrypoints/cli.tsx`
+  4. `package.json`：`dev` 改走 shim；加 `dev:raw` escape hatch 給想驗證 gate 關閉行為的場合
+- **未來類似 bug 的診斷線索**：「UI 動作正常但定時 / 背景 / 非同步的部分完全靜默」是 build-time gate 的典型指紋。新增 flag 時要同步更新 `scripts/experimentalFeatures.ts`。
+- **相關檔案**：`scripts/experimentalFeatures.ts`（清單）、`scripts/build.ts`（bundle path）、`scripts/dev.ts`（dev path）、`package.json`（`dev` / `dev:raw`）、`src/hooks/useScheduledTasks.ts:74`（gate 退出點之一）。
 - **日期**：2026-04-23
 
 ---

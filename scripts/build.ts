@@ -1,5 +1,6 @@
 import { chmodSync, existsSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
+import { fullExperimentalFeatures } from './experimentalFeatures.ts'
 
 const pkg = await Bun.file(new URL('../package.json', import.meta.url)).json() as {
   name: string
@@ -9,44 +10,6 @@ const pkg = await Bun.file(new URL('../package.json', import.meta.url)).json() a
 const args = process.argv.slice(2)
 const compile = args.includes('--compile')
 const dev = args.includes('--dev')
-
-const fullExperimentalFeatures = [
-  'AGENT_MEMORY_SNAPSHOT',
-  'AGENT_TRIGGERS',
-  'AGENT_TRIGGERS_REMOTE',
-  'AWAY_SUMMARY',
-  'BASH_CLASSIFIER',
-  'BRIDGE_MODE',
-  'BUILTIN_EXPLORE_PLAN_AGENTS',
-  'CACHED_MICROCOMPACT',
-  'CCR_AUTO_CONNECT',
-  'CCR_MIRROR',
-  'CCR_REMOTE_SETUP',
-  'COMPACTION_REMINDERS',
-  'CONNECTOR_TEXT',
-  'EXTRACT_MEMORIES',
-  'HISTORY_PICKER',
-  'HOOK_PROMPTS',
-  'KAIROS_BRIEF',
-  'KAIROS_CHANNELS',
-  'LODESTONE',
-  'MCP_RICH_OUTPUT',
-  'MESSAGE_ACTIONS',
-  'NATIVE_CLIPBOARD_IMAGE',
-  'NEW_INIT',
-  'POWERSHELL_AUTO_MODE',
-  'PROMPT_CACHE_BREAK_DETECTION',
-  'QUICK_SEARCH',
-  'SHOT_STATS',
-  'TEAMMEM',
-  'TOKEN_BUDGET',
-  'TREE_SITTER_BASH',
-  'TREE_SITTER_BASH_SHADOW',
-  'ULTRAPLAN',
-  'ULTRATHINK',
-  'UNATTENDED_RETRY',
-  'VERIFICATION_AGENT',
-] as const
 
 function runCommand(cmd: string[]): string | null {
   const proc = Bun.spawnSync({
@@ -78,15 +41,7 @@ function getVersionChangelog(): string {
   )
 }
 
-// ADR-003：新功能不使用 feature flag — 所有功能直接啟用。正式 build 預設把
-// 整套 experimental flags 打開，對齊 my-agent「移除遙測、解鎖實驗功能」的方向。
-// 否則 7 個 Cron 工具 + RemoteTriggerTool + daemon cronWiring 等會在 build
-// 階段被死碼消除（見 src/tools.ts:34 的 `feature('AGENT_TRIGGERS')` gate）。
-//
-// NOTE：PROACTIVE / KAIROS / MONITOR_TOOL / KAIROS_PUSH_NOTIFICATION /
-// KAIROS_GITHUB_WEBHOOKS 不能加進來，my-agent 移除遙測時連帶刪了
-// src/proactive/、src/tools/MonitorTool/ 等目錄，打開這些 flag 會 bundle-time
-// 解析失敗。需要恢復對應功能時要先把模組補回來。
+// 預設把 experimental flags 全開；完整清單與理由見 ./experimentalFeatures.ts。
 const defaultFeatures: string[] = [...fullExperimentalFeatures]
 const featureSet = new Set(defaultFeatures)
 for (let i = 0; i < args.length; i += 1) {
