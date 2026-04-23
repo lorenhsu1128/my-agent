@@ -3,12 +3,19 @@ import * as React from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Box, Text, useInput } from '../../ink.js'
 import {
+  addCronTask,
   type CronTask,
   listAllCronTasks,
   nextCronRunMs,
+  parseSchedule,
   removeCronTasks,
   updateCronTask,
 } from '../../utils/cronTasks.js'
+import { parseScheduleNL } from '../../utils/cronNlParser.js'
+import {
+  CronCreateWizard,
+  type CronWizardDraft,
+} from '../../components/CronCreateWizard.js'
 import { readHistory, type CronHistoryEntry } from '../../utils/cronHistory.js'
 import { formatDuration } from '../../utils/format.js'
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js'
@@ -18,7 +25,7 @@ type Props = {
   onExit: (summary: string) => void
 }
 
-type Mode = 'list' | 'detail' | 'confirmDelete'
+type Mode = 'list' | 'detail' | 'confirmDelete' | 'create'
 
 type Flash = { text: string; tone: 'info' | 'error' }
 
@@ -196,6 +203,63 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     }
   }
 
+  async function createTaskFromDraft(draft: CronWizardDraft): Promise<void> {
+    const rawSchedule = (draft.cron ?? draft.schedule ?? '').trim()
+    const prompt = (draft.prompt ?? '').trim()
+    if (!rawSchedule) {
+      setFlash({ text: 'Schedule is required', tone: 'error' })
+      return
+    }
+    if (!prompt) {
+      setFlash({ text: 'Prompt is required', tone: 'error' })
+      return
+    }
+
+    // Resolve schedule — try local parseSchedule (5-field cron / "every Nm")
+    // first; fall back to LLM NL parser.
+    let cron: string
+    let scheduleSpec: { kind: 'cron' | 'nl'; raw: string } | undefined
+    let recurring: boolean = draft.recurring ?? true
+    try {
+      const parsed = parseSchedule(rawSchedule)
+      cron = parsed.cron
+      scheduleSpec = { kind: 'cron', raw: rawSchedule }
+      // parseSchedule always returns recurring: true (interval forms are
+      // always recurring). Respect user override only for one-shots, which
+      // must go through NL parser or explicit 5-field crons.
+      if (draft.recurring !== undefined) recurring = draft.recurring
+    } catch {
+      setFlash({ text: 'Resolving schedule via LLM…', tone: 'info' })
+      try {
+        const ctrl = new AbortController()
+        const nl = await parseScheduleNL(rawSchedule, { signal: ctrl.signal })
+        cron = nl.cron
+        scheduleSpec = { kind: 'nl', raw: rawSchedule }
+        if (draft.recurring === undefined) recurring = nl.recurring
+      } catch (err) {
+        setFlash({
+          text: `Schedule parse failed: ${(err as Error).message}`,
+          tone: 'error',
+        })
+        return
+      }
+    }
+
+    try {
+      const id = await addCronTask(cron, prompt, recurring, true, undefined, {
+        name: draft.name,
+        modelOverride: draft.modelOverride,
+        preRunScript: draft.preRunScript,
+        scheduleSpec,
+      })
+      setFlash({ text: `✓ Created ${id} (${cron})`, tone: 'info' })
+      setMode('list')
+      reload()
+    } catch (err) {
+      setFlash({ text: `Create failed: ${(err as Error).message}`, tone: 'error' })
+    }
+  }
+
   function runNowSelected(): void {
     if (!selected) return
     try {
@@ -229,6 +293,9 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
   }
 
   useInput((input, key) => {
+    // In create mode the wizard owns input (its own useInput). Do nothing here.
+    if (mode === 'create') return
+
     if (mode === 'confirmDelete') {
       if (input === 'y' || input === 'Y') {
         void deleteSelected()
@@ -265,6 +332,10 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
         runNowSelected()
         return
       }
+      if (input === 'n') {
+        setMode('create')
+        return
+      }
       if (input === 'd') {
         if (!selected) return
         setMode('confirmDelete')
@@ -298,6 +369,29 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
       <Box flexDirection="column">
         <Text color="red">Failed to load cron tasks: {loadError}</Text>
         <Text dimColor>Press Esc to close</Text>
+      </Box>
+    )
+  }
+
+  if (mode === 'create') {
+    return (
+      <Box flexDirection="column">
+        <CronCreateWizard
+          wizardId="local-create"
+          draft={{ recurring: true }}
+          onConfirm={draft => {
+            void createTaskFromDraft(draft)
+          }}
+          onCancel={() => {
+            setMode('list')
+            setFlash({ text: 'Create cancelled', tone: 'info' })
+          }}
+        />
+        {flash && (
+          <Box marginTop={1}>
+            <Text color={flash.tone === 'error' ? 'red' : 'green'}>{flash.text}</Text>
+          </Box>
+        )}
       </Box>
     )
   }
@@ -419,7 +513,7 @@ function CronList({
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
-          ↑/↓ move · Enter = detail · r = run now · p = pause/resume · d = delete · q/Esc = close
+          ↑/↓ move · Enter = detail · n = new · r = run · p = pause/resume · d = delete · q/Esc = close
         </Text>
       </Box>
     </Box>
