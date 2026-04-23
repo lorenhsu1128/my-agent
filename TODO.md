@@ -585,7 +585,7 @@
 - [ ] 手動 E2E：REPL 開啟 /session-delete / /memory-delete / /trash 互動驗證（待使用者驗證）
 
 ### 完成標準
-- [ ] `bun run typecheck` 綠
+- [x] `bun run typecheck` 綠
 - [ ] 三個 command 在 REPL 可用且互動順暢
 - [ ] 軟刪 + restore 往返完整（session FTS 索引正確重建）
 - [ ] Discord 來源拒絕觸發（slash command 明確回拒）
@@ -607,21 +607,21 @@
 **架構原則**：擴 CronTask schema（全 optional）+ scheduler 邊界 hook，**不重寫核心邏輯**；保留 6105c6c 修的 batched write race；daemon 是唯一 fire 執行者。
 
 ### 任務
-- [ ] M-CRON-W3-1 CronTask schema 擴充（scheduleSpec / notify / history / retry / condition / catchupMax 6 個 optional 欄位 + FailureMode type export + writeCronTasks strip 邏輯保持，typecheck 全綠）
-- [ ] M-CRON-W3-2 Run history store + `CronHistoryTool` + `/cron-history` slash（`.my-agent/cron/history/{id}.jsonl` append-only + keepRuns truncate）
-- [ ] M-CRON-W3-3 Condition gate（`src/utils/cronCondition.ts` 支援 shell/lastRunOk/lastRunFailed/fileChanged，cronWiring.handleFire 開頭 evaluateCondition 不通過 emit skipped）
-- [ ] M-CRON-W3-4 Catch-up 明確化（enumerateMissedFires + selectCatchUpFires，daemon startup spread jitter 連續 fire `min(actual, catchupMax)` 次）
-- [ ] M-CRON-W3-5 Retry / backoff（cronFailureClassifier 5 種 mode，handleFire 訂 turnEnd → setTimeout exponential backoff，daemon restart attemptCount&gt;0 視同放棄）
-- [ ] M-CRON-W3-6 Broker `cronFireEvent` + Discord cronMirror（sessionBroker emit + directConnectServer broadcast + 走 pickAllMirrorTargets + redactSecrets + truncateForDiscord）
-- [ ] M-CRON-W3-7 TUI toast + StatusBadge（useDaemonMode.onCronFireEvent → addNotification 重用 context/notifications.tsx + 新 useCronStatus hook + CronStatusBadge 掛 StatusLine）
-- [ ] M-CRON-W3-8a Wizard 後端（broker 三 frames + cronCreateWizardRouter mirror permissionRouter pattern + CronCreateTool 改 async 等 wizard 結果 + bypassWizard escape hatch）
-- [ ] M-CRON-W3-8b Wizard 前端（CronCreateWizard summary card + inline edit ink UI，REPL 推到 modal slot）
-- [ ] M-CRON-W3-9 NL parser（cronNlParser 走 services/api/client.ts 結構化 prompt + tz/now，retry 1 次，失敗 typed error；CronCreateTool 偵測非 cron 字串走 NL 路徑）
-- [ ] M-CRON-W3-10 Docs（更新 `docs/daemon-mode.md` cron 章節）+ 開發日誌 + LESSONS
+- [x] M-CRON-W3-1 CronTask schema 擴充（scheduleSpec / notify / history / retry / condition / catchupMax 6 個 optional 欄位 + FailureMode type export + writeCronTasks strip 邏輯保持，typecheck 全綠）
+- [x] M-CRON-W3-2 Run history store + `CronHistoryTool` + `/cron-history` slash（`.my-agent/cron/history/{id}.jsonl` append-only + keepRuns truncate）
+- [x] M-CRON-W3-3 Condition gate（`src/utils/cronCondition.ts` 支援 shell/lastRunOk/lastRunFailed/fileChanged，cronWiring.handleFire 開頭 evaluateCondition 不通過 emit skipped）
+- [x] M-CRON-W3-4 Catch-up 明確化（enumerateMissedFires + selectCatchUpFires，daemon startup spread jitter 連續 fire `min(actual, catchupMax)` 次）
+- [x] M-CRON-W3-5 Retry / backoff（cronFailureClassifier 5 種 mode，handleFire 訂 turnEnd → setTimeout exponential backoff，daemon restart attemptCount&gt;0 視同放棄）
+- [x] M-CRON-W3-6 Broker `cronFireEvent` + Discord cronMirror（sessionBroker emit + directConnectServer broadcast + 走 pickAllMirrorTargets + redactSecrets + truncateForDiscord）
+- [x] M-CRON-W3-7 TUI toast + StatusBadge（useDaemonMode.onCronFireEvent → addNotification 重用 context/notifications.tsx + 新 useCronStatus hook + CronStatusBadge 掛 StatusLine）
+- [x] M-CRON-W3-8a Wizard 後端（broker 三 frames + cronCreateWizardRouter mirror permissionRouter pattern + CronCreateTool 改 async 等 wizard 結果 + bypassWizard escape hatch）
+- [x] M-CRON-W3-8b Wizard 前端（CronCreateWizard summary card + inline edit ink UI，REPL 推到 modal slot）
+- [x] M-CRON-W3-9 NL parser（cronNlParser 走 services/api/client.ts 結構化 prompt + tz/now，retry 1 次，失敗 typed error；CronCreateTool 偵測非 cron 字串走 NL 路徑）
+- [x] M-CRON-W3-10 Docs（更新 `docs/daemon-mode.md` cron 章節）+ 開發日誌 + LESSONS
 
 ### 完成標準
-- [ ] `bun run typecheck` 綠
-- [ ] `tests/integration/daemon/cron-wiring.test.ts` 既有測試全綠
+- [x] `bun run typecheck` 綠
+- [x] `tests/integration/daemon/cron-wiring.test.ts` 既有測試全綠
 - [ ] 新增單元測試（cronNlParser / cronFailureClassifier / cronCondition / cronHistory / catch-up helpers）
 - [ ] 端到端：daemon 跑 cron 失敗 retry 正確、condition skip 正確、catchupMax 限制正確
 - [ ] Discord home channel 收到 cron fire 通知（已 redactSecrets + truncate）
@@ -1729,3 +1729,5 @@
 - 2026-04-23 14:14: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
 
 - 2026-04-23 14:17: Session 結束 | 進度：464/490 任務 | 6105c6c fix(cron): 合併 tick 內兩個 fire-and-forget write，消除 lastFiredAt ↔ lastStatus race
+
+- 2026-04-23 14:54: Session 結束 | 進度：464/510 任務 | 16646bd feat(cron): W3-6 — cronWiring emits CronFireEvent，daemon broadcast 到 WS

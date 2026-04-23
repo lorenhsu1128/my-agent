@@ -238,6 +238,47 @@ export CLAUDE_CONFIG_DIR=~/.claude
 
 ---
 
+### 2026-04-23 — M-CRON-W3：Cron 6 大功能擴充（Wave 3）
+
+**範圍**：本地 cron 從「會 fire 的 timer」升級成「可觀測 / 可確認 / 可恢復」的排程子系統。補齊 6 項：自然語言排程、結果通知（TUI toast + StatusLine badge + Discord 基礎建設）、run history、失敗重試 + exponential backoff、conditional 觸發、catch-up 策略。規劃見 `docs/cron-wave3-plan.md`、使用指南 `docs/cron-wave3.md`。
+
+**commit 序列**（10 個獨立可交付）：
+1. `39fdad7` W3-1 — CronTask schema 擴 6 optional 欄位 + FailureMode / CronCondition / CronNotifyConfig types
+2. `8ea9edd` W3-2 — history JSONL + CronHistoryTool + markCronFiredBatch hook
+3. `fc38b01` W3-3 — condition gate（shell / lastRunOk / lastRunFailed / fileChanged）
+4. `7c9da27` W3-4 — per-task `catchupMax`（enumerateMissedFires + selectCatchUpFires + daemon startup spread）
+5. `9d39186` W3-5 — retry/backoff（cronFailureClassifier 5 mode + handleFire 訂 turnEnd + setTimeout exponential）
+6. `16646bd` W3-6 — cronWiring emits CronFireEvent + projectRuntimeFactory broadcast WS
+7. `83e985b` W3-7 — TUI toast（重用 notifications）+ StatusLine CronStatusBadge（5min TTL）
+8. `3f91e49` W3-8a — cronCreateWizardRouter（first-wins / 5min timeout / no-clients reject）
+9. `5150164` W3-8b — CronCreateWizard summary card + CronCreateTool 走 router.requestWizard
+10. `f0864cb` W3-9 — 純 LLM NL parser（queryHaiku + JSON + parseCronExpression 驗證 + retry 1）
+
+**關鍵決策**（與使用者對齊）：
+- Q1 純 LLM NL 解析（不裝 chrono-node），失敗明確報錯不靜默 fallback
+- Q2 ephemeral toast + StatusLine 持久 badge
+- Q3 失敗條件不寫死，走統一 wizard 蒐集
+- Q3+ LLM 呼叫 CronCreate 一律彈 wizard 預填
+- Q4 per-task `catchupMax`（預設 1 與 Wave 2 相容）
+
+**新模組**：`src/utils/cronNlParser.ts` / `cronHistory.ts` / `cronCondition.ts` / `cronFailureClassifier.ts`、`src/daemon/cronCreateWizardRouter.ts`、`src/components/CronCreateWizard.tsx` / `CronStatusBadge.tsx`、`src/tools/ScheduleCronTool/CronHistoryTool.ts`
+
+**改造既有**：cronTasks.ts schema + markCronFiredBatch hook + catch-up helpers；cronWiring.ts condition gate + retry loop + event emit + catch-up 前置；projectRuntimeFactory wizard router register + broadcast；daemonCli wizard frame route；CronCreateTool 走 wizard router + NL fallback；useDaemonMode 3 callbacks；AppState lastCronFire；StatusLine 掛 badge；REPL.tsx 接 wizard + toast；fallbackManager sendCronCreateWizardResult。
+
+**踩坑 / 教訓**：
+1. scheduler batched write race（commit 6105c6c 修過）— Wave 3 history append 必須 pigback 在 markCronFiredBatch 之後，不能另開 write path
+2. condition gate 原 plan 想「skip 不 advance lastFiredAt」會 1s tick-loop 狂 eval；改為「skip 也 advance 但 suppress submit」
+3. retry 跨 daemon restart 無法保留（setTimeout + in-memory Map 都沒了）— 文檔明說 attemptCount > 0 視同放棄
+4. wizard「沒 attached REPL」必須立即 reject 不 hang（否則 LLM 卡 5min timeout）
+5. cron-wiring.test.ts 的 fake broker 要補 `queue.on/off` stub（retry path subscribe runnerEvent/turnEnd）
+6. bun + Windows mkdir EEXIST — history dir 沿用 writeCronTasks 的 EEXIST swallow
+
+**測試**：Wave 3 新增 88 tests；cron + daemon cron 130/130 綠；typecheck baseline 不變；每個 commit `./cli -p` smoke 通過。
+
+**未做（後續）**：Discord cronMirror（gateway subscribe + pickAllMirrorTargets + redact）；wizard inline edit；slash `/cron-history`；CronListTool render scheduleSpec.raw；完整 E2E 實機驗證（需 daemon + REPL + llama.cpp + Discord 全起）。
+
+---
+
 ### 2026-04-20 — M-DISCORD-AUTOBIND：Per-project channel + REPL 雙向同步
 
 **範圍**：把 M-DISCORD 的靜態 `channelBindings` 升級成 REPL 內 `/discord-bind` 一鍵建頻道；加入 Discord ↔ REPL 雙向 turn 可見 + 權限雙發。9 個 commit，每個自成邏輯單元。
