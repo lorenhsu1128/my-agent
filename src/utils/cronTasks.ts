@@ -793,6 +793,64 @@ export async function markJobRun(
   await writeCronTasks(tasks, dir)
 }
 
+/** One fire outcome to persist in a {@link markCronFiredBatch} call. */
+export type CronFireRecord = {
+  id: string
+  firedAt: number
+  success: boolean
+  /** Only meaningful when `success === false`. Capped at 500 chars on write. */
+  error?: string
+}
+
+/**
+ * Batched post-fire persistence. Single read → apply lastFiredAt + lastStatus
+ * + repeat.completed for every record → single write. Replaces the split
+ * `markCronTasksFired` + per-task `markJobRun` call pair in the scheduler,
+ * which raced when both ran concurrently against scheduled_tasks.json and
+ * clobbered each other's fields. Repeat-limit deletion semantics match
+ * {@link markJobRun}.
+ */
+export async function markCronFiredBatch(
+  records: CronFireRecord[],
+  dir?: string,
+): Promise<void> {
+  if (records.length === 0) return
+  const tasks = await readCronTasks(dir)
+  const byId = new Map<string, CronFireRecord>()
+  for (const r of records) byId.set(r.id, r)
+  const kept: CronTask[] = []
+  let changed = false
+  for (const t of tasks) {
+    const r = byId.get(t.id)
+    if (!r) {
+      kept.push(t)
+      continue
+    }
+    changed = true
+    t.lastFiredAt = r.firedAt
+    t.lastStatus = r.success ? 'ok' : 'error'
+    if (!r.success && r.error) {
+      t.lastError =
+        r.error.length > 500 ? `${r.error.slice(0, 500)}...` : r.error
+    } else {
+      delete t.lastError
+    }
+    if (t.repeat) {
+      t.repeat.completed = (t.repeat.completed ?? 0) + 1
+      if (
+        typeof t.repeat.times === 'number' &&
+        t.repeat.completed >= t.repeat.times
+      ) {
+        // Limit reached — drop (same as one-shot completion).
+        continue
+      }
+    }
+    kept.push(t)
+  }
+  if (!changed) return
+  await writeCronTasks(kept, dir)
+}
+
 /**
  * Wave 2 — apply a partial update to a single task. The updater callback
  * receives the current task and returns the next one; returning the same

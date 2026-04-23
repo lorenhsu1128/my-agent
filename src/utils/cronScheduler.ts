@@ -27,8 +27,7 @@ import {
   getCronFilePath,
   hasCronTasksSync,
   jitteredNextCronRunMs,
-  markCronTasksFired,
-  markJobRun,
+  markCronFiredBatch,
   oneShotJitteredNextCronRunMs,
   readCronTasks,
   removeCronTasks,
@@ -235,13 +234,10 @@ export function createCronScheduler(
     if (isLoading() && !assistantMode) return
     const now = Date.now()
     const seen = new Set<string>()
-    // File-backed recurring tasks that fired this tick. Batched into one
-    // markCronTasksFired call after the loop so N fires = one write. Session
-    // tasks excluded — they die with the process, no point persisting.
-    const firedFileRecurring: string[] = []
     // All file-backed tasks that fired this tick (recurring + one-shot).
-    // Used for observability writes (markJobRun + saveJobOutput). Session
-    // tasks excluded from audit too — process-local, nothing to reconstruct.
+    // Used for saveJobOutput audit + batched persistence of lastFiredAt /
+    // lastStatus / repeat.completed via markCronFiredBatch. Session tasks
+    // excluded — they die with the process, nothing to reconstruct.
     const firedFileAll: CronTask[] = []
     // Read once per tick. REPL callers pass getJitterConfig backed by
     // GrowthBook so a config push takes effect without restart. Daemon and
@@ -353,9 +349,10 @@ export function createCronScheduler(
         const newNext =
           jitteredNextCronRunMs(t.cron, now, t.id, jitterCfg) ?? Infinity
         nextFireAt.set(t.id, newNext)
-        // Persist lastFiredAt=now so next process spawn reconstructs this
-        // same newNext on first-sight. Session tasks skip — process-local.
-        if (!isSession) firedFileRecurring.push(t.id)
+        // Recurring file tasks are already in firedFileAll; the tick-end batch
+        // writes lastFiredAt / lastStatus / repeat.completed for them in one
+        // shot (see markCronFiredBatch below). Session tasks skip — process-
+        // local, nothing to reconstruct.
       } else if (isSession) {
         // One-shot (or aged-out recurring) session task: synchronous memory
         // removal. No inFlight window — the next tick will read a session
@@ -383,28 +380,9 @@ export function createCronScheduler(
     // the same on-disk task.
     if (isOwner) {
       for (const t of tasks) process(t, false)
-      // Batched lastFiredAt write. inFlight guards against double-fire
-      // during the chokidar-triggered reload (same pattern as removeCronTasks
-      // below) — the reload re-seeds `tasks` with the just-written
-      // lastFiredAt, and first-sight on that yields the same newNext we
-      // already set in-memory, so it's idempotent even without inFlight.
-      // Guarding anyway keeps the semantics obvious.
-      if (firedFileRecurring.length > 0) {
-        for (const id of firedFileRecurring) inFlight.add(id)
-        void markCronTasksFired(firedFileRecurring, now, dir)
-          .catch(e =>
-            logForDebugging(
-              `[ScheduledTasks] failed to persist lastFiredAt: ${e}`,
-            ),
-          )
-          .finally(() => {
-            for (const id of firedFileRecurring) inFlight.delete(id)
-          })
-      }
-      // Observability (Wave 1 port). Per-task audit log + run-status update.
-      // Fire-and-forget: failures are logged but must not break the tick.
-      // One-shots fire once then get removed by the inFlight/remove path
-      // above, so markJobRun may see "task gone" — handled silently there.
+      // Per-fire audit log — writes under .my-agent/cron/output/{id}/, a
+      // separate file hierarchy from scheduled_tasks.json, so it doesn't
+      // contend with the batched persistence below.
       for (const t of firedFileAll) {
         const audit =
           `# Cron fire\n\n` +
@@ -419,14 +397,28 @@ export function createCronScheduler(
         void saveJobOutput(t.id, now, audit, dir).catch(e =>
           logForDebugging(`[ScheduledTasks] saveJobOutput ${t.id}: ${e}`),
         )
-        // Recurring tasks get run-status bookkeeping (repeat.completed,
-        // lastStatus). One-shots are being deleted in the same tick — skip
-        // to avoid a needless write-then-delete race.
-        if (t.recurring) {
-          void markJobRun(t.id, true, undefined, dir).catch(e =>
-            logForDebugging(`[ScheduledTasks] markJobRun ${t.id}: ${e}`),
+      }
+      // Batched persistence for recurring file tasks: one read-modify-write
+      // covers lastFiredAt + lastStatus + repeat.completed across every fire
+      // this tick. Replaces the previous split markCronTasksFired +
+      // per-task markJobRun pair, which raced against the same
+      // scheduled_tasks.json and clobbered each other's fields. One-shots
+      // skip — they're being removed in the same tick via the inFlight /
+      // removeCronTasks path in process().
+      const fireRecords = firedFileAll
+        .filter(t => t.recurring)
+        .map(t => ({ id: t.id, firedAt: now, success: true as const }))
+      if (fireRecords.length > 0) {
+        for (const r of fireRecords) inFlight.add(r.id)
+        void markCronFiredBatch(fireRecords, dir)
+          .catch(e =>
+            logForDebugging(
+              `[ScheduledTasks] failed to persist fire batch: ${e}`,
+            ),
           )
-        }
+          .finally(() => {
+            for (const r of fireRecords) inFlight.delete(r.id)
+          })
       }
     }
     // Session-only tasks: process-private, the lock does not apply — the

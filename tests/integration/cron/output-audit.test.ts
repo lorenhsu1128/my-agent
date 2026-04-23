@@ -4,6 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   advanceNextRun,
+  markCronFiredBatch,
   markJobRun,
   readCronTasks,
   saveJobOutput,
@@ -148,5 +149,95 @@ describe('cron observability — audit log + markJobRun + advanceNextRun', () =>
     const roundTripped = await readCronTasks(tmpDir)
     expect(roundTripped[0]!.id).toBe('atom0001')
     expect(roundTripped[0]!.prompt).toBe('atomic test')
+  })
+
+  test('markCronFiredBatch persists lastFiredAt + lastStatus atomically for multiple tasks', async () => {
+    await writeCronTasks(
+      [
+        {
+          id: 'batch001',
+          cron: '* * * * *',
+          prompt: 'a',
+          createdAt: Date.now(),
+          recurring: true,
+        },
+        {
+          id: 'batch002',
+          cron: '* * * * *',
+          prompt: 'b',
+          createdAt: Date.now(),
+          recurring: true,
+        },
+      ],
+      tmpDir,
+    )
+    const T = 1_777_000_000_000
+    await markCronFiredBatch(
+      [
+        { id: 'batch001', firedAt: T, success: true },
+        { id: 'batch002', firedAt: T, success: true },
+      ],
+      tmpDir,
+    )
+    const tasks = await readCronTasks(tmpDir)
+    expect(tasks.length).toBe(2)
+    for (const t of tasks) {
+      expect(t.lastFiredAt).toBe(T)
+      expect(t.lastStatus).toBe('ok')
+    }
+  })
+
+  test('markCronFiredBatch deletes task when repeat.times reached', async () => {
+    await writeCronTasks(
+      [
+        {
+          id: 'repeat01',
+          cron: '* * * * *',
+          prompt: 'twice',
+          createdAt: Date.now(),
+          recurring: true,
+          repeat: { times: 2, completed: 0 },
+        },
+      ],
+      tmpDir,
+    )
+    const T = Date.now()
+    await markCronFiredBatch(
+      [{ id: 'repeat01', firedAt: T, success: true }],
+      tmpDir,
+    )
+    let tasks = await readCronTasks(tmpDir)
+    expect(tasks.length).toBe(1)
+    expect(tasks[0]!.repeat?.completed).toBe(1)
+
+    await markCronFiredBatch(
+      [{ id: 'repeat01', firedAt: T + 60_000, success: true }],
+      tmpDir,
+    )
+    tasks = await readCronTasks(tmpDir)
+    expect(tasks.length).toBe(0)
+  })
+
+  test('markCronFiredBatch truncates lastError to 500 chars on failure', async () => {
+    await writeCronTasks(
+      [
+        {
+          id: 'err00001',
+          cron: '0 9 * * *',
+          prompt: 'x',
+          createdAt: Date.now(),
+          recurring: true,
+        },
+      ],
+      tmpDir,
+    )
+    const longError = 'x'.repeat(600)
+    await markCronFiredBatch(
+      [{ id: 'err00001', firedAt: Date.now(), success: false, error: longError }],
+      tmpDir,
+    )
+    const tasks = await readCronTasks(tmpDir)
+    expect(tasks[0]!.lastStatus).toBe('error')
+    expect(tasks[0]!.lastError).toBe('x'.repeat(500) + '...')
   })
 })
