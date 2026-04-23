@@ -367,6 +367,8 @@ export type AddCronTaskExtras = {
   modelOverride?: string
   /** Pre-run shell command (Wave 2). See CronTask.preRunScript. */
   preRunScript?: string
+  /** Wave 3 — schedule source spec (raw NL or cron string). */
+  scheduleSpec?: { kind: 'cron' | 'nl'; raw: string }
 }
 
 export async function addCronTask(
@@ -394,6 +396,7 @@ export async function addCronTask(
       ? { modelOverride: extras.modelOverride }
       : {}),
     ...(extras?.preRunScript ? { preRunScript: extras.preRunScript } : {}),
+    ...(extras?.scheduleSpec ? { scheduleSpec: extras.scheduleSpec } : {}),
   }
   if (!durable) {
     addSessionCronTask({ ...task, ...(agentId ? { agentId } : {}) })

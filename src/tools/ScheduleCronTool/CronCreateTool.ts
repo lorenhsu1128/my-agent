@@ -156,17 +156,24 @@ export const CronCreateTool = buildTool({
     return getCronFilePath()
   },
   async validateInput(input): Promise<ValidationResult> {
-    let parsed: ParsedSchedule
+    let parsed: ParsedSchedule | null = null
     try {
       parsed = resolveSchedule(input)
     } catch (e) {
-      return {
-        result: false,
-        message: e instanceof Error ? e.message : String(e),
-        errorCode: 1,
+      // M-CRON-W3-9：input may be natural language ("每週一早上 9 點"). Defer
+      // to call() which runs the LLM parser. Only fail validation when there's
+      // truly no schedule string at all.
+      const raw = input.schedule ?? input.cron
+      if (!raw) {
+        return {
+          result: false,
+          message: e instanceof Error ? e.message : String(e),
+          errorCode: 1,
+        }
       }
+      // Fall through with parsed=null; secret/job-count checks still apply.
     }
-    if (nextCronRunMs(parsed.cron, Date.now()) === null) {
+    if (parsed && nextCronRunMs(parsed.cron, Date.now()) === null) {
       return {
         result: false,
         message: `Schedule '${input.schedule ?? input.cron}' does not match any calendar date in the next year.`,
@@ -198,7 +205,33 @@ export const CronCreateTool = buildTool({
     return { result: true }
   },
   async call({ prompt, durable = false, name, repeat, ...rest }) {
-    const parsed = resolveSchedule(rest)
+    let parsed: ParsedSchedule
+    let nlScheduleSpec: { kind: 'cron' | 'nl'; raw: string } | undefined
+    try {
+      parsed = resolveSchedule(rest)
+    } catch (e) {
+      // M-CRON-W3-9：not a recognized cron / duration / ISO — try NL parser.
+      const raw = (rest.schedule ?? rest.cron ?? '').trim()
+      if (!raw) throw e
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const nlMod = require('../../utils/cronNlParser.js') as
+        | typeof import('../../utils/cronNlParser.js')
+        | undefined
+      if (!nlMod) {
+        throw new Error(
+          `Schedule '${raw}' is not a 5-field cron, duration, or ISO timestamp; NL parser unavailable. Please provide an explicit cron expression.`,
+        )
+      }
+      const nl = await nlMod.parseScheduleNL(raw, {
+        signal: new AbortController().signal,
+      })
+      parsed = {
+        cron: nl.cron,
+        recurring: nl.recurring,
+        display: nl.humanReadable,
+      } as ParsedSchedule
+      nlScheduleSpec = { kind: 'nl', raw }
+    }
     // Kill switch forces session-only; schema stays stable so the model sees
     // no validation errors when the gate flips mid-session.
     let effectiveDurable = durable && isDurableCronEnabled()
@@ -272,6 +305,7 @@ export const CronCreateTool = buildTool({
         ...(finalRecurring && typeof finalRepeat === 'number'
           ? { repeatTimes: finalRepeat }
           : {}),
+        ...(nlScheduleSpec ? { scheduleSpec: nlScheduleSpec } : {}),
       },
     )
     setScheduledTasksEnabled(true)
