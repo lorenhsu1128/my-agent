@@ -6,6 +6,8 @@ import {
   type CronTask,
   listAllCronTasks,
   nextCronRunMs,
+  removeCronTasks,
+  updateCronTask,
 } from '../../utils/cronTasks.js'
 import { readHistory, type CronHistoryEntry } from '../../utils/cronHistory.js'
 import { formatDuration } from '../../utils/format.js'
@@ -14,7 +16,9 @@ type Props = {
   onExit: (summary: string) => void
 }
 
-type Mode = 'list' | 'detail'
+type Mode = 'list' | 'detail' | 'confirmDelete'
+
+type Flash = { text: string; tone: 'info' | 'error' }
 
 type Enriched = {
   task: CronTask
@@ -92,12 +96,17 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
   const [now, setNow] = useState(() => Date.now())
   const [history, setHistory] = useState<CronHistoryEntry[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [flash, setFlash] = useState<Flash | null>(null)
 
   // Refresh now every 10s so "in 2h 14m" counts down
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 10_000)
     return () => clearInterval(t)
   }, [])
+
+  // Reload triggered after local mutations to reflect changes instantly.
+  const [reloadToken, setReloadToken] = useState(0)
+  const reload = () => setReloadToken(n => n + 1)
 
   // Initial load + poll every 5s for external changes (daemon writes)
   useEffect(() => {
@@ -121,7 +130,14 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
       cancelled = true
       clearInterval(t)
     }
-  }, [])
+  }, [reloadToken])
+
+  // Auto-clear flash after 2.5s
+  useEffect(() => {
+    if (!flash) return
+    const t = setTimeout(() => setFlash(null), 2500)
+    return () => clearTimeout(t)
+  }, [flash])
 
   const enriched = useMemo(() => {
     return tasks.map(t => enrich(t, now)).sort(sortEnriched)
@@ -151,7 +167,57 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     }
   }, [mode, selected?.id])
 
+  async function togglePauseSelected(): Promise<void> {
+    if (!selected) return
+    const currentState = selected.state ?? 'scheduled'
+    if (currentState === 'completed') {
+      setFlash({ text: 'Cannot pause/resume a completed task', tone: 'error' })
+      return
+    }
+    const nextState: CronTask['state'] =
+      currentState === 'paused' ? 'scheduled' : 'paused'
+    try {
+      await updateCronTask(selected.id, t => {
+        if (nextState === 'paused') {
+          return { ...t, state: 'paused', pausedAt: new Date().toISOString() }
+        }
+        const { pausedAt: _p, ...rest } = t
+        return { ...rest, state: 'scheduled' }
+      })
+      setFlash({
+        text: `${nextState === 'paused' ? '⏸ Paused' : '▶ Resumed'} ${taskLabel(selected)}`,
+        tone: 'info',
+      })
+      reload()
+    } catch (err) {
+      setFlash({ text: `Failed: ${(err as Error).message}`, tone: 'error' })
+    }
+  }
+
+  async function deleteSelected(): Promise<void> {
+    if (!selected) return
+    try {
+      await removeCronTasks([selected.id])
+      setFlash({ text: `✗ Deleted ${taskLabel(selected)}`, tone: 'info' })
+      setMode('list')
+      reload()
+    } catch (err) {
+      setFlash({ text: `Delete failed: ${(err as Error).message}`, tone: 'error' })
+      setMode('list')
+    }
+  }
+
   useInput((input, key) => {
+    if (mode === 'confirmDelete') {
+      if (input === 'y' || input === 'Y') {
+        void deleteSelected()
+        return
+      }
+      // Any other key cancels
+      setMode('list')
+      return
+    }
+
     if (mode === 'list') {
       if (key.escape || input === 'q') {
         onExit(`Cron picker closed — ${tasks.length} task(s)`)
@@ -170,12 +236,30 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
         setMode('detail')
         return
       }
+      if (input === 'p') {
+        void togglePauseSelected()
+        return
+      }
+      if (input === 'd') {
+        if (!selected) return
+        setMode('confirmDelete')
+        return
+      }
       return
     }
 
     // detail mode
     if (key.escape || key.leftArrow || input === 'q') {
       setMode('list')
+      return
+    }
+    if (input === 'p') {
+      void togglePauseSelected()
+      return
+    }
+    if (input === 'd') {
+      if (!selected) return
+      setMode('confirmDelete')
       return
     }
   })
@@ -189,23 +273,58 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     )
   }
 
+  if (mode === 'confirmDelete' && selected) {
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor="red" paddingX={1}>
+        <Text bold color="red">Delete cron task?</Text>
+        <Box marginTop={1}>
+          <Text>
+            {formatTaskId(selected.id)} · <Text bold>{taskLabel(selected)}</Text>
+          </Text>
+        </Box>
+        <Box>
+          <Text dimColor>Schedule: {selected.cron}</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text>Type </Text>
+          <Text bold color="red">y</Text>
+          <Text> to confirm, any other key to cancel.</Text>
+        </Box>
+      </Box>
+    )
+  }
+
   if (mode === 'detail' && selected) {
     return (
-      <CronDetail
-        task={selected}
-        history={history}
-        enriched={enriched[clampedCursor]!}
-        now={now}
-      />
+      <Box flexDirection="column">
+        <CronDetail
+          task={selected}
+          history={history}
+          enriched={enriched[clampedCursor]!}
+          now={now}
+        />
+        {flash && (
+          <Box marginTop={1}>
+            <Text color={flash.tone === 'error' ? 'red' : 'green'}>{flash.text}</Text>
+          </Box>
+        )}
+      </Box>
     )
   }
 
   return (
-    <CronList
-      enriched={enriched}
-      cursor={clampedCursor}
-      now={now}
-    />
+    <Box flexDirection="column">
+      <CronList
+        enriched={enriched}
+        cursor={clampedCursor}
+        now={now}
+      />
+      {flash && (
+        <Box marginTop={1}>
+          <Text color={flash.tone === 'error' ? 'red' : 'green'}>{flash.text}</Text>
+        </Box>
+      )}
+    </Box>
   )
 }
 
@@ -271,7 +390,7 @@ function CronList({
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
-          ↑/↓ move · Enter = detail · q/Esc = close
+          ↑/↓ move · Enter = detail · p = pause/resume · d = delete · q/Esc = close
         </Text>
       </Box>
     </Box>
@@ -378,7 +497,7 @@ function CronDetail({
         })
       )}
       <Box marginTop={1}>
-        <Text dimColor>q/Esc/← = back to list</Text>
+        <Text dimColor>p = pause/resume · d = delete · q/Esc/← = back</Text>
       </Box>
     </Box>
   )
