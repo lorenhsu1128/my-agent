@@ -330,15 +330,23 @@ function translateToolsToOpenAI(
  * options.vision（M-VISION）：true 時 image block 翻成 OpenAI `image_url`；
  * 否則（預設）走 `[Image attachment]` 字串佔位符路徑，對純文字模型無縫 fallback。
  */
-function translateRequestToOpenAI(
+export function translateRequestToOpenAI(
   anthropic: AnthropicRequestBody,
   defaultModel: string,
   options: { vision?: boolean } = {},
 ): OpenAIRequestBody {
   const systemPrompt = flattenSystemPrompt(anthropic.system)
+  // 當 request 帶 tools 定義時，在 system prompt 尾端追加一句 tool-usage policy。
+  // 觀察：本地 Qwen3.5 / Gemopus-4 有時會輸出「我來幫您查詢...」然後 finish_reason=stop
+  // 而不 emit tool_use block（sampling 走了 text-only 分支）。追加一句明確指令
+  // 降低這種「承諾卻不做」的機率。只在真的有 tools 時加，純對話不污染。
+  const hasTools = Array.isArray(anthropic.tools) && anthropic.tools.length > 0
+  const augmentedSystemPrompt = hasTools
+    ? (systemPrompt ? systemPrompt + '\n\n' : '') + TOOL_USAGE_POLICY_NUDGE
+    : systemPrompt
   const messages: OpenAIMessage[] = []
-  if (systemPrompt) {
-    messages.push({ role: 'system', content: systemPrompt })
+  if (augmentedSystemPrompt) {
+    messages.push({ role: 'system', content: augmentedSystemPrompt })
   }
   messages.push(
     ...translateMessagesToOpenAI(anthropic.messages ?? [], {
@@ -358,6 +366,13 @@ function translateRequestToOpenAI(
   if (tools) body.tools = tools
   return body
 }
+
+/**
+ * Tool-usage policy nudge — 只在 tools 陣列非空時追加到 system prompt 尾端。
+ * 目的：避免本地 model 的 sampling 走 text-only 分支（例如「我來幫您查詢」後就
+ * finish_reason=stop），明確告訴模型能用 tool 就必須 emit tool_use block。
+ */
+export const TOOL_USAGE_POLICY_NUDGE = `Tool usage policy: If a tool can answer the user's question, you MUST emit a tool_use block in the same turn. Do NOT answer with text-only intentions like "I will check ..." or "Let me look up ..." — either call the tool now, or answer fully without promising any tool call.`
 
 // ── 回應翻譯：OpenAI → Anthropic（non-streaming）──────────────────────────
 
@@ -515,6 +530,11 @@ async function* translateOpenAIStreamToAnthropic(
   let nextBlockIndex = 0
   let textIndex = -1
   let textType: 'text' | 'thinking' | null = null
+  // debug 觀測：追蹤整個 stream 是否吐過 text / thinking / tool_calls（供
+  // finish_reason 結束時診斷「承諾用工具卻沒 emit」的情境）
+  let emittedText = false
+  let emittedThinking = false
+  let emittedToolCall = false
   // OpenAI tool_call.index → Anthropic content block index（開啟中的工具塊）
   const openToolBlocks = new Map<number, number>()
   // 每個 tool block 的 arguments 累積 buffer（openaiIdx → 累積字串）。
@@ -602,6 +622,7 @@ async function* translateOpenAIStreamToAnthropic(
           index: textIndex,
           delta: { type: 'thinking_delta', thinking: reasoning_content },
         })
+        emittedThinking = true
       }
 
       // 2. text delta
@@ -616,10 +637,12 @@ async function* translateOpenAIStreamToAnthropic(
           index: textIndex,
           delta: { type: 'text_delta', text: content },
         })
+        emittedText = true
       }
 
       // 3. tool_call deltas（可多筆，按 openai index 區分）
       if (Array.isArray(tool_calls) && tool_calls.length > 0) {
+        emittedToolCall = true
         // 一旦進入 tool call，先關掉任何開啟的 text/thinking block
         // （OpenAI Chat Completions 串流實務上 text/reasoning 不與 tool_calls 交錯）
         if (textIndex >= 0) {
@@ -713,6 +736,7 @@ async function* translateOpenAIStreamToAnthropic(
     })
     yield combined // 單一 yield → 單一 chunk → SDK 一次 read 拿到全部
   }
+  const finalToolBlockCount = openToolBlocks.size
   openToolBlocks.clear()
   toolArgBuffers.clear()
 
@@ -723,6 +747,16 @@ async function* translateOpenAIStreamToAnthropic(
     console.error(
       '[llamacpp] finish_reason=length 且 output_tokens=0；可能為上下文已滿或 n_ctx 不足。' +
         '若情況持續，確認 LLAMACPP_CTX_SIZE 與實際 /slots n_ctx 一致，或手動 /compact',
+    )
+  }
+
+  // Stream 結束摘要：供診斷「模型承諾用工具但沒 emit」的症狀。若 finish=stop
+  // + emittedText + !emittedToolCall 可判斷為模型 sampling 決定不呼叫工具
+  // （不是 adapter bug）。只在 LLAMA_DEBUG 或 MY_AGENT_DEBUG 開啟時印。
+  if (process.env.LLAMA_DEBUG || process.env.MY_AGENT_DEBUG) {
+    // biome-ignore lint/suspicious/noConsole: diagnostic only
+    console.error(
+      `[llamacpp/stream-end] finish_reason=${finalFinishReason} text=${emittedText} thinking=${emittedThinking} tool_calls=${emittedToolCall} closed_tool_blocks=${finalToolBlockCount} out_tokens=${accUsage.output_tokens}`,
     )
   }
   yield formatSSE('message_delta', {
