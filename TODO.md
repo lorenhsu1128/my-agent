@@ -1961,3 +1961,17 @@
 - 2026-04-24 14:22: Session 結束 | 進度：505/550 任務 | 00f013d fix(llamacpp): tools 定義存在時補 system nudge + stream-end 診斷 log
 
 - 2026-04-24 16:47: Session 結束 | 進度：505/550 任務 | 427717d feat(llamacpp): 中強度 tool nudge — tool_choice=auto 明示 + retry-on-empty-tool
+
+- 2026-04-24 17:17: Session 結束 | 進度：505/550 任務 | f99462c chore(todo): session 結束 log — llamacpp memory + tool nudge 工作期間累積
+
+- 2026-04-24 17:25: Session 結束 | 進度：505/550 任務 | f99462c chore(todo): session 結束 log — llamacpp memory + tool nudge 工作期間累積
+
+- 2026-04-24 17:28: Session 結束 | 進度：505/550 任務 | f99462c chore(todo): session 結束 log — llamacpp memory + tool nudge 工作期間累積
+
+- 2026-04-24 17:35: Session 結束 | 進度：505/550 任務 | f99462c chore(todo): session 結束 log — llamacpp memory + tool nudge 工作期間累積
+
+- 2026-04-24 17:54: Session 結束 | 進度：505/550 任務 | 779a05c fix(context): ctx size fallback 200K → 128K + 全域 .my-agent.json 可覆蓋
+
+- 2026-04-24 18:07: Session 結束 | 進度：505/550 任務 | 779a05c fix(context): ctx size fallback 200K → 128K + 全域 .my-agent.json 可覆蓋
+
+- 2026-04-24 18:10: Session 結束 | 進度：505/550 任務 | 779a05c fix(context): ctx size fallback 200K → 128K + 全域 .my-agent.json 可覆蓋
