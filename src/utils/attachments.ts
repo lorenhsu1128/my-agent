@@ -2363,8 +2363,13 @@ export function startRelevantMemoryPrefetch(
   }
 
   const input = getUserMessageText(lastUserMessage)
-  // Single-word prompts lack enough context for meaningful term extraction
-  if (!input || !/\s/.test(input.trim())) {
+  // Skip prompts too short to be meaningful. Original guard was `/\s/.test`
+  // (catch single-word English like "weather") but that mis-fires on CJK
+  // queries with no whitespace ("現在台北天氣"). Treat any input with
+  // whitespace OR ≥4 chars as substantive — covers CJK 4+ chars and
+  // English 4+ char single tokens, still skips "ls" / "y".
+  const trimmed = input?.trim() ?? ''
+  if (!input || (!/\s/.test(trimmed) && trimmed.length < 4)) {
     return undefined
   }
 
