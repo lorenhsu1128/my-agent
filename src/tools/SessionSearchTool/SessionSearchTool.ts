@@ -17,11 +17,11 @@ import { z } from 'zod/v4'
 import type { ValidationResult } from '../../Tool.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { getProjectRoot } from '../../bootstrap/state.js'
-import { getAnthropicClient } from '../../services/api/client.js'
 import {
   ensureReconciled,
   openSessionIndex,
 } from '../../services/sessionIndex/index.js'
+import { sideQuery } from '../../utils/sideQuery.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { DESCRIPTION, SESSION_SEARCH_TOOL_NAME } from './prompt.js'
 import {
@@ -298,15 +298,15 @@ async function summarizeSessions(
   const timer = setTimeout(() => childCtrl.abort(), SUMMARIZE_TIMEOUT_MS)
 
   try {
-    const client = await getAnthropicClient()
-    const resp = await client.messages.create(
-      {
-        model,
-        max_tokens: SUMMARIZE_MAX_OUTPUT_TOKENS,
-        messages: [{ role: 'user', content: prompt }],
-      },
-      { signal: childCtrl.signal },
-    )
+    // 改走 sideQuery 而非 getAnthropicClient().messages.create — 讓 llamacpp
+    // 模式經 sideQueryViaLlamaCpp 直通本地端點（階段 1 的 helper）。
+    const resp = await sideQuery({
+      model,
+      max_tokens: SUMMARIZE_MAX_OUTPUT_TOKENS,
+      messages: [{ role: 'user', content: prompt }],
+      signal: childCtrl.signal,
+      querySource: 'session_search',
+    })
 
     // 聚合 text content blocks
     const textParts: string[] = []

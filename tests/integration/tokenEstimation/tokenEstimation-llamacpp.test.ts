@@ -40,6 +40,24 @@ mock.module('../../../src/llamacppConfig/index', () => ({
   isVisionEnabled: () => false,
 }))
 
+// withTokenCountVCR 在 NODE_ENV=test 下會從 fixtures/token-count-*.json 讀
+// cache，前次 test run 寫下的固定值會阻擋 fetch mock 被呼叫。本測試不依賴
+// fixture 比對、每次都要真的走 /tokenize fetch 路徑，所以 bypass VCR。
+mock.module('../../../src/services/vcr', () => ({
+  withTokenCountVCR: async (
+    _messages: unknown,
+    _tools: unknown,
+    f: () => Promise<number | null>,
+  ) => f(),
+  withVCR: async (_msgs: unknown, f: () => Promise<unknown>) => f(),
+  withStreamingVCR: async function* (
+    _msgs: unknown,
+    f: () => AsyncGenerator<unknown>,
+  ) {
+    yield* f()
+  },
+}))
+
 type FetchCall = {
   url: string
   body: Record<string, unknown>
