@@ -64,6 +64,38 @@ export const WARNING_THRESHOLD_BUFFER_TOKENS = 20_000
 export const ERROR_THRESHOLD_BUFFER_TOKENS = 20_000
 export const MANUAL_COMPACT_BUFFER_TOKENS = 3_000
 
+/**
+ * Resolve the buffer tokens to reserve when computing the auto-compact
+ * threshold. Normal Anthropic models use the shared 13K default. llama.cpp
+ * reasoning models (qwen3.5-9b-neo etc.) need more headroom because
+ * reasoning_content routinely eats 5-15K output tokens — too tight a buffer
+ * ends with the model exhausting context inside <thinking> and emitting a
+ * blank `content`. Resolution chain for llama.cpp models:
+ *   1. env `LLAMACPP_COMPACT_BUFFER` (numeric override)
+ *   2. `~/.my-agent/llamacpp.json` → `autoCompactBufferTokens`
+ *   3. fallback to AUTOCOMPACT_BUFFER_TOKENS
+ */
+function getAutoCompactBufferTokens(model: string): number {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const provMod =
+      require('../../utils/model/providers.js') as typeof import('../../utils/model/providers.js')
+    if (!provMod.isLlamaCppModel(model)) return AUTOCOMPACT_BUFFER_TOKENS
+    const envOverride = process.env.LLAMACPP_COMPACT_BUFFER
+    if (envOverride) {
+      const n = parseInt(envOverride, 10)
+      if (Number.isFinite(n) && n > 0) return n
+    }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const cfgMod =
+      require('../../llamacppConfig/loader.js') as typeof import('../../llamacppConfig/loader.js')
+    const snap = cfgMod.getLlamaCppConfigSnapshot()
+    return snap.autoCompactBufferTokens
+  } catch {
+    return AUTOCOMPACT_BUFFER_TOKENS
+  }
+}
+
 // Stop trying autocompact after this many consecutive failures.
 // BQ 2026-03-10: 1,279 sessions had 50+ consecutive failures (up to 3,272)
 // in a single session, wasting ~250K API calls/day globally.
@@ -73,7 +105,7 @@ export function getAutoCompactThreshold(model: string): number {
   const effectiveContextWindow = getEffectiveContextWindowSize(model)
 
   const autocompactThreshold =
-    effectiveContextWindow - AUTOCOMPACT_BUFFER_TOKENS
+    effectiveContextWindow - getAutoCompactBufferTokens(model)
 
   // Override for easier testing of autocompact
   const envPercent = process.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE

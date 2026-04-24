@@ -34,6 +34,7 @@ const README_CONTENT = `# ~/.my-agent/llamacpp.json
 | \`baseUrl\` | OpenAI 相容 endpoint | \`http://127.0.0.1:8080/v1\` |
 | \`model\` | 送給 server 的模型名稱（需與 \`server.alias\` 一致） | \`qwen3.5-9b-neo\` |
 | \`contextSize\` | 用於 auto-compact 閾值；若 \`/slots\` 可查到就用 server 實際值 | \`131072\` |
+| \`autoCompactBufferTokens\` | 觸發 auto-compact 前預留的 token 數。reasoning 模型（thinking 模式）建議 30K+；env \`LLAMACPP_COMPACT_BUFFER\` 優先 | \`30000\` |
 | \`debug\` | 印 \`[LLAMA_DEBUG]\` 到 stderr | \`false\` |
 | \`modelAliases\` | 命中時自動走 llamacpp 分支的 model 名清單 | \`["qwen3.5-9b-neo", "qwopus3.5-9b-v3"]\` |
 

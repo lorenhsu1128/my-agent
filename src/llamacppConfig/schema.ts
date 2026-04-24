@@ -63,6 +63,13 @@ export const LlamaCppConfigSchema = z.object({
   model: z.string().default('qwen3.5-9b-neo'),
   /** 用於 auto-compact 閾值計算；若 server /slots 查不到就用此值 */
   contextSize: z.number().int().positive().default(131072),
+  /**
+   * 觸發 auto-compact 前預留的 token 數（= 距離 context 上限還有多少就開始 compact）。
+   * 預設 30000 — 比通用預設 13000 寬鬆，reasoning 模型（qwen3.5-9b-neo 等）
+   * 常在 <thinking> 吃掉 5-15K tokens，13K 太緊會導致 content 沒空間生成。
+   * env `LLAMACPP_COMPACT_BUFFER` 優先於此設定。
+   */
+  autoCompactBufferTokens: z.number().int().positive().default(30000),
   /** 開 stderr 偵錯輸出 */
   debug: z.boolean().default(false),
   /**
