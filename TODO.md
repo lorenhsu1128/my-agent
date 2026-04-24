@@ -1867,3 +1867,17 @@
 - 2026-04-24 08:30: Session 結束 | 進度：495/535 任務 | 70c88fb feat(cron): /cron history 時間改顯示本地時間
 
 - 2026-04-24 08:33: Session 結束 | 進度：495/535 任務 | 70c88fb feat(cron): /cron history 時間改顯示本地時間
+
+- 2026-04-24 08:36: Session 結束 | 進度：495/535 任務 | 7e02439 chore(todo): session log — daemon cron diagnostics + history UI fixes
+
+- 2026-04-24 08:48: Session 結束 | 進度：495/535 任務 | 7e02439 chore(todo): session log — daemon cron diagnostics + history UI fixes
+
+- 2026-04-24 08:51: Session 結束 | 進度：495/535 任務 | 7e02439 chore(todo): session log — daemon cron diagnostics + history UI fixes
+
+- 2026-04-24 09:02: Session 結束 | 進度：495/535 任務 | 7e02439 chore(todo): session log — daemon cron diagnostics + history UI fixes
+
+- 2026-04-24 09:14: Session 結束 | 進度：495/535 任務 | 01dd331 feat(cron): configurable auto-compact buffer for llama.cpp reasoning models
+
+- 2026-04-24 09:26: Session 結束 | 進度：495/535 任務 | 01415f0 Revert "fix(llamacpp): detect silent overflow when reasoning_content eats all output"
+
+- 2026-04-24 09:37: Session 結束 | 進度：495/535 任務 | 01415f0 Revert "fix(llamacpp): detect silent overflow when reasoning_content eats all output"
