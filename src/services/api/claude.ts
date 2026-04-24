@@ -23,6 +23,7 @@ import { randomUUID } from 'crypto'
 import {
   getAPIProvider,
   isFirstPartyAnthropicBaseUrl,
+  isLlamaCppActive,
 } from 'src/utils/model/providers.js'
 import {
   getAttributionHeader,
@@ -3238,6 +3239,31 @@ export async function queryHaiku({
   signal: AbortSignal
   options: HaikuOptions
 }): Promise<AssistantMessage> {
+  // llama.cpp 模式下改走輕量直通路徑：避開 streaming / VCR / attribution
+  // 等 Anthropic-only 開銷，複用 stage 1 驗證過的 sideQueryViaLlamaCpp helper，
+  // 把回應包裝成 AssistantMessage shape。
+  if (isLlamaCppActive()) {
+    const { sideQueryViaLlamaCpp } = await import('./llamacppSideQuery.js')
+    const { createAssistantMessage } = await import('../../utils/messages.js')
+    const systemBlocks = systemPrompt.map(text => ({
+      type: 'text' as const,
+      text,
+    }))
+    const resp = await sideQueryViaLlamaCpp({
+      model: getSmallFastModel(),
+      system: systemBlocks,
+      messages: [{ role: 'user', content: userPrompt }],
+      max_tokens: 4096,
+      ...(outputFormat && { output_format: outputFormat }),
+      signal,
+      querySource: options.querySource,
+    })
+    return createAssistantMessage({
+      content: resp.content,
+      usage: resp.usage,
+    })
+  }
+
   const result = await withVCR(
     [
       createUserMessage({
