@@ -3,7 +3,8 @@ import type { BetaMessageParam as MessageParam } from 'my-agent-ai/sdk/resources
 // @aws-sdk/client-bedrock-runtime is imported dynamically in countTokensWithBedrock()
 // to defer ~279KB of AWS SDK code until a Bedrock call is actually made
 import type { CountTokensCommandInput } from '@aws-sdk/client-bedrock-runtime'
-import { getAPIProvider } from 'src/utils/model/providers.js'
+import { getAPIProvider, isLlamaCppActive } from 'src/utils/model/providers.js'
+import { getLlamaCppConfigSnapshot } from '../llamacppConfig/index.js'
 import { VERTEX_COUNT_TOKENS_ALLOWED_BETAS } from '../constants/betas.js'
 import type { Attachment } from '../utils/attachments.js'
 import { getModelBetas } from '../utils/betas.js'
@@ -31,6 +32,82 @@ import { withTokenCountVCR } from './vcr.js'
 // API constraint: max_tokens must be greater than thinking.budget_tokens
 const TOKEN_COUNT_THINKING_BUDGET = 1024
 const TOKEN_COUNT_MAX_TOKENS = 2048
+
+/**
+ * Flatten messages + tools into a single plain-text blob for llama.cpp 的
+ * /tokenize 端點。粗估足夠 — 只用於 auto-compact 閾值判定，不是計費。
+ */
+function serializeForLlamaCppTokenize(
+  messages: Anthropic.Beta.Messages.BetaMessageParam[],
+  tools: Anthropic.Beta.Messages.BetaToolUnion[],
+): string {
+  const parts: string[] = []
+  if (tools.length > 0) {
+    parts.push(JSON.stringify(tools))
+  }
+  for (const m of messages) {
+    const role = (m as { role?: string }).role ?? 'unknown'
+    const content = (m as { content?: unknown }).content
+    if (typeof content === 'string') {
+      parts.push(`${role}: ${content}`)
+    } else if (Array.isArray(content)) {
+      for (const block of content as Array<Record<string, unknown>>) {
+        const t = block.type
+        if (t === 'text' && typeof block.text === 'string') {
+          parts.push(`${role}: ${block.text}`)
+        } else if (t === 'thinking' && typeof block.thinking === 'string') {
+          parts.push(`[thinking]: ${block.thinking}`)
+        } else if (t === 'tool_use') {
+          parts.push(
+            `[tool_use ${String(block.name ?? '')}]: ${jsonStringify(block.input ?? {})}`,
+          )
+        } else if (t === 'tool_result') {
+          const c = block.content
+          if (typeof c === 'string') parts.push(`[tool_result]: ${c}`)
+          else if (Array.isArray(c)) {
+            parts.push(
+              `[tool_result]: ${c
+                .map(s => {
+                  const sb = s as { type?: string; text?: string }
+                  return sb.type === 'text' ? (sb.text ?? '') : ''
+                })
+                .join('\n')}`,
+            )
+          }
+        } else if (t === 'image') {
+          parts.push('[image]')
+        }
+      }
+    }
+  }
+  return parts.join('\n')
+}
+
+/**
+ * 打 llama.cpp /tokenize 端點計 token。失敗（server down、endpoint 不存在）
+ * 回 null 讓 caller 降級到粗估。
+ */
+async function countTokensViaLlamaCppTokenize(
+  text: string,
+): Promise<number | null> {
+  try {
+    const cfg = getLlamaCppConfigSnapshot()
+    // llama.cpp /tokenize 不在 /v1 prefix 下（它是 llama.cpp server 原生端點），
+    // 去掉 baseUrl 的 /v1 尾段後再接 /tokenize
+    const baseRoot = cfg.baseUrl.replace(/\/$/, '').replace(/\/v1$/, '')
+    const res = await fetch(`${baseRoot}/tokenize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: text }),
+    })
+    if (!res.ok) return null
+    const json = (await res.json()) as { tokens?: unknown }
+    if (!Array.isArray(json.tokens)) return null
+    return json.tokens.length
+  } catch {
+    return null
+  }
+}
 
 /**
  * Check if messages contain thinking blocks
@@ -147,6 +224,13 @@ export async function countMessagesTokensWithAPI(
       const betas = getModelBetas(model)
       const containsThinking = hasThinkingBlocks(messages)
 
+      // llama.cpp 不支援 beta.messages.countTokens；走原生 /tokenize 端點
+      // （非 /v1 prefix）。失敗回 null 讓 caller 降級粗估。
+      if (isLlamaCppActive()) {
+        const text = serializeForLlamaCppTokenize(messages, tools)
+        return await countTokensViaLlamaCppTokenize(text)
+      }
+
       if (getAPIProvider() === 'bedrock') {
         // @anthropic-sdk/bedrock-sdk doesn't support countTokens currently
         return countTokensWithBedrock({
@@ -252,6 +336,13 @@ export async function countTokensViaHaikuFallback(
   messages: Anthropic.Beta.Messages.BetaMessageParam[],
   tools: Anthropic.Beta.Messages.BetaToolUnion[],
 ): Promise<number | null> {
+  // llama.cpp 分支：fallback 路徑也改走 /tokenize，避免 create() max_tokens=1
+  // 的 round-trip（adapter 也不支援這種計 tokens-via-usage 模式）
+  if (isLlamaCppActive()) {
+    const text = serializeForLlamaCppTokenize(messages, tools)
+    return await countTokensViaLlamaCppTokenize(text)
+  }
+
   // Check if messages contain thinking blocks
   const containsThinking = hasThinkingBlocks(messages)
 
