@@ -121,6 +121,30 @@ export function startDaemonCronWiring(
   events.setMaxListeners(32)
 
   if (!gate()) {
+    // Silent gate-off is the reason cron tasks can mysteriously stop firing
+    // — e.g. a daemon launched from a build where `AGENT_TRIGGERS` wasn't
+    // baked. Shout loudly into the daemon log so diagnosis doesn't need a
+    // source dive.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const logMod =
+        require('./daemonLog.js') as typeof import('./daemonLog.js')
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const cronTasksMod =
+        require('../utils/cronTasks.js') as typeof import('../utils/cronTasks.js')
+      const logger = logMod.createDaemonLogger()
+      const hasTasks = cronTasksMod.hasCronTasksSync(opts.cwd)
+      void logger.error('cron scheduler disabled', {
+        reason: 'AGENT_TRIGGERS feature flag is off',
+        cwd: opts.cwd,
+        tasksOnDisk: hasTasks,
+        hint: hasTasks
+          ? 'Tasks exist on disk but will NEVER fire. Rebuild with `bun run build` or `bun run build:dev` so AGENT_TRIGGERS is baked in; or run via `bun run dev` (which auto-adds all flags).'
+          : 'No tasks on disk yet — set this up, then rebuild binary so flags are baked.',
+      })
+    } catch {
+      // Logging is best-effort — don't crash cron init because of it.
+    }
     return { scheduler: null, events, stop: () => {} }
   }
 
@@ -388,6 +412,19 @@ export function startDaemonCronWiring(
     // 走 daemon path（立即 enable，不依賴 bootstrap state flag）。
     dir: opts.cwd,
   })
+
+  // Symmetric success log — the negative path above logs loudly when gate is
+  // off; this line proves the scheduler actually mounted for this project.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const logMod =
+      require('./daemonLog.js') as typeof import('./daemonLog.js')
+    void logMod
+      .createDaemonLogger()
+      .info('cron scheduler started', { cwd: opts.cwd })
+  } catch {
+    // ignore
+  }
 
   // Wave 3 — explicit catch-up. Run BEFORE scheduler.start() so any
   // lastFiredAt advances we make are picked up by the first scheduler load.

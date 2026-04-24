@@ -451,6 +451,14 @@ export async function runDaemonStart(
       )
       if (defaultRuntime.cron.scheduler) {
         out(`  cron:        enabled\n`)
+      } else {
+        // Startup print mirrors the daemon-log ERROR already emitted by
+        // cronWiring. Showing it here too helps a user running
+        // `./cli daemon start` in foreground notice immediately instead of
+        // discovering missing fires hours later.
+        out(
+          `  cron:        DISABLED (AGENT_TRIGGERS flag off — tasks on disk will NOT fire; see daemon.log)\n`,
+        )
       }
     }
 
