@@ -92,6 +92,10 @@ interface OpenAIRequestBody {
       parameters: Record<string, unknown>
     }
   }>
+  tool_choice?: 'auto' | 'none' | 'required' | {
+    type: 'function'
+    function: { name: string }
+  }
 }
 
 interface OpenAIChatCompletion {
@@ -363,7 +367,13 @@ export function translateRequestToOpenAI(
   if (typeof anthropic.temperature === 'number') body.temperature = anthropic.temperature
   if (typeof anthropic.top_p === 'number') body.top_p = anthropic.top_p
   const tools = translateToolsToOpenAI(anthropic.tools)
-  if (tools) body.tools = tools
+  if (tools) {
+    body.tools = tools
+    // 明示 tool_choice='auto' — 雖然是 OpenAI 預設，但確保 llama.cpp server 在
+    // tools 存在時仍把 tool-call 視為一等公民。配合 streamWithRetry 的
+    // retry-on-empty-tool 降低 sampling 走 text-only 分支的機率。
+    body.tool_choice = 'auto'
+  }
   return body
 }
 
@@ -792,6 +802,133 @@ async function* translateOpenAIStreamToAnthropic(
  * 單一 yield（見 translateOpenAIStreamToAnthropic 收尾處）— 那是另一個
  * 獨立 workaround，不受此處影響。
  */
+// ── Retry-on-empty-tool（中強度 nudge）────────────────────────────────────
+
+/**
+ * 觀察 translateOpenAIStreamToAnthropic 吐出的 SSE chunk，記錄：
+ *   - text emitted（text_delta event）
+ *   - tool_use emitted（input_json_delta 或 content_block_start type=tool_use）
+ *   - stop_reason（從 message_delta event 的 delta.stop_reason 抽）
+ * 用以判斷是否觸發 retry。
+ */
+export function observeSseChunk(
+  chunk: string,
+  state: { text: boolean; toolCall: boolean; stopReason: string | null },
+): void {
+  if (chunk.includes('"type":"text_delta"')) state.text = true
+  if (
+    chunk.includes('"type":"input_json_delta"') ||
+    chunk.includes('"type":"tool_use"')
+  ) {
+    state.toolCall = true
+  }
+  if (chunk.includes('event: message_delta')) {
+    const m = chunk.match(/"stop_reason":"([^"]+)"/)
+    if (m) state.stopReason = m[1]!
+  }
+}
+
+/**
+ * 第二輪 retry 時追加的 user 訊息 — 明確指示模型必須 emit tool_use。
+ */
+export const RETRY_TOOL_NUDGE =
+  'Your previous reply only stated an intention (e.g. "I will check ...") without emitting a tool_use block. You MUST call the appropriate tool NOW to fulfil the user request. Do not reply with text-only intentions again.'
+
+/**
+ * 中強度「retry-on-empty-tool」：當第一輪 streaming 結束後偵測到
+ *   stop_reason=end_turn + text_emitted + !tool_use_emitted + tools_defined
+ * 代表模型 sampling 走了 text-only 分支（「我來幫您查詢...」就停），此時
+ * 丟掉第一輪 buffer、追加 user 重試訊息、再 fetch 第二輪。若第二輪仍失敗
+ * 或 retry 端網路/server 錯，fallback 回第一輪 buffer 避免卡死。
+ *
+ * 代價：tools 存在的 streaming 請求會被完整 buffer 後才往下游 yield（失去
+ * 漸進輸出的 UX）；換 correctness。不含 tools 的請求完全走原路徑。
+ */
+async function* streamWithRetryOnEmptyTool(
+  firstBody: ReadableStream<Uint8Array>,
+  endpoint: string,
+  openaiBody: OpenAIRequestBody,
+  reportedModel: string,
+): AsyncGenerator<string> {
+  const state1 = {
+    text: false,
+    toolCall: false,
+    stopReason: null as string | null,
+  }
+  const msgId = mkMsgId()
+  const firstBuffer: string[] = []
+  for await (const chunk of translateOpenAIStreamToAnthropic(
+    firstBody,
+    reportedModel,
+    msgId,
+  )) {
+    observeSseChunk(chunk, state1)
+    firstBuffer.push(chunk)
+  }
+
+  // False-positive 保護：只在最後一則 message 是 user（= 這是新一輪 query、
+  // 預期需要呼叫工具）時才 retry。如果最後一則是 assistant / tool，代表這輪
+  // 是「拿到 tool result 後做 summary」，文字結束是正常行為，不該 retry。
+  const lastMessage = openaiBody.messages[openaiBody.messages.length - 1]
+  const lastIsUser = lastMessage?.role === 'user'
+
+  const shouldRetry =
+    state1.stopReason === 'end_turn' &&
+    state1.text &&
+    !state1.toolCall &&
+    lastIsUser
+  if (!shouldRetry) {
+    for (const c of firstBuffer) yield c
+    return
+  }
+
+  if (process.env.LLAMA_DEBUG || process.env.MY_AGENT_DEBUG) {
+    // biome-ignore lint/suspicious/noConsole: diagnostic
+    console.error(
+      '[llamacpp/retry] triggered — text-only reply without tool_use, retrying with nudge',
+    )
+  }
+
+  const retryOpenaiBody: OpenAIRequestBody = {
+    ...openaiBody,
+    messages: [
+      ...openaiBody.messages,
+      { role: 'user', content: RETRY_TOOL_NUDGE },
+    ],
+  }
+
+  let retryRes: Response
+  try {
+    // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+    retryRes = await globalThis.fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(retryOpenaiBody),
+    })
+  } catch {
+    for (const c of firstBuffer) yield c
+    return
+  }
+  if (!retryRes.ok || !retryRes.body) {
+    for (const c of firstBuffer) yield c
+    return
+  }
+
+  // 第二輪：直接串流給下游（不 buffer；這輪是最後結果）。message_start 由
+  // translator 自己吐，SDK 會看到第二個 message_start — 但因為第一輪 buffer
+  // 整個被丟掉（沒有 yield），下游等同於只看見第二輪。
+  for await (const chunk of translateOpenAIStreamToAnthropic(
+    retryRes.body,
+    reportedModel,
+    mkMsgId(),
+  )) {
+    yield chunk
+  }
+}
+
 function sseGeneratorToStream(
   gen: AsyncGenerator<string>,
 ): ReadableStream<Uint8Array> {
@@ -956,11 +1093,22 @@ export function createLlamaCppFetch(
           { status: 500, headers: { 'Content-Type': 'application/json' } },
         )
       }
-      const sseGen = translateOpenAIStreamToAnthropic(
-        openaiRes.body,
-        reportedModel,
-        mkMsgId(),
-      )
+      const hasTools =
+        Array.isArray(openaiBody.tools) && openaiBody.tools.length > 0
+      // 有 tools 時走 retry wrapper：第一輪完整 buffer 後偵測空 tool_use 情境，
+      // 命中就追加 nudge 重發一次。失去漸進輸出 UX 換 correctness。
+      const sseGen = hasTools
+        ? streamWithRetryOnEmptyTool(
+            openaiRes.body,
+            `${config.baseUrl.replace(/\/$/, '')}/chat/completions`,
+            openaiBody,
+            reportedModel,
+          )
+        : translateOpenAIStreamToAnthropic(
+            openaiRes.body,
+            reportedModel,
+            mkMsgId(),
+          )
       return new Response(sseGeneratorToStream(sseGen), {
         status: 200,
         headers: {

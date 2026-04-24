@@ -94,4 +94,32 @@ describe('translateRequestToOpenAI — tool-usage nudge', () => {
     expect(TOOL_USAGE_POLICY_NUDGE).toContain('Tool usage policy')
     expect(TOOL_USAGE_POLICY_NUDGE).toContain('MUST emit a tool_use block')
   })
+
+  test('有 tools → 明示 tool_choice=auto', () => {
+    const result = translateRequestToOpenAI(
+      {
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: [
+          {
+            name: 'X',
+            description: '',
+            input_schema: { type: 'object', properties: {} },
+          },
+        ],
+      },
+      'test-model',
+    )
+    expect(result.tool_choice).toBe('auto')
+    expect(result.tools?.length).toBe(1)
+  })
+
+  test('沒 tools → 不設 tool_choice', () => {
+    const result = translateRequestToOpenAI(
+      {
+        messages: [{ role: 'user', content: 'hi' }],
+      },
+      'test-model',
+    )
+    expect(result.tool_choice).toBeUndefined()
+  })
 })
