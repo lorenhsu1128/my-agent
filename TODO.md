@@ -1937,3 +1937,27 @@
 - 2026-04-24 12:00: Session 結束 | 進度：504/550 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
 
 - 2026-04-24 12:15: Session 結束 | 進度：505/550 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 12:29: Session 結束 | 進度：505/550 任務 | 2021725 docs(memrecall): ADR-014 + lessons + M-MEMRECALL-LOCAL milestone
+
+- 2026-04-24 12:37: Session 結束 | 進度：505/550 任務 | 2021725 docs(memrecall): ADR-014 + lessons + M-MEMRECALL-LOCAL milestone
+
+- 2026-04-24 12:38: Session 結束 | 進度：505/550 任務 | 2021725 docs(memrecall): ADR-014 + lessons + M-MEMRECALL-LOCAL milestone
+
+- 2026-04-24 13:07: Session 結束 | 進度：505/550 任務 | 7725292 feat(vision): factory 化 + llama.cpp 多模態 + 無供應商時 graceful disable
+
+- 2026-04-24 13:24: Session 結束 | 進度：505/550 任務 | 7725292 feat(vision): factory 化 + llama.cpp 多模態 + 無供應商時 graceful disable
+
+- 2026-04-24 13:33: Session 結束 | 進度：505/550 任務 | 7725292 feat(vision): factory 化 + llama.cpp 多模態 + 無供應商時 graceful disable
+
+- 2026-04-24 13:39: Session 結束 | 進度：505/550 任務 | 7725292 feat(vision): factory 化 + llama.cpp 多模態 + 無供應商時 graceful disable
+
+- 2026-04-24 13:53: Session 結束 | 進度：505/550 任務 | 7725292 feat(vision): factory 化 + llama.cpp 多模態 + 無供應商時 graceful disable
+
+- 2026-04-24 14:02: Session 結束 | 進度：505/550 任務 | 7725292 feat(vision): factory 化 + llama.cpp 多模態 + 無供應商時 graceful disable
+
+- 2026-04-24 14:05: Session 結束 | 進度：505/550 任務 | 7725292 feat(vision): factory 化 + llama.cpp 多模態 + 無供應商時 graceful disable
+
+- 2026-04-24 14:22: Session 結束 | 進度：505/550 任務 | 00f013d fix(llamacpp): tools 定義存在時補 system nudge + stream-end 診斷 log
+
+- 2026-04-24 16:47: Session 結束 | 進度：505/550 任務 | 427717d feat(llamacpp): 中強度 tool nudge — tool_choice=auto 明示 + retry-on-empty-tool
