@@ -109,6 +109,20 @@
 - **相關檔案**：`scripts/experimentalFeatures.ts`（清單）、`scripts/build.ts`（bundle path）、`scripts/dev.ts`（dev path）、`package.json`（`dev` / `dev:raw`）、`src/hooks/useScheduledTasks.ts:74`（gate 退出點之一）。
 - **日期**：2026-04-23
 
+### daemon `agentVersion` 帶 `-dev` 後綴 + cron 不 fire → feature flag 可能沒 bake 進 binary
+- **發生什麼事**：`./cli daemon start` 起來了，heartbeat 正常，`/cron` UI 一切 OK、檔案寫入正確、task `state: 'scheduled'`、`lastFiredAt` 卻從不更新，`.my-agent/cron/history/<id>.jsonl` 也不產生。daemon.log 完全沒 cron event。跟上一條 `bun run dev` 的 feature-gate 症狀一模一樣，但這次是走 `./cli`（production binary）啟 daemon。
+- **根本原因**：手上的 `./cli` 可能不是用當前 `scripts/build.ts` build 出來的乾淨 binary（例如歷史殘留、中間某次 bun cache、或手動跑過 raw `bun run src/entrypoints/cli.tsx` 寫到同名 path），`feature('AGENT_TRIGGERS')` → false → `cronWiring` gate 在 boot `return { scheduler: null, ... }`。同時 REPL 的 `useScheduledTasks` 偵測到 daemon 活著 → 自己也跳過 → **沒人跑 cron**，但所有寫入動作（`cron.mutation` WS RPC、`updateCronTask`）都只動檔案不需 scheduler，所以 UI 看起來毫無異狀。
+- **指紋 1：`agentVersion`**。正確 production build 是純 `pkg.version`（例如 `2.1.87`）；正確 dev build 是 `2.1.87-dev.<YYYYMMDD>.t<HHMMSS>.sha<8char>`；JIT bun 跑 raw 原始碼是字面 `'dev'`。如果看到 `2.1.87-dev`（**plain，沒後綴**）— 不是 build 出來的 — 一律視為可疑，重 build 再試。
+- **指紋 2：daemon.log 沒有 `cron scheduler started` 或 `cron scheduler disabled` entry**。自 2026-04-24 `eaac529` 後兩條 log 必定擇一出現；都沒出現 = cronWiring 根本沒被 call = 其他更深 bug。
+- **修法**：`bun run build`（production）或 `bun run build:dev`（dev build with full flags — `scripts/build.ts` line 45 已對齊）。重 build 後 `./cli daemon stop && ./cli daemon start`，log 會看到 `{"msg":"cron scheduler started"}` 或 `cron: enabled` 印到 stdout。
+- **診斷 SOP**（往後同症狀）：
+  1. `./cli daemon status` 看 `agentVersion` 是不是合理格式
+  2. `tail -20 ~/.my-agent/daemon.log | grep cron` 看有沒有 started / disabled entry
+  3. 若 disabled ERROR → 重 build
+  4. 若兩個都沒有 → daemon 本身沒跑 cronWiring（例如別的 projectRuntime bug），再挖
+- **相關檔案**：`src/daemon/cronWiring.ts:123`（gate off 分支 + logger）、`src/daemon/cronWiring.ts:405`（gate on 分支 + logger）、`src/daemon/daemonCli.ts:452`（stdout enabled / DISABLED 印字）、`scripts/build.ts:45`（defaultFeatures 對 prod 和 dev 都是 full）、`src/daemon/main.ts:35`（agentVersion 來源 MACRO.VERSION）。
+- **日期**：2026-04-24
+
 ---
 
 ## 型別與編譯相關
