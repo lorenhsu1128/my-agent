@@ -528,11 +528,6 @@ async function* translateOpenAIStreamToAnthropic(
     cache_read_input_tokens: 0,
   }
   let finalFinishReason: string | null = null
-  // Count chars emitted as *visible* text content (excludes reasoning_content
-  // and tool_calls). Needed to detect a silent-overflow case: reasoning model
-  // exhausts n_ctx inside the thinking block, leaving 0 visible output — the
-  // older `output_tokens === 0` check misses this (reasoning eats tokens).
-  let contentCharsEmitted = 0
 
   const startMessage = () => {
     msgStarted = true
@@ -616,7 +611,6 @@ async function* translateOpenAIStreamToAnthropic(
           if (stop) yield stop
           yield openTextBlock('text')
         }
-        contentCharsEmitted += content.length
         yield formatSSE('content_block_delta', {
           type: 'content_block_delta',
           index: textIndex,
@@ -719,37 +713,16 @@ async function* translateOpenAIStreamToAnthropic(
     })
     yield combined // 單一 yield → 單一 chunk → SDK 一次 read 拿到全部
   }
-  const toolCallsEmitted = openToolBlocks.size
   openToolBlocks.clear()
   toolArgBuffers.clear()
 
-  // Silent-overflow detection (two variants covered in one condition):
-  //
-  //   (i)  output_tokens === 0         — server produced literally nothing
-  //        (older llama.cpp behaviour for overflowing prompts; rare on new
-  //        servers that now pre-flight reject with HTTP 400).
-  //
-  //   (ii) output_tokens > 0 but all tokens went to reasoning_content         ← the silent case we actually hit
-  //        (qwen3.5-9b-neo etc.: model starts reasoning, n_ctx exhausted
-  //        before it can emit real `content`. finish_reason=length,
-  //        content_block_delta never yielded any 'text_delta'.)
-  //
-  // Either way the user sees blank output. Throw so the stream surfaces an
-  // error that matches `isPromptTooLongMessage()` — downstream will trigger
-  // reactive compaction and retry, same as Anthropic prompt-too-long path.
-  const noVisibleOutput = contentCharsEmitted === 0 && toolCallsEmitted === 0
-  if (finalFinishReason === 'length' && noVisibleOutput) {
-    const detail =
-      accUsage.output_tokens === 0
-        ? `output_tokens=0 (input=${accUsage.input_tokens})`
-        : `all ${accUsage.output_tokens} output tokens consumed by reasoning_content (input=${accUsage.input_tokens})`
+  // M-LLAMACPP-CTX: finish_reason=length + 0 output 是典型上下文溢出徵兆
+  // （server 吃掉 prompt 但沒空間產 token）。寫一條 stderr 警示協助診斷。
+  if (finalFinishReason === 'length' && accUsage.output_tokens === 0) {
     // biome-ignore lint/suspicious/noConsole: diagnostic only
     console.error(
-      `[llamacpp] silent overflow detected: ${detail}. Raising as prompt-too-long to trigger auto-compact.`,
-    )
-    throw new Error(
-      `Prompt is too long (llama.cpp): ${detail}. n_ctx likely exhausted by input + reasoning. ` +
-        `Increase server --ctx-size, set LLAMACPP_CTX_SIZE matching /slots n_ctx, or /compact.`,
+      '[llamacpp] finish_reason=length 且 output_tokens=0；可能為上下文已滿或 n_ctx 不足。' +
+        '若情況持續，確認 LLAMACPP_CTX_SIZE 與實際 /slots n_ctx 一致，或手動 /compact',
     )
   }
   yield formatSSE('message_delta', {
