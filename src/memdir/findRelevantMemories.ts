@@ -2,6 +2,8 @@ import { feature } from 'bun:bundle'
 import { logForDebugging } from '../utils/debug.js'
 import { errorMessage } from '../utils/errors.js'
 import { getDefaultSonnetModel } from '../utils/model/model.js'
+import { isLlamaCppActive } from '../utils/model/providers.js'
+import { getLlamaCppConfigSnapshot } from '../llamacppConfig/index.js'
 import { sideQuery } from '../utils/sideQuery.js'
 import { jsonParse } from '../utils/slowOperations.js'
 import {
@@ -9,6 +11,15 @@ import {
   type MemoryHeader,
   scanMemoryFiles,
 } from './memoryScan.js'
+
+/**
+ * Fallback cap when the selector returns empty (no API key, parse failure,
+ * llamacpp server down, etc). Without this, llama.cpp users see zero memory
+ * recall — the selector silently fails and the prefetch returns []. Capped
+ * by file count rather than bytes to avoid an extra stat round; memories
+ * are already mtime-sorted so we keep the freshest N.
+ */
+const FALLBACK_MAX_FILES = 8
 
 export type RelevantMemory = {
   path: string
@@ -57,9 +68,22 @@ export async function findRelevantMemories(
     recentTools,
   )
   const byFilename = new Map(memories.map(m => [m.filename, m]))
-  const selected = selectedFilenames
+  let selected = selectedFilenames
     .map(filename => byFilename.get(filename))
     .filter((m): m is MemoryHeader => m !== undefined)
+
+  // M-MEMRECALL-LOCAL: selector returned nothing but candidates exist.
+  // Most likely cause: no Anthropic API key + llamacpp parse failure / server
+  // down. Without this fallback, llama.cpp users get zero memory recall and
+  // every new session starts blind. Take the freshest N (already mtime-sorted)
+  // so the model at least sees recent context.
+  if (selected.length === 0 && memories.length > 0) {
+    selected = memories.slice(0, FALLBACK_MAX_FILES)
+    logForDebugging(
+      `[memdir] selector returned 0 of ${memories.length} candidates; fallback attached ${selected.length} freshest memories`,
+      { level: 'warn' },
+    )
+  }
 
   // Fires even on empty selection: selection-rate needs the denominator,
   // and -1 ages distinguish "ran, picked nothing" from "never ran".
@@ -93,6 +117,20 @@ async function selectRelevantMemories(
     recentTools.length > 0
       ? `\n\nRecently used tools: ${recentTools.join(', ')}`
       : ''
+
+  // M-MEMRECALL-LOCAL: sideQuery is hardcoded to Anthropic SDK. Pure llama.cpp
+  // users (no ANTHROPIC_API_KEY) would otherwise 401 silently and lose memory
+  // recall entirely. Branch to a direct OpenAI-compatible /v1/chat/completions
+  // call against the local server when llamacpp is the active provider.
+  if (isLlamaCppActive()) {
+    return await selectViaLlamaCpp(
+      query,
+      manifest,
+      toolsSection,
+      validFilenames,
+      signal,
+    )
+  }
 
   try {
     const result = await sideQuery({
@@ -138,4 +176,106 @@ async function selectRelevantMemories(
     )
     return []
   }
+}
+
+/**
+ * llama.cpp branch of the memory selector. Talks directly to the OpenAI-
+ * compatible /v1/chat/completions endpoint instead of going through
+ * sideQuery (which is Anthropic-only). Local models are unreliable with
+ * the structured-output beta header, so we steer with the prompt and
+ * extract the first JSON array from the response.
+ *
+ * On any failure (network, parse, empty) returns []. Caller's fallback path
+ * (findRelevantMemories) handles the empty case by attaching the freshest N
+ * memories so recall still works.
+ */
+async function selectViaLlamaCpp(
+  query: string,
+  manifest: string,
+  toolsSection: string,
+  validFilenames: Set<string>,
+  signal: AbortSignal,
+): Promise<string[]> {
+  try {
+    const cfg = getLlamaCppConfigSnapshot()
+    const userPrompt = `Query: ${query}\n\nAvailable memories:\n${manifest}${toolsSection}\n\nReply with ONLY a JSON array of filenames (e.g. ["foo.md","bar.md"]). No prose, no markdown fences, no keys. Empty array [] if none apply.`
+    const response = await fetch(`${cfg.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: cfg.model,
+        max_tokens: 256,
+        temperature: 0,
+        messages: [
+          { role: 'system', content: SELECT_MEMORIES_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+      signal,
+    })
+    if (!response.ok) {
+      logForDebugging(
+        `[memdir] llamacpp selector HTTP ${response.status}`,
+        { level: 'warn' },
+      )
+      return []
+    }
+    const json = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>
+    }
+    const text = json.choices?.[0]?.message?.content ?? ''
+    return extractFilenamesFromText(text, validFilenames)
+  } catch (e) {
+    if (signal.aborted) {
+      return []
+    }
+    logForDebugging(
+      `[memdir] selectViaLlamaCpp failed: ${errorMessage(e)}`,
+      { level: 'warn' },
+    )
+    return []
+  }
+}
+
+/**
+ * Extract a JSON array of strings from arbitrary model output. Local models
+ * sometimes wrap in ```json fences, prepend "Here are the relevant files:",
+ * or emit `{"selected_memories":[...]}` despite the prompt. Try the first
+ * `[ ... ]` substring; fall back to parsing the whole thing as an object
+ * with a `selected_memories` key (matches the Anthropic schema for parity).
+ */
+export function extractFilenamesFromText(
+  text: string,
+  validFilenames: Set<string>,
+): string[] {
+  if (!text) return []
+  const arrayMatch = text.match(/\[[\s\S]*?\]/)
+  if (arrayMatch) {
+    try {
+      const arr: unknown = jsonParse(arrayMatch[0])
+      if (
+        Array.isArray(arr) &&
+        arr.every((x): x is string => typeof x === 'string')
+      ) {
+        return arr.filter(f => validFilenames.has(f))
+      }
+    } catch {
+      // fall through to object form
+    }
+  }
+  try {
+    const obj = jsonParse(text) as { selected_memories?: unknown }
+    if (
+      obj &&
+      Array.isArray(obj.selected_memories) &&
+      obj.selected_memories.every((x: unknown): x is string => typeof x === 'string')
+    ) {
+      return (obj.selected_memories as string[]).filter(f =>
+        validFilenames.has(f),
+      )
+    }
+  } catch {
+    // give up
+  }
+  return []
 }
