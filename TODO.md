@@ -1853,3 +1853,17 @@
 - 2026-04-23 23:48: Session 結束 | 進度：478/510 任務 | cccaac5 build(dev): bun run dev 啟用 feature flags
 
 - 2026-04-24 00:12: Session 結束 | 進度：478/510 任務 | 1f88ef3 test(cron): B6 — extract picker helpers + 22 unit tests
+
+- 2026-04-24 00:18: Session 結束 | 進度：495/535 任務 | b3e07e9 docs(cron): Wave 4 TODO + CLAUDE.md 開發日誌
+
+- 2026-04-24 07:50: Session 結束 | 進度：495/535 任務 | b3e07e9 docs(cron): Wave 4 TODO + CLAUDE.md 開發日誌
+
+- 2026-04-24 07:59: Session 結束 | 進度：495/535 任務 | b3e07e9 docs(cron): Wave 4 TODO + CLAUDE.md 開發日誌
+
+- 2026-04-24 08:05: Session 結束 | 進度：495/535 任務 | b3e07e9 docs(cron): Wave 4 TODO + CLAUDE.md 開發日誌
+
+- 2026-04-24 08:17: Session 結束 | 進度：495/535 任務 | a34f3bd docs(lessons): daemon agentVersion 帶 -dev 後綴 + cron 不 fire
+
+- 2026-04-24 08:30: Session 結束 | 進度：495/535 任務 | 70c88fb feat(cron): /cron history 時間改顯示本地時間
+
+- 2026-04-24 08:33: Session 結束 | 進度：495/535 任務 | 70c88fb feat(cron): /cron history 時間改顯示本地時間
