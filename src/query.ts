@@ -1618,27 +1618,51 @@ async function* queryLoop(
     }
 
     // Memory prefetch consume: only if settled and not already consumed on
-    // an earlier iteration. If not settled yet, skip (zero-wait) and retry
-    // next iteration — the prefetch gets as many chances as there are loop
-    // iterations before the turn ends. readFileState (cumulative across
-    // iterations) filters out memories the model already Read/Wrote/Edited
-    // — including in earlier iterations, which the per-iteration
-    // toolUseBlocks array would miss.
+    // an earlier iteration. On the FIRST iteration we actively wait up to
+    // 1500ms for the prefetch to settle — selector now runs against local
+    // llamacpp (few-hundred-ms latency) and dropping it costs real recall.
+    // Later iterations use zero-wait (turn already has more chances).
     if (
       pendingMemoryPrefetch &&
-      pendingMemoryPrefetch.settledAt !== null &&
       pendingMemoryPrefetch.consumedOnIteration === -1
     ) {
-      const memoryAttachments = filterDuplicateMemoryAttachments(
-        await pendingMemoryPrefetch.promise,
-        toolUseContext.readFileState,
-      )
-      for (const memAttachment of memoryAttachments) {
-        const msg = createAttachmentMessage(memAttachment)
-        yield msg
-        toolResults.push(msg)
+      if (pendingMemoryPrefetch.settledAt === null && turnCount === 1) {
+        await Promise.race([
+          pendingMemoryPrefetch.promise.catch(() => null),
+          new Promise<void>(resolve => setTimeout(resolve, 1500)),
+        ])
       }
-      pendingMemoryPrefetch.consumedOnIteration = turnCount - 1
+
+      if (pendingMemoryPrefetch.settledAt !== null) {
+        const rawMemories = await pendingMemoryPrefetch.promise
+        const memoryAttachments = filterDuplicateMemoryAttachments(
+          rawMemories,
+          toolUseContext.readFileState,
+        )
+        const rawCount = rawMemories.reduce(
+          (n, a) =>
+            n + (a.type === 'relevant_memories' ? a.memories.length : 0),
+          0,
+        )
+        const injectedCount = memoryAttachments.reduce(
+          (n, a) =>
+            n + (a.type === 'relevant_memories' ? a.memories.length : 0),
+          0,
+        )
+        logForDebugging(
+          `[memdir/consume] iter=${turnCount - 1} raw=${rawCount} injected=${injectedCount} filtered_by_dedup=${rawCount - injectedCount}`,
+        )
+        for (const memAttachment of memoryAttachments) {
+          const msg = createAttachmentMessage(memAttachment)
+          yield msg
+          toolResults.push(msg)
+        }
+        pendingMemoryPrefetch.consumedOnIteration = turnCount - 1
+      } else {
+        logForDebugging(
+          `[memdir/consume] iter=${turnCount - 1} prefetch_not_settled_yet (will retry next iteration or drop if turn ends)`,
+        )
+      }
     }
 
 

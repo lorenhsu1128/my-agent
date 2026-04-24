@@ -2350,15 +2350,18 @@ export function startRelevantMemoryPrefetch(
   messages: ReadonlyArray<Message>,
   toolUseContext: ToolUseContext,
 ): MemoryPrefetch | undefined {
-  if (
-    !isAutoMemoryEnabled() ||
-    !getFeatureValue_CACHED_MAY_BE_STALE('tengu_moth_copse', false)
-  ) {
+  if (!isAutoMemoryEnabled()) {
+    logForDebugging('[memdir/prefetch] skip: isAutoMemoryEnabled()=false')
+    return undefined
+  }
+  if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_moth_copse', false)) {
+    logForDebugging('[memdir/prefetch] skip: feature flag tengu_moth_copse=false')
     return undefined
   }
 
   const lastUserMessage = messages.findLast(m => m.type === 'user' && !m.isMeta)
   if (!lastUserMessage) {
+    logForDebugging('[memdir/prefetch] skip: no non-meta user message found')
     return undefined
   }
 
@@ -2370,13 +2373,23 @@ export function startRelevantMemoryPrefetch(
   // English 4+ char single tokens, still skips "ls" / "y".
   const trimmed = input?.trim() ?? ''
   if (!input || (!/\s/.test(trimmed) && trimmed.length < 4)) {
+    logForDebugging(
+      `[memdir/prefetch] skip: query too short (len=${trimmed.length})`,
+    )
     return undefined
   }
 
   const surfaced = collectSurfacedMemories(messages)
   if (surfaced.totalBytes >= RELEVANT_MEMORIES_CONFIG.MAX_SESSION_BYTES) {
+    logForDebugging(
+      `[memdir/prefetch] skip: session bytes ${surfaced.totalBytes} >= MAX ${RELEVANT_MEMORIES_CONFIG.MAX_SESSION_BYTES}`,
+    )
     return undefined
   }
+
+  logForDebugging(
+    `[memdir/prefetch] fire: query="${trimmed.slice(0, 60)}" alreadySurfaced=${surfaced.paths.size}`,
+  )
 
   // Chained to the turn-level abort so user Escape cancels the sideQuery
   // immediately, not just on [Symbol.dispose] when queryLoop exits.
@@ -2514,23 +2527,38 @@ export function filterDuplicateMemoryAttachments(
   attachments: Attachment[],
   readFileState: FileStateCache,
 ): Attachment[] {
-  return attachments
-    .map(attachment => {
-      if (attachment.type !== 'relevant_memories') return attachment
-      const filtered = attachment.memories.filter(
-        m => !readFileState.has(m.path),
-      )
-      for (const m of filtered) {
-        readFileState.set(m.path, {
-          content: m.content,
-          timestamp: m.mtimeMs,
-          offset: undefined,
-          limit: m.limit,
-        })
-      }
-      return filtered.length > 0 ? { ...attachment, memories: filtered } : null
+  // 2026-04-24 變更：不再因為 readFileState 含該 path 就過濾掉 memory。
+  // 原本 readFileState 內存會封鎖「LLM Read 過的 memory 檔」或「前面 turn
+  // 注入過的 memory」永不再注入，造成使用者回報的「有時召回、有時沒召回」。
+  // memory 是「ground knowledge」不是「工作中檔案」，應每 turn 都可再注入一次。
+  // 仍然更新 readFileState（讓後續 Read tool 知道 timestamp / content），只是
+  // 不用它當 filter。MAX_SESSION_BYTES 的 session 級 cap 仍在（見 prefetch 入口）。
+  const result: Attachment[] = []
+  for (const attachment of attachments) {
+    if (attachment.type !== 'relevant_memories') {
+      result.push(attachment)
+      continue
+    }
+    // 同 attachment 內 dedup（若 selector 不小心回了兩次同 path）
+    const seen = new Set<string>()
+    const unique = attachment.memories.filter(m => {
+      if (seen.has(m.path)) return false
+      seen.add(m.path)
+      return true
     })
-    .filter((a): a is Attachment => a !== null)
+    for (const m of unique) {
+      readFileState.set(m.path, {
+        content: m.content,
+        timestamp: m.mtimeMs,
+        offset: undefined,
+        limit: m.limit,
+      })
+    }
+    if (unique.length > 0) {
+      result.push({ ...attachment, memories: unique })
+    }
+  }
+  return result
 }
 
 /**
