@@ -152,9 +152,11 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
       setHistory([])
       return
     }
-    readHistory(selected.id, 5)
+    readHistory(selected.id)
       .then(h => {
-        if (!cancelled) setHistory(h)
+        // readHistory returns everything (chronological). We only want the
+        // tail of most recent fires for the inline detail panel.
+        if (!cancelled) setHistory(h.slice(-5).reverse())
       })
       .catch(() => {
         if (!cancelled) setHistory([])
@@ -172,10 +174,13 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
       setHistoryOffset(0)
       return
     }
-    readHistory(selected.id, HISTORY_MAX)
+    readHistory(selected.id)
       .then(h => {
         if (!cancelled) {
-          setFullHistory(h)
+          // readHistory is chronological; show newest first, cap at
+          // HISTORY_MAX most recent entries.
+          const tail = h.slice(-HISTORY_MAX).reverse()
+          setFullHistory(tail)
           setHistoryOffset(0)
         }
       })
