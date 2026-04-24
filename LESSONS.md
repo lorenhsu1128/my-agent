@@ -37,6 +37,33 @@
 - **相關檔案**：`src/utils/model/model.ts`（修法位置）、`src/utils/model/modelStrings.ts:25-31`（lookup 根源）、`src/utils/model/configs.ts`（`ALL_MODEL_CONFIGS` 資料結構）、`src/utils/model/providers.ts`（APIProvider enum）。
 - **日期**：2026-04-15
 
+### `cachedGrowthBookFeatures` disk cache 蓋掉 code 預設 — 舊版 my-agent 寫 false 永久卡住功能
+- **發生什麼事**：CJK fix 後 prefetch 仍未啟動。debug log 顯示 `gate1: autoEnabled=true mothCopseFlag=false BAIL`。但 `src/utils/config.ts:676` 明明寫 `tengu_moth_copse: true`。
+- **根本原因**：`getFeatureValue_CACHED_MAY_BE_STALE` 讀取順序是 env override → config override → `getGlobalConfig().cachedGrowthBookFeatures[flag]` → caller 傳的 `defaultValue`。my-agent 的「全 flag 預設 true」只會在 disk 上**沒有這個 key** 時生效；而 `~/.my-agent/.my-agent.json` 的 `cachedGrowthBookFeatures.tengu_moth_copse` 已經被舊版 my-agent（或更早的 Claude Code）寫成 false，永久蓋掉 code 預設。
+- **影響面**：所有 my-agent shipped-as-true 的 flag 都有同樣風險。`tengu_moth_copse` (memory prefetch)、`tengu_coral_fern` (?)、`tengu_session_memory` 等。任何過去某 GrowthBook server 推送過 false 而留在 disk 的 flag 都會被卡住。
+- **正確做法**（短期）：手動 `sed` 改 disk config：`~/.my-agent/.my-agent.json` 的 `tengu_moth_copse` 改 true。永久修法（M-DISK-CFG-MIGRATION）：lookup 邏輯區分「my-agent strong-default」vs「user-customizable flag」，前者優先於 disk。
+- **診斷路徑**：debug log 顯示 `flagOn=false` → `grep flag-name ~/.my-agent/.my-agent.json` → 看到 explicit false → 確認 lookup 不會 fallback 到 code default。
+- **相關檔案**：`src/services/analytics/growthbook.ts:695` `getFeatureValue_CACHED_MAY_BE_STALE`、`src/utils/config.ts:632-689` `cachedGrowthBookFeatures` defaults。
+- **日期**：2026-04-24
+
+### Memory prefetch `/\s/.test(input)` early-return 對中文 query 全誤判 → CJK 用戶 memory 完全失效
+- **發生什麼事**：修完 sideQuery hardcoded Sonnet 後（M-MEMRECALL-LOCAL），daemon 重啟、新 session 問「現在台北天氣」LLM 仍亂答 + 幻覺工具。debug log 完全空 → `findRelevantMemories` 根本沒被呼叫。
+- **根本原因**：`src/utils/attachments.ts:2367` 的 `startRelevantMemoryPrefetch` early-return 條件 `!/\s/.test(input.trim())`，意圖過濾「single-word prompts lack context」。但 `/\s/` 在 JS 預設只匹配 ASCII / 常見 Unicode 空白，**完全不認 CJK 字元為「字詞分界」**。中文 query「現在台北天氣」trim 後仍無空白 → bailout → prefetch 整套不啟動。所有純中文使用者的 memory 系統等於關閉，不分本地 / Anthropic。
+- **誤導點**：以為 selector / fallback 失效，加 debug log 後才發現連入口都沒進。
+- **正確做法**：判斷條件改成 `hasWhitespace || trimmed.length >= 4` — 英文「weather」單字（7 字）會觸發但仍排掉「ls」「y」之類 trivial input；中文 4+ 字普遍有意義（「台北天氣」「今天行程」）。
+- **延伸問題**：M2 / M3 / extractMemories 還可能有更多類似「以英文為前提」的字串處理（regex word boundary、token splitter 等），需搜過一遍。立 TODO M-CJK-AUDIT。
+- **相關檔案**：`src/utils/attachments.ts:2367`。
+- **日期**：2026-04-24
+
+### `sideQuery` 寫死 Anthropic — 純 llama.cpp 環境 memory recall 全失效（silent）
+- **發生什麼事**：用戶在 standalone mode 跟 agent 講「天氣請用 wttr.in」並讓它存進 auto-memory。任何 **新 session**（standalone 或 daemon）後問天氣都亂查。同 session 第二次能用，純粹是 conversation history 還在。
+- **根本原因**：M2 query-driven memory prefetch（`tengu_moth_copse=true` 預設開）的 selector model 在 `src/memdir/findRelevantMemories.ts:99` 寫死 `getDefaultSonnetModel()`，透過 `sideQuery` → `getAnthropicClient()` 走純 Anthropic SDK 路徑。沒設 `ANTHROPIC_API_KEY` 的 llamacpp 用戶 → client 401/throw → catch（line 131-140）吞掉 → 回 `[]` → 沒任何 memory file 被注入 attachments。**且 LLM 看到的 framework 文字仍提到 MEMORY.md 存在，但內容沒進來** —— 容易誤判成 memory 機制有運作但 LLM 不採用。
+- **誤導點**：問題像是 daemon vs standalone 行為差異 —— 實際是「同 session 有 history vs 新 session 沒 history」的差異。Daemon attach 等於開新 session，純粹巧合放大。診斷時讓 LLM 答 yes/no 兩題（「system prompt 含 wttr.in？」「含 MEMORY.md？」）才能拆分 framework vs content 兩層。
+- **正確做法**（M-MEMRECALL-LOCAL）：selector 偵測 `isLlamaCppActive()` → 走直接 fetch `${baseUrl}/chat/completions`（OpenAI 相容）+ prompt 引導 JSON array 輸出（不依賴 structured-output beta）；selector 失敗（任何原因）時 fallback 帶 `FALLBACK_MAX_FILES=8` 個最新 memory，讓 recall 不至於完全停擺。
+- **相關檔案**：`src/memdir/findRelevantMemories.ts`、`src/utils/sideQuery.ts:124`、`src/utils/claudemd.ts:1142`（filterInjectedMemoryFiles 的 gate）。
+- **未修**：`src/services/extractMemories/extractMemories.ts` 也用 sideQuery，純 llamacpp 環境 memory consolidation 仍會 silent fail（背景工作可容忍）— 入 TODO 待 M-EXTRACT-LOCAL。
+- **日期**：2026-04-24
+
 ### `ANTHROPIC_API_KEY=dummy` 會讓 my-agent bootstrap 無限阻塞
 - **發生什麼事**：V4 測試時設 `ANTHROPIC_API_KEY=dummy CLAUDE_CODE_USE_LLAMACPP=true ./cli -p "hi"`，CLI 掛住 60 秒 + 無任何 stdout/stderr，連 `getAnthropicClient()` 都沒被呼叫。把 `ANTHROPIC_API_KEY=dummy` 拿掉（只保留 `CLAUDE_CODE_USE_LLAMACPP=true`）馬上解開。
 - **根本原因**：my-agent 的 bootstrap（`src/bootstrap/state.ts` + `src/main.tsx` 初始化鏈）偵測到 `ANTHROPIC_API_KEY` 存在時會觸發同步 / 網路驗證，dummy key 讓這步卡住。具體哪一步目前未追到，但行為可重現。

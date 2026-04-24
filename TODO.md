@@ -1014,6 +1014,38 @@
 
 ---
 
+## 當前里程碑：M-MEMRECALL-LOCAL — Memory Prefetch 在純 llama.cpp 環境失效修復（2026-04-24 啟動）
+
+**問題**：M2 設計的 query-driven memory prefetch（`tengu_moth_copse=true`）的 selector model 寫死 `getDefaultSonnetModel()`，透過 `sideQuery → getAnthropicClient` 走 Anthropic SDK。純 llama.cpp 用戶（無 `ANTHROPIC_API_KEY`）→ 401/throw → catch 吞掉 → 回 `[]` → memory 完全沒進 attachments。任何新 session 問記過的事都「亂答」（同 session 第二次能對是 conversation history 撐著，不是 memory 機制）。
+
+**根因檔案**：
+- `src/memdir/findRelevantMemories.ts:99` — selector hardcode `getDefaultSonnetModel()`
+- `src/utils/sideQuery.ts:124` — 純 Anthropic 路徑
+- `src/utils/claudemd.ts:1142` `filterInjectedMemoryFiles` 過濾 AutoMem（設計如此，由 `tengu_moth_copse` gate）
+
+### 任務（A 走本地模型 + B fallback safety net）
+- [x] M-MEMRECALL-1 `findRelevantMemories.ts`：加 `isLlamaCppActive()` 分支 → 走新 `selectViaLlamaCpp()`（直接 fetch `${baseUrl}/chat/completions`，prompt 引導純 JSON array 輸出，不依賴 structured-output beta）；signal 沿用既有 abort chain
+- [x] M-MEMRECALL-2 fallback：selector 回 `[]` 時，按 mtime 排序帶最新 `FALLBACK_MAX_FILES=8` 檔（簡化版：用檔案數而非 bytes，省 stat IO）+ `logForDebugging` warn
+- [x] M-MEMRECALL-3 unit test：`tests/integration/memory/findRelevantMemories-llamacpp.test.ts`（23 test：純函式 16 + selector 整合 7，mock fetch + mock.module）全綠
+- [x] M-MEMRECALL-3b CJK fix：`src/utils/attachments.ts:2367` 原 `/\s/.test()` early-return 對中文 query（無空白）誤判 → bailout prefetch，所有 CJK 用戶 memory 機制完全失效。改成 `hasWhitespace || trimmed.length >= 4`（CJK 4 字 + 英文 4 字單字都觸發）
+- [x] M-MEMRECALL-3c disk config 修正：`~/.my-agent/.my-agent.json` 的 `cachedGrowthBookFeatures.tengu_moth_copse` 被舊版 my-agent 寫死成 `false`，覆蓋了 code 預設 true → prefetch 整路關閉。本機 `sed` 改回 true + backup 到 `.my-agent.json.bak.before-mothcopse-fix`。永久修法另立 M-DISK-CFG-MIGRATION
+- [x] M-MEMRECALL-4 typecheck（已過 baseline）+ 手動 E2E（2026-04-24 04:09）：daemon 重啟後新 session 問「現在台北天氣？」 — debug log 顯示 4 gate 全過 → llamacpp branch 觸發 → selector 回 0（local model 26s）→ fallback 帶 5 檔（含 `feedback_weather_api.md`）→ session JSONL 確認 LLM 直接 `curl wttr.in/Taipei` 拿到 `+21°C 🌓` 並正確答覆。Debug 程式碼已清掉
+- [x] M-MEMRECALL-5 文件：CLAUDE.md ADR-014 + LESSONS.md（sideQuery hardcoded Sonnet 教訓）+ session log（docs/memory.md 待專題擴充時一起補）
+
+### 完成標準
+- [x] 純 llama.cpp + 無 API key 環境，新 session 套用 memory 規則（單元測試覆蓋；E2E 待人工驗）
+- [x] Anthropic 路徑（設 API key 時）行為不變（沒動 sideQuery / Anthropic branch；分支由 `isLlamaCppActive()` gate）
+- [x] selector 失效時 fallback 觸發、log 出現 warn（HTTP 500 / parse fail / network error / empty array 四 case 測過）
+
+### 不在範圍（→ 後續 milestone）
+- [ ] M-SIDEQUERY-PROVIDER：`sideQuery` 整體重構成 provider-aware（影響 session search / model validation / extractMemories 等多 caller，爆炸面大，獨立 task）
+- [ ] M-EXTRACT-LOCAL：`src/services/extractMemories/extractMemories.ts` 也用 sideQuery → 純 llama.cpp 環境 memory consolidation 失效（背景工作可容忍 fail，本次不修）
+- [ ] M-MEMRECALL-FLAG-AUDIT：評估 `tengu_moth_copse` 預設值是否該對純本地用戶反轉（回到 MEMORY.md 全進 system prompt） — 跟既有 ADR + 上下文 budget 取捨衝突，需專題討論
+- [ ] M-CJK-AUDIT：全倉庫搜「以英文為前提」的字串處理（regex word boundary `\b`、whitespace `\s` token split、字數 / 詞數計算），逐一驗證 CJK 行為。`src/utils/attachments.ts:2367` 已修；可能還有 `extractMemories` / `memoryScan` / FTS query 預處理等
+- [ ] M-DISK-CFG-MIGRATION：`~/.my-agent/.my-agent.json` 上的 `cachedGrowthBookFeatures` 是舊版本 sync 的快取，可能含被改成 `false` 的 my-agent-default-true flag（如本次的 `tengu_moth_copse`，或其他 `tengu_*` 解鎖 flag）。`getFeatureValue_CACHED_MAY_BE_STALE` 純讀 disk → 蓋掉 code 預設。要做：(a) 啟動時 detect my-agent-shipped flags 跟 disk 衝突，warn 或自動覆寫；(b) 或在 lookup 加一層「my-agent strong-default override」優先於 disk false。需考慮使用者手動關閉 flag 的情境（差別在哪）
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -1881,3 +1913,27 @@
 - 2026-04-24 09:26: Session 結束 | 進度：495/535 任務 | 01415f0 Revert "fix(llamacpp): detect silent overflow when reasoning_content eats all output"
 
 - 2026-04-24 09:37: Session 結束 | 進度：495/535 任務 | 01415f0 Revert "fix(llamacpp): detect silent overflow when reasoning_content eats all output"
+
+- 2026-04-24 10:06: Session 結束 | 進度：495/535 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 10:13: Session 結束 | 進度：495/535 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 10:15: Session 結束 | 進度：495/535 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 10:20: Session 結束 | 進度：495/535 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 10:24: Session 結束 | 進度：495/535 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 10:26: Session 結束 | 進度：495/535 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 10:42: Session 結束 | 進度：502/546 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 10:48: Session 結束 | 進度：502/546 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 10:53: Session 結束 | 進度：503/548 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 10:58: Session 結束 | 進度：503/548 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 12:00: Session 結束 | 進度：504/550 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert
+
+- 2026-04-24 12:15: Session 結束 | 進度：505/550 任務 | 8deee4e chore(todo): session log — overflow detection attempt + revert

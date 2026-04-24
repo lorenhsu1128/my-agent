@@ -192,6 +192,7 @@ bun test                         # 執行測試
 - ADR-008（2026-04-19）：M-SP — system prompt 29 個 section 外部化至 `~/.my-agent/system-prompt/` 下的 .md 檔。新增 `src/systemPromptFiles/` 模組（paths / sections / bundledDefaults / loader / snapshot / seed / index）。採 session 啟動凍結快照（沿用 M-UM pattern）、per-project > global > bundled 三層解析、完全取代（不合併）、首次啟動自動 seed global 層 + README.md。覆蓋範圍：prompts.ts 全部 15 個 section（靜態 + 動態） + cyber-risk + user-profile 外框 + memory 系統 8 個常數 + QueryEngine 4 條錯誤訊息。使用者指南見 `docs/customizing-system-prompt.md`。理由：讓措辭調整不必改 code → rebuild；per-project 可做專案專屬 prompt 客製化。
 - ADR-011（2026-04-19）：Browser 能力走 puppeteer-core，不走 playwright-core。M5 首次用 playwright-core 時發現在 bun + Windows 下預設 `--remote-debugging-pipe` transport 無限 hang，即使改 `ignoreDefaultArgs` + `remote-debugging-port` + `connectOverCDP` 也 hang（raw `ws` 套件連 chromium 可以，但 playwright 自家 client 不行）。puppeteer-core 預設 WebSocket CDP 在同環境下秒連，沿用 `bunx playwright install chromium` 裝的 browser binary 不需第二次下載。本地 / Browserbase / Browser Use 三個 provider 共用 puppeteer-core。Vision 走 vendored `my-agent-ai/sdk`（Anthropic SDK），interface 設計保留換後端空間（未來可加 Gemini / 本地 VLM）。Firecrawl 不當作 browser provider（它是 scraping API 不是 CDP target），改為 `WebCrawlTool` 的 optional fetcher backend，透過 `WEBCRAWL_BACKEND=firecrawl` + `FIRECRAWL_API_KEY` 啟用。Provider 選擇不走 feature flag（ADR-003），以 runtime env 決定：`BROWSER_PROVIDER` 顯式 > API key 偵測 > fallback local。
 - ADR-012（2026-04-20）：M-DAEMON — Daemon 模式架構（Path A in-process QueryEngine 整合）。`my-agent daemon start` 起常駐 Bun.serve WS server（loopback only `127.0.0.1`、OS 指派 port、bearer token auth、pid.json heartbeat）；QueryEngineRunner 包 `ask()` 成 SessionRunner，跑真實 LLM turn；InputQueue 狀態機（IDLE/RUNNING/INTERRUPTING）+ 混合 intent 策略（interactive 打斷 / background FIFO / slash 優先）；sessionBroker 廣播 turnStart/turnEnd/runnerEvent 給所有 attached client 同步；permissionRouter 把 canUseTool 路由到 source client（含 toolName/input/riskLevel/description/affectedPaths），broadcast permissionPending 給旁觀 client（Q2=b），timeout 5min auto-allow（Q3=c），fallbackHandler interface 預留給 M-DISCORD；cron scheduler 搬進 daemon 獨占跑（`isDaemonAliveSync()` 讓 REPL/headless 跳過避免雙跑）；REPL 側 thin-client（detectDaemon 2s poll + thinClientSocket WS + fallbackManager 狀態機 standalone↔attached↔reconnecting），daemon 起/掛時透明切換，狀態列 badge 顯示目前模式。Session JSONL 沿用既有 `recordTranscript()`→`Project` singleton 不重做；`.daemon.lock` 檔防同 cwd 重啟兩份 daemon。**Path A 完整 in-process** 不是 Path B 的 spawn `./cli --print` 子程序 — 理由：狀態共享、單一 process 方便 debug、未來 Discord/cron 可同 AppState 搬動任務；代價：daemon bootstrap 要複製 main.tsx 的 headless 分支（`bootstrapDaemonContext`，不 refactor print.ts）。使用者指南見 `docs/daemon-mode.md`。Discord 整合（M-DISCORD）是 daemon 的第一個 non-REPL consumer。
+- ADR-014（2026-04-24）：M-MEMRECALL-LOCAL — Memory prefetch selector 在 llama.cpp 模式走本地模型 + safety-net fallback。`src/memdir/findRelevantMemories.ts` 的 `selectRelevantMemories` 在 `isLlamaCppActive()` 為 true 時改走新 `selectViaLlamaCpp()`，直接 fetch `${cfg.baseUrl}/chat/completions`（OpenAI 相容、不依賴 structured-output beta、prompt 引導 JSON array 輸出，響應交給新 export `extractFilenamesFromText` 容錯解析），不污染 `sideQuery`（後者仍純 Anthropic）。Selector 任何原因（HTTP 非 200 / parse 失敗 / 網路錯 / 空 array）回 `[]` 時，新增 fallback 帶最新 `FALLBACK_MAX_FILES=8` 個 memory（按 mtime 已排序），讓「new session × 無 ANTHROPIC_API_KEY」場景至少有最近 memory 能 ground。理由：M2 的 `tengu_moth_copse=true`（`config.ts:676` 預設）會把 MEMORY.md 從 system prompt 過濾掉、改走 query-driven prefetch；prefetch 又寫死 Sonnet → 純 llamacpp 用戶 silent 401 → memory 機制等於關閉，新 session 完全不認得記過的東西（同 session 第二次能對是 conversation history 撐著，誤導為 daemon vs standalone bug）。不動 `sideQuery` 整體 provider-aware 化（爆炸面太大，影響 session search / model validation 等多 caller，立 M-SIDEQUERY-PROVIDER 後續處理）；不動 `extractMemories` 的 sideQuery 路徑（背景 consolidation 可容忍 fail，立 M-EXTRACT-LOCAL）。
 - ADR-013（2026-04-20）：M-DISCORD — 單 daemon 多 project Discord gateway。一個 daemon process 內活 N 個 `ProjectRuntime`（各自 AppState / broker / QueryEngineRunner / permissionRouter / cron scheduler / session JSONL），透過 `ProjectRegistry` 管理 lifecycle（lazy loadProject / hasAttachedRepl-aware idle unload / onLoad/onUnload listeners）。並行策略 **B-1**：daemon 全域 turn mutex + `wrapRunnerWithProjectCwd` 切 `process.cwd()` 與 `STATE.originalCwd` 序列化跨 project turn（個人使用場景極少並行，接受「後到者排隊」UX）；`src/utils/sessionStorage.ts` 的 Project singleton 改 `Map<cwd, Project>`。REPL thin-client WS handshake 帶 `?cwd=`；daemon 側 `getProjectByCwd` 命中 → attachRepl + 綁 projectId；沒命中 → 回 `attachRejected` frame，REPL fallback standalone（不自動重試，避免 loop）。Discord gateway 以 `DiscordConfig`（`~/.my-agent/discord.json`）為入口：訊息路由 = 白名單 + DM `#<id|alias>` 前綴 + `channelBindings[channelId]` → `projectPath` → `registry.loadProject`；discord.js v14 **DM 坑**（MESSAGE_CREATE payload 缺 `channel.type`，Partials.Channel 建不出 DMChannel）workaround 兩層：啟動 pre-fetch whitelist users DM + 'raw' event fallback。8 個 slash commands（/status /list /help /mode /clear /interrupt /allow /deny）；permission mode 雙向同步新增 `permissionModeChanged` WS frame（daemon → attached REPL）。Home channel（`homeChannelId`）鏡像 non-Discord source 的 turn 輸出 + daemon up/down 通知，Discord source 的 turn 不鏡（streamOutput 已 reply 原 DM）。**不含**：voice / Slack-Telegram / button UX / 多使用者 guild。使用者指南見 `docs/discord-mode.md`。
 
 ---
@@ -235,6 +236,44 @@ export CLAUDE_CONFIG_DIR=~/.claude
 > Claude Code：在這行下方附加你的 session 摘要。
 > 格式：`### YYYY-MM-DD — Session 標題`
 > 包含：你做了什麼、修改了哪些檔案、還剩什麼、遇到的問題。
+
+---
+
+### 2026-04-24 — M-MEMRECALL-LOCAL：純 llamacpp 環境 memory recall 修復
+
+**範圍**：M2 query-driven memory prefetch 在 llama.cpp 用戶（無 `ANTHROPIC_API_KEY`）silent 失效。診斷+修復同 session 完成。
+
+**根因（透過 LLM 回答 yes/no 問題分流確認）**：
+- `tengu_moth_copse=true` 預設開 → `filterInjectedMemoryFiles`（`src/utils/claudemd.ts:1142`）把 AutoMem 從 system prompt 過濾，改走 prefetch
+- Prefetch 入口 `startRelevantMemoryPrefetch` → `findRelevantMemories` → `selectRelevantMemories`，selector model 寫死 `getDefaultSonnetModel()` + 走 `sideQuery`（純 Anthropic SDK）
+- 沒 `ANTHROPIC_API_KEY` → 401/throw → catch 吞掉 → 回 `[]` → 沒任何 memory file 進 attachments → LLM 不認得記過的規則
+- **誤導**：以為是 daemon vs standalone 行為差異，實際是「同 session 有 history vs 新 session 沒 history」的差異 — daemon attach 等於開新 session
+
+**修改**：
+- `src/memdir/findRelevantMemories.ts`：
+  - import `isLlamaCppActive` + `getLlamaCppConfigSnapshot`
+  - `selectRelevantMemories` 加 llamacpp 分支 → `selectViaLlamaCpp()`（直接 fetch `${baseUrl}/chat/completions`，OpenAI 相容、不依賴 structured-output beta、prompt 引導 JSON array 輸出）
+  - 新 export `extractFilenamesFromText` 容錯解析（處理 markdown fence / preamble / `{selected_memories: [...]}` 包裝）
+  - `findRelevantMemories` 主路徑加 fallback：selector 回 `[]` 但有候選時，帶最新 `FALLBACK_MAX_FILES=8` 個（按 mtime 排序），warn log
+- `tests/integration/memory/findRelevantMemories-llamacpp.test.ts`：23 test（純函式 16 + 整合 7），用 `mock.module` 換掉 providers / llamacppConfig / memoryScan，patch `global.fetch`。涵蓋 HTTP 500 / 空 array / parse fail / network error / alreadySurfaced / 零候選 → 全綠
+- `LESSONS.md`：加「sideQuery hardcoded Sonnet — 純 llamacpp memory recall silent fail」教訓條，含診斷路徑（yes/no 分流）
+- `TODO.md`：M-MEMRECALL-LOCAL 里程碑勾完 4/5（M-MEMRECALL-4 手動 E2E 待用戶實機驗），「不在範圍」3 項列為後續 milestone（M-SIDEQUERY-PROVIDER / M-EXTRACT-LOCAL / M-MEMRECALL-FLAG-AUDIT）
+
+**設計取捨**：
+- 不重構 `sideQuery` provider-aware（影響 session search / model validation / extractMemories 多 caller，獨立 task）
+- 不關 `tengu_moth_copse`（會回退到舊「MEMORY.md 全進 system prompt」與既有 ADR 衝突）
+- Fallback 用「檔案數」而非「bytes 總量」cap → 省 stat IO；個人小型 memory 庫 8 個檔約 4-16KB 上下文成本可接受
+- 不做 selector 結果比對 / 抓 LLM 解析失敗統計 → MVP 先讓功能可用，觀察是否需要
+
+**踩坑**：
+1. ESM 模組 export readonly，bun:test 直接 `module.X = ...` `TypeError: Attempted to assign to readonly property` — 改用 `mock.module()` API
+2. `mock.module` 必須在 import 目標模組之前呼叫 → 用 `await import(...)` 動態載入確保順序
+3. `LlamaCppConfigSnapshot` 的 `baseUrl` / `model` 是頂層欄位不是 `cfg.server.*`（schema 有兩個 server.* 子欄位但連線資訊在頂層）
+4. 測試裡 `beforeEach` 在頂層會跑遍所有 describe，要嘛限縮到該 describe 內、要嘛不要碰 readonly export
+
+**未做（已入 TODO）**：
+- 手動 E2E：`unset ANTHROPIC_API_KEY` → 重啟 daemon → 新 session 問「現在台北天氣？」應走 wttr.in
+- `docs/memory.md` 加 llamacpp selector 段落（待專題擴充時補）
 
 ---
 
