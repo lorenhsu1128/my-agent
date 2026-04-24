@@ -14,9 +14,11 @@ import { logEvent } from '../services/analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/metadata.js'
 import { getAPIMetadata } from '../services/api/claude.js'
 import { getAnthropicClient } from '../services/api/client.js'
+import { sideQueryViaLlamaCpp } from '../services/api/llamacppSideQuery.js'
 import { getModelBetas, modelSupportsStructuredOutputs } from './betas.js'
 import { computeFingerprint } from './fingerprint.js'
 import { normalizeModelStringForAPI } from './model/model.js'
+import { isLlamaCppActive } from './model/providers.js'
 
 type MessageParam = Anthropic.MessageParam
 type TextBlockParam = Anthropic.TextBlockParam
@@ -105,6 +107,12 @@ function extractFirstUserMessageText(messages: MessageParam[]): string {
  * await sideQuery({ querySource: 'model_validation', model, max_tokens: 1, messages: [{ role: 'user', content: 'Hi' }] })
  */
 export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
+  // llama.cpp 模式下直通本地 OpenAI-相容端點，避開 OAuth / attribution /
+  // 結構化輸出 beta 等 Anthropic-only 機制（見 llamacppSideQuery.ts 說明）。
+  if (isLlamaCppActive()) {
+    return sideQueryViaLlamaCpp(opts)
+  }
+
   const {
     model,
     system,
