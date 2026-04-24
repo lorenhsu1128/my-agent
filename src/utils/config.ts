@@ -248,6 +248,16 @@ export type GlobalConfig = {
   bypassPermissionsModeAccepted?: boolean
   hasUsedBackslashReturn?: boolean
   autoCompactEnabled: boolean // Controls whether auto-compact is enabled
+  /**
+   * 覆蓋 context window 估算值（tokens）。
+   *
+   * 用於 auto-compact 閾值計算；主要在 llama.cpp 場景下使用（當 /slots 無法查到
+   * server 的 n_ctx 時走此值）。未設定或 <= 0 則走下一層 fallback。
+   *
+   * 優先序（getContextWindowForModel）：/slots → LLAMACPP_CTX_SIZE env →
+   *   本欄位 → llamacpp.json.contextSize → MODEL_CONTEXT_WINDOW_DEFAULT (128K)
+   */
+  contextSize?: number
   showTurnDuration: boolean // Controls whether to show turn duration message (e.g., "Cooked for 1m 6s")
   /**
    * @deprecated Use settings.env instead.
@@ -604,6 +614,7 @@ function createDefaultGlobalConfig(): GlobalConfig {
     verbose: false,
     editorMode: 'normal',
     autoCompactEnabled: true,
+    contextSize: 131072,
     showTurnDuration: true,
     hasSeenTasksHint: false,
     hasUsedStash: false,

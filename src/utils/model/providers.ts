@@ -132,7 +132,7 @@ export async function queryLlamaCppContextSize(
     })
     if (!res.ok) {
       warnOnceCtxSizeMissing(
-        `llama-server /slots HTTP ${res.status}; 若模型非 200K 請設 LLAMACPP_CTX_SIZE=<tokens>`,
+        `llama-server /slots HTTP ${res.status}; 若模型非 128K 請設 LLAMACPP_CTX_SIZE=<tokens> 或編輯 ~/.my-agent/.my-agent.json 的 contextSize`,
       )
       return null
     }
@@ -143,11 +143,11 @@ export async function queryLlamaCppContextSize(
       return n_ctx
     }
     warnOnceCtxSizeMissing(
-      `llama-server /slots 未回傳 n_ctx；若模型非 200K 請設 LLAMACPP_CTX_SIZE=<tokens>`,
+      `llama-server /slots 未回傳 n_ctx；若模型非 128K 請設 LLAMACPP_CTX_SIZE=<tokens> 或編輯 ~/.my-agent/.my-agent.json 的 contextSize`,
     )
   } catch (e) {
     warnOnceCtxSizeMissing(
-      `llama-server /slots 查詢失敗（${e instanceof Error ? e.message : String(e)}）；若模型非 200K 請設 LLAMACPP_CTX_SIZE=<tokens>，否則 auto-compact 閾值會落在 200K 造成溢出`,
+      `llama-server /slots 查詢失敗（${e instanceof Error ? e.message : String(e)}）；若模型非 128K 請設 LLAMACPP_CTX_SIZE=<tokens> 或編輯 ~/.my-agent/.my-agent.json 的 contextSize，否則 auto-compact 閾值會落在 128K`,
     )
   }
   return null
