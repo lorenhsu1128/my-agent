@@ -50,6 +50,14 @@ function formatTaskId(id: string): string {
   return id
 }
 
+/** Local-time display used by history rows. Zero-padded YYYY-MM-DD HH:MM:SS
+ * in the user's timezone — easier to correlate with wall-clock than ISO UTC. */
+function formatLocalTime(ts: number): string {
+  const d = new Date(ts)
+  const pad = (n: number): string => n.toString().padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 export function CronPicker({ onExit }: Props): React.ReactNode {
   const [mode, setMode] = useState<Mode>('list')
   const [tasks, setTasks] = useState<CronTask[]>([])
@@ -693,7 +701,7 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
               return (
                 <Box key={h.ts}>
                   <Text color={color}>{mark} </Text>
-                  <Text dimColor>{new Date(h.ts).toISOString()} </Text>
+                  <Text dimColor>{formatLocalTime(h.ts)} </Text>
                   <Text>
                     {typeof h.durationMs === 'number' ? `${h.durationMs}ms ` : ''}
                     att={h.attempt ?? 1}
@@ -932,7 +940,7 @@ function CronDetail({
           return (
             <Box key={h.ts}>
               <Text color={color}>{mark} </Text>
-              <Text dimColor>{new Date(h.ts).toISOString()} </Text>
+              <Text dimColor>{formatLocalTime(h.ts)} </Text>
               <Text>
                 {typeof h.durationMs === 'number' ? `${h.durationMs}ms ` : ''}
                 att={h.attempt ?? 1}
