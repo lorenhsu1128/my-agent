@@ -250,7 +250,7 @@ if scope_includes "B" || scope_includes "build"; then
 
   # 注意 build:dev 可能需要較長；給 5 min
   log "  跑 bun run build:dev（較久）..."
-  BUILD_OUT="$(timeout 300 bun run build:dev 2>&1 | tail -30)"
+  BUILD_OUT="$(timeout -k 10s 300 bun run build:dev 2>&1 | tail -30)"
   if echo "$BUILD_OUT" | grep -qE "build error|✘|Bundle failed"; then
     test_fail "B2 build:dev" "build error"
     echo "$BUILD_OUT" >> "$REPORT_FILE"
@@ -359,7 +359,7 @@ if scope_includes "D" || scope_includes "cli"; then
     rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null
 
     # D1 算術（避開 grep 配對 prompt echo；LLM thinking 模型可能慢，給 60s）
-    OUT=$(timeout 60 $BIN -p "請只回一個阿拉伯數字：2+2 等於幾" 2>&1 | tail -5)
+    OUT=$(timeout -k 10s 60 $BIN -p "請只回一個阿拉伯數字：2+2 等於幾" 2>&1 | tail -5)
     if echo "$OUT" | grep -qE "\b4\b|^4$|是 4"; then
       test_pass "D1 算術 2+2=4"
     else
@@ -367,7 +367,7 @@ if scope_includes "D" || scope_includes "cli"; then
     fi
 
     # D2 工具呼叫
-    OUT=$(timeout 60 $BIN -p "讀 package.json 然後回 name 欄位的值" 2>&1 | tail -10)
+    OUT=$(timeout -k 10s 60 $BIN -p "讀 package.json 然後回 name 欄位的值" 2>&1 | tail -10)
     if echo "$OUT" | grep -qE "my-agent"; then
       test_pass "D2 Read tool"
     else
@@ -375,7 +375,7 @@ if scope_includes "D" || scope_includes "cli"; then
     fi
 
     # D3 unset API key — LLM 冷啟動可能 1m+，給 90s
-    OUT=$(env -u ANTHROPIC_API_KEY timeout 90 $BIN -p "請只回一個阿拉伯數字：3+5 等於幾" 2>&1 | tail -5)
+    OUT=$(env -u ANTHROPIC_API_KEY timeout -k 10s 90 $BIN -p "請只回一個阿拉伯數字：3+5 等於幾" 2>&1 | tail -5)
     if echo "$OUT" | grep -qE "\b8\b|^8$|是 8"; then
       test_pass "D3 unset API key 仍可對話"
     else
@@ -383,7 +383,7 @@ if scope_includes "D" || scope_includes "cli"; then
     fi
 
     # D4 fake API key
-    OUT=$(ANTHROPIC_API_KEY=fake-test-key timeout 30 $BIN -p "ok" 2>&1 | tail -5)
+    OUT=$(ANTHROPIC_API_KEY=fake-test-key timeout -k 10s 30 $BIN -p "ok" 2>&1 | tail -5)
     if echo "$OUT" | grep -qE "401|Unauthorized|Anthropic"; then
       test_fail "D4 fake key" "走錯 endpoint"
     else
@@ -392,7 +392,7 @@ if scope_includes "D" || scope_includes "cli"; then
 
     # D5 啟動時間（fast path --version）
     START=$(date +%s)
-    timeout 10 $BIN --version > /dev/null 2>&1
+    timeout -k 10s 10 $BIN --version > /dev/null 2>&1
     END=$(date +%s)
     DUR=$((END-START))
     if [[ $DUR -lt 10 ]]; then
@@ -407,7 +407,7 @@ if scope_includes "D" || scope_includes "cli"; then
     # 走 fast path，但仍會 import 整個 module 樹 — feature flag 殘留 / dangling
     # import / vendored SDK import 壞都會立刻爆 + 1m 內完成。
     if [[ -f ./scripts/dev.ts ]]; then
-      OUT=$(timeout 90 bun run ./scripts/dev.ts --version 2>&1 | tail -5)
+      OUT=$(timeout -k 10s 90 bun run ./scripts/dev.ts --version 2>&1 | tail -5)
       RC=$?
       if [[ $RC -eq 0 ]] && echo "$OUT" | grep -qE "[0-9]+\.[0-9]+\."; then
         test_pass "D6 SRC mode (bun run dev) --version 通"
@@ -478,7 +478,7 @@ if scope_includes "E" || scope_includes "daemon"; then
     # E2 print mode while daemon up — 注意：`-p` 不走 thin-client（standalone
     # 直打 llama.cpp），這裡只驗 daemon 在跑時 print 路徑仍正常。真實 thin-client
     # attach 由 E4 驗證（M-DECOUPLE-3-3）。LLM 冷啟動可能 1m+，給 150s。
-    OUT=$(timeout 150 $BIN -p "請只回 4" 2>&1 | tail -5)
+    OUT=$(timeout -k 10s 150 $BIN -p "請只回 4" 2>&1 | tail -5)
     if echo "$OUT" | grep -qE "\b4\b|^4$"; then
       test_pass "E2 print mode while daemon up（回 4）"
     else
@@ -489,7 +489,7 @@ if scope_includes "E" || scope_includes "daemon"; then
     # 等 hello frame、送 permissionContextSync、close。比 E2 精準，
     # daemon.log 會有 `client connected` 紀錄。
     PING_LOG_BEFORE=$(grep -c "client connected" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
-    OUT=$(timeout 30 bun run "$ROOT/tests/e2e/_thinClientPing.ts" 2>&1)
+    OUT=$(timeout -k 10s 30 bun run "$ROOT/tests/e2e/_thinClientPing.ts" 2>&1)
     PING_RC=$?
     PING_LOG_AFTER=$(grep -c "client connected" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
     PING_DELTA=$((PING_LOG_AFTER - PING_LOG_BEFORE))
@@ -502,7 +502,7 @@ if scope_includes "E" || scope_includes "daemon"; then
     # E5 完整 turn — 用 REPL 真正用的 createFallbackManager + createDaemonDetector，
     # 送 sendInput 等 turnEnd 抽 assistant output。比 E4 多驗 input/runnerEvent/
     # turnEnd 整個 protocol；差別只剩 React 渲染（PTY 互動 REPL 留 M-DECOUPLE-3-5）。
-    OUT=$(timeout 180 bun run "$ROOT/tests/e2e/_thinClientTurn.ts" 2>&1)
+    OUT=$(timeout -k 10s 180 bun run "$ROOT/tests/e2e/_thinClientTurn.ts" 2>&1)
     TURN_RC=$?
     if [[ $TURN_RC -eq 0 ]] && echo "$OUT" | grep -q 'output="9"'; then
       test_pass "E5 thin-client turn（4+5=9 via runnerEvent）"
@@ -747,7 +747,7 @@ if scope_includes "G" || scope_includes "memory"; then
 
     # G3 unset ANTHROPIC_API_KEY 走 llama.cpp 不 401
     BIN=$([[ -f ./cli-dev.exe ]] && echo ./cli-dev.exe || echo ./cli)
-    OUT=$(env -u ANTHROPIC_API_KEY timeout 60 $BIN -p "ok" 2>&1 | tail -10)
+    OUT=$(env -u ANTHROPIC_API_KEY timeout -k 10s 60 $BIN -p "ok" 2>&1 | tail -10)
     if echo "$OUT" | grep -qE "401|Unauthorized|ANTHROPIC_API_KEY"; then
       test_fail "G3 memory recall pure llamacpp" "401 / unauthorized"
     else
