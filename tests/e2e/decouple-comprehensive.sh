@@ -14,6 +14,7 @@
 #   G. Memory recall    — sideQuery via llama.cpp / mtime fallback
 #   H. Auto mode        — yoloClassifier 不 401 / 不 unavailable
 #   I. Discord gateway  — module load / unit / 真 boot bot connected
+#   J. PTY REPL         — ink + daemon attach + assistant 渲染（M-DECOUPLE-3-6）
 #
 # 用法：
 #   bash tests/e2e/decouple-comprehensive.sh                 # 全部
@@ -30,6 +31,15 @@ set -uo pipefail
 SCOPE="${1:-all}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || exit 2
+
+# 三層 binary cascade — Windows 用 .exe、macOS dev build 無副檔名（cli-dev）、
+# 最後 fallback 到 production binary（./cli）。
+pick_bin() {
+  if [[ -f ./cli-dev.exe ]]; then echo ./cli-dev.exe
+  elif [[ -f ./cli-dev ]]; then echo ./cli-dev
+  else echo ./cli
+  fi
+}
 
 REPORT_FILE="$ROOT/tests/e2e/decouple-comprehensive-$(date +%Y%m%d-%H%M%S).txt"
 mkdir -p "$(dirname "$REPORT_FILE")"
@@ -349,7 +359,7 @@ fi
 # ═══════════════════════════════════════════════
 if scope_includes "D" || scope_includes "cli"; then
   section "D. CLI smoke（fresh cli-dev.exe）"
-  BIN=$([[ -f ./cli-dev.exe ]] && echo ./cli-dev.exe || echo ./cli)
+  BIN=$(pick_bin)
   if [[ $LLAMA_RUNNING -eq 0 ]]; then
     test_skip "D" "llama.cpp 未啟動"
   elif [[ ! -f "$BIN" ]]; then
@@ -429,7 +439,7 @@ fi
 # log 檔，子 shell 立刻 detach，daemon 持續活著。daemon stop 同樣處理。
 if scope_includes "E" || scope_includes "daemon"; then
   section "E. Daemon lifecycle"
-  BIN=$([[ -f ./cli-dev.exe ]] && echo ./cli-dev.exe || echo ./cli)
+  BIN=$(pick_bin)
   if [[ $LLAMA_RUNNING -eq 0 ]]; then
     test_skip "E" "llama.cpp 未啟動"
   elif [[ ! -f "$BIN" ]]; then
@@ -567,7 +577,7 @@ fi
 # ═══════════════════════════════════════════════
 if scope_includes "F" || scope_includes "cron"; then
   section "F. Cron task lifecycle"
-  BIN=$([[ -f ./cli-dev.exe ]] && echo ./cli-dev.exe || echo ./cli)
+  BIN=$(pick_bin)
 
   # F0 cronNlParser 不 throw（純單元測試，無 daemon）
   OUT=$(bun -e "
@@ -777,7 +787,7 @@ if scope_includes "G" || scope_includes "memory"; then
     fi
 
     # G3 unset ANTHROPIC_API_KEY 走 llama.cpp 不 401
-    BIN=$([[ -f ./cli-dev.exe ]] && echo ./cli-dev.exe || echo ./cli)
+    BIN=$(pick_bin)
     OUT=$(env -u ANTHROPIC_API_KEY timeout -k 10s 60 $BIN -p "ok" 2>&1 | tail -10)
     if echo "$OUT" | grep -qE "401|Unauthorized|ANTHROPIC_API_KEY"; then
       test_fail "G3 memory recall pure llamacpp" "401 / unauthorized"
@@ -831,7 +841,7 @@ fi
 # ═══════════════════════════════════════════════
 if scope_includes "I" || scope_includes "discord"; then
   section "I. Discord gateway"
-  BIN=$([[ -f ./cli-dev.exe ]] && echo ./cli-dev.exe || echo ./cli)
+  BIN=$(pick_bin)
 
   # I1 (a) — 5 個關鍵模組可動態 load + helper 不 throw
   OUT=$(bun -e "
@@ -921,6 +931,65 @@ if scope_includes "I" || scope_includes "discord"; then
       fi
 
       ( $BIN daemon stop > /tmp/d-discord-stop.log 2>&1 & )
+      for i in $(seq 1 12); do
+        [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        sleep 1
+      done
+      rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null || true
+    fi
+  fi
+fi
+
+# ═══════════════════════════════════════════════
+# J. PTY interactive REPL（M-DECOUPLE-3-6）
+#   J1 ink 啟動 + daemon attach（看到「Daemon 已連線」marker）
+#   J2 完整 turn — 送 4+5、stdout grep `\b9\b` 證 ink <Messages> 渲染 OK
+#
+# 注意：必須用 `npx tsx` 跑（不用 bun）— Bun + node-pty + ink alt-screen 在
+# Windows 會撞 async ERR_SOCKET_CLOSED；Node + node-pty 是 node-pty 設計目標。
+# 跨平台：node-pty prebuilt 含 Windows x64 + macOS arm64/x64；BIN cascade 三層
+# 已支援 macOS 無副檔名的 cli-dev。
+# ═══════════════════════════════════════════════
+if scope_includes "J" || scope_includes "pty" || scope_includes "repl"; then
+  section "J. PTY interactive REPL"
+  BIN=$(pick_bin)
+
+  if [[ ! -f "$BIN" ]]; then
+    test_skip "J1-J2" "$BIN 不存在"
+  elif [[ $LLAMA_RUNNING -eq 0 ]]; then
+    test_skip "J1-J2" "llama.cpp 未啟動"
+  elif ! command -v node > /dev/null 2>&1; then
+    test_skip "J1-J2" "node 不在 PATH（PTY test 需要 npx tsx）"
+  elif ! bun -e "import('node-pty')" > /dev/null 2>&1; then
+    test_skip "J1-J2" "node-pty 不可載入（執行 bun add -d node-pty）"
+  else
+    # 起 daemon — PTY test 靠 daemon 在跑才有 thin-client attach
+    ( $BIN daemon stop > /tmp/d-cleanup.log 2>&1 & ); sleep 2
+    rm -f "$HOME/.my-agent/daemon.pid.json"
+    ( $BIN daemon start > "$ROOT/tests/e2e/pty-daemon-start.log" 2>&1 & )
+    for i in $(seq 1 15); do
+      [[ -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+      sleep 1
+    done
+    sleep 5  # 給 daemon WS server / runner 完全就緒
+
+    if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+      test_fail "J1-J2 daemon start" "no pid.json"
+    else
+      OUT=$(timeout -k 10s 240 npx tsx "$ROOT/tests/e2e/_replInteractive.ts" 2>&1)
+      RC=$?
+      if echo "$OUT" | grep -q "phase1: attached marker seen"; then
+        test_pass "J1 PTY ink + daemon attach（看到 'Daemon 已連線'）"
+      else
+        test_fail "J1 PTY attach" "rc=$RC, $(echo "$OUT" | tail -3)"
+      fi
+      if [[ $RC -eq 0 ]] && echo "$OUT" | grep -q "phase2: answer 9"; then
+        test_pass "J2 PTY ink Messages 渲染（assistant 'X+Y=9' 進 stdout）"
+      else
+        test_fail "J2 PTY render" "rc=$RC（5=ink 渲染壞 / 4=從沒 attached / 3=PTY 起不來）"
+      fi
+
+      ( $BIN daemon stop > /tmp/d-pty-stop.log 2>&1 & )
       for i in $(seq 1 12); do
         [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
         sleep 1
