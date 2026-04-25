@@ -425,3 +425,60 @@
 - **日期**：2026-04-20
 
 ---
+
+## E2E 測試套件（M-DECOUPLE-3）
+
+### Bun + node-pty + ink alt-screen → async ERR_SOCKET_CLOSED
+
+- **發生什麼事**：用 Bun 1.3.12 跑 `bun run tests/e2e/_replInteractive.ts`（PTY-based 互動 REPL E2E）— Phase 1 抓到 daemon attach marker 後，下一行 `term.write('text')` 從 `node:net:888` 拋 `Socket is closed`，stack 裡看到 `node-pty/lib/windowsTerminal.js:144`、無法 try/catch（async uncaught）。
+- **根本原因**：node-pty 是 Node.js 設計目標的 native module（內部用 `net.Socket` 做 IPC），Bun runtime 在 ink 進入 raw mode / alt-screen 後對 internal socket close 行為與 Node 不同。改 `useConpty: false` 走 winpty 也撞同一條 stack — 不是 ConPTY vs winpty 問題、是 Bun + node-pty + ink 三方湊。
+- **正確做法**：PTY E2E 測試固定走 Node 跑（`npx tsx tests/e2e/_replInteractive.ts`），不走 bun。decouple-comprehensive.sh 的 J section 已 hardcode `npx tsx`。bun 跑也支援 Phase 1（attach marker），但 Phase 2 必失敗。
+- **相關檔案**：`tests/e2e/_replInteractive.ts`、`tests/e2e/decouple-comprehensive.sh` J section
+- **日期**：2026-04-25
+
+### ConPTY spawn 必須吃絕對路徑
+
+- **發生什麼事**：`pty.spawn('./cli-dev.exe', [], {...})` 直接拋 `File not found:`（注意 message 後面是空字串）。
+- **根本原因**：node-pty 在 Windows 用 ConPTY agent 做 spawn，相對路徑解析跟 OS 預期的不同。macOS PTY 接受相對路徑但不一致沒意義。
+- **正確做法**：spawn 前用 `resolve(candidate)` 轉絕對路徑，跨平台都丟絕對。`pickBinary()` helper 三層 cascade（`cli-dev.exe` / `cli-dev` / `cli`）後一律 resolve()。
+- **相關檔案**：`tests/e2e/_replInteractive.ts:63-68`
+- **日期**：2026-04-25
+
+### ink TextInput 把合併寫的 trailing `\r` 當 SSH-coalesced Enter strip 掉
+
+- **發生什麼事**：`term.write('4+5 等於幾\r')` 文字進輸入框正確，但 Enter 沒觸發 — prompt 還停在 `❯ 4+5 等於幾`，沒提交。
+- **根本原因**：`src/hooks/useTextInput.ts:402` 的 `.replace(/(?<=[^\\\r\n])\r$/, '')` 把「文字尾巴 + 單個 \r」當 SSH 合併把 Enter 連在訊息後面送的場景處理 — strip 掉 \r 不當 submit。要走 `key.return` path 必須 \r **獨立**到達，不能合併。
+- **正確做法**：text 跟 Enter 分開兩次 `term.write`，中間 `await sleep(300)` 確保 ink reader 把 text 接完才送 \r：
+  ```ts
+  term.write('4+5 等於幾，只回阿拉伯數字')
+  await sleep(300)
+  term.write('\r')
+  ```
+- **相關檔案**：`tests/e2e/_replInteractive.ts:170-180`、`src/hooks/useTextInput.ts:402`
+- **日期**：2026-04-25
+
+### `timeout N CMD` 偶發不殺 child（Bun + Windows）
+
+- **發生什麼事**：full E2E 跑到 E section 卡住，daemon force-kill 才清；事後查發現 bash 腳本的 `timeout 150 cli-dev.exe -p ...` 過了 150s 仍沒回，bash 主流程一直 wait 不前進。
+- **根本原因**：GNU `timeout` 預設只送 `SIGTERM`；child 若忽略訊號（卡 syscall / 子 process reap 等待 / IO buffer flush 等），timeout 時間到了 child 仍活著，bash wait 不到。
+- **正確做法**：改 `timeout -k 10s N CMD` — N 秒送 TERM，再過 10s 還沒退就 KILL，bash 主流程最壞 +10s 一定拿到 exit code。`tests/e2e/decouple-comprehensive.sh` 11 處 timeout 統一加上。
+- **相關檔案**：`tests/e2e/decouple-comprehensive.sh`（commit 4999d1c）
+- **日期**：2026-04-25
+
+### F section cron e2e task 殘留 → 撞 E5 sendInput 變 P0 false-positive
+
+- **發生什麼事**：`_thinClientTurn.ts` 第二次跑直接 `turn ended with reason=aborted`；之前剛剛還過。
+- **根本原因**：F section 寫進 `e2etest1777*` cron task（`* * * * *`，每分鐘 fire）跑完應 cleanup。原本靠 backup/restore（cp 原檔 → 寫新版本 → mv backup 回），但**前次 F 跑壞 → 沒 restore → 下次 F 把這份「污染狀態」當 backup → 鏈式累積**。daemon 重起後 cron scheduler 撿到殘留 task 開始 fire；E5 `sendInput intent='interactive'` 撞到正在跑的 cron turn → InputQueue interruptAndReplace → cron turn aborted + force-cleared。
+- **正確做法**：(a) E section 開頭加 prophylactic 清理 — 讀 `scheduled_tasks.jsonc` 後 filter 砍 `e2etest*` 才繼續；(b) F cleanup 也用 filter 不只靠 backup/restore。雙保險。
+- **相關檔案**：`tests/e2e/decouple-comprehensive.sh`（commit fbc266f E section + F cleanup）
+- **日期**：2026-04-25
+
+### daemon stdout banner 在 daemon 還在 run 時不 flush 到 file（OS pipe buffering）
+
+- **發生什麼事**：I3 Discord gateway 測試 `( cli-dev.exe daemon start > pty-daemon-start.log 2>&1 & )` 起 daemon，daemon 確實在跑（pid.json 有、`discord ready` 進 daemon.log）— 但 `pty-daemon-start.log` **空檔**，grep `bot connected` 找不到。
+- **根本原因**：daemon 是 long-running blocked process，stdout fd 被 daemon 一直握著、OS pipe / file 緩衝沒 flush 到磁碟。要等 daemon 退（`daemon stop`）file system 才看到內容。
+- **正確做法**：authoritative source 改 `~/.my-agent/daemon.log`（daemon 寫完即 fsync），不靠 stdout banner。grep 用 daemon.log 的 `discord ready` + `slash commands registered` 雙 marker 確認 gateway 起來。
+- **相關檔案**：`tests/e2e/decouple-comprehensive.sh` I3 段
+- **日期**：2026-04-25
+
+---
