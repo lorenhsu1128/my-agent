@@ -1981,3 +1981,5 @@
 - 2026-04-25 08:52: Session 結束 | 進度：505/550 任務 | 7f11a35 chore(todo): session 結束 log — ctx size fix 驗收與 daemon 重啟
 
 - 2026-04-25 08:59: Session 結束 | 進度：505/550 任務 | 7f11a35 chore(todo): session 結束 log — ctx size fix 驗收與 daemon 重啟
+
+- 2026-04-25 09:09: Session 結束 | 進度：505/550 任務 | 340b5d1 docs(p2): 已完成 milestone 規劃文件歸檔至 docs/archive/
