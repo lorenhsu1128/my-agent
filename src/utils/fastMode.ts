@@ -1,6 +1,3 @@
-import axios from 'axios'
-import { getApiBaseUrl } from 'src/constants/apiBase.js'
-import { OAUTH_BETA_HEADER } from 'src/constants/oauth.js'
 import {
   getIsNonInteractiveSession,
   getKairosActive,
@@ -10,12 +7,6 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../services/analytics/index.js'
-import {
-  getAnthropicApiKey,
-  getClaudeAIOAuthTokens,
-  handleOAuth401Error,
-  hasProfileScope,
-} from './auth.js'
 import { isInBundledMode } from './bundledMode.js'
 import { getGlobalConfig, saveGlobalConfig } from './config.js'
 import { logForDebugging } from './debug.js'
@@ -27,7 +18,6 @@ import {
   parseUserSpecifiedModel,
 } from './model/model.js'
 import { getAPIProvider } from './model/providers.js'
-import { isEssentialTrafficOnly } from './privacyLevel.js'
 import {
   getInitialSettings,
   getSettingsForSource,
@@ -127,8 +117,8 @@ export function getFastModeUnavailableReason(): string | null {
         return null
       }
     }
-    const authType: AuthType =
-      getClaudeAIOAuthTokens() !== null ? 'oauth' : 'api-key'
+    // my-agent: OAuth path removed (Phase 2E decoupling). Always api-key/local.
+    const authType: AuthType = 'api-key'
     const reason = getDisabledReasonMessage(orgStatus.reason, authType)
     logForDebugging(`Fast mode unavailable: ${reason}`)
     return reason
@@ -357,35 +347,16 @@ let orgStatus: FastModeOrgStatus = { status: 'pending' }
 const orgFastModeChange = createSignal<[orgEnabled: boolean]>()
 export const onOrgFastModeChanged = orgFastModeChange.subscribe
 
-type FastModeResponse = {
-  enabled: boolean
-  disabled_reason: FastModeDisabledReason | null
-}
-
-async function fetchFastModeStatus(
-  auth: { accessToken: string } | { apiKey: string },
-): Promise<FastModeResponse> {
-  const endpoint = `${getApiBaseUrl()}/api/claude_code_penguin_mode`
-  const headers: Record<string, string> =
-    'accessToken' in auth
-      ? {
-          Authorization: `Bearer ${auth.accessToken}`,
-          'anthropic-beta': OAUTH_BETA_HEADER,
-        }
-      : { 'x-api-key': auth.apiKey }
-
-  const response = await axios.get<FastModeResponse>(endpoint, { headers })
-  return response.data
-}
-
-const PREFETCH_MIN_INTERVAL_MS = 30_000
-let lastPrefetchAt = 0
-let inflightPrefetch: Promise<void> | null = null
+// my-agent (Phase 2E decoupling): The cloud `/api/claude_code_penguin_mode`
+// prefetch path was removed. Fast mode org status is now resolved purely from
+// the local cached `penguinModeOrgEnabled` config flag. The OAuth / API-key
+// fetch + 401 retry + axios round-trip have been deleted, but the public
+// surface (`prefetchFastModeStatus` / `resolveFastModeStatusFromCache`) is
+// preserved as no-op shims so the existing call sites in main.tsx, fast.tsx
+// keep working without change.
 
 /**
  * Resolve orgStatus from the persisted cache without making any API calls.
- * Used when startup prefetches are throttled to avoid hitting the network
- * while still making fast mode availability checks work.
  */
 export function resolveFastModeStatusFromCache(): void {
   if (!isFastModeEnabled()) {
@@ -402,129 +373,10 @@ export function resolveFastModeStatusFromCache(): void {
       : { status: 'disabled', reason: 'unknown' }
 }
 
+/**
+ * Originally hit `/api/claude_code_penguin_mode`. Cloud path removed; now
+ * just resolves from cache so call sites in main.tsx / fast.tsx still work.
+ */
 export async function prefetchFastModeStatus(): Promise<void> {
-  // Skip network requests if nonessential traffic is disabled
-  if (isEssentialTrafficOnly()) {
-    return
-  }
-
-  if (!isFastModeEnabled()) {
-    return
-  }
-
-  if (inflightPrefetch) {
-    logForDebugging(
-      'Fast mode prefetch in progress, returning in-flight promise',
-    )
-    return inflightPrefetch
-  }
-
-  // Service key OAuth sessions lack user:profile scope → endpoint 403s.
-  // Resolve orgStatus from cache and bail before burning the throttle window.
-  // API key auth is unaffected.
-  const apiKey = getAnthropicApiKey()
-  const hasUsableOAuth =
-    getClaudeAIOAuthTokens()?.accessToken && hasProfileScope()
-  if (!hasUsableOAuth && !apiKey) {
-    const isAnt = process.env.USER_TYPE === 'ant'
-    const cachedEnabled = getGlobalConfig().penguinModeOrgEnabled === true
-    orgStatus =
-      isAnt || cachedEnabled
-        ? { status: 'enabled' }
-        : { status: 'disabled', reason: 'preference' }
-    return
-  }
-
-  const now = Date.now()
-  if (now - lastPrefetchAt < PREFETCH_MIN_INTERVAL_MS) {
-    logForDebugging('Skipping fast mode prefetch, fetched recently')
-    return
-  }
-  lastPrefetchAt = now
-
-  const fetchWithCurrentAuth = async (): Promise<FastModeResponse> => {
-    const currentTokens = getClaudeAIOAuthTokens()
-    const auth =
-      currentTokens?.accessToken && hasProfileScope()
-        ? { accessToken: currentTokens.accessToken }
-        : apiKey
-          ? { apiKey }
-          : null
-    if (!auth) {
-      throw new Error('No auth available')
-    }
-    return fetchFastModeStatus(auth)
-  }
-
-  async function doFetch(): Promise<void> {
-    try {
-      let status: FastModeResponse
-      try {
-        status = await fetchWithCurrentAuth()
-      } catch (err) {
-        const isAuthError =
-          axios.isAxiosError(err) &&
-          (err.response?.status === 401 ||
-            (err.response?.status === 403 &&
-              typeof err.response?.data === 'string' &&
-              err.response.data.includes('OAuth token has been revoked')))
-        if (isAuthError) {
-          const failedAccessToken = getClaudeAIOAuthTokens()?.accessToken
-          if (failedAccessToken) {
-            await handleOAuth401Error(failedAccessToken)
-            status = await fetchWithCurrentAuth()
-          } else {
-            throw err
-          }
-        } else {
-          throw err
-        }
-      }
-
-      const previousEnabled =
-        orgStatus.status !== 'pending'
-          ? orgStatus.status === 'enabled'
-          : getGlobalConfig().penguinModeOrgEnabled
-      orgStatus = status.enabled
-        ? { status: 'enabled' }
-        : {
-            status: 'disabled',
-            reason: status.disabled_reason ?? 'preference',
-          }
-      if (previousEnabled !== status.enabled) {
-        // When org disables fast mode, permanently turn off the user's fast mode setting
-        if (!status.enabled) {
-          updateSettingsForSource('userSettings', { fastMode: undefined })
-        }
-        saveGlobalConfig(current => ({
-          ...current,
-          penguinModeOrgEnabled: status.enabled,
-        }))
-        orgFastModeChange.emit(status.enabled)
-      }
-      logForDebugging(
-        `Org fast mode: ${status.enabled ? 'enabled' : `disabled (${status.disabled_reason ?? 'preference'})`}`,
-      )
-    } catch (err) {
-      // On failure: ants default to enabled (don't block internal users).
-      // External users: fall back to the cached penguinModeOrgEnabled value;
-      // if no positive cache, disable with network_error reason.
-      const isAnt = process.env.USER_TYPE === 'ant'
-      const cachedEnabled = getGlobalConfig().penguinModeOrgEnabled === true
-      orgStatus =
-        isAnt || cachedEnabled
-          ? { status: 'enabled' }
-          : { status: 'disabled', reason: 'network_error' }
-      logForDebugging(
-        `Failed to fetch org fast mode status, defaulting to ${orgStatus.status === 'enabled' ? 'enabled (cached)' : 'disabled (network_error)'}: ${err}`,
-        { level: 'error' },
-      )
-      logEvent('tengu_org_penguin_mode_fetch_failed', {})
-    } finally {
-      inflightPrefetch = null
-    }
-  }
-
-  inflightPrefetch = doFetch()
-  return inflightPrefetch
+  resolveFastModeStatusFromCache()
 }

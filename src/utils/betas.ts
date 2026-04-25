@@ -17,8 +17,10 @@ import {
   TOOL_SEARCH_BETA_HEADER_3P,
   WEB_SEARCH_BETA_HEADER,
 } from '../constants/betas.js'
-import { OAUTH_BETA_HEADER } from '../constants/oauth.js'
-import { isClaudeAISubscriber } from './auth.js'
+// my-agent (Phase 2E): OAUTH_BETA_HEADER + isClaudeAISubscriber dropped — the
+// claude.ai subscriber path is permanently disabled in this fork (auth.ts's
+// isClaudeAISubscriber always returns false), so the OAuth beta header push
+// and the subscriber-only filterAllowedSdkBetas branch were dead code.
 import { has1mContext } from './context.js'
 import { isEnvDefinedFalsy, isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
@@ -64,14 +66,7 @@ export function filterAllowedSdkBetas(
     return undefined
   }
 
-  if (isClaudeAISubscriber()) {
-    // biome-ignore lint/suspicious/noConsole: intentional warning
-    console.warn(
-      'Warning: Custom betas are only available for API key users. Ignoring provided betas.',
-    )
-    return undefined
-  }
-
+  // my-agent: claude.ai subscriber check removed (always false in this fork).
   const { allowed, disallowed } = partitionBetasByAllowlist(sdkBetas)
   for (const beta of disallowed) {
     // biome-ignore lint/suspicious/noConsole: intentional warning
@@ -243,9 +238,8 @@ export const getAllModelBetas = memoize((model: string): string[] => {
       }
     }
   }
-  if (isClaudeAISubscriber()) {
-    betaHeaders.push(OAUTH_BETA_HEADER)
-  }
+  // my-agent: OAUTH_BETA_HEADER push gated on isClaudeAISubscriber removed —
+  // subscriber path is hardcoded off in this fork.
   if (has1mContext(model)) {
     betaHeaders.push(CONTEXT_1M_BETA_HEADER)
   }
