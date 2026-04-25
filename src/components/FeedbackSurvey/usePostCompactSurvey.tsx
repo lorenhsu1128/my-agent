@@ -1,7 +1,6 @@
 import { c as _c } from "react/compiler-runtime";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isFeedbackSurveyDisabled } from 'src/services/analytics/config.js';
-import { checkStatsigFeatureGate_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
 import { shouldUseSessionMemoryCompaction } from '../../services/compact/sessionMemoryCompact.js';
 import type { Message } from '../../types/message.js';
@@ -80,7 +79,7 @@ export function usePostCompactSurvey(messages, isLoading, t0, t1) {
       if (!enabled) {
         return;
       }
-      setGateEnabled(checkStatsigFeatureGate_CACHED_MAY_BE_STALE(POST_COMPACT_SURVEY_GATE));
+      setGateEnabled(true);
     };
     t7 = [enabled];
     $[4] = enabled;

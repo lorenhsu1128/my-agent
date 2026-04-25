@@ -64,7 +64,6 @@ import { init, initializeTelemetryAfterTrust } from './entrypoints/init.js';
 import { addToHistory } from './history.js';
 import type { Root } from './ink.js';
 import { launchRepl } from './replLauncher.js';
-import { hasGrowthBookEnvOverride, initializeGrowthBook, refreshGrowthBookAfterAuthChange } from './services/analytics/growthbook.js';
 import { fetchBootstrapData } from './services/api/bootstrap.js';
 import { type DownloadResult, downloadSessionFiles, type FilesApiConfig, parseFileSpecs } from './services/api/filesApi.js';
 import { prefetchPassesEligibility } from './services/api/referral.js';
@@ -112,7 +111,6 @@ const assistantModule = feature('KAIROS') ? require('./assistant/index.js') as t
 const kairosGate = feature('KAIROS') ? require('./assistant/gate.js') as typeof import('./assistant/gate.js') : null;
 import { relative, resolve } from 'path';
 import { isAnalyticsDisabled } from 'src/services/analytics/config.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
 import { initializeAnalyticsGates } from 'src/services/analytics/sink.js';
 import { getOriginalCwd, setAdditionalDirectoriesForClaudeMd, setIsRemoteMode, setMainLoopModelOverride, setMainThreadAgentType, setTeleportedSessionInfo } from './bootstrap/state.js';
@@ -1964,10 +1962,6 @@ async function run(): Promise<CommanderCommand> {
     //  - explicit model via --model or ANTHROPIC_MODEL (both feed alias resolution)
     //  - no env override (which short-circuits _CACHED_MAY_BE_STALE before disk)
     //  - flag absent from disk (== null also catches pre-#22279 poisoned null)
-    const explicitModel = options.model || process.env.ANTHROPIC_MODEL;
-    if ("external" === 'ant' && explicitModel && explicitModel !== 'default' && !hasGrowthBookEnvOverride('tengu_ant_model_override') && getGlobalConfig().cachedGrowthBookFeatures?.['tengu_ant_model_override'] == null) {
-      await initializeGrowthBook();
-    }
 
     // Special case the default model with the null keyword
     // NOTE: Model resolution happens after setup() to ensure trust is established before AWS auth
@@ -2236,10 +2230,8 @@ async function run(): Promise<CommanderCommand> {
         // Keep in sync with the post-login logic in src/commands/login.tsx
         void refreshRemoteManagedSettings();
         void refreshPolicyLimits();
-        // Clear user data cache BEFORE GrowthBook refresh so it picks up fresh credentials
+        // Clear user data cache after login so it picks up fresh credentials
         resetUserCache();
-        // Refresh GrowthBook after login to get updated feature flags (e.g., for claude.ai MCPs)
-        refreshGrowthBookAfterAuthChange();
         // Clear any stale trusted device token then enroll for Remote Control.
         // Both self-gate on tengu_sessions_elevated_auth_enforcement internally
         // — enrollTrustedDevice() via checkGate_CACHED_OR_BLOCKING (awaits
@@ -2296,7 +2288,7 @@ async function run(): Promise<CommanderCommand> {
     // --bare / SIMPLE: skip — these are cache-warms for the REPL's
     // first-turn responsiveness (quota, passes, fastMode, bootstrap data). Fast
     // mode doesn't apply to the Agent SDK anyway (see getFastModeUnavailableReason).
-    const bgRefreshThrottleMs = getFeatureValue_CACHED_MAY_BE_STALE('tengu_cicada_nap_ms', 0);
+    const bgRefreshThrottleMs = 0;
     const lastPrefetched = getGlobalConfig().startupPrefetchedAt ?? 0;
     const skipStartupPrefetches = isBareMode() || bgRefreshThrottleMs > 0 && Date.now() - lastPrefetched < bgRefreshThrottleMs;
     if (!skipStartupPrefetches) {
@@ -2309,7 +2301,7 @@ async function run(): Promise<CommanderCommand> {
 
       // TODO: Consolidate other prefetches into a single bootstrap request.
       void prefetchPassesEligibility();
-      if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_miraculo_the_bard', false)) {
+      if (!true) {
         void prefetchFastModeStatus();
       } else {
         // Kill switch skips the network call, not org-policy enforcement.
@@ -3366,7 +3358,7 @@ async function run(): Promise<CommanderCommand> {
         const hasInitialPrompt = remote.length > 0;
 
         // Check if TUI mode is enabled - description is only optional in TUI mode
-        const isRemoteTuiEnabled = getFeatureValue_CACHED_MAY_BE_STALE('tengu_remote_backend', false);
+        const isRemoteTuiEnabled = true;
         if (!isRemoteTuiEnabled && !hasInitialPrompt) {
           return await exitWithError(root, 'Error: --remote requires a description.\nUsage: claude --remote "your task description"', () => gracefulShutdown(1));
         }

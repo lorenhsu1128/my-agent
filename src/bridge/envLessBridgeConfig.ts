@@ -1,5 +1,4 @@
 import { z } from 'zod/v4'
-import { getFeatureValue_DEPRECATED } from '../services/analytics/growthbook.js'
 import { lazySchema } from '../utils/lazySchema.js'
 import { lt } from '../utils/semver.js'
 import { isEnvLessBridgeEnabled } from './bridgeEnabled.js'
@@ -128,12 +127,7 @@ const envLessBridgeConfigSchema = lazySchema(() =>
  * warns against startup-path usage, which this isn't.
  */
 export async function getEnvLessBridgeConfig(): Promise<EnvLessBridgeConfig> {
-  const raw = await getFeatureValue_DEPRECATED<unknown>(
-    'tengu_bridge_repl_v2_config',
-    DEFAULT_ENV_LESS_BRIDGE_CONFIG,
-  )
-  const parsed = envLessBridgeConfigSchema().safeParse(raw)
-  return parsed.success ? parsed.data : DEFAULT_ENV_LESS_BRIDGE_CONFIG
+  return DEFAULT_ENV_LESS_BRIDGE_CONFIG
 }
 
 /**

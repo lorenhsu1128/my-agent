@@ -13,7 +13,6 @@ import { useNotifications } from '../context/notifications.js';
 import type { PermissionMode, SDKMessage } from '../entrypoints/agentSdkTypes.js';
 import type { SDKControlResponse } from '../entrypoints/sdk/controlTypes.js';
 import { Text } from '../ink.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js';
 import { useAppState, useAppStateStore, useSetAppState } from '../state/AppState.js';
 import type { Message } from '../types/message.js';
 import { getCwd } from '../utils/cwd.js';
@@ -288,7 +287,7 @@ export function useReplBridge(messages: Message[], setMessages: (action: React.S
                   // to put system/init on the REPL-bridge wire. Skills load is
                   // async (memoized, cheap after REPL startup); fire-and-forget
                   // so the connected-state transition isn't blocked.
-                  if (getFeatureValue_CACHED_MAY_BE_STALE('tengu_bridge_system_init', false)) {
+                  if (true) {
                     void (async () => {
                       try {
                         const skills = await getSlashCommandToolSkills(getCwd());

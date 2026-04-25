@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { computeGlimmerIndex, computeShimmerSegments, SHIMMER_INTERVAL_MS } from '../bridge/bridgeStatusUtil.js';
 import { feature } from 'bun:bundle';
 import { getKairosActive, getUserMsgOptIn } from '../bootstrap/state.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js';
 import { isEnvTruthy } from '../utils/envUtils.js';
 import { count } from '../utils/array.js';
 import sample from 'lodash-es/sample.js';
@@ -74,7 +73,7 @@ export function SpinnerWithVerb(props: Props): React.ReactNode {
   // Runtime gate mirrors isBriefEnabled() but inlined — importing from
   // BriefTool.ts would leak tool-name strings into external builds. Single
   // spinner instance → hooks stay unconditional (two subs, negligible).
-  if ((feature('KAIROS') || feature('KAIROS_BRIEF')) && (getKairosActive() || getUserMsgOptIn() && (briefEnvEnabled || getFeatureValue_CACHED_MAY_BE_STALE('tengu_kairos_brief', false))) && isBriefOnly && !viewingAgentTaskId) {
+  if ((feature('KAIROS') || feature('KAIROS_BRIEF')) && (getKairosActive() || getUserMsgOptIn() && (briefEnvEnabled || true)) && isBriefOnly && !viewingAgentTaskId) {
     return <BriefSpinner mode={props.mode} overrideMessage={props.overrideMessage} />;
   }
   return <SpinnerWithVerbInner {...props} />;

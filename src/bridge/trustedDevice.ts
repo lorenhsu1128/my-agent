@@ -2,10 +2,6 @@ import axios from 'axios'
 import memoize from 'lodash-es/memoize.js'
 import { hostname } from 'os'
 import { getOauthConfig } from '../constants/oauth.js'
-import {
-  checkGate_CACHED_OR_BLOCKING,
-  getFeatureValue_CACHED_MAY_BE_STALE,
-} from '../services/analytics/growthbook.js'
 import { logForDebugging } from '../utils/debug.js'
 import { errorMessage } from '../utils/errors.js'
 import { isEssentialTrafficOnly } from '../utils/privacyLevel.js'
@@ -33,7 +29,7 @@ import { jsonStringify } from '../utils/slowOperations.js'
 const TRUSTED_DEVICE_GATE = 'tengu_sessions_elevated_auth_enforcement'
 
 function isGateEnabled(): boolean {
-  return getFeatureValue_CACHED_MAY_BE_STALE(TRUSTED_DEVICE_GATE, false)
+  return true
 }
 
 // Memoized — secureStorage.read() spawns a macOS `security` subprocess (~40ms).
@@ -100,12 +96,6 @@ export async function enrollTrustedDevice(): Promise<void> {
     // checkGate_CACHED_OR_BLOCKING awaits any in-flight GrowthBook re-init
     // (triggered by refreshGrowthBookAfterAuthChange in login.tsx) before
     // reading the gate, so we get the post-refresh value.
-    if (!(await checkGate_CACHED_OR_BLOCKING(TRUSTED_DEVICE_GATE))) {
-      logForDebugging(
-        `[trusted-device] Gate ${TRUSTED_DEVICE_GATE} is off, skipping enrollment`,
-      )
-      return
-    }
     // If CLAUDE_TRUSTED_DEVICE_TOKEN is set (e.g. by an enterprise wrapper),
     // skip enrollment — the env var takes precedence in readStoredToken() so
     // any enrolled token would be shadowed and never used.

@@ -3,7 +3,6 @@ import { REMOTE_CONTROL_DISCONNECTED_MSG } from '../bridge/types.js';
 import type { Command } from '../commands.js';
 import { DIAMOND_OPEN } from '../constants/figures.js';
 import { getRemoteSessionUrl } from '../constants/product.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../services/analytics/index.js';
 import type { AppState } from '../state/AppStateStore.js';
 import { checkRemoteAgentEligibility, formatPreconditionError, RemoteAgentTask, type RemoteAgentTaskState, registerRemoteAgentTask } from '../tasks/RemoteAgentTask/RemoteAgentTask.js';
@@ -30,7 +29,7 @@ export const CCR_TERMS_URL = 'https://code.claude.com/docs/en/claude-code-on-the
 // load: the GrowthBook cache is empty at import and `/config` Gates can flip
 // it between invocations.
 function getUltraplanModel(): string {
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_ultraplan_model', ALL_MODEL_CONFIGS.opus46.firstParty);
+  return ALL_MODEL_CONFIGS.opus46.firstParty;
 }
 
 // prompt.txt is wrapped in <system-reminder> so the CCR browser hides

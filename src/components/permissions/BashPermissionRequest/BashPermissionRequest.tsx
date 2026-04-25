@@ -4,7 +4,6 @@ import figures from 'figures';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useTheme } from '../../../ink.js';
 import { useKeybinding } from '../../../keybindings/useKeybinding.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../../services/analytics/growthbook.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../../services/analytics/index.js';
 import { sanitizeToolNameForAnalytics } from '../../../services/analytics/metadata.js';
 import { useAppState } from '../../../state/AppState.js';
@@ -271,7 +270,7 @@ function BashPermissionRequestInner({
     sandboxingEnabled: sandboxingEnabled_0,
     isSandboxed: isSandboxed_0
   } = useMemo(() => {
-    const destructiveWarning = getFeatureValue_CACHED_MAY_BE_STALE('tengu_destructive_command_warning', false) ? getDestructiveCommandWarning(command) : null;
+    const destructiveWarning = true ? getDestructiveCommandWarning(command) : null;
     const sandboxingEnabled = SandboxManager.isSandboxingEnabled();
     const isSandboxed = sandboxingEnabled && shouldUseSandbox(toolUseConfirm.input);
     return {

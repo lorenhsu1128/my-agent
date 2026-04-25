@@ -10,7 +10,6 @@
  */
 
 import type { ContentBlockParam } from 'my-agent-ai/sdk/resources/messages'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -174,10 +173,7 @@ export async function launchRemoteReview(
   // total_wallclock must stay below RemoteAgentTask's 30min poll timeout
   // with headroom for finalization (~3min synthesis). Per-field guards
   // match autoDream.ts — GB cache can return stale wrong-type values.
-  const raw = getFeatureValue_CACHED_MAY_BE_STALE<Record<
-    string,
-    unknown
-  > | null>('tengu_review_bughunter_config', null)
+  const raw: Record<string, unknown> | null = null
   const posInt = (v: unknown, fallback: number, max?: number): number => {
     if (typeof v !== 'number' || !Number.isFinite(v)) return fallback
     const n = Math.floor(v)

@@ -2,7 +2,6 @@ import { c as _c } from "react/compiler-runtime";
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { Box, Text } from '../../ink.js';
-import { getDynamicConfig_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js';
 import { logEvent } from '../../services/analytics/index.js';
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 import { Select } from '../CustomSelect/select.js';
@@ -17,7 +16,7 @@ const DESKTOP_UPSELL_DEFAULT: DesktopUpsellConfig = {
   enable_startup_dialog: false
 };
 export function getDesktopUpsellConfig(): DesktopUpsellConfig {
-  return getDynamicConfig_CACHED_MAY_BE_STALE('tengu_desktop_upsell', DESKTOP_UPSELL_DEFAULT);
+  return DESKTOP_UPSELL_DEFAULT;
 }
 function isSupportedPlatform(): boolean {
   return process.platform === 'darwin' || process.platform === 'win32' && process.arch === 'x64';
