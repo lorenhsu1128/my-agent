@@ -1078,7 +1078,7 @@
 - [ ] M-DECOUPLE-3-4：cron fire 也應該驗 daemon source（目前 F 系列只驗 BIN）
 - [ ] M-DECOUPLE-3-5：Discord gateway 進 E2E（需要 mock bot token，工程量單獨估）
 - [ ] M-DECOUPLE-3-6：c 方案 PTY-based 互動 REPL E2E — 用 node-pty 真正 spawn cli-dev.exe 互動 REPL、stdin pipe 送 prompt、stdout 等 reply。差別：B 方案的 `_thinClientTurn.ts` 跳過 React 渲染那層，c 方案才能驗 ink TUI 把 thin-client 真的接起來。延後到 native module 在 bun + Windows 環境穩定後再做
-- [ ] M-DECOUPLE-3-7：full E2E flake 改善 — 觀察到 E2 `timeout 150 cli-dev.exe -p` 在 bash + Windows 偶發掛住超過 timeout 不被殺；對應對策：改 `timeout -k 10s 150 ...` 強制 SIGKILL 後援，或改 LLM 慢時用 cancellation
+- [x] M-DECOUPLE-3-7：full E2E flake 改善 — 11 處 `timeout N CMD` 統一加 `-k 10s` SIGKILL 後援（commit 4999d1c）
 
 ---
 
