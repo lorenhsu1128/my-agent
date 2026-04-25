@@ -374,8 +374,8 @@ if scope_includes "D" || scope_includes "cli"; then
       test_fail "D2 Read tool" "$OUT"
     fi
 
-    # D3 unset API key
-    OUT=$(env -u ANTHROPIC_API_KEY timeout 30 $BIN -p "請只回一個阿拉伯數字：3+5 等於幾" 2>&1 | tail -5)
+    # D3 unset API key — LLM 冷啟動可能 1m+，給 90s
+    OUT=$(env -u ANTHROPIC_API_KEY timeout 90 $BIN -p "請只回一個阿拉伯數字：3+5 等於幾" 2>&1 | tail -5)
     if echo "$OUT" | grep -qE "\b8\b|^8$|是 8"; then
       test_pass "D3 unset API key 仍可對話"
     else
@@ -400,6 +400,23 @@ if scope_includes "D" || scope_includes "cli"; then
     else
       test_fail "D5 啟動慢" "${DUR}s"
     fi
+
+    # D6 (M-DECOUPLE-3-2-1) SRC 模式 sanity — `bun run dev` shim 跑 cli.tsx 原始碼。
+    # 用 `--version` 而非 LLM 算術：SRC 模式三層 bun（dev shim → cli.tsx → llama.cpp）
+    # 第一次 cold start 含 tsx 全樹 transpile 可能 4 分鐘+，用 LLM 太貴。`--version`
+    # 走 fast path，但仍會 import 整個 module 樹 — feature flag 殘留 / dangling
+    # import / vendored SDK import 壞都會立刻爆 + 1m 內完成。
+    if [[ -f ./scripts/dev.ts ]]; then
+      OUT=$(timeout 90 bun run ./scripts/dev.ts --version 2>&1 | tail -5)
+      RC=$?
+      if [[ $RC -eq 0 ]] && echo "$OUT" | grep -qE "[0-9]+\.[0-9]+\."; then
+        test_pass "D6 SRC mode (bun run dev) --version 通"
+      else
+        test_fail "D6 SRC mode" "rc=$RC out=$OUT"
+      fi
+    else
+      test_skip "D6" "scripts/dev.ts 不存在"
+    fi
   fi
 fi
 
@@ -422,6 +439,26 @@ if scope_includes "E" || scope_includes "daemon"; then
     sleep 2
     rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null || true
 
+    # 清前次 F section 殘留的 `e2etest*` cron task — 否則 E5 sendInput
+    # 會撞到 cron 觸發的 turn → interactive intent 中斷它 → E5 收 aborted。
+    # F 自己有 backup/restore，但 backup 來自前次 F 留下的污染狀態形成連鎖。
+    CRON_FILE="$ROOT/.my-agent/scheduled_tasks.jsonc"
+    if [[ -f "$CRON_FILE" ]]; then
+      bun -e "
+        import { readFileSync, writeFileSync } from 'fs'
+        try {
+          const raw = readFileSync('$CRON_FILE', 'utf8')
+            .replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+          const parsed = JSON.parse(raw)
+          const before = parsed.tasks?.length ?? 0
+          parsed.tasks = (parsed.tasks ?? []).filter(t => !(t.id ?? '').startsWith('e2etest'))
+          writeFileSync('$CRON_FILE', JSON.stringify(parsed, null, 2))
+          if (before !== parsed.tasks.length)
+            console.log('cleaned', before - parsed.tasks.length, 'e2etest cron tasks')
+        } catch(e) { console.log('cron clean skip:', e.message) }
+      " 2>&1 | head -1
+    fi
+
     # E1 daemon start（subshell + bg + redirect）
     ( $BIN daemon start > "$ROOT/tests/e2e/daemon-start.log" 2>&1 & )
     for i in $(seq 1 12); do
@@ -438,12 +475,39 @@ if scope_includes "E" || scope_includes "daemon"; then
     # 給 daemon 多 5s 讓 WS server / cron / runner 完全就緒
     sleep 5
 
-    # E2 attached turn — thin client 接 daemon；LLM 慢給 90s
-    OUT=$(timeout 90 $BIN -p "請只回 4" 2>&1 | tail -5)
+    # E2 print mode while daemon up — 注意：`-p` 不走 thin-client（standalone
+    # 直打 llama.cpp），這裡只驗 daemon 在跑時 print 路徑仍正常。真實 thin-client
+    # attach 由 E4 驗證（M-DECOUPLE-3-3）。LLM 冷啟動可能 1m+，給 150s。
+    OUT=$(timeout 150 $BIN -p "請只回 4" 2>&1 | tail -5)
     if echo "$OUT" | grep -qE "\b4\b|^4$"; then
-      test_pass "E2 thin client attach + turn（回 4）"
+      test_pass "E2 print mode while daemon up（回 4）"
     else
-      test_fail "E2 attach turn" "$OUT"
+      test_fail "E2 print mode" "$OUT"
+    fi
+
+    # E4 真 thin-client attach — bun 直接跑 _thinClientPing.ts，打開 WS、
+    # 等 hello frame、送 permissionContextSync、close。比 E2 精準，
+    # daemon.log 會有 `client connected` 紀錄。
+    PING_LOG_BEFORE=$(grep -c "client connected" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
+    OUT=$(timeout 30 bun run "$ROOT/tests/e2e/_thinClientPing.ts" 2>&1)
+    PING_RC=$?
+    PING_LOG_AFTER=$(grep -c "client connected" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
+    PING_DELTA=$((PING_LOG_AFTER - PING_LOG_BEFORE))
+    if [[ $PING_RC -eq 0 ]] && echo "$OUT" | grep -q "hello received" && [[ $PING_DELTA -ge 1 ]]; then
+      test_pass "E4 thin-client attach + hello + ack（daemon.log +${PING_DELTA}）"
+    else
+      test_fail "E4 thin-client" "rc=$PING_RC delta=$PING_DELTA out=$OUT"
+    fi
+
+    # E5 完整 turn — 用 REPL 真正用的 createFallbackManager + createDaemonDetector，
+    # 送 sendInput 等 turnEnd 抽 assistant output。比 E4 多驗 input/runnerEvent/
+    # turnEnd 整個 protocol；差別只剩 React 渲染（PTY 互動 REPL 留 M-DECOUPLE-3-5）。
+    OUT=$(timeout 180 bun run "$ROOT/tests/e2e/_thinClientTurn.ts" 2>&1)
+    TURN_RC=$?
+    if [[ $TURN_RC -eq 0 ]] && echo "$OUT" | grep -q 'output="9"'; then
+      test_pass "E5 thin-client turn（4+5=9 via runnerEvent）"
+    else
+      test_fail "E5 thin-client turn" "rc=$TURN_RC out=$OUT"
     fi
 
     # E3 daemon stop（subshell + bg + redirect）
@@ -457,6 +521,42 @@ if scope_includes "E" || scope_includes "daemon"; then
     else
       rm -f "$HOME/.my-agent/daemon.pid.json"
       test_fail "E3 daemon stop" "pid.json 12s 後仍存在（已強制清）"
+    fi
+
+    # E6 (M-DECOUPLE-3-2-2) SRC daemon start/stop — `bun run dev daemon start`
+    # 走 dev.ts shim spawn 子 bun 跑 cli.tsx。commit 5cd3028 留下「SRC hang」
+    # 後續任務；2026-04-25 重新診斷重現不到（八成是 e2e timeout 殺掉誤判），
+    # 加回 sanity gate 防迴歸。
+    if [[ -f ./scripts/dev.ts ]]; then
+      ( bun run ./scripts/dev.ts daemon stop > /tmp/d-cleanup.log 2>&1 & )
+      sleep 2
+      rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null || true
+
+      ( bun run ./scripts/dev.ts daemon start > "$ROOT/tests/e2e/daemon-src-start.log" 2>&1 & )
+      for i in $(seq 1 15); do
+        [[ -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        sleep 1
+      done
+      if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+        test_pass "E6 SRC daemon start 寫 pid.json"
+      else
+        test_fail "E6 SRC daemon start" "no pid.json after 15s"
+        cat "$ROOT/tests/e2e/daemon-src-start.log" 2>/dev/null | tail -10 >> "$REPORT_FILE"
+      fi
+
+      ( bun run ./scripts/dev.ts daemon stop > "$ROOT/tests/e2e/daemon-src-stop.log" 2>&1 & )
+      for i in $(seq 1 12); do
+        [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        sleep 1
+      done
+      if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+        test_pass "E7 SRC daemon stop 清 pid.json"
+      else
+        rm -f "$HOME/.my-agent/daemon.pid.json"
+        test_fail "E7 SRC daemon stop" "pid.json 12s 後仍存在（已強制清）"
+      fi
+    else
+      test_skip "E6/E7" "scripts/dev.ts 不存在"
     fi
   fi
 fi
@@ -587,11 +687,22 @@ TSEOF
       fi
     fi
 
-    # cleanup：還原原本 cron-tasks.jsonc
+    # cleanup：先還原原本 cron-tasks.jsonc，再 filter 掉所有 `e2etest*`
+    # （備份本身可能來自前次 F 污染，所以還要再 filter 一次保證乾淨）
     if [[ -f "$BACKUP_CRON" ]]; then
       mv "$BACKUP_CRON" "$CRON_FILE"
-    else
-      rm -f "$CRON_FILE"
+    fi
+    if [[ -f "$CRON_FILE" ]]; then
+      bun -e "
+        import { readFileSync, writeFileSync } from 'fs'
+        try {
+          const raw = readFileSync('$CRON_FILE', 'utf8')
+            .replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+          const parsed = JSON.parse(raw)
+          parsed.tasks = (parsed.tasks ?? []).filter(t => !(t.id ?? '').startsWith('e2etest'))
+          writeFileSync('$CRON_FILE', JSON.stringify(parsed, null, 2))
+        } catch {}
+      " 2>&1 | head -1
     fi
   fi
 fi

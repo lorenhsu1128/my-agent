@@ -1046,6 +1046,42 @@
 
 ---
 
+## 當前里程碑：M-DECOUPLE-3 — E2E 測試套件補洞（2026-04-25 啟動）
+
+**背景**：commit `5cd3028` 把 daemon + cron section 自動化到全綠（PASS=43）；但留兩條後續：(1) SRC mode（`bun run dev`）daemon start 當下被觀察到 hang，移到後續 milestone；(2) E2 test 名為「thin client attach + turn」實際 `-p` print mode 完全不走 thinClient（standalone 直打 llama.cpp），test 通過是 false-positive。
+
+**重新診斷（2026-04-25）**：
+- SRC hang **重現不到** — `( bun run ./scripts/dev.ts daemon start > log 2>&1 & )` pid.json 2s 出來、heartbeat 正常更新、daemon.log 顯示完整 listening。原本 `daemon-src-start.log` 的 `exited with code 143` 是 SIGTERM（八成 e2e timeout 殺的，被誤判為 hang）。
+- E2 false-positive **已確認** — `src/cli/print.ts` 對 daemon 只查 `isDaemonAliveSync()` 用於 cron 歸屬，不開 thinClient socket；thinClient 模組（`src/repl/thinClient/fallbackManager.ts`）只在 `src/screens/REPL.tsx` 互動 REPL 使用。daemon.log grep `client connected` 對 SRC -p 跑那段時間 zero connection。
+
+### 任務
+
+#### M-DECOUPLE-3-2：SRC 路徑加回 E2E（防迴歸）
+- [x] M-DECOUPLE-3-2-1 D6（SRC sanity）。**設計改變**：原計畫用 LLM 算術發現 SRC 三層 bun + tsx 全樹 transpile cold start 4 分鐘+ 跑不完；改用 `bun run dev --version` fast path — 仍會 import 整個 module 樹（dangling import / feature flag 殘留 / vendored SDK 壞會立刻爆），1 秒內完成。
+- [x] M-DECOUPLE-3-2-2 E6/E7（SRC daemon start/stop）。`( bun run dev daemon start & )` → 15s 內 pid.json → SRC daemon stop 12s 內清乾淨。
+- [x] M-DECOUPLE-3-2-3 D + E section isolated 驗證（D=6/6, E=7/7 全綠）
+
+#### M-DECOUPLE-3-3：E2 名實不符修正 — 真 thin-client smoke + 完整 REPL E2E（B 方案）
+- [x] M-DECOUPLE-3-3-1 (b 方案) `tests/e2e/_thinClientPing.ts` — 用底層 `createThinClientSocket` + `readPidFile/readToken`，直接打 WS 等 hello frame、送 permissionContextSync。E section 用 `bun run` 呼叫並比對 daemon.log 的 `client connected` 計數差。
+- [x] M-DECOUPLE-3-3-2 E section 改造：E2 改名 `E2 print mode while daemon up`（誠實標示 standalone），新增 E4 thin-client ping、E5 完整 turn。
+- [x] M-DECOUPLE-3-3-3 (c→改 B 方案) `tests/e2e/_thinClientTurn.ts` 用 REPL 真正用的 `createFallbackManager` + `createDaemonDetector`，sendInput 等 turnEnd 抽 `runnerEvent` assistant 文字。比 PTY-based 全互動 REPL 工程量小 N 倍、邊際 coverage 高（差別只剩 React 渲染那層，留 M-DECOUPLE-3-5）。
+  - 關鍵 false-positive 副產物修復：F section 殘留的 `e2etest*` cron task 撞 E5 sendInput 觸發 interactive interrupt → turn aborted。E section 開頭加 prophylactic 清理；F cleanup 改用 filter 不只靠 backup/restore。
+- [x] M-DECOUPLE-3-3-4 D + E section isolated 全綠；待 full E2E + commit
+
+### 完成標準
+- [x] D/E section 全綠（D 5→6 case, E 3→7 case）
+- [x] 真 thin-client attach + turn 驗到（E4 + E5）
+- [x] daemon.log 在 E4 + E5 期間有真實 `client connected` 紀錄（消除 false-positive）
+- [x] SRC + BIN 兩條 path 都驗到（D6 SRC --version + E6/E7 SRC daemon）
+
+### 不在範圍（→ 後續 milestone）
+- [ ] M-DECOUPLE-3-4：cron fire 也應該驗 daemon source（目前 F 系列只驗 BIN）
+- [ ] M-DECOUPLE-3-5：Discord gateway 進 E2E（需要 mock bot token，工程量單獨估）
+- [ ] M-DECOUPLE-3-6：c 方案 PTY-based 互動 REPL E2E — 用 node-pty 真正 spawn cli-dev.exe 互動 REPL、stdin pipe 送 prompt、stdout 等 reply。差別：B 方案的 `_thinClientTurn.ts` 跳過 React 渲染那層，c 方案才能驗 ink TUI 把 thin-client 真的接起來。延後到 native module 在 bun + Windows 環境穩定後再做
+- [ ] M-DECOUPLE-3-7：full E2E flake 改善 — 觀察到 E2 `timeout 150 cli-dev.exe -p` 在 bash + Windows 偶發掛住超過 timeout 不被殺；對應對策：改 `timeout -k 10s 150 ...` 強制 SIGKILL 後援，或改 LLM 慢時用 cancellation
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2003,3 +2039,21 @@
 - 2026-04-25 11:16: Session 結束 | 進度：505/550 任務 | 0f850e2 test(globalConfig): 加入 bundled 模板覆蓋率自動檢查 + 補上 5 個漏掉的欄位
 
 - 2026-04-25 11:42: Session 結束 | 進度：505/550 任務 | 0f850e2 test(globalConfig): 加入 bundled 模板覆蓋率自動檢查 + 補上 5 個漏掉的欄位
+
+- 2026-04-25 19:44: Session 結束 | 進度：505/550 任務 | 9b1c62d test(e2e): 完整 M-DECOUPLE 自動測試套件 + 兩個 regression fix
+
+- 2026-04-25 19:53: Session 結束 | 進度：505/550 任務 | 9b1c62d test(e2e): 完整 M-DECOUPLE 自動測試套件 + 兩個 regression fix
+
+- 2026-04-25 19:58: Session 結束 | 進度：505/550 任務 | 9b1c62d test(e2e): 完整 M-DECOUPLE 自動測試套件 + 兩個 regression fix
+
+- 2026-04-25 20:03: Session 結束 | 進度：505/550 任務 | 9b1c62d test(e2e): 完整 M-DECOUPLE 自動測試套件 + 兩個 regression fix
+
+- 2026-04-25 20:04: Session 結束 | 進度：505/550 任務 | 9b1c62d test(e2e): 完整 M-DECOUPLE 自動測試套件 + 兩個 regression fix
+
+- 2026-04-25 20:10: Session 結束 | 進度：505/550 任務 | 9b1c62d test(e2e): 完整 M-DECOUPLE 自動測試套件 + 兩個 regression fix
+
+- 2026-04-25 20:42: Session 結束 | 進度：505/563 任務 | 5cd3028 test(e2e): daemon + cron 完整自動 E2E（PASS=43 FAIL=0 SKIP=0）
+
+- 2026-04-25 21:09: Session 結束 | 進度：505/563 任務 | 5cd3028 test(e2e): daemon + cron 完整自動 E2E（PASS=43 FAIL=0 SKIP=0）
+
+- 2026-04-25 21:16: Session 結束 | 進度：505/563 任務 | 5cd3028 test(e2e): daemon + cron 完整自動 E2E（PASS=43 FAIL=0 SKIP=0）
