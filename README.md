@@ -150,6 +150,7 @@ My Agent 把所有使用者設定放在兩個目錄：
 | [docs/cron-wave34.md](./docs/cron-wave34.md) | Cron 進階特性（Wave 3：NL/retry/condition/catchup/history/通知）+ Wave 4 `/cron` TUI |
 | [src/tools/ScheduleCronTool/README.md](./src/tools/ScheduleCronTool/README.md) | Cron 工具參考（action 表） |
 | [src/tools/WebBrowserTool/README.md](./src/tools/WebBrowserTool/README.md) | WebBrowser 工具參考（action 表） |
+| [docs/e2e-test-suite.md](./docs/e2e-test-suite.md) | E2E 測試套件（A–J 10 sections / 53 cases）— 開發者 |
 | [FEATURES.md](./FEATURES.md) | Feature flag 清單（建構時控制模組啟用） |
 
 ---
