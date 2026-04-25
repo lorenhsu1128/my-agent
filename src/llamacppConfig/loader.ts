@@ -14,6 +14,7 @@ import {
   LlamaCppConfigSchema,
   type LlamaCppConfig,
 } from './schema.js'
+import { parseJsonc } from '../utils/jsoncStore.js'
 
 let cached: LlamaCppConfig | null = null
 let loadInFlight: Promise<LlamaCppConfig> | null = null
@@ -37,10 +38,10 @@ async function readLive(): Promise<LlamaCppConfig> {
   }
   let parsed: unknown
   try {
-    parsed = JSON.parse(raw.replace(/^\uFEFF/, ''))
+    parsed = parseJsonc(raw.replace(/^\uFEFF/, ''))
   } catch (e) {
     warnOnce(
-      `${path} JSON 解析失敗：${e instanceof Error ? e.message : String(e)}`,
+      `${path} JSONC 解析失敗：${e instanceof Error ? e.message : String(e)}`,
     )
     return DEFAULT_LLAMACPP_CONFIG
   }
@@ -68,7 +69,7 @@ export function getLlamaCppConfigSnapshot(): LlamaCppConfig {
   // setup.ts 的 fire-and-forget 載入可能還沒跑完，同步讀檔避免拿到錯誤的預設值
   try {
     const raw = readFileSync(getLlamaCppConfigPath(), 'utf-8')
-    const parsed = JSON.parse(raw.replace(/^﻿/, ''))
+    const parsed = parseJsonc(raw.replace(/^﻿/, ''))
     const result = LlamaCppConfigSchema.safeParse(parsed)
     if (result.success) {
       cached = result.data
