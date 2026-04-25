@@ -145,6 +145,7 @@ import sandboxToggle from './commands/sandbox-toggle/index.js'
 import stickers from './commands/stickers/index.js'
 import advisor from './commands/advisor.js'
 import daemonCommand from './commands/daemon.js'
+import configRewriteWithDocsCommand from './commands/configRewriteWithDocs.js'
 import discordBindCommand from './commands/discordBind.js'
 import discordUnbindCommand from './commands/discordUnbind.js'
 import discordBindOtherChannelCommand from './commands/discordBindOtherChannel.js'
@@ -344,6 +345,7 @@ const COMMANDS = memoize((): Command[] => [
   exportCommand,
   sandboxToggle,
   daemonCommand,
+  configRewriteWithDocsCommand,
   discordBindCommand,
   discordUnbindCommand,
   discordBindOtherChannelCommand,
