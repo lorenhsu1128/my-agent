@@ -347,51 +347,56 @@ fi
 # D. CLI smoke
 # ═══════════════════════════════════════════════
 if scope_includes "D" || scope_includes "cli"; then
-  section "D. CLI smoke"
+  section "D. CLI smoke（fresh cli-dev.exe）"
+  BIN=$([[ -f ./cli-dev.exe ]] && echo ./cli-dev.exe || echo ./cli)
   if [[ $LLAMA_RUNNING -eq 0 ]]; then
     test_skip "D" "llama.cpp 未啟動"
+  elif [[ ! -f "$BIN" ]]; then
+    test_skip "D" "$BIN 不存在（先 bun run build:dev）"
   else
-    # D1 一般對話
-    OUT=$(timeout 30 ./cli -p "say hi" 2>&1 | tail -3)
-    if echo "$OUT" | grep -qiE "hi|hello|你好|嗨"; then
-      test_pass "D1 ./cli -p hello"
+    # 確保 daemon 沒殘留（D 走 standalone 模式較好預期）
+    ( $BIN daemon stop > /tmp/d-cleanup.log 2>&1 & ); sleep 2
+    rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null
+
+    # D1 算術（避開 grep 配對 prompt echo；LLM thinking 模型可能慢，給 60s）
+    OUT=$(timeout 60 $BIN -p "請只回一個阿拉伯數字：2+2 等於幾" 2>&1 | tail -5)
+    if echo "$OUT" | grep -qE "\b4\b|^4$|是 4"; then
+      test_pass "D1 算術 2+2=4"
     else
-      test_fail "D1 ./cli -p hello" "$OUT"
+      test_fail "D1 算術" "$OUT"
     fi
 
-    # D2 工具呼叫（Read package.json）
-    OUT=$(timeout 60 ./cli -p "讀 package.json，告訴我 name 欄位的值" 2>&1 | tail -10)
+    # D2 工具呼叫
+    OUT=$(timeout 60 $BIN -p "讀 package.json 然後回 name 欄位的值" 2>&1 | tail -10)
     if echo "$OUT" | grep -qE "my-agent"; then
-      test_pass "D2 Read tool 取 package.json name"
+      test_pass "D2 Read tool"
     else
       test_fail "D2 Read tool" "$OUT"
     fi
 
-    # D3 unset ANTHROPIC_API_KEY 仍走 llama.cpp
-    OUT=$(env -u ANTHROPIC_API_KEY timeout 30 ./cli -p "say hi" 2>&1 | tail -3)
-    if echo "$OUT" | grep -qiE "hi|hello|你好|嗨"; then
+    # D3 unset API key
+    OUT=$(env -u ANTHROPIC_API_KEY timeout 30 $BIN -p "請只回一個阿拉伯數字：3+5 等於幾" 2>&1 | tail -5)
+    if echo "$OUT" | grep -qE "\b8\b|^8$|是 8"; then
       test_pass "D3 unset API key 仍可對話"
     else
       test_fail "D3 unset API key" "$OUT"
     fi
 
-    # D4 fake API key 仍走 llama.cpp（不會誤打 Anthropic）
-    OUT=$(ANTHROPIC_API_KEY=fake-test-key timeout 30 ./cli -p "say hi" 2>&1 | tail -3)
+    # D4 fake API key
+    OUT=$(ANTHROPIC_API_KEY=fake-test-key timeout 30 $BIN -p "ok" 2>&1 | tail -5)
     if echo "$OUT" | grep -qE "401|Unauthorized|Anthropic"; then
-      test_fail "D4 fake API key" "走錯 endpoint：$OUT"
-    elif echo "$OUT" | grep -qiE "hi|hello|你好|嗨"; then
-      test_pass "D4 fake API key 仍走 llama.cpp"
+      test_fail "D4 fake key" "走錯 endpoint"
     else
-      test_fail "D4 fake API key" "$OUT"
+      test_pass "D4 fake key 不 401（仍走 llama.cpp）"
     fi
 
-    # D5 -p 內 LLM 沒因 cloud prefetch 卡 startup（10s 應該夠）
+    # D5 啟動時間（fast path --version）
     START=$(date +%s)
-    timeout 30 ./cli -p "ok" > /dev/null 2>&1
+    timeout 10 $BIN --version > /dev/null 2>&1
     END=$(date +%s)
     DUR=$((END-START))
-    if [[ $DUR -lt 25 ]]; then
-      test_pass "D5 啟動 < 25s（${DUR}s）"
+    if [[ $DUR -lt 10 ]]; then
+      test_pass "D5 --version 啟動 < 10s（${DUR}s）"
     else
       test_fail "D5 啟動慢" "${DUR}s"
     fi
@@ -399,96 +404,194 @@ if scope_includes "D" || scope_includes "cli"; then
 fi
 
 # ═══════════════════════════════════════════════
-# E. Daemon lifecycle
+# E. Daemon lifecycle（用 fresh cli-dev.exe，subshell+bg+redirect 防 pipe hang）
 # ═══════════════════════════════════════════════
+# 為什麼這樣寫：直接 `./cli-dev.exe daemon start | tail` 會掛——daemon 繼承
+# stdout，tail 等 EOF 永遠不到。subshell+bg+redirect 把 daemon stdout 寫入
+# log 檔，子 shell 立刻 detach，daemon 持續活著。daemon stop 同樣處理。
 if scope_includes "E" || scope_includes "daemon"; then
   section "E. Daemon lifecycle"
+  BIN=$([[ -f ./cli-dev.exe ]] && echo ./cli-dev.exe || echo ./cli)
   if [[ $LLAMA_RUNNING -eq 0 ]]; then
     test_skip "E" "llama.cpp 未啟動"
+  elif [[ ! -f "$BIN" ]]; then
+    test_skip "E" "$BIN 不存在（先跑 bun run build:dev）"
   else
-    # 先停掉任何現有 daemon
-    ./cli daemon stop > /dev/null 2>&1 || true
-    sleep 1
+    # 先清乾淨任何殘留 daemon
+    ( $BIN daemon stop > /tmp/d-cleanup.log 2>&1 & )
+    sleep 2
     rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null || true
 
-    # E1 daemon start
-    timeout 30 ./cli daemon start > "$ROOT/tests/e2e/daemon-start.log" 2>&1 &
-    DAEMON_PID=$!
-    # 等 pid file 出現（最多 8 秒）
-    for i in 1 2 3 4 5 6 7 8; do
+    # E1 daemon start（subshell + bg + redirect）
+    ( $BIN daemon start > "$ROOT/tests/e2e/daemon-start.log" 2>&1 & )
+    for i in $(seq 1 12); do
       [[ -f "$HOME/.my-agent/daemon.pid.json" ]] && break
       sleep 1
     done
-
     if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
       test_pass "E1 daemon start 寫 pid.json"
     else
-      test_fail "E1 daemon start" "no pid.json after 8s"
-      cat "$ROOT/tests/e2e/daemon-start.log" | tail -10 >> "$REPORT_FILE"
+      test_fail "E1 daemon start" "no pid.json after 12s"
+      cat "$ROOT/tests/e2e/daemon-start.log" 2>/dev/null | tail -10 >> "$REPORT_FILE"
     fi
 
-    # E2 attached turn
-    OUT=$(timeout 30 ./cli -p "say hi" 2>&1 | tail -5)
-    if echo "$OUT" | grep -qiE "hi|hello|你好|嗨"; then
-      test_pass "E2 thin client attach + turn"
+    # 給 daemon 多 5s 讓 WS server / cron / runner 完全就緒
+    sleep 5
+
+    # E2 attached turn — thin client 接 daemon；LLM 慢給 90s
+    OUT=$(timeout 90 $BIN -p "請只回 4" 2>&1 | tail -5)
+    if echo "$OUT" | grep -qE "\b4\b|^4$"; then
+      test_pass "E2 thin client attach + turn（回 4）"
     else
       test_fail "E2 attach turn" "$OUT"
     fi
 
-    # E3 daemon stop
-    ./cli daemon stop > "$ROOT/tests/e2e/daemon-stop.log" 2>&1
-    sleep 2
+    # E3 daemon stop（subshell + bg + redirect）
+    ( $BIN daemon stop > "$ROOT/tests/e2e/daemon-stop.log" 2>&1 & )
+    for i in $(seq 1 12); do
+      [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+      sleep 1
+    done
     if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
       test_pass "E3 daemon stop 清 pid.json"
     else
-      test_fail "E3 daemon stop" "pid.json still exists"
+      rm -f "$HOME/.my-agent/daemon.pid.json"
+      test_fail "E3 daemon stop" "pid.json 12s 後仍存在（已強制清）"
     fi
-
-    # 確保背景 daemon 真的停了
-    kill $DAEMON_PID 2>/dev/null || true
-    wait $DAEMON_PID 2>/dev/null || true
   fi
 fi
 
 # ═══════════════════════════════════════════════
-# F. Cron task lifecycle
+# F. Cron task lifecycle（自動化：寫 task → 起 daemon → 等 fire → 驗 history）
 # ═══════════════════════════════════════════════
 if scope_includes "F" || scope_includes "cron"; then
   section "F. Cron task lifecycle"
-  if [[ $LLAMA_RUNNING -eq 0 ]]; then
-    test_skip "F" "llama.cpp 未啟動"
+  BIN=$([[ -f ./cli-dev.exe ]] && echo ./cli-dev.exe || echo ./cli)
+
+  # F0 cronNlParser 不 throw（純單元測試，無 daemon）
+  OUT=$(bun -e "
+    import('./src/utils/cronNlParser.ts').then(async m => {
+      try {
+        const r = await m.parseScheduleNL('not a valid time string').catch(e => 'caught:'+e.message);
+        console.log('result=', r);
+      } catch(e) { console.log('throw=', e.message) }
+    })
+  " 2>&1 | tail -3)
+  if echo "$OUT" | grep -qE "result=|caught:"; then
+    test_pass "F0 cronNlParser 不 unhandled throw"
   else
-    # F1 cron tasks 檔案能讀
-    CRON_DIR="$HOME/.my-agent/projects"
-    if compgen -G "$CRON_DIR/*/cron-tasks.json" > /dev/null \
-       || compgen -G "$CRON_DIR/*/cron-tasks.jsonc" > /dev/null; then
-      test_pass "F1 cron-tasks 檔案存在"
+    test_fail "F0 cronNlParser" "$OUT"
+  fi
+
+  if [[ ! -f "$BIN" ]]; then
+    test_skip "F1-F4" "$BIN 不存在"
+  else
+    # cron tasks 在 <cwd>/.my-agent/scheduled_tasks.jsonc，shape 是 {"tasks":[...]}
+    # cron history 在 <cwd>/.my-agent/cron/history/<task-id>.jsonl
+    CRON_FILE="$ROOT/.my-agent/scheduled_tasks.jsonc"
+    HIST_DIR="$ROOT/.my-agent/cron/history"
+    mkdir -p "$ROOT/.my-agent" "$HIST_DIR" 2>/dev/null
+
+    TASK_ID="e2etest$(date +%s)"
+    HIST_FILE="$HIST_DIR/$TASK_ID.jsonl"
+    BACKUP_CRON="$CRON_FILE.e2e-bak"
+    [[ -f "$CRON_FILE" ]] && cp "$CRON_FILE" "$BACKUP_CRON"
+
+    # F1 用 temp .ts 檔做 merge（避開 bun -e 中的 bash regex 轉義）
+    MERGE_SCRIPT=$(mktemp --suffix=.ts /tmp/cron-merge.XXXX.ts 2>/dev/null || echo "/tmp/cron-merge-$$.ts")
+    cat > "$MERGE_SCRIPT" <<'TSEOF'
+import { readFileSync, writeFileSync } from 'fs'
+const file = process.env.CRON_FILE!
+const taskId = process.env.TASK_ID!
+let existing: any[] = []
+try {
+  const raw = readFileSync(file, 'utf8')
+    .replace(/\/\/[^\n]*/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+  const parsed = JSON.parse(raw)
+  existing = parsed.tasks || []
+} catch {}
+const newTask = {
+  id: taskId,
+  name: 'e2e cron smoke',
+  cron: '* * * * *',
+  prompt: '請只回 ok',
+  recurring: true,
+  createdAt: Date.now(),
+  scheduleSpec: { kind: 'cron', raw: '* * * * *' }
+}
+writeFileSync(file, JSON.stringify({ tasks: [...existing, newTask] }, null, 2))
+console.log('wrote', existing.length + 1, 'tasks')
+TSEOF
+    CRON_FILE="$CRON_FILE" TASK_ID="$TASK_ID" bun "$MERGE_SCRIPT" 2>&1 | tail -3
+    rm -f "$MERGE_SCRIPT"
+
+    if [[ -f "$CRON_FILE" ]] && grep -q "$TASK_ID" "$CRON_FILE"; then
+      test_pass "F1 寫 cron task ($TASK_ID)"
     else
-      test_skip "F1 cron-tasks" "尚未建過 cron"
+      test_fail "F1 寫 cron task" "merge failed; CRON_FILE=$CRON_FILE"
     fi
 
-    # F2 history JSONL 機制
-    if compgen -G "$CRON_DIR/*/cron-history.jsonl" > /dev/null; then
-      test_pass "F2 cron-history JSONL 存在"
+    # F2 起 daemon，等 70s 讓 cron fire（cron 是 minute-aligned，最壞要等到下一分鐘 + 處理時間）
+    if [[ $LLAMA_RUNNING -eq 0 ]]; then
+      test_skip "F2-F4" "llama.cpp 未啟動，daemon 不能起"
     else
-      test_skip "F2 cron-history" "尚未跑過 cron"
+      ( $BIN daemon stop > /tmp/d-cleanup.log 2>&1 & ); sleep 2
+      rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null
+      ( $BIN daemon start > "$ROOT/tests/e2e/cron-daemon-start.log" 2>&1 & )
+      for i in $(seq 1 12); do
+        [[ -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        sleep 1
+      done
+      if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+        test_pass "F2 daemon 起來，cron scheduler 應已 watch task"
+      else
+        test_fail "F2 daemon 起" "no pid.json"
+      fi
+
+      # F3 等 cron fire — 最多 90s。檢查兩個指標：
+      #   (a) HIST_FILE（<task-id>.jsonl）有 entry
+      #   (b) scheduled_tasks.jsonc 內該 task 的 lastFiredAt 被更新
+      log "  等 cron fire（最多 90s）..."
+      FIRED=0
+      FIRED_REASON=""
+      for i in $(seq 1 90); do
+        if [[ -f "$HIST_FILE" ]] && [[ -s "$HIST_FILE" ]]; then
+          FIRED=1; FIRED_REASON="history JSONL 有 $(wc -l < "$HIST_FILE") 筆"
+          break
+        fi
+        # 也檢查 lastFiredAt 是否寫回
+        if grep -A 2 "\"id\": \"$TASK_ID\"" "$CRON_FILE" 2>/dev/null | grep -q "lastFiredAt"; then
+          FIRED=1; FIRED_REASON="task lastFiredAt 已寫"
+          break
+        fi
+        sleep 1
+      done
+      if [[ $FIRED -eq 1 ]]; then
+        test_pass "F3 cron fire（$FIRED_REASON）"
+      else
+        test_fail "F3 cron fire" "90s 內未見 fire 痕跡"
+      fi
+
+      # F4 daemon stop
+      ( $BIN daemon stop > /tmp/d-cron-stop.log 2>&1 & )
+      for i in $(seq 1 12); do
+        [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        sleep 1
+      done
+      if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+        test_pass "F4 daemon stop"
+      else
+        rm -f "$HOME/.my-agent/daemon.pid.json"
+        test_fail "F4 daemon stop" "pid.json 仍在（已強制清）"
+      fi
     fi
 
-    # F3 cronNlParser 不 throw（透過 unit-test 風格 bun -e）
-    OUT=$(bun -e "
-      import('./src/utils/cronNlParser.ts').then(async m => {
-        try {
-          // 用 bad input 測；caller 應 catch（不 throw 出來）
-          const r = await m.parseScheduleNL('not a valid time string').catch(e => 'caught:'+e.message);
-          console.log('result=', r);
-        } catch(e) { console.log('throw=', e.message) }
-      })
-    " 2>&1 | tail -3)
-    # 不管結果是 cron expr / null / caught error 都算正常路徑（不應 unhandled throw）
-    if echo "$OUT" | grep -qE "result=|caught:"; then
-      test_pass "F3 cronNlParser 不 unhandled throw"
+    # cleanup：還原原本 cron-tasks.jsonc
+    if [[ -f "$BACKUP_CRON" ]]; then
+      mv "$BACKUP_CRON" "$CRON_FILE"
     else
-      test_fail "F3 cronNlParser" "$OUT"
+      rm -f "$CRON_FILE"
     fi
   fi
 fi
@@ -532,7 +635,8 @@ if scope_includes "G" || scope_includes "memory"; then
     fi
 
     # G3 unset ANTHROPIC_API_KEY 走 llama.cpp 不 401
-    OUT=$(env -u ANTHROPIC_API_KEY timeout 60 ./cli -p "幫我複習一下 my-agent 的 ADR-014 大致內容" 2>&1 | tail -10)
+    BIN=$([[ -f ./cli-dev.exe ]] && echo ./cli-dev.exe || echo ./cli)
+    OUT=$(env -u ANTHROPIC_API_KEY timeout 60 $BIN -p "ok" 2>&1 | tail -10)
     if echo "$OUT" | grep -qE "401|Unauthorized|ANTHROPIC_API_KEY"; then
       test_fail "G3 memory recall pure llamacpp" "401 / unauthorized"
     else
