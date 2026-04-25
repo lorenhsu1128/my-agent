@@ -38,7 +38,6 @@ import { getSettingsFilePathForSource } from '../../utils/settings/settings.js'
 import { resetSettingsCache } from '../../utils/settings/settingsCache.js'
 import { sleep } from '../../utils/sleep.js'
 import { getCodeUserAgent } from '../../utils/userAgent.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
 import { logEvent } from '../analytics/index.js'
 import { getRetryDelay } from '../api/withRetry.js'
 import {
@@ -61,10 +60,7 @@ export async function uploadUserSettingsInBackground(): Promise<void> {
   try {
     if (
       !feature('UPLOAD_USER_SETTINGS') ||
-      !getFeatureValue_CACHED_MAY_BE_STALE(
-        'tengu_enable_settings_sync_push',
-        false,
-      ) ||
+      !true ||
       !getIsInteractive() ||
       !isUsingOAuth()
     ) {
@@ -160,7 +156,7 @@ async function doDownloadUserSettings(
   if (feature('DOWNLOAD_USER_SETTINGS')) {
     try {
       if (
-        !getFeatureValue_CACHED_MAY_BE_STALE('tengu_strap_foyer', false) ||
+        !true ||
         !isUsingOAuth()
       ) {
         logForDiagnosticsNoPII('info', 'settings_sync_download_skipped')

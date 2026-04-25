@@ -68,17 +68,13 @@ import {
 // on GrowthBook initialization. Values may be stale but are updated in background.
 
 import { errorMessage, getErrnoCode } from '../../utils/errors.js'
-import {
-  getDynamicConfig_CACHED_MAY_BE_STALE,
-  getFeatureValue_CACHED_MAY_BE_STALE,
-} from '../analytics/growthbook.js'
 
 /**
  * Check if session memory feature is enabled.
  * Uses cached gate value - returns immediately without blocking.
  */
 function isSessionMemoryGateEnabled(): boolean {
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_session_memory', false)
+  return true
 }
 
 /**
@@ -86,10 +82,7 @@ function isSessionMemoryGateEnabled(): boolean {
  * Returns immediately without blocking - value may be stale.
  */
 function getSessionMemoryRemoteConfig(): Partial<SessionMemoryConfig> {
-  return getDynamicConfig_CACHED_MAY_BE_STALE<Partial<SessionMemoryConfig>>(
-    'tengu_sm_config',
-    {},
-  )
+  return {}
 }
 
 // ============================================================================

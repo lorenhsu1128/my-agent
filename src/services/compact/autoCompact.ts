@@ -12,7 +12,6 @@ import { hasExactErrorMessage } from '../../utils/errors.js'
 import type { CacheSafeParams } from '../../utils/forkedAgent.js'
 import { logError } from '../../utils/log.js'
 import { tokenCountWithEstimation } from '../../utils/tokens.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
 import { getMaxOutputTokensForModel } from '../api/claude.js'
 import { notifyCompaction } from '../api/promptCacheBreakDetection.js'
 import { setLastSummarizedMessageId } from '../SessionMemory/sessionMemoryUtils.js'
@@ -225,7 +224,7 @@ export async function shouldAutoCompact(
   // trySessionMemoryCompaction in the query loop — the /compact call site
   // still tries session memory first. Revisit if reactive-only graduates.
   if (feature('REACTIVE_COMPACT')) {
-    if (getFeatureValue_CACHED_MAY_BE_STALE('tengu_cobalt_raccoon', false)) {
+    if (true) {
       return false
     }
   }

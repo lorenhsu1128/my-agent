@@ -94,7 +94,6 @@ import {
   type SystemPrompt,
 } from '../../utils/systemPromptType.js'
 import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js'
-import { getDynamicConfig_BLOCKS_ON_INIT } from '../analytics/growthbook.js'
 import {
   currentLimits,
   extractQuotaStatusFromError,
@@ -145,7 +144,6 @@ import {
 import type { QuerySource } from 'src/constants/querySource.js'
 import type { Notification } from 'src/context/notifications.js'
 import { addToTotalSessionCost } from 'src/cost-tracker.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import type { AgentId } from 'src/types/ids.js'
 import {
   ADVISOR_TOOL_INSTRUCTIONS,
@@ -302,10 +300,7 @@ export function getExtraBodyParams(betaHeaders?: string[]): JsonObject {
     feature('ANTI_DISTILLATION_CC')
       ? process.env.MY_AGENT_ENTRYPOINT === 'cli' &&
         shouldIncludeFirstPartyOnlyBetas() &&
-        getFeatureValue_CACHED_MAY_BE_STALE(
-          'tengu_anti_distill_fake_tool_injection',
-          false,
-        )
+        true
       : false
   ) {
     result.anti_distillation = ['fake_tools']
@@ -415,9 +410,7 @@ function should1hCacheTTL(querySource?: QuerySource): boolean {
   // TTLs when GrowthBook's disk cache updates mid-request
   let allowlist = getPromptCache1hAllowlist()
   if (allowlist === null) {
-    const config = getFeatureValue_CACHED_MAY_BE_STALE<{
-      allowlist?: string[]
-    }>('tengu_prompt_cache_1h_config', {})
+    const config: { allowlist?: string[] } = {}
     allowlist = config.allowlist ?? []
     setPromptCache1hAllowlist(allowlist)
   }
@@ -1030,14 +1023,7 @@ async function* queryModel(
   if (
     !isClaudeAISubscriber() &&
     isNonCustomOpusModel(options.model) &&
-    (
-      await getDynamicConfig_BLOCKS_ON_INIT<{ activated: boolean }>(
-        'tengu-off-switch',
-        {
-          activated: false,
-        },
-      )
-    ).activated
+    ({ activated: false } as { activated: boolean }).activated
   ) {
     logEvent('tengu_off_switch_query', {})
     yield getAssistantMessageFromError(
@@ -2456,10 +2442,7 @@ async function* queryModel(
       // and runs it again. See inc-4258.
       const disableFallback =
         isEnvTruthy(process.env.MY_AGENT_DISABLE_NONSTREAMING_FALLBACK) ||
-        getFeatureValue_CACHED_MAY_BE_STALE(
-          'tengu_disable_streaming_to_non_streaming_fallback',
-          false,
-        )
+        false
 
       if (disableFallback) {
         logForDebugging(
@@ -3406,7 +3389,7 @@ export function adjustParamsForNonStreaming<
 
 function isMaxTokensCapEnabled(): boolean {
   // 3P default: false (not validated on Bedrock/Vertex)
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_otk_slot_v1', false)
+  return true
 }
 
 export function getMaxOutputTokensForModel(model: string): number {

@@ -1,10 +1,6 @@
 import { logForDebugging } from 'src/utils/debug.js'
 import { z } from 'zod/v4'
 import { lazySchema } from '../../utils/lazySchema.js'
-import {
-  checkStatsigFeatureGate_CACHED_MAY_BE_STALE,
-  getFeatureValue_CACHED_MAY_BE_STALE,
-} from '../analytics/growthbook.js'
 import { logEvent } from '../analytics/index.js'
 import type { ConnectedMCPServer, MCPServerConnection } from './types.js'
 
@@ -12,10 +8,7 @@ import type { ConnectedMCPServer, MCPServerConnection } from './types.js'
 // file pulls in too many deps for this thin IPC module.
 type AutoModeEnabledState = 'enabled' | 'disabled' | 'opt-in'
 function readAutoModeEnabledState(): AutoModeEnabledState | undefined {
-  const v = getFeatureValue_CACHED_MAY_BE_STALE<{ enabled?: string }>(
-    'tengu_auto_mode_config',
-    {},
-  )?.enabled
+  const v = ({} as { enabled?: string }).enabled
   return v === 'enabled' || v === 'disabled' || v === 'opt-in' ? v : undefined
 }
 
@@ -81,22 +74,12 @@ export function setupVscodeSdkMcp(sdkClients: MCPServerConnection[]): void {
 
     // Send necessary experiment gates to VSCode immediately.
     const gates: Record<string, boolean | string> = {
-      tengu_vscode_review_upsell: checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
-        'tengu_vscode_review_upsell',
-      ),
-      tengu_vscode_onboarding: checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
-        'tengu_vscode_onboarding',
-      ),
+      tengu_vscode_review_upsell: true,
+      tengu_vscode_onboarding: true,
       // Browser support.
-      tengu_quiet_fern: getFeatureValue_CACHED_MAY_BE_STALE(
-        'tengu_quiet_fern',
-        false,
-      ),
+      tengu_quiet_fern: true,
       // In-band OAuth via claude_authenticate (vs. extension-native PKCE).
-      tengu_vscode_cc_auth: getFeatureValue_CACHED_MAY_BE_STALE(
-        'tengu_vscode_cc_auth',
-        false,
-      ),
+      tengu_vscode_cc_auth: true,
     }
     // Tri-state: 'enabled' | 'disabled' | 'opt-in'. Omit if unknown so VSCode
     // fails closed (treats absent as 'disabled').

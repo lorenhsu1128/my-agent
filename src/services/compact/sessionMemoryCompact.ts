@@ -18,10 +18,6 @@ import { processSessionStartHooks } from '../../utils/sessionStart.js'
 import { getTranscriptPath } from '../../utils/sessionStorage.js'
 import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js'
 import { extractDiscoveredToolNames } from '../../utils/toolSearch.js'
-import {
-  getDynamicConfig_BLOCKS_ON_INIT,
-  getFeatureValue_CACHED_MAY_BE_STALE,
-} from '../analytics/growthbook.js'
 import { logEvent } from '../analytics/index.js'
 import {
   isSessionMemoryEmpty,
@@ -106,9 +102,7 @@ async function initSessionMemoryCompactConfig(): Promise<void> {
   configInitialized = true
 
   // Load config from GrowthBook, merging with defaults
-  const remoteConfig = await getDynamicConfig_BLOCKS_ON_INIT<
-    Partial<SessionMemoryCompactConfig>
-  >('tengu_sm_compact_config', {})
+  const remoteConfig: Partial<SessionMemoryCompactConfig> = {}
 
   // Only use remote values if they are explicitly set (positive numbers)
   // This ensures sensible defaults aren't overridden by zero values
@@ -409,14 +403,8 @@ export function shouldUseSessionMemoryCompaction(): boolean {
     return false
   }
 
-  const sessionMemoryFlag = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_session_memory',
-    false,
-  )
-  const smCompactFlag = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_sm_compact',
-    false,
-  )
+  const sessionMemoryFlag = true
+  const smCompactFlag = false
   const shouldUse = sessionMemoryFlag && smCompactFlag
 
   // Log flag states for debugging (ant-only to avoid noise in external logs)

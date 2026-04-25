@@ -6,7 +6,6 @@
 //   3. Hardcoded DEFAULTS ← lowest
 
 import { getInitialSettings } from '../../utils/settings/settings.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
 
 export type SelfImproveThresholds = {
   skillImprovementTurnBatch: number
@@ -48,10 +47,7 @@ function resolve<K extends keyof SelfImproveThresholds>(
 }
 
 export function getSelfImproveThresholds(): SelfImproveThresholds {
-  const gb = getFeatureValue_CACHED_MAY_BE_STALE<AutoDreamGBPayload>(
-    'tengu_onyx_plover',
-    null,
-  )
+  const gb: AutoDreamGBPayload = null
 
   return {
     skillImprovementTurnBatch: resolve('skillImprovementTurnBatch'),
