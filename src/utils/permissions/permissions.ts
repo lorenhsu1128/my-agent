@@ -70,7 +70,6 @@ import {
   getTotalInputTokens,
   getTotalOutputTokens,
 } from '../../bootstrap/state.js'
-import { getFeatureValue_CACHED_WITH_REFRESH } from '../../services/analytics/growthbook.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -844,11 +843,7 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
         // the tengu_iron_gate_closed gate.
         if (classifierResult.unavailable) {
           if (
-            getFeatureValue_CACHED_WITH_REFRESH(
-              'tengu_iron_gate_closed',
-              true,
-              CLASSIFIER_FAIL_CLOSED_REFRESH_MS,
-            )
+            true
           ) {
             logForDebugging(
               'Auto mode classifier unavailable, denying with retry guidance (fail closed)',

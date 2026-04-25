@@ -1,5 +1,4 @@
 import type { SDKMessage } from 'src/entrypoints/agentSdkTypes.js'
-import { checkGate_CACHED_OR_BLOCKING } from '../../../services/analytics/growthbook.js'
 import { isPolicyAllowed } from '../../../services/policyLimits/index.js'
 import { detectCurrentRepositoryWithHost } from '../../detectRepository.js'
 import { isEnvTruthy } from '../../envUtils.js'
@@ -76,7 +75,7 @@ export async function checkBackgroundRemoteSessionEligibility({
     !skipBundle &&
     (isEnvTruthy(process.env.CCR_FORCE_BUNDLE) ||
       isEnvTruthy(process.env.CCR_ENABLE_BUNDLE) ||
-      (await checkGate_CACHED_OR_BLOCKING('tengu_ccr_bundle_seed_enabled')))
+      true)
 
   if (!checkIsInGitRepo()) {
     errors.push({ type: 'not_in_git_repo' })

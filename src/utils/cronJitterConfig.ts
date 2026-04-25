@@ -9,7 +9,6 @@
 //   Daemon/SDK: omit getJitterConfig → DEFAULT_CRON_JITTER_CONFIG applies.
 
 import { z } from 'zod/v4'
-import { getFeatureValue_CACHED_WITH_REFRESH } from '../services/analytics/growthbook.js'
 import {
   type CronJitterConfig,
   DEFAULT_CRON_JITTER_CONFIG,
@@ -65,11 +64,6 @@ const cronJitterConfigSchema = lazySchema(() =>
  * contexts. Daemon/SDK callers omit getJitterConfig and get defaults.
  */
 export function getCronJitterConfig(): CronJitterConfig {
-  const raw = getFeatureValue_CACHED_WITH_REFRESH<unknown>(
-    'tengu_kairos_cron_config',
-    DEFAULT_CRON_JITTER_CONFIG,
-    JITTER_CONFIG_REFRESH_MS,
-  )
-  const parsed = cronJitterConfigSchema().safeParse(raw)
-  return parsed.success ? parsed.data : DEFAULT_CRON_JITTER_CONFIG
+  // tengu_kairos_cron_config not in shipped table → default
+  return DEFAULT_CRON_JITTER_CONFIG
 }

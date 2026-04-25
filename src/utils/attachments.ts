@@ -214,7 +214,6 @@ import {
   getEffectiveContextWindowSize,
   isAutoCompactEnabled,
 } from '../services/compact/autoCompact.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
   hasInstructionsLoadedHook,
   executeInstructionsLoadedHooks,
@@ -1808,10 +1807,8 @@ async function getNestedMemoryAttachmentsForFile(
       originalCwd,
     )
 
-    const skipProjectLevel = getFeatureValue_CACHED_MAY_BE_STALE(
-      'tengu_paper_halyard',
-      false,
-    )
+    // tengu_paper_halyard shipped=true
+    const skipProjectLevel = true
 
     // Phase 3: Process nested directories (CWD → target)
     // Each directory gets: MY-AGENT.md + unconditional rules + conditional rules
@@ -2354,10 +2351,7 @@ export function startRelevantMemoryPrefetch(
     logForDebugging('[memdir/prefetch] skip: isAutoMemoryEnabled()=false')
     return undefined
   }
-  if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_moth_copse', false)) {
-    logForDebugging('[memdir/prefetch] skip: feature flag tengu_moth_copse=false')
-    return undefined
-  }
+  // tengu_moth_copse shipped=true
 
   const lastUserMessage = messages.findLast(m => m.type === 'user' && !m.isMeta)
   if (!lastUserMessage) {
@@ -3953,9 +3947,7 @@ export function getCompactionReminderAttachment(
   messages: Message[],
   model: string,
 ): Attachment[] {
-  if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_marble_fox', false)) {
-    return []
-  }
+  // tengu_marble_fox shipped=true
 
   if (!isAutoCompactEnabled()) {
     return []

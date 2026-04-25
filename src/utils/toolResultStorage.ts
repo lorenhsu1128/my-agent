@@ -12,7 +12,6 @@ import {
   MAX_TOOL_RESULT_BYTES,
   MAX_TOOL_RESULTS_PER_MESSAGE_CHARS,
 } from '../constants/toolLimits.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import { logEvent } from '../services/analytics/index.js'
 import { sanitizeToolNameForAnalytics } from '../services/analytics/metadata.js'
 import type { Message } from '../types/message.js'
@@ -62,10 +61,7 @@ export function getPersistenceThreshold(
   if (!Number.isFinite(declaredMaxResultSizeChars)) {
     return declaredMaxResultSizeChars
   }
-  const overrides = getFeatureValue_CACHED_MAY_BE_STALE<Record<
-    string,
-    number
-  > | null>(PERSIST_THRESHOLD_OVERRIDE_FLAG, {})
+  const overrides: Record<string, number> | null = {}
   const override = overrides?.[toolName]
   if (
     typeof override === 'number' &&
@@ -419,10 +415,7 @@ export function cloneContentReplacementState(
  * so a flag served as null/string/NaN leaks through.
  */
 export function getPerMessageBudgetLimit(): number {
-  const override = getFeatureValue_CACHED_MAY_BE_STALE<number | null>(
-    'tengu_hawthorn_window',
-    null,
-  )
+  const override: number | null = null
   if (
     typeof override === 'number' &&
     Number.isFinite(override) &&
@@ -448,10 +441,7 @@ export function provisionContentReplacementState(
   initialMessages?: Message[],
   initialContentReplacements?: ContentReplacementRecord[],
 ): ContentReplacementState | undefined {
-  const enabled = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_hawthorn_steeple',
-    false,
-  )
+  const enabled = true
   if (!enabled) return undefined
   if (initialMessages) {
     return reconstructContentReplacementState(

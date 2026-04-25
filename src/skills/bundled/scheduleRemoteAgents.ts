@@ -1,4 +1,3 @@
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import type { MCPServerConnection } from '../../services/mcp/types.js'
 import { isPolicyAllowed } from '../../services/policyLimits/index.js'
 import type { ToolUseContext } from '../../Tool.js'
@@ -317,7 +316,7 @@ Minimum interval is 1 hour. \`*/30 * * * *\` will be rejected.
 - Accept GitHub URLs in any format (https://github.com/org/repo, org/repo, etc.) and normalize to the full HTTPS URL (without .git suffix)
 - The prompt is the most important part — spend time getting it right. The remote agent starts with zero context, so the prompt must be self-contained.
 - To delete a trigger, direct users to https://claude.ai/code/scheduled
-${needsGitHubAccessReminder ? `- If the user's request seems to require GitHub repo access (e.g. cloning a repo, opening PRs, reading code), remind them that ${getFeatureValue_CACHED_MAY_BE_STALE('tengu_cobalt_lantern', false) ? "they should run /web-setup to connect their GitHub account (or install the Claude GitHub App on the repo as an alternative) — otherwise the remote agent won't be able to access it" : "they need the Claude GitHub App installed on the repo — otherwise the remote agent won't be able to access it"}.` : ''}
+${needsGitHubAccessReminder ? `- If the user's request seems to require GitHub repo access (e.g. cloning a repo, opening PRs, reading code), remind them that ${true ? "they should run /web-setup to connect their GitHub account (or install the Claude GitHub App on the repo as an alternative) — otherwise the remote agent won't be able to access it" : "they need the Claude GitHub App installed on the repo — otherwise the remote agent won't be able to access it"}.` : ''}
 ${userArgs ? `\n## User Request\n\nThe user said: "${userArgs}"\n\nStart by understanding their intent and working through the appropriate workflow above.` : ''}`
 }
 
@@ -330,7 +329,7 @@ export function registerScheduleRemoteAgentsSkill(): void {
       'When the user wants to schedule a recurring remote agent, set up automated tasks, create a cron job for my-agent, or manage their scheduled agents/triggers.',
     userInvocable: true,
     isEnabled: () =>
-      getFeatureValue_CACHED_MAY_BE_STALE('tengu_surreal_dali', false) &&
+      true &&
       isPolicyAllowed('allow_remote_sessions'),
     allowedTools: [REMOTE_TRIGGER_TOOL_NAME, ASK_USER_QUESTION_TOOL_NAME],
     async getPromptForCommand(args: string, context: ToolUseContext) {
@@ -397,10 +396,7 @@ export function registerScheduleRemoteAgentsSkill(): void {
         )
         if (!hasAccess) {
           needsGitHubAccessReminder = true
-          const webSetupEnabled = getFeatureValue_CACHED_MAY_BE_STALE(
-            'tengu_cobalt_lantern',
-            false,
-          )
+          const webSetupEnabled = true
           const msg = webSetupEnabled
             ? `GitHub not connected for ${repo.owner}/${repo.name} \u2014 run /web-setup to sync your GitHub credentials, or install the Claude GitHub App at https://claude.ai/code/onboarding?magic=github-app-setup.`
             : `Claude GitHub App not installed on ${repo.owner}/${repo.name} \u2014 install at https://claude.ai/code/onboarding?magic=github-app-setup if your trigger needs this repo.`

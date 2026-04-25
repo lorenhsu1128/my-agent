@@ -14,7 +14,6 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from 'src/services/analytics/index.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { type FilesApiConfig, uploadFile } from '../../services/api/filesApi.js'
 import { getCwd } from '../cwd.js'
 import { logForDebugging } from '../debug.js'
@@ -216,11 +215,7 @@ export async function createAndUploadGitBundle(
 
   // git leaves a partial file on nonzero exit (e.g. empty-repo 128).
   try {
-    const maxBytes =
-      getFeatureValue_CACHED_MAY_BE_STALE<number | null>(
-        'tengu_ccr_bundle_max_bytes',
-        null,
-      ) ?? DEFAULT_BUNDLE_MAX_BYTES
+    const maxBytes = DEFAULT_BUNDLE_MAX_BYTES
 
     const bundle = await _bundleWithFallback(
       gitRoot,

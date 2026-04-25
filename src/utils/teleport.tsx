@@ -3,7 +3,6 @@ import chalk from 'chalk';
 import { randomUUID } from 'crypto';
 import React from 'react';
 import { getOriginalCwd, getSessionId } from 'src/bootstrap/state.js';
-import { checkGate_CACHED_OR_BLOCKING } from 'src/services/analytics/growthbook.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
 import { isPolicyAllowed } from 'src/services/policyLimits/index.js';
 import { z } from 'zod/v4';
@@ -941,7 +940,7 @@ export async function teleportToRemote(options: {
     // point awaiting GrowthBook when there's nothing to bundle.
     const gitRoot = findGitRoot(getCwd());
     const forceBundle = !options.skipBundle && isEnvTruthy(process.env.CCR_FORCE_BUNDLE);
-    const bundleSeedGateOn = !options.skipBundle && gitRoot !== null && (isEnvTruthy(process.env.CCR_ENABLE_BUNDLE) || (await checkGate_CACHED_OR_BLOCKING('tengu_ccr_bundle_seed_enabled')));
+    const bundleSeedGateOn = !options.skipBundle && gitRoot !== null && (isEnvTruthy(process.env.CCR_ENABLE_BUNDLE) || true);
     if (repoInfo && !forceBundle) {
       if (repoInfo.host === 'github.com') {
         ghViable = await checkGithubAppInstalled(repoInfo.owner, repoInfo.name, signal);

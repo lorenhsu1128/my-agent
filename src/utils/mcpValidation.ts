@@ -3,7 +3,6 @@ import type {
   ImageBlockParam,
   TextBlockParam,
 } from 'my-agent-ai/sdk/resources/index'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
   countMessagesTokensWithAPI,
   roughTokenCountEstimation,
@@ -31,10 +30,8 @@ export function getMaxMcpOutputTokens(): number {
       return parsed
     }
   }
-  const overrides = getFeatureValue_CACHED_MAY_BE_STALE<Record<
-    string,
-    number
-  > | null>('tengu_satin_quoll', {})
+  // tengu_satin_quoll not in shipped table → default {}
+  const overrides: Record<string, number> | null = {}
   const override = overrides?.['mcp_tool']
   if (
     typeof override === 'number' &&

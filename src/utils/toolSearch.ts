@@ -7,7 +7,6 @@
  */
 
 import memoize from 'lodash-es/memoize.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -210,10 +209,7 @@ const DEFAULT_UNSUPPORTED_MODEL_PATTERNS = ['haiku']
 function getUnsupportedToolReferencePatterns(): string[] {
   try {
     // Try to get from GrowthBook for live configuration
-    const patterns = getFeatureValue_CACHED_MAY_BE_STALE<string[] | null>(
-      'tengu_tool_search_unsupported_models',
-      null,
-    )
+    const patterns: string[] | null = null
     if (patterns && Array.isArray(patterns) && patterns.length > 0) {
       return patterns
     }
@@ -629,7 +625,7 @@ export type DeferredToolsDeltaScanContext = {
 export function isDeferredToolsDeltaEnabled(): boolean {
   return (
     process.env.USER_TYPE === 'ant' ||
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_glacier_2xr', false)
+    true
   )
 }
 

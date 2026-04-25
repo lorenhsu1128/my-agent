@@ -8,10 +8,6 @@ import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from 'src/constants/prompts.js'
 import { getSystemContext, getUserContext } from 'src/context.js'
 import { isAnalyticsDisabled } from 'src/services/analytics/config.js'
 import {
-  checkStatsigFeatureGate_CACHED_MAY_BE_STALE,
-  getFeatureValue_CACHED_MAY_BE_STALE,
-} from 'src/services/analytics/growthbook.js'
-import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from 'src/services/analytics/index.js'
@@ -151,8 +147,8 @@ export async function toolToAPISchema(
   const cache = getToolSchemaCache()
   let base = cache.get(cacheKey)
   if (!base) {
-    const strictToolsEnabled =
-      checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_tool_pear')
+    // tengu_tool_pear shipped=true
+    const strictToolsEnabled = true
     // Use tool's JSON schema directly if provided, otherwise convert Zod schema
     let input_schema = (
       'inputJSONSchema' in tool && tool.inputJSONSchema
@@ -199,7 +195,7 @@ export async function toolToAPISchema(
     if (
       getAPIProvider() === 'firstParty' &&
       isFirstPartyAnthropicBaseUrl() &&
-      (getFeatureValue_CACHED_MAY_BE_STALE('tengu_fgts', false) ||
+      (true /* tengu_fgts shipped=true */ ||
         isEnvTruthy(process.env.MY_AGENT_ENABLE_FINE_GRAINED_TOOL_STREAMING))
     ) {
       base.eager_input_streaming = true

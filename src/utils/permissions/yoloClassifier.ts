@@ -10,7 +10,6 @@ import {
   getSessionId,
   setLastClassifierRequests,
 } from '../../bootstrap/state.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { logEvent } from '../../services/analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/metadata.js'
 import { getCacheControl } from '../../services/api/claude.js'
@@ -70,10 +69,7 @@ const ANTHROPIC_PERMISSIONS_TEMPLATE: string =
 
 function isUsingExternalPermissions(): boolean {
   if (process.env.USER_TYPE !== 'ant') return true
-  const config = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_auto_mode_config',
-    {} as AutoModeConfig,
-  )
+  const config = {} as AutoModeConfig
   return config?.forceExternalPermissions === true
 }
 
@@ -1336,10 +1332,7 @@ function getClassifierModel(): string {
     const envModel = process.env.MY_AGENT_AUTO_MODE_MODEL
     if (envModel) return envModel
   }
-  const config = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_auto_mode_config',
-    {} as AutoModeConfig,
-  )
+  const config = {} as AutoModeConfig
   if (config?.model) {
     return config.model
   }
@@ -1361,10 +1354,7 @@ function resolveTwoStageClassifier():
     if (isEnvTruthy(env)) return true
     if (isEnvDefinedFalsy(env)) return false
   }
-  const config = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_auto_mode_config',
-    {} as AutoModeConfig,
-  )
+  const config = {} as AutoModeConfig
   return config?.twoStageClassifier
 }
 
@@ -1382,10 +1372,7 @@ function isJsonlTranscriptEnabled(): boolean {
     if (isEnvTruthy(env)) return true
     if (isEnvDefinedFalsy(env)) return false
   }
-  const config = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_auto_mode_config',
-    {} as AutoModeConfig,
-  )
+  const config = {} as AutoModeConfig
   return config?.jsonlTranscript === true
 }
 

@@ -26,10 +26,6 @@ import { NO_CONTENT_MESSAGE } from '../constants/messages.js'
 import { OUTPUT_STYLE_CONFIG } from '../constants/outputStyles.js'
 import { isAutoMemoryEnabled } from '../memdir/paths.js'
 import {
-  checkStatsigFeatureGate_CACHED_MAY_BE_STALE,
-  getFeatureValue_CACHED_MAY_BE_STALE,
-} from '../services/analytics/growthbook.js'
-import {
   getImageTooLargeErrorMessage,
   getPdfInvalidErrorMessage,
   getPdfPasswordProtectedErrorMessage,
@@ -183,10 +179,8 @@ const TOOL_REFERENCE_TURN_BOUNDARY = 'Tool loaded.'
  * when auto-memory is enabled and the GrowthBook flag is on.
  */
 export function withMemoryCorrectionHint(message: string): string {
-  if (
-    isAutoMemoryEnabled() &&
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_amber_prism', false)
-  ) {
+  // tengu_amber_prism shipped=true
+  if (isAutoMemoryEnabled()) {
     return message + MEMORY_CORRECTION_HINT
   }
   return message
@@ -2156,11 +2150,8 @@ export function normalizeMessagesForAPI(
           // of adding one here. This injection is itself one of the patterns
           // that gets relocated, so skipping it saves a scan. When gate is
           // off, this is the fallback (same as pre-#21049 main).
-          if (
-            !checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
-              'tengu_toolref_defer_j8m',
-            )
-          ) {
+          // tengu_toolref_defer_j8m shipped=true → block disabled
+          if (false) {
             const contentAfterStrip = normalizedMessage.message.content
             if (
               Array.isArray(contentAfterStrip) &&
@@ -2270,11 +2261,8 @@ export function normalizeMessagesForAPI(
           const rawAttachmentMessage = normalizeAttachmentForAPI(
             message.attachment,
           )
-          const attachmentMessage = checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
-            'tengu_chair_sermon',
-          )
-            ? rawAttachmentMessage.map(ensureSystemReminderWrap)
-            : rawAttachmentMessage
+          // tengu_chair_sermon shipped=true
+          const attachmentMessage = rawAttachmentMessage.map(ensureSystemReminderWrap)
 
           // If the last message is also a user message, merge them
           const lastMessage = last(result)
@@ -2298,11 +2286,8 @@ export function normalizeMessagesForAPI(
   // Runs after merge (siblings are in place) and before ID tagging (so
   // tags reflect final positions). When gate is OFF, this is a noop and
   // the TOOL_REFERENCE_TURN_BOUNDARY injection above serves as fallback.
-  const relocated = checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
-    'tengu_toolref_defer_j8m',
-  )
-    ? relocateToolReferenceSiblings(result)
-    : result
+  // tengu_toolref_defer_j8m shipped=true
+  const relocated = relocateToolReferenceSiblings(result)
 
   // Filter orphaned thinking-only assistant messages (likely introduced by
   // compaction slicing away intervening messages between a failed streaming
@@ -2331,11 +2316,8 @@ export function normalizeMessagesForAPI(
   // Gated together: the merge exists solely to feed the smoosh; running it
   // ungated changes VCR fixture hashes for @-mention scenarios (adjacent
   // [prompt, attachment] users) without any benefit when the smoosh is off.
-  const smooshed = checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
-    'tengu_chair_sermon',
-  )
-    ? smooshSystemReminderSiblings(mergeAdjacentUserMessages(withNonEmpty))
-    : withNonEmpty
+  // tengu_chair_sermon shipped=true
+  const smooshed = smooshSystemReminderSiblings(mergeAdjacentUserMessages(withNonEmpty))
 
   // Unconditional — catches transcripts persisted before smooshIntoToolResult
   // learned to filter on is_error. Without this a resumed session with an
@@ -2612,7 +2594,8 @@ export function mergeUserContentBlocks(
     return [...a, ...b]
   }
 
-  if (!checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_chair_sermon')) {
+  // tengu_chair_sermon shipped=true → legacy branch disabled
+  if (false) {
     // Legacy (ungated) smoosh: only string-content tool_result + all-text
     // siblings → joined string. Matches pre-universal-smoosh behavior on main.
     // The precondition guarantees smooshIntoToolResult hits its string path
@@ -5367,11 +5350,8 @@ export function ensureToolResultPairing(
         // Prepending synthetics to existing content can produce a
         // [tool_result, text] sibling the smoosh inside normalize never saw
         // (pairing runs after normalize). Re-smoosh just this one message.
-        result.push(
-          checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_chair_sermon')
-            ? smooshSystemReminderSiblings([patchedNext])[0]!
-            : patchedNext,
-        )
+        // tengu_chair_sermon shipped=true
+        result.push(smooshSystemReminderSiblings([patchedNext])[0]!)
       } else {
         // Content is empty after stripping orphaned tool_results. We still
         // need a user message here to maintain role alternation — otherwise
