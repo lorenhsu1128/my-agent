@@ -74,7 +74,7 @@ BFS 邏輯本身（佇列、深度、網域過濾）完全不變。
 真實 Chromium via puppeteer-core。詳細 action 參考：
 [`src/tools/WebBrowserTool/README.md`](../src/tools/WebBrowserTool/README.md)。
 
-### 10 個 actions
+### 13 個 actions
 
 | Action | 功能 |
 |---|---|

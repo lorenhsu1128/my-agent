@@ -88,6 +88,30 @@ agent：[呼叫 SessionSearch] query="llamacpp context window"
 給 prefetch 結果。本地 128K 模型有充裕空間；雲端的 200K 模型更寬鬆。
 Context 快滿時 prefetch 自動縮量。
 
+### llama.cpp 模式下的 selector（ADR-014 / M-MEMRECALL-LOCAL）
+
+Prefetch 內部要決定「目前的 query 該抓哪幾個 memory 檔」— 這個 selector
+原本寫死走 Anthropic Sonnet（透過 `sideQuery`）。對純本地模型用戶
+（沒有 `ANTHROPIC_API_KEY`）會 silent 401 → selector 回 `[]` →
+**memory 機制等於關閉**。
+
+修復後（2026-04-24）：
+
+- `selectRelevantMemories` 偵測 `isLlamaCppActive()` → 改走
+  `selectViaLlamaCpp()`，直接 fetch `${baseUrl}/chat/completions`（OpenAI
+  相容 endpoint，不依賴 structured output beta，prompt 引導模型輸出
+  JSON array）。
+- `extractFilenamesFromText` 容錯解析（處理 markdown fence、preamble、
+  `{selected_memories: [...]}` 包裝）。
+- **Safety-net fallback**：selector 任何原因回 `[]` 時（HTTP 非 200 /
+  parse 失敗 / 網路錯 / 真的零相關），自動帶最新 `FALLBACK_MAX_FILES=8`
+  個 memory（按 mtime 排序）讓新 session 至少有最近 memory 能 ground。
+- 不污染 `sideQuery`（後者仍純 Anthropic）— 整體 provider-aware 化已
+  獨立列為 M-SIDEQUERY-PROVIDER 後續 milestone。
+
+實作見 `src/memdir/findRelevantMemories.ts`，整合測試在
+`tests/integration/memory/findRelevantMemories-llamacpp.test.ts`。
+
 ---
 
 ## MemoryTool + memdir
@@ -199,13 +223,12 @@ M-UM 的實作有三個獨立控制點：
 
 ---
 
-## 相關 Feature flags
+## 相關架構
 
-| Flag | 用途 |
-|---|---|
-| `AGENT_MEMORY_SNAPSHOT` | 啟用 memdir 快照狀態儲存 |
-| `EXTRACT_MEMORIES` | 啟用 post-query 記憶抽取 hooks |
-| `TEAMMEM` | 啟用 team memory 檔案與 watcher |
+my-agent 採 ADR-003 — 不使用 feature flag，記憶機制（Session Recall /
+Dynamic Prefetch / MemoryTool / User Modeling）皆預設啟用。
+原 Claude Code 對應的 flag（`AGENT_MEMORY_SNAPSHOT` / `EXTRACT_MEMORIES`
+/ `TEAMMEM`）僅供 [FEATURES.md](../FEATURES.md) 歷史對照。
 
 ---
 
