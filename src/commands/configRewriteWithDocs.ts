@@ -67,9 +67,9 @@ const call: LocalCommandCall = async () => {
     value:
       `已觸發設定檔重寫（帶繁中註解 JSONC 模板）\n\n` +
       messages.join('\n') +
-      `\n⚠️ 已知限制：src/utils/config.ts 的 saveGlobalConfig 目前仍會在每次 turn\n` +
-      `   結束時寫回 GlobalConfig（filter-out-defaults + JSON.stringify），可能洗\n` +
-      `   掉部分 bundled 註解。完整保留需等 M-CONFIG-JSONC-SAVE 里程碑改造該路徑。`,
+      `\n✅ saveGlobalConfig / saveConfigWithLock 已改為偵測 JSONC 並保留註解\n` +
+      `   （src/utils/config.ts 兩個寫入函式走 jsonc.modify）。後續 turn-end stats /\n` +
+      `   skillUsage / projects 寫回時不會洗掉 // 註解。`,
   }
 }
 
