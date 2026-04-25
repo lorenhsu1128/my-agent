@@ -1,12 +1,24 @@
 /**
- * 首次啟動種檔：~/.my-agent/discord.json 不存在時寫入預設停用版本 + README。
- * 已存在則完全不動。
+ * 首次啟動 seed + 既有 strict JSON → JSONC migration。
+ *
+ * 行為：
+ *   - 檔案不存在 → 寫入 DISCORD_JSONC_TEMPLATE（含繁中註解）
+ *   - 檔案存在且 strict JSON → 重寫為 JSONC 模板格式，保留使用者既有值
+ *   - 檔案存在且已是 JSONC → 不動
+ *   - README sidecar（discord.README.md）僅在不存在時 seed；保留為跨檔深度資訊
  */
 import { existsSync } from 'fs'
-import { mkdir, writeFile } from 'fs/promises'
+import { readFile, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
+import { mkdir } from 'fs/promises'
 import { getDiscordConfigPath } from './paths.js'
-import { DEFAULT_DISCORD_CONFIG } from './schema.js'
+import { DiscordConfigSchema } from './schema.js'
+import { DISCORD_JSONC_TEMPLATE } from './bundledTemplate.js'
+import {
+  parseJsonc,
+  writeJsoncPreservingComments,
+  forceRewriteJsoncFile,
+} from '../utils/jsoncStore.js'
 import { logForDebugging } from '../utils/debug.js'
 
 const README_FILENAME = 'discord.README.md'
@@ -15,6 +27,9 @@ const README_CONTENT = `# ~/.my-agent/discord.json
 
 Discord gateway 設定（M-DISCORD）。預設 \`enabled: false\`；編輯完填妥
 token / whitelist / projects 再改 \`true\` 才會生效。
+
+每個欄位的繁體中文說明已內嵌在 \`discord.json\` 內（JSONC 格式，支援 // 與 /* */ 註解）。
+本 README 保留跨檔資訊：啟動流程、路由規則、安全提醒。
 
 ## 啟動流程
 
@@ -34,46 +49,6 @@ token / whitelist / projects 再改 \`true\` 才會生效。
 - DM：\`#<projectId|alias> <訊息>\` 指定 project；沒前綴用 \`defaultProjectPath\`
 - Channel：必須在 \`channelBindings\` 裡；沒綁就忽略
 
-## 欄位說明
-
-| 欄位 | 用途 |
-|------|------|
-| \`enabled\` | 總開關；false 時 daemon 跳過整個 Discord gateway |
-| \`botToken\` | Bot token；env var \`DISCORD_BOT_TOKEN\` 優先於此欄位 |
-| \`whitelistUserIds\` | 僅這些 user 的訊息被處理；空陣列 = 全擋 |
-| \`defaultProjectPath\` | DM 沒前綴時的預設 project（須在 \`projects[].path\` 中） |
-| \`projects[].id\` | 路由 key（DM 前綴用） |
-| \`projects[].name\` | UI 顯示名 |
-| \`projects[].path\` | 實際 cwd 絕對路徑 |
-| \`projects[].aliases\` | 備用前綴（e.g. \`"ma"\`） |
-| \`channelBindings\` | \`{ channelId: projectPath }\` 映射（手動設或走 \`/discord-bind\` 自動寫入） |
-| \`homeChannelId\` | cron / 長任務完成通知 post 至此 channel |
-| \`guildId\` | \`/discord-bind\` 自動建頻道用的 server id；bot 須在此 guild 有 Manage Channels 權限 |
-| \`archiveCategoryId\` | 專案目錄刪除時，對應頻道被移到此分類保留歷史；未設則只清 binding |
-| \`streamStrategy\` | \`turn-end\`（一次送）或 \`edit\`（模擬 streaming） |
-| \`replyMode\` | \`first\`（只首段 reply）/ \`all\` / \`off\` |
-
-## 範例
-
-\`\`\`json
-{
-  "enabled": true,
-  "botToken": "MT...your.token.here",
-  "whitelistUserIds": ["123456789012345678"],
-  "defaultProjectPath": "C:/Users/me/projects/my-agent",
-  "projects": [
-    { "id": "my-agent", "name": "My Agent", "path": "C:/Users/me/projects/my-agent", "aliases": ["ma", "agent"] },
-    { "id": "blog", "name": "Blog", "path": "C:/Users/me/projects/blog", "aliases": [] }
-  ],
-  "channelBindings": {
-    "987654321098765432": "C:/Users/me/projects/my-agent"
-  },
-  "homeChannelId": "987654321098765433",
-  "streamStrategy": "turn-end",
-  "replyMode": "first"
-}
-\`\`\`
-
 ## 安全提醒
 
 - **白名單**：個人使用請只放自己的 user id。bot 被拉進公開 guild 也不會回應陌生人。
@@ -81,28 +56,78 @@ token / whitelist / projects 再改 \`true\` 才會生效。
   - \`~/.my-agent/discord.json\` **不要 commit 進 git**（家目錄預設不會，但注意別手動把它複製到 repo）
   - 檔案權限建議 \`chmod 600 ~/.my-agent/discord.json\`（Windows 可改為只有本人可讀）
   - Token 外洩 → Developer Portal → Bot → Reset Token
-- **Permission mode**：從 Discord \`/mode default\` 等 slash command 可切 permission mode，會雙向同步到 REPL。預設 \`default\`（destructive 會請求授權）。
+- **Permission mode**：從 Discord \`/mode default\` 等 slash command 可切 permission mode，會雙向同步到 REPL。
+
+## JSONC 格式
+
+本檔從 v2026-04-25 起採用 JSONC（JSON with Comments），支援 \`//\`、\`/* */\`、
+尾部逗號。my-agent 寫回此檔（\`/discord-bind\` / 白名單變更等）時會保留使用者加的註解。
 `
 
-/**
- * 若 ~/.my-agent/discord.json 不存在，寫入 DEFAULT_DISCORD_CONFIG（enabled=false）
- * + discord.README.md。已存在則不動。
- */
+function isStrictJson(text: string): boolean {
+  const stripped = text.replace(/^﻿/, '').trim()
+  if (!stripped) return false
+  try {
+    JSON.parse(stripped)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function migrateStrictJsonToJsonc(
+  path: string,
+  originalText: string,
+): Promise<void> {
+  let userValue: unknown
+  try {
+    userValue = JSON.parse(originalText.replace(/^﻿/, ''))
+  } catch (err) {
+    logForDebugging(
+      `[discord-config] migration skip：JSON parse 失敗（${err instanceof Error ? err.message : String(err)}）`,
+      { level: 'warn' },
+    )
+    return
+  }
+  // 先 schema 驗證，失敗就不動（使用者手動修）
+  const validated = DiscordConfigSchema.safeParse(userValue)
+  if (!validated.success) {
+    logForDebugging(
+      `[discord-config] migration skip：schema 驗證失敗（${validated.error.message}），保留原檔`,
+      { level: 'warn' },
+    )
+    return
+  }
+  // 模板 + 使用者值套回 → 保留模板註解
+  const { newText } = await writeJsoncPreservingComments(
+    path,
+    DISCORD_JSONC_TEMPLATE,
+    validated.data,
+  )
+  await forceRewriteJsoncFile(path, newText)
+  logForDebugging(
+    `[discord-config] migrated strict JSON → JSONC with comments：${path}`,
+  )
+}
+
 export async function seedDiscordConfigIfMissing(): Promise<void> {
   const path = getDiscordConfigPath()
   try {
-    if (existsSync(path)) return
-    await mkdir(dirname(path), { recursive: true })
-    await writeFile(
-      path,
-      JSON.stringify(DEFAULT_DISCORD_CONFIG, null, 2) + '\n',
-      'utf-8',
-    )
-    const readmePath = join(dirname(path), README_FILENAME)
-    if (!existsSync(readmePath)) {
-      await writeFile(readmePath, README_CONTENT, 'utf-8')
+    if (!existsSync(path)) {
+      await mkdir(dirname(path), { recursive: true })
+      await writeFile(path, DISCORD_JSONC_TEMPLATE, 'utf-8')
+      const readmePath = join(dirname(path), README_FILENAME)
+      if (!existsSync(readmePath)) {
+        await writeFile(readmePath, README_CONTENT, 'utf-8')
+      }
+      logForDebugging(`[discord-config] seeded ${path} (JSONC)`)
+      return
     }
-    logForDebugging(`[discord-config] seeded ${path}`)
+
+    const existingText = await readFile(path, 'utf-8')
+    if (isStrictJson(existingText)) {
+      await migrateStrictJsonToJsonc(path, existingText)
+    }
   } catch (e) {
     logForDebugging(
       `[discord-config] seed failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -110,3 +135,7 @@ export async function seedDiscordConfigIfMissing(): Promise<void> {
     )
   }
 }
+
+// 保留未使用但供外部 import 的值（parseJsonc / writeJsoncPreservingComments
+// 只在 migration 內部用；DiscordConfigSchema 已 import above）
+void parseJsonc

@@ -6,7 +6,7 @@
  *   - getDiscordConfigSnapshot() 同步回傳凍結結果
  *   - 檔案不存在 / JSON 壞 / schema 失敗 → 走 DEFAULT + stderr warn；enabled=false
  */
-import { readFile, writeFile } from 'fs/promises'
+import { readFile } from 'fs/promises'
 import { getDiscordConfigPath } from './paths.js'
 import { normalizeProjectPath } from './pathNormalize.js'
 import {
@@ -14,6 +14,10 @@ import {
   DiscordConfigSchema,
   type DiscordConfig,
 } from './schema.js'
+import {
+  parseJsonc,
+  writeJsoncPreservingComments,
+} from '../utils/jsoncStore.js'
 
 let cached: DiscordConfig | null = null
 let loadInFlight: Promise<DiscordConfig> | null = null
@@ -36,10 +40,10 @@ async function readLive(): Promise<DiscordConfig> {
   }
   let parsed: unknown
   try {
-    parsed = JSON.parse(raw.replace(/^\uFEFF/, ''))
+    parsed = parseJsonc(raw.replace(/^\uFEFF/, ''))
   } catch (e) {
     warnOnce(
-      `${path} JSON 解析失敗：${e instanceof Error ? e.message : String(e)}`,
+      `${path} JSONC 解析失敗：${e instanceof Error ? e.message : String(e)}`,
     )
     return DEFAULT_DISCORD_CONFIG
   }
@@ -137,12 +141,12 @@ export async function addChannelBinding(
   } catch {
     raw = JSON.stringify(DEFAULT_DISCORD_CONFIG, null, 2)
   }
-  const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
+  const parsed = parseJsonc(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
   const bindings =
     (parsed.channelBindings as Record<string, string> | undefined) ?? {}
   bindings[channelId] = normalized
   parsed.channelBindings = bindings
-  await writeFile(path, JSON.stringify(parsed, null, 2) + '\n', 'utf-8')
+  await writeJsoncPreservingComments(path, raw.replace(/^﻿/, ''), parsed)
   // 同步更新 in-memory（gateway 共用此物件 reference）
   cfg.channelBindings[channelId] = normalized
 }
@@ -156,7 +160,7 @@ export async function removeChannelBinding(channelId: string): Promise<void> {
   } catch {
     return
   }
-  const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
+  const parsed = parseJsonc(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
   const bindings =
     (parsed.channelBindings as Record<string, string> | undefined) ?? {}
   if (!(channelId in bindings)) {
@@ -166,7 +170,7 @@ export async function removeChannelBinding(channelId: string): Promise<void> {
   }
   delete bindings[channelId]
   parsed.channelBindings = bindings
-  await writeFile(path, JSON.stringify(parsed, null, 2) + '\n', 'utf-8')
+  await writeJsoncPreservingComments(path, raw.replace(/^﻿/, ''), parsed)
   delete cfg.channelBindings[channelId]
 }
 
@@ -184,7 +188,7 @@ export async function addWhitelistUser(userId: string): Promise<boolean> {
   } catch {
     raw = JSON.stringify(DEFAULT_DISCORD_CONFIG, null, 2)
   }
-  const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
+  const parsed = parseJsonc(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
   const list = (parsed.whitelistUserIds as string[] | undefined) ?? []
   if (list.includes(userId)) {
     // disk 已有；確保 in-memory 同步（理論上一致，防邊界情況）
@@ -193,7 +197,7 @@ export async function addWhitelistUser(userId: string): Promise<boolean> {
   }
   list.push(userId)
   parsed.whitelistUserIds = list
-  await writeFile(path, JSON.stringify(parsed, null, 2) + '\n', 'utf-8')
+  await writeJsoncPreservingComments(path, raw.replace(/^﻿/, ''), parsed)
   if (!already) cfg.whitelistUserIds.push(userId)
   return true
 }
@@ -207,7 +211,7 @@ export async function removeWhitelistUser(userId: string): Promise<boolean> {
   } catch {
     return false
   }
-  const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
+  const parsed = parseJsonc(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
   const list = (parsed.whitelistUserIds as string[] | undefined) ?? []
   const idx = list.indexOf(userId)
   const memIdx = cfg.whitelistUserIds.indexOf(userId)
@@ -217,7 +221,7 @@ export async function removeWhitelistUser(userId: string): Promise<boolean> {
   }
   list.splice(idx, 1)
   parsed.whitelistUserIds = list
-  await writeFile(path, JSON.stringify(parsed, null, 2) + '\n', 'utf-8')
+  await writeJsoncPreservingComments(path, raw.replace(/^﻿/, ''), parsed)
   if (memIdx >= 0) cfg.whitelistUserIds.splice(memIdx, 1)
   return true
 }
