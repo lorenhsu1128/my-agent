@@ -356,4 +356,4 @@ prompts.ts / memoryTypes.ts / QueryEngine.ts
 
 ### 詳細使用方法
 
-參見 `docs/customizing-system-prompt.md`（使用者指南）與 `M_SP_PLAN.md`（完整計畫）。
+參見 `docs/customizing-system-prompt.md`（使用者指南）與 `docs/archive/M_SP_PLAN.md`（完整計畫，已歸檔）。

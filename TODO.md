@@ -28,7 +28,7 @@
 
 ## 當前里程碑：M-VISION — llamacpp 路徑多模態（Vision）支援 + 文字模型 fallback（2026-04-19 啟動）
 
-**目標**：讓 llamacpp 路徑能真實接收圖片（目標後端 Gemopus-4-E4B-it，基於 Gemma-4-E4B-it 多模態 GGUF）；同時當後端是純文字模型（Qwen3.5-9B-Neo）時走 graceful fallback（保留現行 `[Image attachment]` 佔位符行為）。詳見 `M_VISION_PLAN.md`。
+**目標**：讓 llamacpp 路徑能真實接收圖片（目標後端 Gemopus-4-E4B-it，基於 Gemma-4-E4B-it 多模態 GGUF）；同時當後端是純文字模型（Qwen3.5-9B-Neo）時走 graceful fallback（保留現行 `[Image attachment]` 佔位符行為）。詳見 `docs/archive/M_VISION_PLAN.md`。
 
 **決策**：capability 由 `~/.my-agent/llamacpp.json` 的 `vision.enabled` 宣告（不 runtime probe）；adapter 依旗標分支；serve.sh 透過 load-config.sh 的 extraArgs 機制追加 `--mmproj`。
 
@@ -282,7 +282,7 @@
 - ADR-UM-05：Session 啟動凍結快照 (Hermes 作法)；mid-session 寫入 MemoryTool 看到 live，但 system prompt 用 snapshot（prefix cache 友善）
 - ADR-UM-06：開關優先序 env (`MYAGENT_DISABLE_USER_MODEL`) > `CLAUDE_CODE_SIMPLE` > settings (`userModelEnabled`) > 預設啟用；CLI flag 暫不做（env var 前綴已夠用）
 
-**詳細設計見 `USER_MODELING_PLAN.md`（根目錄）。**
+**詳細設計見 `docs/archive/USER_MODELING_PLAN.md`（已歸檔）。**
 
 ### 任務
 - [x] M-UM-1 建立 `src/userModel/` 骨架：`paths.ts`（雙層路徑 + 開關）/ `userModel.ts`（讀寫 / snapshot / 雙層合併）/ `prompt.ts`（fence 格式化 + `loadUserProfilePrompt`）
@@ -330,7 +330,7 @@
 
 **目標**：把約 15–16K tokens 寫死在 TS 的 system prompt 文字外部化到 `~/.my-agent/system-prompt/` 下的 `.md` 檔，使用者可直接編輯、下一 session 生效。雙層（global + per-project）+ 首次啟動自動 seed + README.md 指引。
 
-**詳細計畫**：見 `M_SP_PLAN.md`
+**詳細計畫**：見 `docs/archive/M_SP_PLAN.md`
 
 ### 任務
 
@@ -407,7 +407,7 @@
 
 **問題**：TUI `/cost` 與 session 摘要的 `cache read` 在 llamacpp session 一直顯示 0，但 llama.cpp 的 OpenAI-compatible response 有 `usage.prompt_tokens_details.cached_tokens` 欄位，adapter 硬編碼 0 沒接上。
 
-**詳細計畫**：`M_TOKEN_PLAN.md`
+**詳細計畫**：`docs/archive/M_TOKEN_PLAN.md`
 
 ### 任務
 - [x] M-TOKEN-1 `llamacpp-fetch-adapter.ts` OpenAI 型別介面加 `prompt_tokens_details?: { cached_tokens?: number }`（非 stream + stream 兩個 interface）
@@ -762,7 +762,7 @@
 
 **目標**：合併 my-agent 的 AutoDream（背景記憶整合）與 Hermes Agent 的 self-improving loop（即時自我改進迴圈），讓系統從「被動整理記憶」進化為「邊做邊學邊改」。三個階段漸進實施：方案一（擴展 Dream prompt）→ 方案二（即時 Nudge 雙迴圈）→ 方案三（完整三層自改進系統）。以 **llama.cpp 本地模型** 為主要運行情境。
 
-**詳細設計分析見 `AUTODREAM_HERMES_MERGE_ANALYSIS.md`。**
+**詳細設計分析見 `docs/archive/AUTODREAM_HERMES_MERGE_ANALYSIS.md`。**
 
 **架構決策**：
 - ADR-M6-01：三方案漸進式實施，每階段驗證效果後再決定是否繼續下一階段
@@ -813,7 +813,7 @@
 
 **目標**：修復 M6 的三個斷點——新增 SkillManageTool 讓 agent 直接建立/修改 skill，所有寫入經 scanSkill 程式碼層級安全掃描，接通 nudge → UI → 建立的完整閉環。
 
-**詳細設計分析見 `SKILL_SELF_CREATION_PLAN.md`。**
+**詳細設計分析見 `docs/archive/SKILL_SELF_CREATION_PLAN.md`。**
 
 #### 階段一：SkillManageTool 核心工具
 - [x] M6b-01 新增 `src/tools/SkillManageTool/SkillManageTool.ts`：6 action + scanSkill + 回滾
@@ -838,7 +838,7 @@
 - [x] M6b-16 更新 `session-review.test.ts`：prompt 斷言對齊 SkillManage
 - [x] M6b-17 更新 `m6-full-e2e.test.ts`：管線模擬對齊 SkillManage 路徑
 - [x] M6b-18 typecheck 基線不變；93/93 全綠
-- [x] M6b-19 更新 `AUTODREAM_HERMES_MERGE_ANALYSIS.md`（觸發架構圖 + Phase 清單）+ `SKILL_SELF_CREATION_PLAN.md`（狀態標記完成）
+- [x] M6b-19 更新 `docs/archive/AUTODREAM_HERMES_MERGE_ANALYSIS.md`（觸發架構圖 + Phase 清單）+ `docs/archive/SKILL_SELF_CREATION_PLAN.md`（狀態標記完成）
 
 #### 完成標準
 - [x] 對話中 agent 呼叫 SkillManage(create) → scanSkill 掃描 → chokidar 自動加載：SkillManageTool 已註冊，scanSkill 在 create/edit/patch/write_file 中呼叫
@@ -1975,3 +1975,9 @@
 - 2026-04-24 18:07: Session 結束 | 進度：505/550 任務 | 779a05c fix(context): ctx size fallback 200K → 128K + 全域 .my-agent.json 可覆蓋
 
 - 2026-04-24 18:10: Session 結束 | 進度：505/550 任務 | 779a05c fix(context): ctx size fallback 200K → 128K + 全域 .my-agent.json 可覆蓋
+
+- 2026-04-24 18:30: Session 結束 | 進度：505/550 任務 | 7f11a35 chore(todo): session 結束 log — ctx size fix 驗收與 daemon 重啟
+
+- 2026-04-25 08:52: Session 結束 | 進度：505/550 任務 | 7f11a35 chore(todo): session 結束 log — ctx size fix 驗收與 daemon 重啟
+
+- 2026-04-25 08:59: Session 結束 | 進度：505/550 任務 | 7f11a35 chore(todo): session 結束 log — ctx size fix 驗收與 daemon 重啟

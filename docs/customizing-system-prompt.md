@@ -186,7 +186,7 @@ my-agent -p "hi"   # 重新 seed
 ## 相關文件
 
 - `docs/context-architecture.md` — 上下文組成整體架構
-- `M_SP_PLAN.md` — M-SP 完整實作計畫
+- `docs/archive/M_SP_PLAN.md` — M-SP 完整實作計畫（已歸檔）
 - `~/.my-agent/system-prompt/README.md` — seed 時自動寫入的使用者指引
 
 ---
