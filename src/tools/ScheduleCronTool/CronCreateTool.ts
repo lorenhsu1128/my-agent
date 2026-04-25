@@ -222,9 +222,20 @@ export const CronCreateTool = buildTool({
           `Schedule '${raw}' is not a 5-field cron, duration, or ISO timestamp; NL parser unavailable. Please provide an explicit cron expression.`,
         )
       }
-      const nl = await nlMod.parseScheduleNL(raw, {
-        signal: new AbortController().signal,
-      })
+      let nl: Awaited<ReturnType<typeof nlMod.parseScheduleNL>>
+      try {
+        nl = await nlMod.parseScheduleNL(raw, {
+          signal: new AbortController().signal,
+        })
+      } catch (nlErr) {
+        // NL parser may throw CronNLParseError when the local model is
+        // unreachable / returns un-parseable text. Surface a single
+        // actionable error to the LLM caller instead of bubbling the raw
+        // adapter / network error.
+        throw new Error(
+          `Could not parse schedule '${raw}'. Provide a 5-field cron expression (e.g. "*/30 * * * *") or a clear duration/ISO timestamp. Underlying error: ${(nlErr as Error).message}`,
+        )
+      }
       parsed = {
         cron: nl.cron,
         recurring: nl.recurring,

@@ -1,10 +1,7 @@
 import { feature } from 'bun:bundle'
 import { logForDebugging } from '../utils/debug.js'
 import { errorMessage } from '../utils/errors.js'
-import { getDefaultSonnetModel } from '../utils/model/model.js'
-import { isLlamaCppActive } from '../utils/model/providers.js'
 import { getLlamaCppConfigSnapshot } from '../llamacppConfig/index.js'
-import { sideQuery } from '../utils/sideQuery.js'
 import { jsonParse } from '../utils/slowOperations.js'
 import {
   formatMemoryManifest,
@@ -118,64 +115,16 @@ async function selectRelevantMemories(
       ? `\n\nRecently used tools: ${recentTools.join(', ')}`
       : ''
 
-  // M-MEMRECALL-LOCAL: sideQuery is hardcoded to Anthropic SDK. Pure llama.cpp
-  // users (no ANTHROPIC_API_KEY) would otherwise 401 silently and lose memory
-  // recall entirely. Branch to a direct OpenAI-compatible /v1/chat/completions
-  // call against the local server when llamacpp is the active provider.
-  if (isLlamaCppActive()) {
-    return await selectViaLlamaCpp(
-      query,
-      manifest,
-      toolsSection,
-      validFilenames,
-      signal,
-    )
-  }
-
-  try {
-    const result = await sideQuery({
-      model: getDefaultSonnetModel(),
-      system: SELECT_MEMORIES_SYSTEM_PROMPT,
-      skipSystemPromptPrefix: true,
-      messages: [
-        {
-          role: 'user',
-          content: `Query: ${query}\n\nAvailable memories:\n${manifest}${toolsSection}`,
-        },
-      ],
-      max_tokens: 256,
-      output_format: {
-        type: 'json_schema',
-        schema: {
-          type: 'object',
-          properties: {
-            selected_memories: { type: 'array', items: { type: 'string' } },
-          },
-          required: ['selected_memories'],
-          additionalProperties: false,
-        },
-      },
-      signal,
-      querySource: 'memdir_relevance',
-    })
-
-    const textBlock = result.content.find(block => block.type === 'text')
-    if (!textBlock || textBlock.type !== 'text') {
-      return []
-    }
-
-    const parsed: { selected_memories: string[] } = jsonParse(textBlock.text)
-    return parsed.selected_memories.filter(f => validFilenames.has(f))
-  } catch (e) {
-    if (signal.aborted) {
-      return []
-    }
-    logForDebugging(
-      `[memdir] selectRelevantMemories failed: ${errorMessage(e)}`,
-      { level: 'warn' },
-    )
-    return []
-  }
+  // Phase 3 (dapper-sonnet plan): all utility-level LLM traffic flows
+  // through llama.cpp now. The previous Anthropic-SDK path + structured-
+  // output beta have been removed — selectViaLlamaCpp is the only branch.
+  return await selectViaLlamaCpp(
+    query,
+    manifest,
+    toolsSection,
+    validFilenames,
+    signal,
+  )
 }
 
 /**
