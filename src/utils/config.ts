@@ -24,6 +24,8 @@ import { getFsImplementation } from './fsOperations.js'
 import { findCanonicalGitRoot } from './git.js'
 import { safeParseJSON } from './json.js'
 import { stripBOM } from './jsonRead.js'
+import * as jsonc from 'jsonc-parser'
+import { diffPaths, parseJsonc } from './jsoncStore.js'
 import * as lockfile from './lockfile.js'
 import { logError } from './log.js'
 import type { MemoryType } from './memory/types.js'
@@ -1246,6 +1248,37 @@ function saveConfig<A extends object>(
   // mkdirSync is already recursive in FsOperations implementation
   fs.mkdirSync(dir)
 
+  // JSONC 保留註解路徑（與 saveConfigWithLock 對稱）：若原檔含 // 或 /*
+  // 註解，對變更路徑套 jsonc.modify 保留註解，而非整檔 jsonStringify。
+  let jsoncPreservedText: string | null = null
+  try {
+    const existingRaw = fs.readFileStringSync(file, 'utf-8').replace(/^﻿/, '')
+    if (/\/\/|\/\*/.test(existingRaw)) {
+      const currentParsed = parseJsonc<A>(existingRaw)
+      const edits = diffPaths(currentParsed, config)
+      let working = existingRaw
+      for (const { path: editPath, value } of edits) {
+        if (editPath.length === 0) {
+          working = jsonStringify(value, null, 2)
+          break
+        }
+        const modifyEdits = jsonc.modify(working, editPath, value, {
+          formattingOptions: { tabSize: 2, insertSpaces: true, eol: '\n' },
+        })
+        working = jsonc.applyEdits(working, modifyEdits)
+      }
+      jsoncPreservedText = working
+    }
+  } catch (err) {
+    const code = getErrnoCode(err)
+    if (code !== 'ENOENT') {
+      logForDebugging(
+        `[config] saveConfig JSONC preserve 失敗，fallback strict JSON：${err instanceof Error ? err.message : String(err)}`,
+        { level: 'warn' },
+      )
+    }
+  }
+
   // Filter out any values that match the defaults
   const filteredConfig = pickBy(
     config,
@@ -1253,14 +1286,14 @@ function saveConfig<A extends object>(
       jsonStringify(value) !== jsonStringify(defaultConfig[key as keyof A]),
   )
   // Write config file with secure permissions - mode only applies to new files
-  writeFileSyncAndFlush_DEPRECATED(
-    file,
-    jsonStringify(filteredConfig, null, 2),
-    {
-      encoding: 'utf-8',
-      mode: 0o600,
-    },
-  )
+  const payload =
+    jsoncPreservedText !== null
+      ? jsoncPreservedText
+      : jsonStringify(filteredConfig, null, 2)
+  writeFileSyncAndFlush_DEPRECATED(file, payload, {
+    encoding: 'utf-8',
+    mode: 0o600,
+  })
   if (file === getGlobalClaudeFile()) {
     globalConfigWriteCount++
   }
@@ -1353,6 +1386,41 @@ function saveConfigWithLock<A extends object>(
       return false
     }
 
+    // JSONC 保留註解路徑：若原檔含 // 或 /* 註解（M-CONFIG-JSONC），使用
+    // jsonc.modify 僅套用變更路徑的 edit，保留使用者加的繁中註解與格式。
+    // 偵測不到註解 → 走既有嚴格 JSON 寫回路徑（filter-out-defaults +
+    // jsonStringify），確保 legacy 使用者零行為變更。
+    let jsoncPreservedText: string | null = null
+    try {
+      const existingRaw = fs.readFileStringSync(file, 'utf-8').replace(/^﻿/, '')
+      if (/\/\/|\/\*/.test(existingRaw)) {
+        // 以原 raw 文字為基底，對每個變更路徑套 jsonc.modify
+        const edits = diffPaths(currentConfig, mergedConfig)
+        let working = existingRaw
+        for (const { path: editPath, value } of edits) {
+          if (editPath.length === 0) {
+            // 根節點整替換 — JSONC 註解無法保留，fallback 到 stringify
+            working = jsonStringify(value, null, 2)
+            break
+          }
+          const modifyEdits = jsonc.modify(working, editPath, value, {
+            formattingOptions: { tabSize: 2, insertSpaces: true, eol: '\n' },
+          })
+          working = jsonc.applyEdits(working, modifyEdits)
+        }
+        jsoncPreservedText = working
+      }
+    } catch (err) {
+      // 檔案不存在 / 讀取失敗 → 走既有路徑，不影響正確性
+      const code = getErrnoCode(err)
+      if (code !== 'ENOENT') {
+        logForDebugging(
+          `[config] JSONC preserve 偵測失敗，fallback strict JSON：${err instanceof Error ? err.message : String(err)}`,
+          { level: 'warn' },
+        )
+      }
+    }
+
     // Filter out any values that match the defaults
     const filteredConfig = pickBy(
       mergedConfig,
@@ -1431,14 +1499,14 @@ function saveConfigWithLock<A extends object>(
     }
 
     // Write config file with secure permissions - mode only applies to new files
-    writeFileSyncAndFlush_DEPRECATED(
-      file,
-      jsonStringify(filteredConfig, null, 2),
-      {
-        encoding: 'utf-8',
-        mode: 0o600,
-      },
-    )
+    const payload =
+      jsoncPreservedText !== null
+        ? jsoncPreservedText
+        : jsonStringify(filteredConfig, null, 2)
+    writeFileSyncAndFlush_DEPRECATED(file, payload, {
+      encoding: 'utf-8',
+      mode: 0o600,
+    })
     if (file === getGlobalClaudeFile()) {
       globalConfigWriteCount++
     }
@@ -1558,10 +1626,19 @@ function getConfig<A>(
     })
     try {
       // Strip BOM before parsing - PowerShell 5.x adds BOM to UTF-8 files
-      const parsedConfig = jsonParse(stripBOM(fileContent))
+      const stripped = stripBOM(fileContent)
+      // M-CONFIG-JSONC：優先嘗試 JSONC（允許 //, /*, 尾部逗號），失敗才走
+      // 原本的 jsonParse 嚴格 JSON 路徑。既有 strict JSON 檔在 parseJsonc
+      // 也能通過，故兩路徑對 legacy 檔等效。
+      let parsedConfig: unknown
+      try {
+        parsedConfig = parseJsonc(stripped)
+      } catch {
+        parsedConfig = jsonParse(stripped)
+      }
       return {
         ...createDefault(),
-        ...parsedConfig,
+        ...(parsedConfig as object),
       }
     } catch (error) {
       // Throw a ConfigParseError with the file path and default config
