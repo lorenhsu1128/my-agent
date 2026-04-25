@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { z } from 'zod/v4'
-import { getOauthConfig } from '../../constants/oauth.js'
+import { getApiBaseUrl } from '../../constants/apiBase.js'
 import { getOrganizationUUID } from '../../services/oauth/client.js'
 import { isPolicyAllowed } from '../../services/policyLimits/index.js'
 import type { ToolUseContext } from '../../Tool.js'
@@ -87,7 +87,7 @@ export const RemoteTriggerTool = buildTool({
       throw new Error('Unable to resolve organization UUID.')
     }
 
-    const base = `${getOauthConfig().BASE_API_URL}/v1/code/triggers`
+    const base = `${getApiBaseUrl()}/v1/code/triggers`
     const headers = {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',

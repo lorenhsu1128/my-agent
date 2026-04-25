@@ -23,7 +23,7 @@ import {
   getBridgeAccessToken,
   getBridgeBaseUrlOverride,
 } from '../../bridge/bridgeConfig.js'
-import { getOauthConfig } from '../../constants/oauth.js'
+import { getApiBaseUrl } from '../../constants/apiBase.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
@@ -61,7 +61,7 @@ function debug(msg: string): void {
  * Base URL for uploads. Must match the host the token is valid for.
  *
  * Subprocess hosts (cowork) pass ANTHROPIC_BASE_URL alongside
- * MY_AGENT_OAUTH_TOKEN — prefer that since getOauthConfig() only
+ * MY_AGENT_OAUTH_TOKEN — prefer that since getApiBaseUrl() only
  * returns staging when USE_STAGING_OAUTH is set, which such hosts don't
  * set. Without this a staging token hits api.anthropic.com → 401 → silent
  * skip → web viewer sees inert cards with no file_uuid.
@@ -70,7 +70,7 @@ function getBridgeBaseUrl(): string {
   return (
     getBridgeBaseUrlOverride() ??
     process.env.ANTHROPIC_BASE_URL ??
-    getOauthConfig().BASE_API_URL
+    getApiBaseUrl()
   )
 }
 

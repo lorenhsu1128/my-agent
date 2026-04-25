@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getOauthConfig } from 'src/constants/oauth.js'
+import { getApiBaseUrl } from 'src/constants/apiBase.js'
 import { getOrganizationUUID } from 'src/services/oauth/client.js'
 import { getClaudeAIOAuthTokens } from '../auth.js'
 import { toError } from '../errors.js'
@@ -42,7 +42,7 @@ export async function fetchEnvironments(): Promise<EnvironmentResource[]> {
     throw new Error('Unable to get organization UUID')
   }
 
-  const url = `${getOauthConfig().BASE_API_URL}/v1/environment_providers`
+  const url = `${getApiBaseUrl()}/v1/environment_providers`
 
   try {
     const headers = {
@@ -85,7 +85,7 @@ export async function createDefaultCloudEnvironment(
     throw new Error('Unable to get organization UUID')
   }
 
-  const url = `${getOauthConfig().BASE_API_URL}/v1/environment_providers/cloud/create`
+  const url = `${getApiBaseUrl()}/v1/environment_providers/cloud/create`
   const response = await axios.post<EnvironmentResource>(
     url,
     {

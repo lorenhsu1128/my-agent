@@ -16,7 +16,7 @@
 
 import { createHash } from 'crypto'
 import { userInfo } from 'os'
-import { getOauthConfig } from 'src/constants/oauth.js'
+import { getKeychainFileSuffix } from 'src/constants/apiBase.js'
 import { getMyAgentConfigHomeDir } from '../envUtils.js'
 import type { SecureStorageData } from './types.js'
 
@@ -40,7 +40,7 @@ export function getMacOsKeychainStorageServiceName(
   // my-agent：獨立 prefix 與官方 Claude Code 隔離（與 ~/.my-agent/ 家目錄
   // 隔離的決定一致）。Windows / Linux 不走此路（改用 plaintext
   // ~/.my-agent/.credentials.json）。
-  return `my-agent${getOauthConfig().OAUTH_FILE_SUFFIX}${serviceSuffix}${dirHash}`
+  return `my-agent${getKeychainFileSuffix()}${serviceSuffix}${dirHash}`
 }
 
 export function getUsername(): string {

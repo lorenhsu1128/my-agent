@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getOauthConfig } from 'src/constants/oauth.js'
+import { getApiBaseUrl } from 'src/constants/apiBase.js'
 import { getOrganizationUUID } from 'src/services/oauth/client.js'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
@@ -96,7 +96,7 @@ export async function checkGithubAppInstalled(
       return false
     }
 
-    const url = `${getOauthConfig().BASE_API_URL}/api/oauth/organizations/${orgUUID}/code/repos/${owner}/${repo}`
+    const url = `${getApiBaseUrl()}/api/oauth/organizations/${orgUUID}/code/repos/${owner}/${repo}`
     const headers = {
       ...getOAuthHeaders(accessToken),
       'x-organization-uuid': orgUUID,
@@ -174,7 +174,7 @@ export async function checkGithubTokenSynced(): Promise<boolean> {
       return false
     }
 
-    const url = `${getOauthConfig().BASE_API_URL}/api/oauth/organizations/${orgUUID}/sync/github/auth`
+    const url = `${getApiBaseUrl()}/api/oauth/organizations/${orgUUID}/sync/github/auth`
     const headers = {
       ...getOAuthHeaders(accessToken),
       'x-organization-uuid': orgUUID,

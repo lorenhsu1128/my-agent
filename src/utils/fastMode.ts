@@ -1,5 +1,6 @@
 import axios from 'axios'
-import { getOauthConfig, OAUTH_BETA_HEADER } from 'src/constants/oauth.js'
+import { getApiBaseUrl } from 'src/constants/apiBase.js'
+import { OAUTH_BETA_HEADER } from 'src/constants/oauth.js'
 import {
   getIsNonInteractiveSession,
   getKairosActive,
@@ -364,7 +365,7 @@ type FastModeResponse = {
 async function fetchFastModeStatus(
   auth: { accessToken: string } | { apiKey: string },
 ): Promise<FastModeResponse> {
-  const endpoint = `${getOauthConfig().BASE_API_URL}/api/claude_code_penguin_mode`
+  const endpoint = `${getApiBaseUrl()}/api/claude_code_penguin_mode`
   const headers: Record<string, string> =
     'accessToken' in auth
       ? {

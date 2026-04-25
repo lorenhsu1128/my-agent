@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getOauthConfig } from '../../constants/oauth.js'
+import { getApiBaseUrl } from '../../constants/apiBase.js'
 import { getOAuthHeaders, prepareApiRequest } from '../../utils/teleport/api.js'
 
 export type AdminRequestType = 'limit_increase' | 'seat_upgrade'
@@ -56,7 +56,7 @@ export async function createAdminRequest(
     'x-organization-uuid': orgUUID,
   }
 
-  const url = `${getOauthConfig().BASE_API_URL}/api/oauth/organizations/${orgUUID}/admin_requests`
+  const url = `${getApiBaseUrl()}/api/oauth/organizations/${orgUUID}/admin_requests`
 
   const response = await axios.post<AdminRequest>(url, params, { headers })
 
@@ -79,7 +79,7 @@ export async function getMyAdminRequests(
     'x-organization-uuid': orgUUID,
   }
 
-  let url = `${getOauthConfig().BASE_API_URL}/api/oauth/organizations/${orgUUID}/admin_requests/me?request_type=${requestType}`
+  let url = `${getApiBaseUrl()}/api/oauth/organizations/${orgUUID}/admin_requests/me?request_type=${requestType}`
   for (const status of statuses) {
     url += `&statuses=${status}`
   }
@@ -109,7 +109,7 @@ export async function checkAdminRequestEligibility(
     'x-organization-uuid': orgUUID,
   }
 
-  const url = `${getOauthConfig().BASE_API_URL}/api/oauth/organizations/${orgUUID}/admin_requests/eligibility?request_type=${requestType}`
+  const url = `${getApiBaseUrl()}/api/oauth/organizations/${orgUUID}/admin_requests/eligibility?request_type=${requestType}`
 
   const response = await axios.get<AdminRequestEligibilityResponse>(url, {
     headers,

@@ -10,8 +10,7 @@
  * Callers that compose with a different auth source (e.g. daemon workers
  * using IPC auth) use the Override getters directly.
  */
-
-import { getOauthConfig } from '../constants/oauth.js'
+import { getApiBaseUrl } from '../constants/apiBase.js'
 import { getClaudeAIOAuthTokens } from '../utils/auth.js'
 
 /** Ant-only dev override: CLAUDE_BRIDGE_OAUTH_TOKEN, else undefined. */
@@ -44,5 +43,5 @@ export function getBridgeAccessToken(): string | undefined {
  * OAuth config. Always returns a URL.
  */
 export function getBridgeBaseUrl(): string {
-  return getBridgeBaseUrlOverride() ?? getOauthConfig().BASE_API_URL
+  return getBridgeBaseUrlOverride() ?? getApiBaseUrl()
 }

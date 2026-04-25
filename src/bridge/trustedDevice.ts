@@ -1,7 +1,7 @@
 import axios from 'axios'
 import memoize from 'lodash-es/memoize.js'
 import { hostname } from 'os'
-import { getOauthConfig } from '../constants/oauth.js'
+import { getApiBaseUrl } from '../constants/apiBase.js'
 import { logForDebugging } from '../utils/debug.js'
 import { errorMessage } from '../utils/errors.js'
 import { isEssentialTrafficOnly } from '../utils/privacyLevel.js'
@@ -129,7 +129,7 @@ export async function enrollTrustedDevice(): Promise<void> {
       return
     }
 
-    const baseUrl = getOauthConfig().BASE_API_URL
+    const baseUrl = getApiBaseUrl()
     let response
     try {
       response = await axios.post<{

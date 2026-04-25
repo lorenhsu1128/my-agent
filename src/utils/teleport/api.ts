@@ -1,6 +1,6 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { randomUUID } from 'crypto'
-import { getOauthConfig } from 'src/constants/oauth.js'
+import { getApiBaseUrl } from 'src/constants/apiBase.js'
 import { getOrganizationUUID } from 'src/services/oauth/client.js'
 import z from 'zod/v4'
 import { getClaudeAIOAuthTokens } from '../auth.js'
@@ -206,7 +206,7 @@ export async function fetchCodeSessionsFromSessionsAPI(): Promise<
 > {
   const { accessToken, orgUUID } = await prepareApiRequest()
 
-  const url = `${getOauthConfig().BASE_API_URL}/v1/sessions`
+  const url = `${getApiBaseUrl()}/v1/sessions`
 
   try {
     const headers = {
@@ -291,7 +291,7 @@ export async function fetchSession(
 ): Promise<SessionResource> {
   const { accessToken, orgUUID } = await prepareApiRequest()
 
-  const url = `${getOauthConfig().BASE_API_URL}/v1/sessions/${sessionId}`
+  const url = `${getApiBaseUrl()}/v1/sessions/${sessionId}`
   const headers = {
     ...getOAuthHeaders(accessToken),
     'anthropic-beta': 'ccr-byoc-2025-07-29',
@@ -366,7 +366,7 @@ export async function sendEventToRemoteSession(
   try {
     const { accessToken, orgUUID } = await prepareApiRequest()
 
-    const url = `${getOauthConfig().BASE_API_URL}/v1/sessions/${sessionId}/events`
+    const url = `${getApiBaseUrl()}/v1/sessions/${sessionId}/events`
     const headers = {
       ...getOAuthHeaders(accessToken),
       'anthropic-beta': 'ccr-byoc-2025-07-29',
@@ -429,7 +429,7 @@ export async function updateSessionTitle(
   try {
     const { accessToken, orgUUID } = await prepareApiRequest()
 
-    const url = `${getOauthConfig().BASE_API_URL}/v1/sessions/${sessionId}`
+    const url = `${getApiBaseUrl()}/v1/sessions/${sessionId}`
     const headers = {
       ...getOAuthHeaders(accessToken),
       'anthropic-beta': 'ccr-byoc-2025-07-29',
