@@ -3,7 +3,9 @@ import { homedir } from 'os';
 import * as React from 'react';
 import { Box, Text } from '../../ink.js';
 import type { Step } from '../../projectOnboardingState.js';
-import { formatCreditAmount, getCachedReferrerReward } from '../../services/api/referral.js';
+// my-agent: referral / passes API removed (cloud-only). Stubs always return null.
+const formatCreditAmount = (_reward: unknown): string => '';
+const getCachedReferrerReward = (): null => null;
 import type { LogOption } from '../../types/logs.js';
 import { getCwd } from '../../utils/cwd.js';
 import { formatRelativeTimeAgo } from '../../utils/format.js';

@@ -11,16 +11,17 @@ import {
   logEvent,
 } from '../../services/analytics/index.js'
 import { getSSLErrorHint } from '../../services/api/errorUtils.js'
-import { fetchAndStoreClaudeCodeFirstTokenDate } from '../../services/api/firstTokenDate.js'
-import {
-  createAndStoreApiKey,
-  fetchAndStoreUserRoles,
-  refreshOAuthToken,
-  shouldUseClaudeAIAuth,
-  storeOAuthAccountInfo,
-} from '../../services/oauth/client.js'
-import { getOauthProfileFromOauthToken } from '../../services/oauth/getOauthProfile.js'
-import { OAuthService } from '../../services/oauth/index.js'
+// my-agent: cloud OAuth login removed. Most paths are unreachable; stubs keep file buildable.
+const fetchAndStoreClaudeCodeFirstTokenDate = async (): Promise<void> => {}
+const createAndStoreApiKey = async (_t: string): Promise<string | null> => null
+const fetchAndStoreUserRoles = async (_t: string): Promise<void> => {}
+const refreshOAuthToken = async (_t: string, _o?: unknown): Promise<never> => { throw new Error('OAuth login removed in my-agent') }
+const shouldUseClaudeAIAuth = (_s: string[]): boolean => false
+const storeOAuthAccountInfo = async (_t: unknown): Promise<void> => {}
+const getOauthProfileFromOauthToken = async (_t: string): Promise<undefined> => undefined
+class OAuthService {
+  async startOAuthFlow(..._args: unknown[]): Promise<never> { throw new Error('OAuth login removed in my-agent') }
+}
 import type { OAuthTokens } from '../../services/oauth/types.js'
 import {
   clearOAuthTokenCache,

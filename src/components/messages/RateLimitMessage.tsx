@@ -1,6 +1,7 @@
 import { c as _c } from "react/compiler-runtime";
 import React, { useEffect, useMemo, useState } from 'react';
-import { extraUsage } from 'src/commands/extra-usage/index.js';
+// my-agent: extra-usage command removed (cloud-only). Stub.
+const extraUsage = { isEnabled: (): boolean => false };
 import { Box, Text } from 'src/ink.js';
 import { useClaudeAiLimits } from 'src/services/claudeAiLimitsHook.js';
 import { shouldProcessMockLimits } from 'src/services/rateLimitMocking.js'; // Used for /mock-limits command

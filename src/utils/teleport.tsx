@@ -12,7 +12,9 @@ import type { SDKMessage } from '../entrypoints/agentSdkTypes.js';
 import type { Root } from '../ink.js';
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js';
 import { queryHaiku } from '../services/api/claude.js';
-import { getSessionLogsViaOAuth, getTeleportEvents } from '../services/api/sessionIngress.js';
+// my-agent: sessionIngress removed (cloud-only). Stubs return null → teleport falls back to local logs.
+const getSessionLogsViaOAuth = async (..._args: unknown[]): Promise<unknown[] | null> => null;
+const getTeleportEvents = async (..._args: unknown[]): Promise<unknown[] | null> => null;
 import { getOrganizationUUID } from '../services/oauth/client.js';
 import { AppStateProvider } from '../state/AppState.js';
 import type { Message, SystemMessage } from '../types/message.js';

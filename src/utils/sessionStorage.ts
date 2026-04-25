@@ -34,7 +34,11 @@ import {
 import { indexEntry } from '../services/sessionIndex/index.js'
 import { builtInCommandNames } from '../commands.js'
 import { COMMAND_NAME_TAG, TICK_TAG } from '../constants/xml.js'
-import * as sessionIngress from '../services/api/sessionIngress.js'
+// my-agent: sessionIngress removed (cloud-only). Stub for legacy code paths.
+const sessionIngress = {
+  appendSessionLog: async (_sessionId: string, _entry: unknown, _url: string): Promise<boolean> => true,
+  getSessionLogs: async (_sessionId: string, _url: string): Promise<unknown[] | null> => null,
+}
 import { REPL_TOOL_NAME } from '../tools/REPLTool/constants.js'
 import {
   type AgentId,

@@ -188,7 +188,10 @@ import {
 } from 'src/services/PromptSuggestion/promptSuggestion.js'
 import { getLastCacheSafeParams } from 'src/utils/forkedAgent.js'
 import { getAccountInformation } from 'src/utils/auth.js'
-import { OAuthService } from 'src/services/oauth/index.js'
+// my-agent: cloud OAuth login removed. Stub class.
+class OAuthService {
+  async startOAuthFlow(..._args: unknown[]): Promise<never> { throw new Error('OAuth login removed in my-agent') }
+}
 import { installOAuthTokens } from 'src/cli/handlers/auth.js'
 import { getAPIProvider } from 'src/utils/model/providers.js'
 import type { HookCallbackMatcher } from 'src/types/hooks.js'
@@ -249,10 +252,9 @@ import {
 } from 'src/services/mcp/utils.js'
 import { setupVscodeSdkMcp } from 'src/services/mcp/vscodeSdkMcp.js'
 import { getAllMcpConfigs } from 'src/services/mcp/config.js'
-import {
-  isQualifiedForGrove,
-  checkGroveForNonInteractive,
-} from 'src/services/api/grove.js'
+// my-agent: Grove (cloud-only privacy onboarding) removed. Stubs.
+const isQualifiedForGrove = async (): Promise<boolean> => false
+const checkGroveForNonInteractive = async (): Promise<void> => {}
 import {
   toInternalMessages,
   toSDKRateLimitInfo,

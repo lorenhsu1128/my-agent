@@ -39,7 +39,8 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import { fetchClaudeAIMcpConfigsIfEligible } from './claudeai.js'
+// my-agent: claudeai MCP removed (cloud-only). Stub returns empty config map.
+const fetchClaudeAIMcpConfigsIfEligible = async (): Promise<Record<string, never>> => ({})
 import { expandEnvVarsInString } from './envExpansion.js'
 import {
   type ConfigScope,

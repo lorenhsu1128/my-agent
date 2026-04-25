@@ -9,7 +9,8 @@ import {
 import { shouldOfferTerminalSetup } from '../../commands/terminalSetup/terminalSetup.js'
 import { getDesktopUpsellConfig } from '../../components/DesktopUpsell/DesktopUpsellStartup.js'
 import { color } from '../../components/design-system/color.js'
-import { shouldShowOverageCreditUpsell } from '../../components/LogoV2/OverageCreditUpsell.js'
+// my-agent: cloud upsell removed. Stub.
+const shouldShowOverageCreditUpsell = async (): Promise<boolean> => false
 import { getShortcutDisplay } from '../../keybindings/shortcutFormat.js'
 import { isKairosCronEnabled } from '../../tools/ScheduleCronTool/prompt.js'
 import { is1PApiCustomer } from '../../utils/auth.js'
@@ -43,15 +44,12 @@ import {
   getCurrentSessionAgentColor,
   isCustomTitleEnabled,
 } from '../../utils/sessionStorage.js'
-import {
-  formatGrantAmount,
-  getCachedOverageCreditGrant,
-} from '../api/overageCreditGrant.js'
-import {
-  checkCachedPassesEligibility,
-  formatCreditAmount,
-  getCachedReferrerReward,
-} from '../api/referral.js'
+// my-agent: overage credit / referral APIs removed (cloud-only). Stubs.
+const formatGrantAmount = (_info: unknown): string | null => null
+const getCachedOverageCreditGrant = (): null => null
+const checkCachedPassesEligibility = (): { eligible: boolean; hasCache: boolean } => ({ eligible: false, hasCache: false })
+const formatCreditAmount = (_reward: unknown): string => ''
+const getCachedReferrerReward = (): null => null
 import { getSessionsSinceLastShown } from './tipHistory.js'
 import type { Tip, TipContext } from './types.js'
 

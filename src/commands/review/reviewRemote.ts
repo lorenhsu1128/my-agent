@@ -14,8 +14,9 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../../services/analytics/index.js'
-import { fetchUltrareviewQuota } from '../../services/api/ultrareviewQuota.js'
-import { fetchUtilization } from '../../services/api/usage.js'
+// my-agent: ultrareviewQuota / usage endpoints removed (cloud-only). Stubs return null → review proceeds without quota gating.
+const fetchUltrareviewQuota = async (): Promise<null> => null
+const fetchUtilization = async (): Promise<null> => null
 import type { ToolUseContext } from '../../Tool.js'
 import {
   checkRemoteAgentEligibility,

@@ -76,10 +76,9 @@ import {
   createChannelPermissionCallbacks,
   isChannelPermissionRelayEnabled,
 } from './channelPermissions.js'
-import {
-  clearClaudeAIMcpConfigsCache,
-  fetchClaudeAIMcpConfigsIfEligible,
-} from './claudeai.js'
+// my-agent: claudeai MCP removed (cloud-only). Stub no-ops.
+const clearClaudeAIMcpConfigsCache = (): void => {}
+const fetchClaudeAIMcpConfigsIfEligible = async (): Promise<Record<string, never>> => ({})
 import { registerElicitationHandler } from './elicitationHandler.js'
 import { getMcpPrefix } from './mcpStringUtils.js'
 import { commandBelongsToServer, excludeStalePluginClients } from './utils.js'

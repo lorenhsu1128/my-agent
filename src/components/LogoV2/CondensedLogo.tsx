@@ -14,8 +14,13 @@ import { renderModelSetting } from '../../utils/model/model.js';
 import { OffscreenFreeze } from '../OffscreenFreeze.js';
 import { AnimatedClawd } from './AnimatedClawd.js';
 import { Clawd } from './Clawd.js';
-import { GuestPassesUpsell, incrementGuestPassesSeenCount, useShowGuestPassesUpsell } from './GuestPassesUpsell.js';
-import { incrementOverageCreditUpsellSeenCount, OverageCreditUpsell, useShowOverageCreditUpsell } from './OverageCreditUpsell.js';
+// my-agent: cloud upsell components removed. Stubs always disable upsells.
+const GuestPassesUpsell = (): null => null;
+const OverageCreditUpsell = (_props: { maxWidth?: number; twoLine?: boolean }): null => null;
+const useShowGuestPassesUpsell = (): boolean => false;
+const useShowOverageCreditUpsell = (): boolean => false;
+const incrementGuestPassesSeenCount = (): void => {};
+const incrementOverageCreditUpsellSeenCount = (): void => {};
 export function CondensedLogo() {
   const $ = _c(29);
   const {

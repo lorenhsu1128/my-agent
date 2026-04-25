@@ -1,20 +1,27 @@
 import { c as _c } from "react/compiler-runtime";
 import * as React from 'react';
 import { useEffect, useState } from 'react';
-import { extraUsage as extraUsageCommand } from 'src/commands/extra-usage/index.js';
+// my-agent: extra-usage command removed (cloud-only). Stub.
+const extraUsageCommand = { isEnabled: (): boolean => false };
 import { formatCost } from 'src/cost-tracker.js';
 import { getSubscriptionType } from 'src/utils/auth.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { Box, Text } from '../../ink.js';
 import { useKeybinding } from '../../keybindings/useKeybinding.js';
-import { type ExtraUsage, fetchUtilization, type RateLimit, type Utilization } from '../../services/api/usage.js';
+// my-agent: usage API removed (cloud-only). Stubs.
+type ExtraUsage = { is_enabled?: boolean; monthly_limit?: number | null; used_credits?: number; utilization?: number };
+type RateLimit = { used: number; limit: number; resets_at: string };
+type Utilization = { rate_limits?: RateLimit[]; extra_usage?: ExtraUsage };
+const fetchUtilization = async (): Promise<Utilization | null> => null;
 import { formatResetText } from '../../utils/format.js';
 import { logError } from '../../utils/log.js';
 import { jsonStringify } from '../../utils/slowOperations.js';
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
 import { Byline } from '../design-system/Byline.js';
 import { ProgressBar } from '../design-system/ProgressBar.js';
-import { isEligibleForOverageCreditGrant, OverageCreditUpsell } from '../LogoV2/OverageCreditUpsell.js';
+// my-agent: cloud upsell removed. Stubs.
+const isEligibleForOverageCreditGrant = (): boolean => false;
+const OverageCreditUpsell = (_props: { maxWidth?: number; twoLine?: boolean }): null => null;
 type LimitBarProps = {
   title: string;
   limit: RateLimit;

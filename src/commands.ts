@@ -121,8 +121,6 @@ import thinkbackPlay from './commands/thinkback-play/index.js'
 import permissions from './commands/permissions/index.js'
 import plan from './commands/plan/index.js'
 import fast from './commands/fast/index.js'
-import passes from './commands/passes/index.js'
-import privacySettings from './commands/privacy-settings/index.js'
 import hooks from './commands/hooks/index.js'
 import files from './commands/files/index.js'
 import branch from './commands/branch/index.js'
@@ -186,10 +184,6 @@ import tag from './commands/tag/index.js'
 import outputStyle from './commands/output-style/index.js'
 import remoteEnv from './commands/remote-env/index.js'
 import upgrade from './commands/upgrade/index.js'
-import {
-  extraUsage,
-  extraUsageNonInteractive,
-} from './commands/extra-usage/index.js'
 import rateLimitOptions from './commands/rate-limit-options/index.js'
 import statusline from './commands/statusline.js'
 import effort from './commands/effort/index.js'
@@ -322,8 +316,6 @@ const COMMANDS = memoize((): Command[] => [
   securityReview,
   terminalSetup,
   upgrade,
-  extraUsage,
-  extraUsageNonInteractive,
   rateLimitOptions,
   usage,
   usageReport,
@@ -340,7 +332,6 @@ const COMMANDS = memoize((): Command[] => [
   thinkbackPlay,
   permissions,
   plan,
-  privacySettings,
   hooks,
   exportCommand,
   sandboxToggle,
@@ -355,7 +346,6 @@ const COMMANDS = memoize((): Command[] => [
   discordInviteCommand,
   discordGuildsCommand,
   // my-agent: /login /logout 已移除（本地模型不需要 Anthropic OAuth）
-  passes,
   ...(peersCmd ? [peersCmd] : []),
   tasks,
   ...(workflowsCmd ? [workflowsCmd] : []),

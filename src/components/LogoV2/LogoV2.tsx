@@ -10,6 +10,8 @@ import { getDisplayPath } from '../../utils/file.js';
 import { Clawd } from './Clawd.js';
 import { FeedColumn } from './FeedColumn.js';
 import { createRecentActivityFeed, createWhatsNewFeed, createProjectOnboardingFeed, createGuestPassesFeed } from './feedConfigs.js';
+// my-agent: overage credit feed removed (cloud-only).
+const createOverageCreditFeed = (): { title: string; lines: never[]; emptyMessage: string } => ({ title: '', lines: [], emptyMessage: '' });
 import { getGlobalConfig, saveGlobalConfig } from 'src/utils/config.js';
 import { resolveThemeSetting } from 'src/utils/systemTheme.js';
 import { getInitialSettings } from 'src/utils/settings/settings.js';
@@ -34,8 +36,11 @@ import { feature } from 'bun:bundle';
 const ChannelsNoticeModule = feature('KAIROS') || feature('KAIROS_CHANNELS') ? require('./ChannelsNotice.js') as typeof import('./ChannelsNotice.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
-import { useShowGuestPassesUpsell, incrementGuestPassesSeenCount } from './GuestPassesUpsell.js';
-import { useShowOverageCreditUpsell, incrementOverageCreditUpsellSeenCount, createOverageCreditFeed } from './OverageCreditUpsell.js';
+// my-agent: cloud upsells removed. Stubs.
+const useShowGuestPassesUpsell = (): boolean => false;
+const useShowOverageCreditUpsell = (): boolean => false;
+const incrementGuestPassesSeenCount = (): void => {};
+const incrementOverageCreditUpsellSeenCount = (): void => {};
 import { plural } from '../../utils/stringUtils.js';
 import { useAppState } from '../../state/AppState.js';
 import { getEffortSuffix } from '../../utils/effort.js';
