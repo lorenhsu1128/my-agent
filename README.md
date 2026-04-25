@@ -24,8 +24,18 @@
   讓 agent 用你熟悉的術語、了解你的工作環境。
 - **可自訂系統提示**：29 段 system prompt 全部外部化到 markdown 檔案，
   按 per-project > global > bundled 三層解析。改措辭不必改程式碼、不必 rebuild。
-- **排程系統（Cron）**：7 個排程工具、人性化排程語法（`30m` / `every 2h` / ISO timestamp / 標準 cron）、
+- **排程系統（Cron）**：8 個排程工具 + `/cron` 互動式 TUI、人性化排程語法
+  （`30m` / `every 2h` / ISO timestamp / 5-field cron / 自然語言 via LLM 解析）、
   每個 job 可獨立指定模型、pre-run script 注入上下文、稽核 log、injection 防禦。
+  進階：失敗重試 + exponential backoff、conditional 觸發（shell / lastRunOk / fileChanged）、
+  per-task catchup 策略、結果通知（TUI toast + StatusLine badge）、run history 查詢。
+- **Daemon 模式**：`my-agent daemon start` 起常駐 WS server，REPL 變 thin-client；
+  單一 daemon 內活 N 個 ProjectRuntime（lazy load + idle unload），cron 移到 daemon 獨占跑；
+  REPL 起/掛時透明切換 standalone ↔ attached。詳見 [docs/daemon-mode.md](./docs/daemon-mode.md)。
+- **Discord 整合**：daemon 接 Discord bot，DM / guild channel 文字對話、8 個 slash commands
+  （/status /list /help /mode /clear /interrupt /allow /deny）、permission mode 雙向同步、
+  REPL 內 `/discord-bind` 一鍵建 per-project 頻道、turn 雙向鏡像、權限雙發 first-wins。
+  詳見 [docs/discord-mode.md](./docs/discord-mode.md)。
 - **網頁工具**：`WebFetch`（單頁）、`WebSearch`（搜尋）、`WebCrawl`（BFS + robots.txt 的多頁抓取，
   支援 Firecrawl backend）、`WebBrowser`（真實 Chromium via puppeteer-core，
   支援本地 / Browserbase / Browser Use provider + Vision 問答）。
@@ -83,6 +93,10 @@ bun run build:dev             # ./cli-dev，dev 版本
 | `ANTHROPIC_BASE_URL` | Messages API 的 base URL |
 | `LLAMA_BASE_URL` | 本地 llama.cpp endpoint（預設 `http://127.0.0.1:8080/v1`） |
 | `LLAMA_MODEL` | 本地模型名稱（或用 `~/.my-agent/llamacpp.json` 集中管理） |
+| `LLAMACPP_CTX_SIZE` | 手動覆寫 llama.cpp context size（tokens；`/slots` 偵測失敗時使用） |
+| `BROWSER_PROVIDER` | WebBrowser backend 顯式指定（`local` / `browserbase` / `browser-use`） |
+| `BROWSERBASE_API_KEY` / `BROWSER_USE_API_KEY` | Cloud browser provider 認證（自動偵測） |
+| `WEBCRAWL_BACKEND=firecrawl` + `FIRECRAWL_API_KEY` | WebCrawl 切到 Firecrawl 的 JS 渲染 backend |
 
 完整設定方式見 [docs/providers.md](./docs/providers.md)。
 
@@ -131,6 +145,9 @@ My Agent 把所有使用者設定放在兩個目錄：
 | [docs/web-tools.md](./docs/web-tools.md) | WebFetch / WebSearch / WebCrawl / WebBrowser 與共用安全層 |
 | [docs/customizing-system-prompt.md](./docs/customizing-system-prompt.md) | 如何用 markdown 覆寫 29 段 system prompt |
 | [docs/context-architecture.md](./docs/context-architecture.md) | Context 組成詳解：system prompt 注入、memory context、fence 機制 |
+| [docs/daemon-mode.md](./docs/daemon-mode.md) | Daemon 模式（常駐 WS server、多 ProjectRuntime、cron 獨占執行） |
+| [docs/discord-mode.md](./docs/discord-mode.md) | Discord 整合（DM / guild channel、slash commands、per-project 頻道） |
+| [docs/cron-wave3.md](./docs/cron-wave3.md) | Cron 進階特性（NL 解析、retry、condition、catchup、history、通知） |
 | [src/tools/ScheduleCronTool/README.md](./src/tools/ScheduleCronTool/README.md) | Cron 工具參考（action 表） |
 | [src/tools/WebBrowserTool/README.md](./src/tools/WebBrowserTool/README.md) | WebBrowser 工具參考（action 表） |
 | [FEATURES.md](./FEATURES.md) | Feature flag 清單（建構時控制模組啟用） |
@@ -160,6 +177,9 @@ My Agent 把所有使用者設定放在兩個目錄：
 ./cli --continue               # 延續上次 session
 ./cli --resume <session-id>    # 續跑指定 session（FTS 可查）
 ./cli --verbose                # 詳細 log
+./cli daemon start             # 啟動常駐 daemon（後續 REPL 自動 attach）
+./cli daemon status            # 檢視 daemon 狀態
+./cli daemon stop              # 關閉 daemon
 ```
 
 ---

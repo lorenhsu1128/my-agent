@@ -1,6 +1,21 @@
 # Feature Flags Audit
 
-Audit date: 2026-03-31
+> **⚠️ 本文件僅供歷史對照（fork 自原 Claude Code）**
+>
+> my-agent 採 **ADR-003：新功能不使用 feature flag — 直接啟用**。本文件保留下來
+> 紀錄上游 Claude Code 各 flag 的可建構狀態，供我們從 fork 移植或回切時參考。
+>
+> 本文件中標為 "broken"（如 `DAEMON` missing `workerRegistry.js`）的 flag，**在
+> my-agent 多半已用不同路徑重新實作**：
+> - `DAEMON` → ADR-012 Path A in-process（`src/daemon/`，已 ship）
+> - `AGENT_TRIGGERS` → 已實作為預設啟用的 cron 子系統（M-CRON-W3+W4）
+> - `EXTRACT_MEMORIES` → 已實作於 `src/memdir/extractMemories.ts`
+>
+> my-agent 的功能總表請看 [CLAUDE.md](./CLAUDE.md) 開發日誌與 [README.md](./README.md)。
+
+---
+
+## 原始 Audit（snapshot date: 2026-03-31）
 
 This repository currently references 88 `feature('FLAG')` compile-time flags.
 I re-checked them by bundling the CLI once per flag on top of the current
@@ -309,15 +324,9 @@ missing import is only the visible edge of a broader absent subsystem.
 
 ## Useful Entry Points
 
-- Feature-aware build logic:
-  [scripts/build.ts](/Users/paolo/Repos/claude-code/scripts/build.ts)
-- Feature-gated command imports:
-  [src/commands.ts](/Users/paolo/Repos/claude-code/src/commands.ts)
-- Feature-gated tool imports:
-  [src/tools.ts](/Users/paolo/Repos/claude-code/src/tools.ts)
-- Feature-gated task imports:
-  [src/tasks.ts](/Users/paolo/Repos/claude-code/src/tasks.ts)
-- Feature-gated query behavior:
-  [src/query.ts](/Users/paolo/Repos/claude-code/src/query.ts)
-- Feature-gated CLI entry paths:
-  [src/entrypoints/cli.tsx](/Users/paolo/Repos/claude-code/src/entrypoints/cli.tsx)
+- Feature-aware build logic: [scripts/build.ts](./scripts/build.ts)
+- Feature-gated command imports: [src/commands.ts](./src/commands.ts)
+- Feature-gated tool imports: [src/tools.ts](./src/tools.ts)
+- Feature-gated task imports: [src/tasks.ts](./src/tasks.ts)
+- Feature-gated query behavior: [src/query.ts](./src/query.ts)
+- Feature-gated CLI entry paths: [src/entrypoints/cli.tsx](./src/entrypoints/cli.tsx)
