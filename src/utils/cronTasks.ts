@@ -10,8 +10,13 @@
 //   { "tasks": [{ id, cron, prompt, createdAt, recurring?, permanent? }] }
 
 import { randomUUID } from 'crypto'
-import { readFileSync } from 'fs'
-import { mkdir, rename, writeFile } from 'fs/promises'
+import { existsSync, readFileSync } from 'fs'
+import { mkdir, readFile, rename, writeFile } from 'fs/promises'
+import {
+  parseJsonc,
+  writeJsoncPreservingComments,
+} from './jsoncStore.js'
+import { CRON_TASKS_JSONC_TEMPLATE } from './bundledCronTasksTemplate.js'
 import { join } from 'path'
 import {
   addSessionCronTask,
@@ -212,7 +217,13 @@ export async function readCronTasks(dir?: string): Promise<CronTask[]> {
     return []
   }
 
-  const parsed = safeParseJSON(raw, false)
+  let parsed: unknown
+  try {
+    parsed = parseJsonc(raw.replace(/^﻿/, ''))
+  } catch {
+    // JSONC 壞檔 → fallback 到 safeParseJSON（相容 strict JSON）
+    parsed = safeParseJSON(raw, false)
+  }
   if (!parsed || typeof parsed !== 'object') return []
   const file = parsed as Partial<CronFile>
   if (!Array.isArray(file.tasks)) return []
@@ -333,7 +344,12 @@ export function hasCronTasksSync(dir?: string): boolean {
   } catch {
     return false
   }
-  const parsed = safeParseJSON(raw, false)
+  let parsed: unknown
+  try {
+    parsed = parseJsonc(raw.replace(/^﻿/, ''))
+  } catch {
+    parsed = safeParseJSON(raw, false)
+  }
   if (!parsed || typeof parsed !== 'object') return false
   const tasks = (parsed as Partial<CronFile>).tasks
   return Array.isArray(tasks) && tasks.length > 0
@@ -364,23 +380,51 @@ export async function writeCronTasks(
       ({ durable: _durable, agentId: _agentId, ...rest }) => rest,
     ),
   }
-  // Atomic write: stage to .tmp + rename, so a crash mid-write can't leave
-  // a half-written jobs file. Matches Hermes `save_jobs` tempfile+os.replace.
   const finalPath = getCronFilePath(root)
-  const tmpPath = `${finalPath}.${randomUUID().slice(0, 8)}.tmp`
-  const payload = jsonStringify(body, null, 2) + '\n'
-  try {
-    await writeFile(tmpPath, payload, 'utf-8')
-    await rename(tmpPath, finalPath)
-  } catch (e) {
-    // Best-effort cleanup; ignore secondary failure.
+  // JSONC 保留註解寫回：
+  //   - 檔案存在 → 讀原 raw、diff 後只改變更路徑（檔頭註解與 task 內註解都保留）
+  //   - 檔案不存在 → 用 CRON_TASKS_JSONC_TEMPLATE 當 baseline（模板含 schema 說明註解）
+  // 原有的 atomic（tempfile + rename）行為已內建在 jsoncStore.writeJsoncPreservingComments。
+  let originalText: string | null = null
+  if (existsSync(finalPath)) {
     try {
-      const fs = getFsImplementation()
-      await fs.unlink(tmpPath)
+      originalText = (await readFile(finalPath, 'utf-8')).replace(/^﻿/, '')
     } catch {
-      /* ignore */
+      originalText = null
     }
-    throw e
+  }
+  if (originalText === null || originalText.trim().length === 0) {
+    originalText = CRON_TASKS_JSONC_TEMPLATE
+  }
+  // 若原檔是 strict JSON 且 parse 失敗 → 視為損壞，直接用模板覆蓋保底
+  try {
+    parseJsonc(originalText)
+  } catch {
+    originalText = CRON_TASKS_JSONC_TEMPLATE
+  }
+  try {
+    await writeJsoncPreservingComments(finalPath, originalText, body)
+  } catch (e) {
+    // 保留舊 atomic write fallback 作為最終保底 — 若 jsoncStore 失敗（極少見），
+    // 至少資料還能寫入，註解可能會失去但資料不遺失。
+    const tmpPath = `${finalPath}.${randomUUID().slice(0, 8)}.tmp`
+    try {
+      await writeFile(tmpPath, jsonStringify(body, null, 2) + '\n', 'utf-8')
+      await rename(tmpPath, finalPath)
+    } catch (fallbackErr) {
+      try {
+        const fs = getFsImplementation()
+        await fs.unlink(tmpPath)
+      } catch {
+        /* ignore */
+      }
+      throw fallbackErr
+    }
+    // 拋回原始 jsonc 錯誤供 debug（若 fallback 成功）
+    logForDebugging(
+      `[cron] writeJsoncPreservingComments 失敗，fallback to strict JSON：${e instanceof Error ? e.message : String(e)}`,
+      { level: 'warn' },
+    )
   }
 }
 
