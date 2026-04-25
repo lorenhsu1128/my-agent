@@ -13,6 +13,7 @@
 #   F. Cron lifecycle   — build / list / fire / history JSONL
 #   G. Memory recall    — sideQuery via llama.cpp / mtime fallback
 #   H. Auto mode        — yoloClassifier 不 401 / 不 unavailable
+#   I. Discord gateway  — module load / unit / 真 boot bot connected
 #
 # 用法：
 #   bash tests/e2e/decouple-comprehensive.sh                 # 全部
@@ -584,7 +585,7 @@ if scope_includes "F" || scope_includes "cron"; then
   fi
 
   if [[ ! -f "$BIN" ]]; then
-    test_skip "F1-F4" "$BIN 不存在"
+    test_skip "F1-F8" "$BIN 不存在"
   else
     # cron tasks 在 <cwd>/.my-agent/scheduled_tasks.jsonc，shape 是 {"tasks":[...]}
     # cron history 在 <cwd>/.my-agent/cron/history/<task-id>.jsonl
@@ -592,12 +593,10 @@ if scope_includes "F" || scope_includes "cron"; then
     HIST_DIR="$ROOT/.my-agent/cron/history"
     mkdir -p "$ROOT/.my-agent" "$HIST_DIR" 2>/dev/null
 
-    TASK_ID="e2etest$(date +%s)"
-    HIST_FILE="$HIST_DIR/$TASK_ID.jsonl"
     BACKUP_CRON="$CRON_FILE.e2e-bak"
     [[ -f "$CRON_FILE" ]] && cp "$CRON_FILE" "$BACKUP_CRON"
 
-    # F1 用 temp .ts 檔做 merge（避開 bun -e 中的 bash regex 轉義）
+    # 共用：merge 一個 task 進 cron file（避開 bun -e 內 bash regex 轉義）
     MERGE_SCRIPT=$(mktemp --suffix=.ts /tmp/cron-merge.XXXX.ts 2>/dev/null || echo "/tmp/cron-merge-$$.ts")
     cat > "$MERGE_SCRIPT" <<'TSEOF'
 import { readFileSync, writeFileSync } from 'fs'
@@ -623,69 +622,101 @@ const newTask = {
 writeFileSync(file, JSON.stringify({ tasks: [...existing, newTask] }, null, 2))
 console.log('wrote', existing.length + 1, 'tasks')
 TSEOF
-    CRON_FILE="$CRON_FILE" TASK_ID="$TASK_ID" bun "$MERGE_SCRIPT" 2>&1 | tail -3
-    rm -f "$MERGE_SCRIPT"
 
-    if [[ -f "$CRON_FILE" ]] && grep -q "$TASK_ID" "$CRON_FILE"; then
-      test_pass "F1 寫 cron task ($TASK_ID)"
-    else
-      test_fail "F1 寫 cron task" "merge failed; CRON_FILE=$CRON_FILE"
-    fi
+    # 共用 helper — 起 daemon、寫 task、等 fire、停 daemon。
+    # 用法：cron_lifecycle <label> <start_cmd> <stop_cmd> <fire_log_path> <stop_log_path>
+    cron_lifecycle() {
+      local label="$1"
+      local start_cmd="$2"
+      local stop_cmd="$3"
+      local start_log="$4"
+      local stop_log="$5"
+      local f_start="F$F_OFFSET"
+      local f_fire="F$((F_OFFSET+1))"
+      local f_stop="F$((F_OFFSET+2))"
 
-    # F2 起 daemon，等 70s 讓 cron fire（cron 是 minute-aligned，最壞要等到下一分鐘 + 處理時間）
-    if [[ $LLAMA_RUNNING -eq 0 ]]; then
-      test_skip "F2-F4" "llama.cpp 未啟動，daemon 不能起"
-    else
-      ( $BIN daemon stop > /tmp/d-cleanup.log 2>&1 & ); sleep 2
+      local task_id="e2etest$(date +%s)$label"
+      local hist_file="$HIST_DIR/$task_id.jsonl"
+
+      CRON_FILE="$CRON_FILE" TASK_ID="$task_id" bun "$MERGE_SCRIPT" 2>&1 | tail -3 > /dev/null
+      if ! grep -q "$task_id" "$CRON_FILE" 2>/dev/null; then
+        test_fail "$f_start [$label] 寫 cron task" "merge failed"
+        return
+      fi
+
+      ( eval "$stop_cmd" > /tmp/d-cleanup-$label.log 2>&1 & ); sleep 2
       rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null
-      ( $BIN daemon start > "$ROOT/tests/e2e/cron-daemon-start.log" 2>&1 & )
-      for i in $(seq 1 12); do
+      ( eval "$start_cmd" > "$start_log" 2>&1 & )
+      for i in $(seq 1 15); do
         [[ -f "$HOME/.my-agent/daemon.pid.json" ]] && break
         sleep 1
       done
       if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
-        test_pass "F2 daemon 起來，cron scheduler 應已 watch task"
+        test_pass "$f_start [$label] daemon 起來 + cron task 寫入 ($task_id)"
       else
-        test_fail "F2 daemon 起" "no pid.json"
+        test_fail "$f_start [$label] daemon 起" "no pid.json after 15s"
+        return
       fi
 
-      # F3 等 cron fire — 最多 90s。檢查兩個指標：
-      #   (a) HIST_FILE（<task-id>.jsonl）有 entry
-      #   (b) scheduled_tasks.jsonc 內該 task 的 lastFiredAt 被更新
-      log "  等 cron fire（最多 90s）..."
-      FIRED=0
-      FIRED_REASON=""
+      log "  等 cron fire [$label]（最多 90s）..."
+      local fired=0
+      local reason=""
       for i in $(seq 1 90); do
-        if [[ -f "$HIST_FILE" ]] && [[ -s "$HIST_FILE" ]]; then
-          FIRED=1; FIRED_REASON="history JSONL 有 $(wc -l < "$HIST_FILE") 筆"
+        if [[ -f "$hist_file" ]] && [[ -s "$hist_file" ]]; then
+          fired=1; reason="history JSONL 有 $(wc -l < "$hist_file") 筆"
           break
         fi
-        # 也檢查 lastFiredAt 是否寫回
-        if grep -A 2 "\"id\": \"$TASK_ID\"" "$CRON_FILE" 2>/dev/null | grep -q "lastFiredAt"; then
-          FIRED=1; FIRED_REASON="task lastFiredAt 已寫"
+        if grep -A 2 "\"id\": \"$task_id\"" "$CRON_FILE" 2>/dev/null | grep -q "lastFiredAt"; then
+          fired=1; reason="task lastFiredAt 已寫"
           break
         fi
         sleep 1
       done
-      if [[ $FIRED -eq 1 ]]; then
-        test_pass "F3 cron fire（$FIRED_REASON）"
+      if [[ $fired -eq 1 ]]; then
+        test_pass "$f_fire [$label] cron fire（$reason）"
       else
-        test_fail "F3 cron fire" "90s 內未見 fire 痕跡"
+        test_fail "$f_fire [$label] cron fire" "90s 內未見 fire 痕跡"
       fi
 
-      # F4 daemon stop
-      ( $BIN daemon stop > /tmp/d-cron-stop.log 2>&1 & )
+      ( eval "$stop_cmd" > "$stop_log" 2>&1 & )
       for i in $(seq 1 12); do
         [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
         sleep 1
       done
       if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
-        test_pass "F4 daemon stop"
+        test_pass "$f_stop [$label] daemon stop"
       else
         rm -f "$HOME/.my-agent/daemon.pid.json"
-        test_fail "F4 daemon stop" "pid.json 仍在（已強制清）"
+        test_fail "$f_stop [$label] daemon stop" "pid.json 仍在（已強制清）"
+      fi
+    }
+
+    if [[ $LLAMA_RUNNING -eq 0 ]]; then
+      test_skip "F1-F8" "llama.cpp 未啟動，daemon 不能起"
+    else
+      # F1-F3: BIN daemon path
+      F_OFFSET=1
+      cron_lifecycle "BIN" \
+        "$BIN daemon start" \
+        "$BIN daemon stop" \
+        "$ROOT/tests/e2e/cron-bin-start.log" \
+        "$ROOT/tests/e2e/cron-bin-stop.log"
+
+      # F4-F6: SRC daemon path（M-DECOUPLE-3-4：dev.ts shim 跑的 daemon 也要驗
+      # cron 真的能 fire — 防 SRC 跟 BIN 行為發散）
+      if [[ -f ./scripts/dev.ts ]]; then
+        F_OFFSET=4
+        cron_lifecycle "SRC" \
+          "bun run ./scripts/dev.ts daemon start" \
+          "bun run ./scripts/dev.ts daemon stop" \
+          "$ROOT/tests/e2e/cron-src-start.log" \
+          "$ROOT/tests/e2e/cron-src-stop.log"
+      else
+        test_skip "F4-F6 [SRC]" "scripts/dev.ts 不存在"
       fi
     fi
+
+    rm -f "$MERGE_SCRIPT"
 
     # cleanup：先還原原本 cron-tasks.jsonc，再 filter 掉所有 `e2etest*`
     # （備份本身可能來自前次 F 污染，所以還要再 filter 一次保證乾淨）
@@ -788,6 +819,113 @@ if scope_includes "H" || scope_includes "auto"; then
       test_pass "H1 yoloClassifier 不 401"
     else
       test_fail "H1 yoloClassifier" "$OUT"
+    fi
+  fi
+fi
+
+# ═══════════════════════════════════════════════
+# I. Discord gateway（M-DECOUPLE-3-5）
+#   I1 (a) static — discord 模組可載入、helper 不 throw
+#   I2 (b) unit  — tests/integration/discord/* 跑過
+#   I3 (c) full  — 真起 daemon + bot 連 Discord，daemon.log 看到 `discord ready`
+# ═══════════════════════════════════════════════
+if scope_includes "I" || scope_includes "discord"; then
+  section "I. Discord gateway"
+  BIN=$([[ -f ./cli-dev.exe ]] && echo ./cli-dev.exe || echo ./cli)
+
+  # I1 (a) — 5 個關鍵模組可動態 load + helper 不 throw
+  OUT=$(bun -e "
+    import('./src/discord/router.ts').then(m => console.log('router=', typeof m.routeMessage));
+    import('./src/discord/messageAdapter.ts').then(m => console.log('adapter=', typeof m.adaptDiscordMessage));
+    import('./src/discord/truncate.ts').then(m => console.log('truncate=', typeof m.truncateForDiscord, 'chunks=' + m.truncateForDiscord('x'.repeat(3000)).length));
+    import('./src/discord/channelNaming.ts').then(m => console.log('naming=', typeof m.computeChannelName, m.computeChannelName('test', 'abc123')));
+    import('./src/discordConfig/index.ts').then(m => console.log('config=', typeof m.getDiscordConfigSnapshot));
+  " 2>&1 | tail -10)
+  if echo "$OUT" | grep -q "router= function" \
+     && echo "$OUT" | grep -q "adapter= function" \
+     && echo "$OUT" | grep -q "truncate= function" \
+     && echo "$OUT" | grep -q "chunks=2" \
+     && echo "$OUT" | grep -q "naming= function" \
+     && echo "$OUT" | grep -q "config= function"; then
+    test_pass "I1 discord 模組可載入（router/adapter/truncate/naming/config）"
+  else
+    test_fail "I1 discord 模組" "$OUT"
+  fi
+
+  # I2 (b) — 整合單元測試套件跑過（filter 掉 watch / verbose noise）
+  OUT=$(bun test tests/integration/discord/ 2>&1 | tail -8)
+  if echo "$OUT" | grep -qE "[0-9]+ pass" && ! echo "$OUT" | grep -qE "[1-9][0-9]* fail"; then
+    PASS_CNT=$(echo "$OUT" | grep -oE "[0-9]+ pass" | head -1 | grep -oE "[0-9]+")
+    test_pass "I2 discord unit tests（${PASS_CNT:-?} pass）"
+  else
+    test_fail "I2 discord unit tests" "$(echo "$OUT" | tail -3)"
+  fi
+
+  # I3 (c) — full gateway boot：daemon 起來時 stdout 印 `discord: enabled
+  # (bot connected, ...)` 表示 token 有解到 + Client.login() 成功，daemon.log
+  # 接著會印 `discord ready` + `binding health check`。若 discord disabled 或無
+  # token → skip（不算 fail，因為這台機器可能沒設 bot）。
+  if [[ ! -f "$BIN" ]]; then
+    test_skip "I3" "$BIN 不存在"
+  elif [[ $LLAMA_RUNNING -eq 0 ]]; then
+    test_skip "I3" "llama.cpp 未啟動，daemon 不能起"
+  else
+    DISCORD_ENABLED=$(bun -e "
+      import('./src/discordConfig/index.ts').then(async m => {
+        // loader 是 lazy，session 啟動才 init；e2e 顯式呼一次拿真設定
+        const cfg = await m.loadDiscordConfigSnapshot();
+        const tokFromEnv = !!process.env.DISCORD_BOT_TOKEN;
+        const tokFromCfg = typeof cfg.botToken === 'string' && cfg.botToken.length > 10;
+        console.log('result=', cfg.enabled && (tokFromEnv || tokFromCfg) ? 'yes' : 'no');
+      })
+    " 2>&1 | grep -oE "result= (yes|no)" | awk '{print $2}')
+
+    if [[ "$DISCORD_ENABLED" != "yes" ]]; then
+      test_skip "I3" "discord 未啟用或 token 不可解（DISCORD_BOT_TOKEN env / discord.jsonc botToken）"
+    else
+      ( $BIN daemon stop > /tmp/d-cleanup.log 2>&1 & ); sleep 2
+      rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null
+
+      DAEMON_LOG_BEFORE=$(grep -c "discord ready" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
+      START_LOG="$ROOT/tests/e2e/discord-daemon-start.log"
+      ( $BIN daemon start > "$START_LOG" 2>&1 & )
+      for i in $(seq 1 15); do
+        [[ -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        sleep 1
+      done
+      if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+        test_fail "I3 daemon start" "no pid.json after 15s"
+      else
+        # 等最多 60s 看 daemon.log 出現 `discord ready` + `slash commands registered`
+        # 兩條都要才算 gateway 完整起來。daemon 還在 run 時 stdout banner 不會 flush
+        # 到檔（OS pipe buffering），所以不查 stdout，靠 daemon.log（authoritative）。
+        DISCORD_OK=0
+        SLASH_OK=0
+        SLASH_BEFORE=$(grep -c "slash commands registered" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
+        for i in $(seq 1 60); do
+          DAEMON_LOG_AFTER=$(grep -c "discord ready" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
+          SLASH_AFTER=$(grep -c "slash commands registered" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
+          if [[ $DAEMON_LOG_AFTER -gt $DAEMON_LOG_BEFORE ]]; then DISCORD_OK=1; fi
+          if [[ $SLASH_AFTER -gt $SLASH_BEFORE ]]; then SLASH_OK=1; fi
+          if [[ $DISCORD_OK -eq 1 ]] && [[ $SLASH_OK -eq 1 ]]; then break; fi
+          sleep 1
+        done
+
+        if [[ $DISCORD_OK -eq 1 ]] && [[ $SLASH_OK -eq 1 ]]; then
+          test_pass "I3 discord gateway 啟動（discord ready + slash commands registered）"
+        elif [[ $DISCORD_OK -eq 1 ]]; then
+          test_fail "I3 discord gateway" "discord ready 有，但 slash commands 60s 內未 register"
+        else
+          test_fail "I3 discord gateway" "60s 內 daemon.log 無 'discord ready'"
+        fi
+      fi
+
+      ( $BIN daemon stop > /tmp/d-discord-stop.log 2>&1 & )
+      for i in $(seq 1 12); do
+        [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        sleep 1
+      done
+      rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null || true
     fi
   fi
 fi

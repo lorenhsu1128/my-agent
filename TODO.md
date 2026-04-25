@@ -1075,8 +1075,8 @@
 - [x] SRC + BIN 兩條 path 都驗到（D6 SRC --version + E6/E7 SRC daemon）
 
 ### 不在範圍（→ 後續 milestone）
-- [ ] M-DECOUPLE-3-4：cron fire 也應該驗 daemon source（目前 F 系列只驗 BIN）
-- [ ] M-DECOUPLE-3-5：Discord gateway 進 E2E（需要 mock bot token，工程量單獨估）
+- [x] M-DECOUPLE-3-4：F section 從 5 case 擴 → 7 case，BIN + SRC daemon 各跑一輪 cron lifecycle（cron_lifecycle helper 抽出）
+- [x] M-DECOUPLE-3-5：新增 I section（3 case）— I1 模組 load / I2 unit tests 跑過（155 pass）/ I3 真起 daemon + bot 連 Discord 驗 daemon.log 出現 `discord ready` + `slash commands registered`
 - [ ] M-DECOUPLE-3-6：c 方案 PTY-based 互動 REPL E2E — 用 node-pty 真正 spawn cli-dev.exe 互動 REPL、stdin pipe 送 prompt、stdout 等 reply。差別：B 方案的 `_thinClientTurn.ts` 跳過 React 渲染那層，c 方案才能驗 ink TUI 把 thin-client 真的接起來。延後到 native module 在 bun + Windows 環境穩定後再做
 - [x] M-DECOUPLE-3-7：full E2E flake 改善 — 11 處 `timeout N CMD` 統一加 `-k 10s` SIGKILL 後援（commit 4999d1c）
 
