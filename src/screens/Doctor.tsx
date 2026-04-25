@@ -127,7 +127,6 @@ export function Doctor(t0) {
     t2 = $[2];
   }
   const distTagsPromise = t2;
-  const autoUpdatesChannel = getInitialSettings()?.autoUpdatesChannel ?? "latest";
   let t3;
   if ($[3] !== validationErrors) {
     t3 = validationErrors.filter(_temp7);
@@ -289,14 +288,6 @@ export function Doctor(t0) {
   } else {
     t14 = $[26];
   }
-  let t15;
-  if ($[27] !== diagnostic.configInstallMethod) {
-    t15 = <Text>└ Config install method: {diagnostic.configInstallMethod}</Text>;
-    $[27] = diagnostic.configInstallMethod;
-    $[28] = t15;
-  } else {
-    t15 = $[28];
-  }
   const t16 = diagnostic.ripgrepStatus.working ? "OK" : "Not working";
   const t17 = diagnostic.ripgrepStatus.mode === "embedded" ? "bundled" : diagnostic.ripgrepStatus.mode === "builtin" ? "vendor" : diagnostic.ripgrepStatus.systemPath || "system";
   let t18;
@@ -341,13 +332,12 @@ export function Doctor(t0) {
     t22 = $[39];
   }
   let t23;
-  if ($[40] !== t11 || $[41] !== t12 || $[42] !== t13 || $[43] !== t14 || $[44] !== t15 || $[45] !== t18 || $[46] !== t19 || $[47] !== t20 || $[48] !== t21 || $[49] !== t22) {
-    t23 = <Box flexDirection="column">{t10}{t11}{t12}{t13}{t14}{t15}{t18}{t19}{t20}{t21}{t22}</Box>;
+  if ($[40] !== t11 || $[41] !== t12 || $[42] !== t13 || $[43] !== t14 || $[45] !== t18 || $[46] !== t19 || $[47] !== t20 || $[48] !== t21 || $[49] !== t22) {
+    t23 = <Box flexDirection="column">{t10}{t11}{t12}{t13}{t14}{t18}{t19}{t20}{t21}{t22}</Box>;
     $[40] = t11;
     $[41] = t12;
     $[42] = t13;
     $[43] = t14;
-    $[44] = t15;
     $[45] = t18;
     $[46] = t19;
     $[47] = t20;
@@ -357,53 +347,8 @@ export function Doctor(t0) {
   } else {
     t23 = $[50];
   }
-  let t24;
-  if ($[51] === Symbol.for("react.memo_cache_sentinel")) {
-    t24 = <Text bold={true}>Updates</Text>;
-    $[51] = t24;
-  } else {
-    t24 = $[51];
-  }
-  const t25 = diagnostic.packageManager ? "Managed by package manager" : diagnostic.autoUpdates;
-  let t26;
-  if ($[52] !== t25) {
-    t26 = <Text>└ Auto-updates:{" "}{t25}</Text>;
-    $[52] = t25;
-    $[53] = t26;
-  } else {
-    t26 = $[53];
-  }
-  let t27;
-  if ($[54] !== diagnostic.hasUpdatePermissions) {
-    t27 = diagnostic.hasUpdatePermissions !== null && <Text>└ Update permissions:{" "}{diagnostic.hasUpdatePermissions ? "Yes" : "No (requires sudo)"}</Text>;
-    $[54] = diagnostic.hasUpdatePermissions;
-    $[55] = t27;
-  } else {
-    t27 = $[55];
-  }
-  let t28;
-  if ($[56] === Symbol.for("react.memo_cache_sentinel")) {
-    t28 = <Text>└ Auto-update channel: {autoUpdatesChannel}</Text>;
-    $[56] = t28;
-  } else {
-    t28 = $[56];
-  }
-  let t29;
-  if ($[57] === Symbol.for("react.memo_cache_sentinel")) {
-    t29 = <Suspense fallback={null}><DistTagsDisplay promise={distTagsPromise} /></Suspense>;
-    $[57] = t29;
-  } else {
-    t29 = $[57];
-  }
-  let t30;
-  if ($[58] !== t26 || $[59] !== t27) {
-    t30 = <Box flexDirection="column">{t24}{t26}{t27}{t28}{t29}</Box>;
-    $[58] = t26;
-    $[59] = t27;
-    $[60] = t30;
-  } else {
-    t30 = $[60];
-  }
+  // Updates / Auto-update section removed (M-DECOUPLE-4).
+  const t30 = null;
   let t31;
   let t32;
   let t33;

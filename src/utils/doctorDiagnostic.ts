@@ -3,14 +3,7 @@ import { readFile, realpath } from 'fs/promises'
 import { homedir } from 'os'
 import { delimiter, join, posix, win32 } from 'path'
 import { isInBundledMode } from './bundledMode.js'
-import {
-  formatAutoUpdaterDisabledReason,
-  getAutoUpdaterDisabledReason,
-  getGlobalConfig,
-  type InstallMethod,
-} from './config.js'
 import { getCwd } from './cwd.js'
-import { isEnvTruthy } from './envUtils.js'
 import { execFileNoThrow } from './execFileNoThrow.js'
 import { getFsImplementation } from './fsOperations.js'
 import {
@@ -54,9 +47,6 @@ export type DiagnosticInfo = {
   version: string
   installationPath: string
   invokedBinary: string
-  configInstallMethod: InstallMethod | 'not set'
-  autoUpdates: string
-  hasUpdatePermissions: boolean | null
   multipleInstallations: Array<{ type: string; path: string }>
   warnings: Array<{ issue: string; fix: string }>
   recommendation?: string
@@ -295,20 +285,6 @@ async function detectMultipleInstallations(): Promise<
     // Not found
   }
 
-  // Also check if config indicates native installation
-  const config = getGlobalConfig()
-  if (config.installMethod === 'native') {
-    const nativeDataPath = join(homedir(), '.local', 'share', 'claude')
-    try {
-      await fs.stat(nativeDataPath)
-      if (!installations.some(i => i.type === 'native')) {
-        installations.push({ type: 'native', path: nativeDataPath })
-      }
-    } catch {
-      // Not found
-    }
-  }
-
   return installations
 }
 
@@ -360,8 +336,6 @@ async function detectConfigurationIssues(
     // ENOENT (no managed settings) / parse error — not this check's concern.
     // Parse errors are surfaced by the settings loader itself.
   }
-
-  const config = getGlobalConfig()
 
   // Skip most warnings for development mode
   if (type === 'development') {
@@ -427,23 +401,7 @@ async function detectConfigurationIssues(
     }
   }
 
-  // Check for configuration mismatches
-  // Skip these checks if DISABLE_INSTALLATION_CHECKS is set (e.g., in HFI)
-  if (!isEnvTruthy(process.env.DISABLE_INSTALLATION_CHECKS)) {
-    if (type === 'npm-local' && config.installMethod !== 'local') {
-      warnings.push({
-        issue: `Running from local installation but config install method is '${config.installMethod}'`,
-        fix: 'Consider using native installation: claude install',
-      })
-    }
-
-    if (type === 'native' && config.installMethod !== 'native') {
-      warnings.push({
-        issue: `Running native installation but config install method is '${config.installMethod}'`,
-        fix: 'Run my-agent install to update configuration',
-      })
-    }
-  }
+  // Auto-updater removed — install method mismatch checks dropped (M-DECOUPLE-4).
 
   if (type === 'npm-global' && (await localInstallationExists())) {
     warnings.push({
@@ -563,25 +521,6 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
     }
   }
 
-  const config = getGlobalConfig()
-
-  // Get config values for display
-  const configInstallMethod = config.installMethod || 'not set'
-
-  // Check permissions for global installations
-  let hasUpdatePermissions: boolean | null = null
-  if (installationType === 'npm-global') {
-    hasUpdatePermissions = true
-
-    // Add warning if no permissions
-    if (!hasUpdatePermissions && !getAutoUpdaterDisabledReason()) {
-      warnings.push({
-        issue: 'Insufficient permissions for auto-updates',
-        fix: 'Do one of: (1) Re-install node without sudo, or (2) Use `claude install` for native installation',
-      })
-    }
-  }
-
   // Get ripgrep status and configuration
   const ripgrepStatusRaw = getRipgrepStatus()
 
@@ -604,14 +543,6 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
     version,
     installationPath,
     invokedBinary,
-    configInstallMethod,
-    autoUpdates: (() => {
-      const reason = getAutoUpdaterDisabledReason()
-      return reason
-        ? `disabled (${formatAutoUpdaterDisabledReason(reason)})`
-        : 'enabled'
-    })(),
-    hasUpdatePermissions,
     multipleInstallations,
     warnings,
     packageManager,

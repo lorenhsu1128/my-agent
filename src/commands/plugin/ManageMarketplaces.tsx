@@ -11,7 +11,8 @@ import { Box, Text, useInput } from '../../ink.js';
 import { useKeybinding, useKeybindings } from '../../keybindings/useKeybinding.js';
 import type { LoadedPlugin } from '../../types/plugin.js';
 import { count } from '../../utils/array.js';
-import { shouldSkipPluginAutoupdate } from '../../utils/config.js';
+// shouldSkipPluginAutoupdate removed (M-DECOUPLE-4): plugin auto-update never skipped
+const shouldSkipPluginAutoupdate = (): boolean => false;
 import { errorMessage } from '../../utils/errors.js';
 import { clearAllCaches } from '../../utils/plugins/cacheUtils.js';
 import { createPluginId, formatMarketplaceLoadingErrors, getMarketplaceSourceDisplay, loadMarketplacesWithGracefulDegradation } from '../../utils/plugins/marketplaceHelpers.js';

@@ -42,18 +42,7 @@ export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
   // 🗑️ [deprecated] API key helper 外部腳本路徑。改用 settings.apiKeyHelper。
   // "apiKeyHelper": "",
 
-  // ═══ §2 更新 / 安裝 ═══
-
-  // 是否允許自動更新。my-agent 目前建構不走官方更新通道，實質 no-op。
-  // 留著為了跟 Claude Code GlobalConfig 相容。
-  "autoUpdates": false,
-
-  // native 安裝時的更新保護旗標（與 autoUpdates 互補）。my-agent 不使用。
-  // "autoUpdatesProtectedForNative": true,
-
-  // 🗑️ [legacy] Claude Code 安裝方式（native / local / unknown）。
-  // my-agent 從 ./cli 跑，此欄位無意義。可刪。
-  // "installMethod": "unknown",
+  // ═══ §2 設定 migration ═══
 
   // 設定 migration 版本號。my-agent 啟動時若 != CURRENT_MIGRATION_VERSION
   // 會跑一次 runMigrations 補。勿手改。

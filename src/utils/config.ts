@@ -17,7 +17,7 @@ import { registerCleanup } from './cleanupRegistry.js'
 import { logForDebugging } from './debug.js'
 import { logForDiagnosticsNoPII } from './diagLogs.js'
 import { getGlobalClaudeFile } from './env.js'
-import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getClaudeConfigHomeDir } from './envUtils.js'
 import { ConfigParseError, getErrnoCode } from './errors.js'
 import { writeFileSyncAndFlush_DEPRECATED } from './file.js'
 import { getFsImplementation } from './fsOperations.js'
@@ -30,7 +30,6 @@ import * as lockfile from './lockfile.js'
 import { logError } from './log.js'
 import type { MemoryType } from './memory/types.js'
 import { normalizePathForConfigKey } from './path.js'
-import { getEssentialTrafficOnlyReason } from './privacyLevel.js'
 import { getManagedFilePath } from './settings/managedPath.js'
 import type { ThemeSetting } from './theme.js'
 
@@ -76,8 +75,6 @@ export interface HistoryEntry {
   display: string
   pastedContents: Record<number, PastedContent>
 }
-
-export type ReleaseChannel = 'stable' | 'latest'
 
 export type ProjectConfig = {
   allowedTools: string[]
@@ -153,8 +150,6 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   hasClaudeMdExternalIncludesWarningShown: false,
 }
 
-export type InstallMethod = 'local' | 'native' | 'global' | 'unknown'
-
 export {
   EDITOR_MODES,
   NOTIFICATION_CHANNELS,
@@ -193,10 +188,6 @@ export type GlobalConfig = {
   apiKeyHelper?: string
   projects?: Record<string, ProjectConfig>
   numStartups: number
-  installMethod?: InstallMethod
-  autoUpdates?: boolean
-  // Flag to distinguish protection-based disabling from user preference
-  autoUpdatesProtectedForNative?: boolean
   // Session count when Doctor was last shown
   doctorShownAtSession?: number
   userID?: string
@@ -609,8 +600,6 @@ export type GlobalConfig = {
 function createDefaultGlobalConfig(): GlobalConfig {
   return {
     numStartups: 0,
-    installMethod: undefined,
-    autoUpdates: undefined,
     theme: 'dark',
     preferredNotifChannel: 'auto',
     verbose: false,
@@ -752,9 +741,6 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = createDefaultGlobalConfig()
 
 export const GLOBAL_CONFIG_KEYS = [
   'apiKeyHelper',
-  'installMethod',
-  'autoUpdates',
-  'autoUpdatesProtectedForNative',
   'theme',
   'verbose',
   'preferredNotifChannel',
@@ -887,7 +873,6 @@ export function isPathTrusted(dir: string): boolean {
 // We have to put this test code here because Jest doesn't support mocking ES modules :O
 const TEST_GLOBAL_CONFIG_FOR_TESTING: GlobalConfig = {
   ...DEFAULT_GLOBAL_CONFIG,
-  autoUpdates: false,
 }
 const TEST_PROJECT_CONFIG_FOR_TESTING: ProjectConfig = {
   ...DEFAULT_PROJECT_CONFIG,
@@ -1030,57 +1015,11 @@ registerCleanup(async () => {
 })
 
 /**
- * Migrates old autoUpdaterStatus to new installMethod and autoUpdates fields
+ * Auto-updater migration removed — my-agent has no auto-updater.
  * @internal
  */
 function migrateConfigFields(config: GlobalConfig): GlobalConfig {
-  // Already migrated
-  if (config.installMethod !== undefined) {
-    return config
-  }
-
-  // autoUpdaterStatus is removed from the type but may exist in old configs
-  const legacy = config as GlobalConfig & {
-    autoUpdaterStatus?:
-      | 'migrated'
-      | 'installed'
-      | 'disabled'
-      | 'enabled'
-      | 'no_permissions'
-      | 'not_configured'
-  }
-
-  // Determine install method and auto-update preference from old field
-  let installMethod: InstallMethod = 'unknown'
-  let autoUpdates = config.autoUpdates ?? true // Default to enabled unless explicitly disabled
-
-  switch (legacy.autoUpdaterStatus) {
-    case 'migrated':
-      installMethod = 'local'
-      break
-    case 'installed':
-      installMethod = 'native'
-      break
-    case 'disabled':
-      // When disabled, we don't know the install method
-      autoUpdates = false
-      break
-    case 'enabled':
-    case 'no_permissions':
-    case 'not_configured':
-      // These imply global installation
-      installMethod = 'global'
-      break
-    case undefined:
-      // No old status, keep defaults
-      break
-  }
-
-  return {
-    ...config,
-    installMethod,
-    autoUpdates,
-  }
+  return config
 }
 
 /**
@@ -1916,63 +1855,6 @@ export function saveCurrentProjectConfig(
     saveConfig(getGlobalClaudeFile(), written, DEFAULT_GLOBAL_CONFIG)
     writeThroughGlobalConfigCache(written)
   }
-}
-
-export function isAutoUpdaterDisabled(): boolean {
-  return getAutoUpdaterDisabledReason() !== null
-}
-
-/**
- * Returns true if plugin autoupdate should be skipped.
- * This checks if the auto-updater is disabled AND the FORCE_AUTOUPDATE_PLUGINS
- * env var is not set to 'true'. The env var allows forcing plugin autoupdate
- * even when the auto-updater is otherwise disabled.
- */
-export function shouldSkipPluginAutoupdate(): boolean {
-  return (
-    isAutoUpdaterDisabled() &&
-    !isEnvTruthy(process.env.FORCE_AUTOUPDATE_PLUGINS)
-  )
-}
-
-export type AutoUpdaterDisabledReason =
-  | { type: 'development' }
-  | { type: 'env'; envVar: string }
-  | { type: 'config' }
-
-export function formatAutoUpdaterDisabledReason(
-  reason: AutoUpdaterDisabledReason,
-): string {
-  switch (reason.type) {
-    case 'development':
-      return 'development build'
-    case 'env':
-      return `${reason.envVar} set`
-    case 'config':
-      return 'config'
-  }
-}
-
-export function getAutoUpdaterDisabledReason(): AutoUpdaterDisabledReason | null {
-  if (process.env.NODE_ENV === 'development') {
-    return { type: 'development' }
-  }
-  if (isEnvTruthy(process.env.DISABLE_AUTOUPDATER)) {
-    return { type: 'env', envVar: 'DISABLE_AUTOUPDATER' }
-  }
-  const essentialTrafficEnvVar = getEssentialTrafficOnlyReason()
-  if (essentialTrafficEnvVar) {
-    return { type: 'env', envVar: essentialTrafficEnvVar }
-  }
-  const config = getGlobalConfig()
-  if (
-    config.autoUpdates === false &&
-    (config.installMethod !== 'native' ||
-      config.autoUpdatesProtectedForNative !== true)
-  ) {
-    return { type: 'config' }
-  }
-  return null
 }
 
 export function getOrCreateUserID(): string {

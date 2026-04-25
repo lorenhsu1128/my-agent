@@ -11,7 +11,8 @@
  */
 
 import { updatePluginOp } from '../../services/plugins/pluginOperations.js'
-import { shouldSkipPluginAutoupdate } from '../config.js'
+// shouldSkipPluginAutoupdate removed (M-DECOUPLE-4): plugin auto-update never skipped
+const shouldSkipPluginAutoupdate = (): boolean => false
 import { logForDebugging } from '../debug.js'
 import { errorMessage } from '../errors.js'
 import { logError } from '../log.js'

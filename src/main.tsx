@@ -80,7 +80,7 @@ import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js';
 import { count, uniq } from './utils/array.js';
 import { installAsciicastRecorder } from './utils/asciicast.js';
 import { getSubscriptionType, isClaudeAISubscriber, prefetchAwsCredentialsAndBedRockInfoIfSafe, prefetchGcpCredentialsIfSafe, validateForceLoginOrg } from './utils/auth.js';
-import { checkHasTrustDialogAccepted, getGlobalConfig, getRemoteControlAtStartup, isAutoUpdaterDisabled, saveGlobalConfig } from './utils/config.js';
+import { checkHasTrustDialogAccepted, getGlobalConfig, getRemoteControlAtStartup, saveGlobalConfig } from './utils/config.js';
 import { seedEarlyInput, stopCapturingEarlyInput } from './utils/earlyInput.js';
 import { getInitialEffortSetting, parseEffortValue } from './utils/effort.js';
 import { getInitialFastModeSetting, isFastModeEnabled, prefetchFastModeStatus, resolveFastModeStatusFromCache } from './utils/fastMode.js';
@@ -198,7 +198,6 @@ import { type ChannelEntry, getInitialMainLoopModel, getIsNonInteractiveSession,
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('./utils/permissions/autoModeState.js') as typeof import('./utils/permissions/autoModeState.js') : null;
 
 // TeleportRepoMismatchDialog, TeleportResumeWrapper dynamically imported at call sites
-import { migrateAutoUpdatesToSettings } from './migrations/migrateAutoUpdatesToSettings.js';
 import { migrateBypassPermissionsAcceptedToSettings } from './migrations/migrateBypassPermissionsAcceptedToSettings.js';
 import { migrateEnableAllProjectMcpServersToSettings } from './migrations/migrateEnableAllProjectMcpServersToSettings.js';
 import { migrateReplBridgeEnabledToRemoteControlAtStartup } from './migrations/migrateReplBridgeEnabledToRemoteControlAtStartup.js';
@@ -335,7 +334,6 @@ async function logStartupTelemetry(): Promise<void> {
     sandbox_enabled: SandboxManager.isSandboxingEnabled(),
     are_unsandboxed_commands_allowed: SandboxManager.areUnsandboxedCommandsAllowed(),
     is_auto_bash_allowed_if_sandbox_enabled: SandboxManager.isAutoAllowBashIfSandboxedEnabled(),
-    auto_updater_disabled: isAutoUpdaterDisabled(),
     prefers_reduced_motion: getInitialSettings().prefersReducedMotion ?? false,
     ...getCertEnvVarTelemetry()
   });
@@ -346,7 +344,6 @@ async function logStartupTelemetry(): Promise<void> {
 const CURRENT_MIGRATION_VERSION = 11;
 function runMigrations(): void {
   if (getGlobalConfig().migrationVersion !== CURRENT_MIGRATION_VERSION) {
-    migrateAutoUpdatesToSettings();
     migrateBypassPermissionsAcceptedToSettings();
     migrateEnableAllProjectMcpServersToSettings();
     migrateReplBridgeEnabledToRemoteControlAtStartup();
@@ -4627,7 +4624,6 @@ async function logTenguInit({
       ...(assistantActivationPath && {
         assistantActivationPath: assistantActivationPath as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       }),
-      autoUpdatesChannel: (getInitialSettings().autoUpdatesChannel ?? 'latest') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       ...("external" === 'ant' ? (() => {
         const cwd = getCwd();
         const gitRoot = findGitRoot(cwd);
