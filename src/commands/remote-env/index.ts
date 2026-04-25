@@ -1,5 +1,6 @@
 import type { Command } from '../../commands.js'
-import { isPolicyAllowed } from '../../services/policyLimits/index.js'
+// policyLimits removed (M-DECOUPLE-2 Phase 1B)
+const isPolicyAllowed = (_policy: string): boolean => true
 import { isClaudeAISubscriber } from '../../utils/auth.js'
 
 export default {

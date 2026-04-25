@@ -1,5 +1,6 @@
 import type { SDKMessage } from 'src/entrypoints/agentSdkTypes.js'
-import { isPolicyAllowed } from '../../../services/policyLimits/index.js'
+// policyLimits removed (M-DECOUPLE-2 Phase 1B)
+const isPolicyAllowed = (_policy: string): boolean => true
 import { detectCurrentRepositoryWithHost } from '../../detectRepository.js'
 import { isEnvTruthy } from '../../envUtils.js'
 import type { TodoList } from '../../todo/types.js'

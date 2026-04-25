@@ -67,8 +67,13 @@ import { launchRepl } from './replLauncher.js';
 import { type DownloadResult, downloadSessionFiles, type FilesApiConfig, parseFileSpecs } from './services/api/filesApi.js';
 import { prefetchOfficialMcpUrls } from './services/mcp/officialRegistry.js';
 import type { McpSdkServerConfig, McpServerConfig, ScopedMcpServerConfig } from './services/mcp/types.js';
-import { isPolicyAllowed, loadPolicyLimits, refreshPolicyLimits, waitForPolicyLimitsToLoad } from './services/policyLimits/index.js';
-import { loadRemoteManagedSettings, refreshRemoteManagedSettings } from './services/remoteManagedSettings/index.js';
+// policyLimits + remoteManagedSettings removed (M-DECOUPLE-2 Phase 1B): no-op stubs
+const isPolicyAllowed = (_policy: string): boolean => true;
+const loadPolicyLimits = async (): Promise<void> => {};
+const refreshPolicyLimits = async (): Promise<void> => {};
+const waitForPolicyLimitsToLoad = async (): Promise<void> => {};
+const loadRemoteManagedSettings = async (): Promise<void> => {};
+const refreshRemoteManagedSettings = async (): Promise<void> => {};
 import type { ToolInputJSONSchema } from './Tool.js';
 import { createSyntheticOutputTool, isSyntheticOutputToolEnabled } from './tools/SyntheticOutputTool/SyntheticOutputTool.js';
 import { getTools } from './tools.js';
@@ -966,7 +971,7 @@ async function run(): Promise<CommanderCommand> {
     // Load settings sync (non-blocking, fail-open)
     // CLI: uploads local settings to remote (CCR download is handled by print.ts)
     if (feature('UPLOAD_USER_SETTINGS')) {
-      void import('./services/settingsSync/index.js').then(m => m.uploadUserSettingsInBackground());
+      // settingsSync removed (M-DECOUPLE-2 Phase 1B): no-op
     }
     profileCheckpoint('preAction_after_settings_sync');
   });

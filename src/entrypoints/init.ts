@@ -5,14 +5,11 @@ import memoize from 'lodash-es/memoize.js'
 import { getIsNonInteractiveSession } from 'src/bootstrap/state.js'
 import { shutdownLspServerManager } from '../services/lsp/manager.js'
 import { populateOAuthAccountInfoIfNeeded } from '../services/oauth/client.js'
-import {
-  initializePolicyLimitsLoadingPromise,
-  isPolicyLimitsEligible,
-} from '../services/policyLimits/index.js'
-import {
-  initializeRemoteManagedSettingsLoadingPromise,
-  isEligibleForRemoteManagedSettings,
-} from '../services/remoteManagedSettings/index.js'
+// policyLimits + remoteManagedSettings removed (M-DECOUPLE-2 Phase 1B)
+const initializePolicyLimitsLoadingPromise = (): void => {}
+const isPolicyLimitsEligible = (): boolean => false
+const initializeRemoteManagedSettingsLoadingPromise = (): void => {}
+const isEligibleForRemoteManagedSettings = (): boolean => false
 import { preconnectAnthropicApi } from '../utils/apiPreconnect.js'
 import { applyExtraCACertsFromConfig } from '../utils/caCertsConfig.js'
 import { registerCleanup } from '../utils/cleanupRegistry.js'

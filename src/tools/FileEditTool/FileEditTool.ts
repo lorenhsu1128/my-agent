@@ -4,7 +4,8 @@ import { diagnosticTracker } from '../../services/diagnosticTracking.js'
 import { clearDeliveredDiagnosticsForFile } from '../../services/lsp/LSPDiagnosticRegistry.js'
 import { getLspServerManager } from '../../services/lsp/manager.js'
 import { notifyVscodeFileUpdated } from '../../services/mcp/vscodeSdkMcp.js'
-import { checkTeamMemSecrets } from '../../services/teamMemorySync/teamMemSecretGuard.js'
+// teamMemorySync removed (M-DECOUPLE-2 Phase 1B): no team memory in local mode
+const checkTeamMemSecrets = (_p: string, _c: string): string | null => null
 import {
   activateConditionalSkillsForPaths,
   addSkillDirectories,

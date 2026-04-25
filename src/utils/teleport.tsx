@@ -4,7 +4,8 @@ import { randomUUID } from 'crypto';
 import React from 'react';
 import { getOriginalCwd, getSessionId } from 'src/bootstrap/state.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
-import { isPolicyAllowed } from 'src/services/policyLimits/index.js';
+// policyLimits removed (M-DECOUPLE-2 Phase 1B): always allow locally
+const isPolicyAllowed = (_policy: string): boolean => true;
 import { z } from 'zod/v4';
 import { getTeleportErrors, TeleportError, type TeleportLocalErrorType } from '../components/TeleportError.js';
 import { getApiBaseUrl } from '../constants/apiBase.js'

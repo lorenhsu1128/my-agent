@@ -2,7 +2,8 @@ import axios from 'axios'
 import { z } from 'zod/v4'
 import { getApiBaseUrl } from '../../constants/apiBase.js'
 import { getOrganizationUUID } from '../../services/oauth/client.js'
-import { isPolicyAllowed } from '../../services/policyLimits/index.js'
+// policyLimits removed (M-DECOUPLE-2 Phase 1B)
+const isPolicyAllowed = (_policy: string): boolean => true
 import type { ToolUseContext } from '../../Tool.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import {

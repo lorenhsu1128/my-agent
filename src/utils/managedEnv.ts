@@ -1,4 +1,5 @@
-import { isRemoteManagedSettingsEligible } from '../services/remoteManagedSettings/syncCache.js'
+// remoteManagedSettings removed (M-DECOUPLE-2 Phase 1B)
+const isRemoteManagedSettingsEligible = (): boolean => false
 import { clearCACertsCache } from './caCerts.js'
 import { getGlobalConfig } from './config.js'
 import { isEnvTruthy } from './envUtils.js'

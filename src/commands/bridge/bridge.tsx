@@ -465,15 +465,7 @@ function _temp4(s) {
   return s.replBridgeSessionUrl;
 }
 async function checkBridgePrerequisites(): Promise<string | null> {
-  // Check organization policy — remote control may be disabled
-  const {
-    waitForPolicyLimitsToLoad,
-    isPolicyAllowed
-  } = await import('../../services/policyLimits/index.js');
-  await waitForPolicyLimitsToLoad();
-  if (!isPolicyAllowed('allow_remote_control')) {
-    return "Remote Control is disabled by your organization's policy.";
-  }
+  // policyLimits removed (M-DECOUPLE-2 Phase 1B): always allow locally
   const disabledReason = await getBridgeDisabledReason();
   if (disabledReason) {
     return disabledReason;

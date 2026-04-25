@@ -1,6 +1,7 @@
 import { feature } from 'bun:bundle'
 import { getIsRemoteMode } from '../../bootstrap/state.js'
-import { redownloadUserSettings } from '../../services/settingsSync/index.js'
+// settingsSync removed (M-DECOUPLE-2 Phase 1B): no remote pull
+const redownloadUserSettings = async (): Promise<boolean> => false
 import type { LocalCommandCall } from '../../types/command.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { refreshActivePlugins } from '../../utils/plugins/refresh.js'

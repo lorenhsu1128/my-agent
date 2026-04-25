@@ -145,14 +145,7 @@ async function main(): Promise<void> {
     }
 
     // Bridge is a remote control feature - check policy limits
-    const {
-      waitForPolicyLimitsToLoad,
-      isPolicyAllowed
-    } = await import('../services/policyLimits/index.js');
-    await waitForPolicyLimitsToLoad();
-    if (!isPolicyAllowed('allow_remote_control')) {
-      exitWithError("Error: Remote Control is disabled by your organization's policy.");
-    }
+    // policyLimits removed (M-DECOUPLE-2 Phase 1B): always allow locally
     await bridgeMain(args.slice(1));
     return;
   }

@@ -8,7 +8,9 @@ import {
   getOriginalCwd,
   getUseCoworkPlugins,
 } from '../../bootstrap/state.js'
-import { getRemoteManagedSettingsSyncFromCache } from '../../services/remoteManagedSettings/syncCacheState.js'
+// remoteManagedSettings removed (M-DECOUPLE-2 Phase 1B): no remote settings layer
+import type { SettingsJson } from './types.js'
+const getRemoteManagedSettingsSyncFromCache = (): SettingsJson | null => null
 import { uniq } from '../array.js'
 import { logForDebugging } from '../debug.js'
 import { logForDiagnosticsNoPII } from '../diagLogs.js'
