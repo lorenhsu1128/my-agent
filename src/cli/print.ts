@@ -26,7 +26,6 @@ import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
 } from 'src/services/analytics/index.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import {
   logForDiagnosticsNoPII,
@@ -2909,10 +2908,7 @@ function runHeadlessStreaming(
             })
           }
 
-          if (
-            message.request.agentProgressSummaries &&
-            getFeatureValue_CACHED_MAY_BE_STALE('tengu_slate_prism', true)
-          ) {
+          if (message.request.agentProgressSummaries) {
             setSdkAgentProgressSummariesEnabled(true)
           }
 

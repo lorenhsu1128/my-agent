@@ -2121,7 +2121,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
     })
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(
-      '\nRemote Control lets you access this CLI session from the web (claude.ai/code)\nor the Claude app, so you can pick up where you left off on any device.\n\nYou can disconnect remote access anytime by running /remote-control again.\n',
+      '\nRemote Control lets you access this CLI session from a remote front-end\n(via the configured WS bridge), so you can pick up where you left off.\n\nYou can disconnect remote access anytime by running /remote-control again.\n',
     )
     const answer = await new Promise<string>(resolve => {
       rl.question('Enable Remote Control? (y/n) ', resolve)
