@@ -1038,8 +1038,8 @@
 - [x] selector 失效時 fallback 觸發、log 出現 warn（HTTP 500 / parse fail / network error / empty array 四 case 測過）
 
 ### 不在範圍（→ 後續 milestone）
-- [ ] M-SIDEQUERY-PROVIDER：`sideQuery` 整體重構成 provider-aware（影響 session search / model validation / extractMemories 等多 caller，爆炸面大，獨立 task）
-- [ ] M-EXTRACT-LOCAL：`src/services/extractMemories/extractMemories.ts` 也用 sideQuery → 純 llama.cpp 環境 memory consolidation 失效（背景工作可容忍 fail，本次不修）
+- [x] M-SIDEQUERY-PROVIDER：`sideQuery` 改採更簡單方案 — commit `420ad1e` 直接砍 Anthropic 路徑改 llama.cpp-only（model 參數 kept for signature compat 但 runtime 忽略）。後續 commit `ec43451` / `79545c2` 把 callers（session-search summarize 等）跟著走。原本框架的「provider-aware」沒做（沒人需要），但驅動該 milestone 的問題已解
+- [x] M-EXTRACT-LOCAL：自動隨 M-SIDEQUERY-PROVIDER 解 — `extractMemories.ts` 不直連 sideQuery（用 `executeExtractMemories` → ToolUse loop），sideQuery callers 改 llama.cpp-only 後 extractMemories 在純 llama.cpp 環境也能跑
 - [ ] M-MEMRECALL-FLAG-AUDIT：評估 `tengu_moth_copse` 預設值是否該對純本地用戶反轉（回到 MEMORY.md 全進 system prompt） — 跟既有 ADR + 上下文 budget 取捨衝突，需專題討論
 - [ ] M-CJK-AUDIT：全倉庫搜「以英文為前提」的字串處理（regex word boundary `\b`、whitespace `\s` token split、字數 / 詞數計算），逐一驗證 CJK 行為。`src/utils/attachments.ts:2367` 已修；可能還有 `extractMemories` / `memoryScan` / FTS query 預處理等
 - [ ] M-DISK-CFG-MIGRATION：`~/.my-agent/.my-agent.json` 上的 `cachedGrowthBookFeatures` 是舊版本 sync 的快取，可能含被改成 `false` 的 my-agent-default-true flag（如本次的 `tengu_moth_copse`，或其他 `tengu_*` 解鎖 flag）。`getFeatureValue_CACHED_MAY_BE_STALE` 純讀 disk → 蓋掉 code 預設。要做：(a) 啟動時 detect my-agent-shipped flags 跟 disk 衝突，warn 或自動覆寫；(b) 或在 lookup 加一層「my-agent strong-default override」優先於 disk false。需考慮使用者手動關閉 flag 的情境（差別在哪）
@@ -2066,3 +2066,9 @@
 - 2026-04-25 22:02: Session 結束 | 進度：519/565 任務 | 7db360a test(e2e): F section BIN+SRC 雙跑 cron + 新增 I section discord（M-DECOUPLE-3-4/3-5）
 
 - 2026-04-25 22:15: Session 結束 | 進度：519/565 任務 | ac91173 chore(todo): session log entries
+
+- 2026-04-25 22:42: Session 結束 | 進度：520/566 任務 | e357e78 test(e2e): J section PTY 互動 REPL E2E + BIN 三層 cascade（M-DECOUPLE-3-6）
+
+- 2026-04-25 22:46: Session 結束 | 進度：520/566 任務 | e357e78 test(e2e): J section PTY 互動 REPL E2E + BIN 三層 cascade（M-DECOUPLE-3-6）
+
+- 2026-04-25 23:07: Session 結束 | 進度：520/566 任務 | e357e78 test(e2e): J section PTY 互動 REPL E2E + BIN 三層 cascade（M-DECOUPLE-3-6）
