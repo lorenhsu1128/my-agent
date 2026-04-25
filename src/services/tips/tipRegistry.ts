@@ -7,7 +7,8 @@ import {
   getSettingsForSource,
 } from 'src/utils/settings/settings.js'
 import { shouldOfferTerminalSetup } from '../../commands/terminalSetup/terminalSetup.js'
-import { getDesktopUpsellConfig } from '../../components/DesktopUpsell/DesktopUpsellStartup.js'
+// DesktopUpsell removed (M-DECOUPLE-2 Phase 1D): claude.ai desktop app upsell.
+const getDesktopUpsellConfig = () => ({ enable_shortcut_tip: false, enable_startup_dialog: false })
 import { color } from '../../components/design-system/color.js'
 // my-agent: cloud upsell removed. Stub.
 const shouldShowOverageCreditUpsell = async (): Promise<boolean> => false

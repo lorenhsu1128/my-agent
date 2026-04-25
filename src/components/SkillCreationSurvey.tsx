@@ -3,8 +3,10 @@ import { BLACK_CIRCLE, BULLET_OPERATOR } from '../constants/figures.js'
 import type { SkillCreationCandidate } from '../hooks/useSkillCreationSurvey.js'
 import { Box, Text } from '../ink.js'
 import { normalizeFullWidthDigits } from '../utils/stringUtils.js'
-import { isValidResponseInput } from './FeedbackSurvey/FeedbackSurveyView.js'
-import type { FeedbackSurveyResponse } from './FeedbackSurvey/utils.js'
+type FeedbackSurveyResponse = 'dismissed' | 'bad' | 'fine' | 'good'
+const RESPONSE_INPUTS = ['0', '1', '2', '3'] as const
+const isValidResponseInput = (input: string): boolean =>
+  (RESPONSE_INPUTS as readonly string[]).includes(input)
 
 type Props = {
   isOpen: boolean

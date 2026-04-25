@@ -6,7 +6,7 @@
 // Modeled after useSkillImprovementSurvey.ts
 
 import { useCallback, useRef, useState } from 'react'
-import type { FeedbackSurveyResponse } from '../components/FeedbackSurvey/utils.js'
+type FeedbackSurveyResponse = 'dismissed' | 'bad' | 'fine' | 'good'
 import { useAppState, useSetAppState } from '../state/AppState.js'
 import type { Message } from '../types/message.js'
 import { createSystemMessage, createUserMessage } from '../utils/messages.js'
