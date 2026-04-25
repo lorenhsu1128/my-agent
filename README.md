@@ -147,7 +147,7 @@ My Agent 把所有使用者設定放在兩個目錄：
 | [docs/context-architecture.md](./docs/context-architecture.md) | Context 組成詳解：system prompt 注入、memory context、fence 機制 |
 | [docs/daemon-mode.md](./docs/daemon-mode.md) | Daemon 模式（常駐 WS server、多 ProjectRuntime、cron 獨占執行） |
 | [docs/discord-mode.md](./docs/discord-mode.md) | Discord 整合（DM / guild channel、slash commands、per-project 頻道） |
-| [docs/cron-wave3.md](./docs/cron-wave3.md) | Cron 進階特性（NL 解析、retry、condition、catchup、history、通知） |
+| [docs/cron-wave34.md](./docs/cron-wave34.md) | Cron 進階特性（Wave 3：NL/retry/condition/catchup/history/通知）+ Wave 4 `/cron` TUI |
 | [src/tools/ScheduleCronTool/README.md](./src/tools/ScheduleCronTool/README.md) | Cron 工具參考（action 表） |
 | [src/tools/WebBrowserTool/README.md](./src/tools/WebBrowserTool/README.md) | WebBrowser 工具參考（action 表） |
 | [FEATURES.md](./FEATURES.md) | Feature flag 清單（建構時控制模組啟用） |

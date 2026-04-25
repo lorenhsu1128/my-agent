@@ -7,7 +7,7 @@ agent 的全部工具、記憶、skills、以及（選配）不同的模型。
 > **進階特性另開檔**：失敗重試 + exponential backoff、conditional 觸發
 > （shell / lastRunOk / fileChanged）、per-task catchup 策略、結果通知
 > （TUI toast + StatusLine badge）、run history 查詢、自然語言排程解析、
-> `/cron` 互動式 TUI 等 — 詳見 [docs/cron-wave3.md](./cron-wave3.md)。
+> `/cron` 互動式 TUI 等 — 詳見 [docs/cron-wave34.md](./cron-wave34.md)。
 > 本檔涵蓋基礎 schedule DSL、生命週期、modelOverride、preRunScript 與
 > 安全模型。
 >
@@ -50,7 +50,7 @@ agent：[呼叫 CronList]
 
 互動 TUI：直接在 REPL 打 `/cron`（Wave 4 新增）— master-detail 介面，
 支援 list / create / edit / pause / resume / delete / run-now / history
-全部操作。詳見 [docs/cron-wave3.md](./cron-wave3.md)。
+全部操作。詳見 [docs/cron-wave34.md](./cron-wave34.md)。
 
 詳細 I/O 規格見 [`src/tools/ScheduleCronTool/README.md`](../src/tools/ScheduleCronTool/README.md)。
 

@@ -146,7 +146,7 @@ bun run dev                      # 直接跑 src/entrypoints/cli.tsx
 - `LESSONS.md`：教訓記錄（工具呼叫轉譯、Provider 整合、串流處理、建構設定等）
 - `FEATURES.md`：Feature flag 歷史清單（fork 自原 Claude Code；my-agent 採 ADR-003 無 flag 全啟用，本檔僅供對照）
 - `TODO.md`：任務追蹤（含 session 日誌與後續 milestone）
-- `docs/daemon-mode.md` / `docs/discord-mode.md` / `docs/cron-wave3.md`：新功能使用者指南
+- `docs/daemon-mode.md` / `docs/discord-mode.md` / `docs/cron-wave34.md`：新功能使用者指南
 
 ## 自訂指令（CLI）
 
