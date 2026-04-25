@@ -1,4 +1,3 @@
-import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { splitCommand_DEPRECATED } from '../../utils/bash/commands.js'
 import { SandboxManager } from '../../utils/sandbox/sandbox-adapter.js'
 import { getSettings_DEPRECATED } from '../../utils/settings/settings.js'
@@ -21,10 +20,10 @@ type SandboxInput = {
 function containsExcludedCommand(command: string): boolean {
   // Check dynamic config for disabled commands and substrings (only for ants)
   if (process.env.USER_TYPE === 'ant') {
-    const disabledCommands = getFeatureValue_CACHED_MAY_BE_STALE<{
+    const disabledCommands: {
       commands: string[]
       substrings: string[]
-    }>('tengu_sandbox_disabled_commands', { commands: [], substrings: [] })
+    } = { commands: [], substrings: [] }
 
     // Check if command contains any disabled substrings
     for (const substring of disabledCommands.substrings) {
