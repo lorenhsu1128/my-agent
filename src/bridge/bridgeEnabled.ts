@@ -22,7 +22,8 @@ import { lt } from '../utils/semver.js'
  */
 export function isBridgeEnabled(): boolean {
   // my-agent: bridge 功能無條件啟用（不需 OAuth auth）
-  return feature('BRIDGE_MODE')
+  // bun:bundle feature() 必須在 if/ternary 內
+  return feature('BRIDGE_MODE') ? true : false
 }
 
 /**
@@ -39,7 +40,7 @@ export function isBridgeEnabled(): boolean {
  */
 export async function isBridgeEnabledBlocking(): Promise<boolean> {
   // my-agent: bridge 功能無條件啟用
-  return feature('BRIDGE_MODE')
+  return feature('BRIDGE_MODE') ? true : false
 }
 
 /**
@@ -100,7 +101,7 @@ function getOauthAccountInfo(): ReturnType<
  * on the env-based implementation regardless of this gate.
  */
 export function isEnvLessBridgeEnabled(): boolean {
-  return feature('BRIDGE_MODE')
+  return feature('BRIDGE_MODE') ? true : false
 }
 
 /**
@@ -144,7 +145,7 @@ export function checkBridgeMinVersion(): string | null {
  * config.ts → growthbook.ts import cycle (growthbook.ts → user.ts → config.ts).
  */
 export function getCcrAutoConnectDefault(): boolean {
-  return feature('CCR_AUTO_CONNECT')
+  return feature('CCR_AUTO_CONNECT') ? true : false
 }
 
 /**
