@@ -39,6 +39,9 @@ export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
   // 使用統計、memory 歸屬等分裂到不同身份。
   // "userID": "<自動產生>",
 
+  // 🗑️ [deprecated] API key helper 外部腳本路徑。改用 settings.apiKeyHelper。
+  // "apiKeyHelper": "",
+
   // ═══ §2 更新 / 安裝 ═══
 
   // 是否允許自動更新。my-agent 目前建構不走官方更新通道，實質 no-op。
@@ -70,6 +73,12 @@ export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
 
   // 首次啟動 my-agent 的 ISO timestamp（僅記錄用）。
   // "firstStartTime": "<自動產生>",
+
+  // ── Terminal 按鍵設定狀態 ──
+
+  // 是否已安裝 Shift+Enter 按鍵綁定（iTerm2 / VSCode 多行輸入輔助）。
+  // 由 /terminal-setup 寫入，勿手改。
+  // "shiftEnterKeyBindingInstalled": false,
 
   // ═══ §4 核心功能開關（最常手動編輯） ═══
 
@@ -103,6 +112,16 @@ export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
 
   // 是否顯示 terminal progress bar（OSC 9;4 序列，支援的 terminal 才有效）。
   "terminalProgressBarEnabled": true,
+
+  // Terminal tab 狀態指示器（OSC 21337）。開啟時用彩色點顯示 agent 狀態、
+  // 省掉 title 上的 spinner prefix。iTerm2 / WezTerm 等支援的 terminal 才有效。
+  // "showStatusInTerminalTab": false,
+
+  // Permission ask 時用 Haiku 產生人類可讀的解釋文字。預設 undefined = true。
+  // "permissionExplainerEnabled": true,
+
+  // PR 狀態 footer（tengu_pr_status_cli GrowthBook gated）。預設 undefined = true。
+  // "prStatusFooterEnabled": true,
 
   // 是否遵守 .gitignore（File picker / Glob 等工具預設忽略 ignored 檔）。
   // 注意：.ignore 檔案無論此設定為何都會被遵守。
@@ -347,6 +366,12 @@ export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
 
   "cachedStatsigGates": {},
   "cachedDynamicConfigs": {},
+
+  // GrowthBook feature flag 快取。my-agent createDefaultGlobalConfig() 會初始化
+  // 一大串預設值把 upstream Claude Code 的 feature gating 全部設 true（或反向
+  // 邏輯的設 false），以啟用「全功能」路徑。勿手改其中任何 key，否則某些
+  // code path 的 guard 會失敗。
+  "cachedGrowthBookFeatures": {},
 
   // Penguin mode（org 層級 fast mode）快取。my-agent 無此概念，保留 false。
   "penguinModeOrgEnabled": false
