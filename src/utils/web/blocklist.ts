@@ -20,7 +20,7 @@
 import { existsSync, readFileSync } from 'fs'
 import { isAbsolute, join } from 'path'
 import { parse as parseYaml } from 'yaml'
-import { getClaudeConfigHomeDir } from '../envUtils.js'
+import { getMyAgentConfigHomeDir } from '../envUtils.js'
 import { logError } from '../log.js'
 
 export interface BlockResult {
@@ -48,7 +48,7 @@ let cachedAt = 0
 const DEFAULT_POLICY: Policy = { enabled: false, rules: [] }
 
 function getConfigPath(): string {
-  return join(getClaudeConfigHomeDir(), 'website-blocklist.yaml')
+  return join(getMyAgentConfigHomeDir(), 'website-blocklist.yaml')
 }
 
 function normalizeHost(host: string): string {
@@ -131,7 +131,7 @@ function parsePolicy(configPath: string): Policy {
 
   for (const sf of rawShared) {
     if (typeof sf !== 'string' || !sf.trim()) continue
-    const p = isAbsolute(sf) ? sf : join(getClaudeConfigHomeDir(), sf)
+    const p = isAbsolute(sf) ? sf : join(getMyAgentConfigHomeDir(), sf)
     for (const n of loadSharedFile(p)) {
       const key = `${p}:${n}`
       if (seen.has(key)) continue

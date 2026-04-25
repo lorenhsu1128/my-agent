@@ -25,7 +25,6 @@ export type GitHubActionsMetadata = {
 
 /**
  * Core user data used as base for all analytics providers.
- * This is also the format used by GrowthBook.
  */
 export type CoreUserData = {
   deviceId: string

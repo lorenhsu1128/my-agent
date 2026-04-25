@@ -67,7 +67,7 @@ function GracePeriodContentBody() {
   }
   let t6;
   if ($[6] === Symbol.for("react.memo_cache_sentinel")) {
-    t6 = <Link url="https://www.anthropic.com/news/updates-to-our-consumer-terms" />;
+    t6 = <Text></Text>;
     $[6] = t6;
   } else {
     t6 = $[6];
@@ -120,7 +120,7 @@ function PostGracePeriodContentBody() {
   }
   let t4;
   if ($[4] === Symbol.for("react.memo_cache_sentinel")) {
-    t4 = <Link url="https://www.anthropic.com/news/updates-to-our-consumer-terms" />;
+    t4 = <Text></Text>;
     $[4] = t4;
   } else {
     t4 = $[4];

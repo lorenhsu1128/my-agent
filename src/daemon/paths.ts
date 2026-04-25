@@ -9,7 +9,7 @@
  * 測試時傳入 `baseDir` 覆蓋 `~/.my-agent/`，避免踩到真實 daemon。
  */
 import { join } from 'path'
-import { getClaudeConfigHomeDir } from '../utils/envUtils.js'
+import { getMyAgentConfigHomeDir } from '../utils/envUtils.js'
 
 export const DAEMON_PID_FILENAME = 'daemon.pid.json'
 export const DAEMON_TOKEN_FILENAME = 'daemon.token'
@@ -23,7 +23,7 @@ export interface DaemonPaths {
 }
 
 export function getDaemonPaths(baseDir?: string): DaemonPaths {
-  const root = baseDir ?? getClaudeConfigHomeDir()
+  const root = baseDir ?? getMyAgentConfigHomeDir()
   return {
     baseDir: root,
     pidPath: join(root, DAEMON_PID_FILENAME),

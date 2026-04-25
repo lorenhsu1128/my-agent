@@ -3,7 +3,7 @@ import { homedir } from 'os'
 import { join } from 'path'
 import { fileSuffixForOauthConfig } from '../constants/oauth.js'
 import { isRunningWithBun } from './bundledMode.js'
-import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getMyAgentConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { findExecutable } from './findExecutable.js'
 import { getFsImplementation } from './fsOperations.js'
 import { which } from './which.js'
@@ -14,7 +14,7 @@ type Platform = 'win32' | 'darwin' | 'linux'
 // config 檔案位於 ~/.my-agent/.my-agent.jsonc（config 目錄內，JSONC 格式）
 export const getGlobalClaudeFile = memoize((): string => {
   const fs = getFsImplementation()
-  const configHome = getClaudeConfigHomeDir() // ~/.my-agent/
+  const configHome = getMyAgentConfigHomeDir() // ~/.my-agent/
 
   // Legacy fallback for backwards compatibility (.config.json)
   if (fs.existsSync(join(configHome, '.config.json'))) {

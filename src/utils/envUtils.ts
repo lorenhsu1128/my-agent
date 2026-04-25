@@ -4,9 +4,9 @@ import { join } from 'path'
 
 // Memoized: 150+ callers, many on hot paths. Keyed off CLAUDE_CONFIG_DIR so
 // tests that change the env var get a fresh value without explicit cache.clear.
-// 預設家目錄 ~/.my-agent（與官方 my-agent 的 ~/.claude 完全隔離）；
+// 預設家目錄 ~/.my-agent（與官方 Claude Code 的 ~/.claude 完全隔離）；
 // 使用者可用 CLAUDE_CONFIG_DIR env var 手動覆蓋到任意路徑。
-export const getClaudeConfigHomeDir = memoize(
+export const getMyAgentConfigHomeDir = memoize(
   (): string => {
     return (
       process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.my-agent')
@@ -16,7 +16,7 @@ export const getClaudeConfigHomeDir = memoize(
 )
 
 export function getTeamsDir(): string {
-  return join(getClaudeConfigHomeDir(), 'teams')
+  return join(getMyAgentConfigHomeDir(), 'teams')
 }
 
 /**

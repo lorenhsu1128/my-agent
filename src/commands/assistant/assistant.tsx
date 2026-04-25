@@ -1,6 +1,6 @@
 import { join } from 'path'
 import { useEffect } from 'react'
-import { getClaudeConfigHomeDir } from '../../utils/envUtils.js'
+import { getMyAgentConfigHomeDir } from '../../utils/envUtils.js'
 
 type Props = {
   defaultDir: string
@@ -10,7 +10,7 @@ type Props = {
 }
 
 export async function computeDefaultInstallDir(): Promise<string> {
-  return join(getClaudeConfigHomeDir(), 'assistant')
+  return join(getMyAgentConfigHomeDir(), 'assistant')
 }
 
 export function NewInstallWizard({ onCancel }: Props) {

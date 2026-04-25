@@ -16,7 +16,7 @@ import { dirname, join } from 'path'
 import { logEvent } from '../services/analytics/index.js'
 import { registerCleanup } from '../utils/cleanupRegistry.js'
 import { logForDebugging } from '../utils/debug.js'
-import { getClaudeConfigHomeDir } from '../utils/envUtils.js'
+import { getMyAgentConfigHomeDir } from '../utils/envUtils.js'
 import { errorMessage, isENOENT } from '../utils/errors.js'
 import { createSignal } from '../utils/signal.js'
 import { jsonParse } from '../utils/slowOperations.js'
@@ -121,7 +121,7 @@ function isKeybindingBlockArray(arr: unknown): arr is KeybindingBlock[] {
  * 預設 .jsonc；若 .jsonc 不存在但舊 .json 存在 → rename 過去。
  */
 export function getKeybindingsPath(): string {
-  const jsoncPath = join(getClaudeConfigHomeDir(), 'keybindings.jsonc')
+  const jsoncPath = join(getMyAgentConfigHomeDir(), 'keybindings.jsonc')
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { migrateJsonToJsoncIfNeeded } = require('../utils/jsoncStore.js') as typeof import('../utils/jsoncStore.js')
   migrateJsonToJsoncIfNeeded(jsoncPath)

@@ -19,14 +19,14 @@ import { ensureKeychainPrefetchCompleted, startKeychainPrefetch } from './utils/
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 startKeychainPrefetch();
 // my-agent 首次啟動時產生全域 settings.json（JSONC 帶繁中註解）+ 補完目錄結構
-import { getClaudeConfigHomeDir } from './utils/envUtils.js';
+import { getMyAgentConfigHomeDir } from './utils/envUtils.js';
 import { generateDefaultSettingsContent } from './utils/settings/defaultSettingsGenerator.js';
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'fs';
 import { join } from 'path';
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 (function ensureGlobalConfigExists(): void {
   try {
-    const configDir = getClaudeConfigHomeDir()
+    const configDir = getMyAgentConfigHomeDir()
     // 確保全域目錄和子目錄存在
     for (const dir of [configDir, join(configDir, 'projects'), join(configDir, 'cache'), join(configDir, 'plans')]) {
       mkdirSync(dir, { recursive: true })

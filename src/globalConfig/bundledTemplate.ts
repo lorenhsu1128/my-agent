@@ -14,8 +14,8 @@
  *   §4  核心功能開關（my-agent 會真的讀）
  *   §5  自動維護計數（不要手改）
  *   §6  動態容器（projects / githubRepoPaths）
- *   §7  Claude Code 遺留 🗑️（my-agent 不使用，可忽略或刪除）
- *   §8  Statsig / GrowthBook cache（my-agent ADR-003：不用 feature flag）
+ *   §7  Upstream 遺留 🗑️（my-agent 不使用，可忽略或刪除）
+ *   §8  Statsig cache（my-agent ADR-003：不用 feature flag）
  */
 
 export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
@@ -246,22 +246,22 @@ export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
   // Key: "owner/repo"（小寫）；Value: 絕對路徑陣列。自動偵測 .git/config。
   "githubRepoPaths": {},
 
-  // ═══ §7 Claude Code 遺留欄位 🗑️（my-agent 不使用） ═══
+  // ═══ §7 Upstream 遺留欄位 🗑️（my-agent 不使用） ═══
   //
-  // 以下欄位是 fork 自 Claude Code 時沿用下來的 schema，my-agent 實際不讀。
+  // 以下欄位是 fork 自 upstream 時沿用下來的 schema，my-agent 實際不讀。
   // 它們對應的功能在 my-agent 已被移除或重新實作：
   //   - OAuth / 訂閱相關 → my-agent 不走 OAuth（CLAUDE.md 遷移說明）
-  //   - claude.ai MCP connectors → 沒接
+  //   - 雲端 MCP connectors → 沒接
   //   - Chrome extension → M15 已移除
   //   - IDE onboarding → my-agent 不做這塊
   //
   // 這一段可整段刪掉不影響功能。my-agent 不會寫回這裡。
   // 留著純粹為了 TypeScript schema 相容，以免未來引入相關功能時衝突。
 
-  // 🗑️ Anthropic OAuth 帳號資訊。my-agent 不走 OAuth（用 API key / 本地模型）。
+  // 🗑️ OAuth 帳號資訊。my-agent 不走 OAuth（用 API key / 本地模型）。
   // "oauthAccount": {},
 
-  // 🗑️ Claude Code first token 日期。my-agent 不用此欄位做統計。
+  // 🗑️ Upstream first token 日期。my-agent 不用此欄位做統計。
   // "claudeCodeFirstTokenDate": "",
 
   // 🗑️ Chrome extension 安裝偵測快取。M15 已移除 Chrome 整合。
@@ -342,25 +342,14 @@ export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
   "officialMarketplaceAutoInstallAttempted": false,
   "officialMarketplaceAutoInstalled": false,
 
-  // ═══ §8 Statsig / GrowthBook cache ═══
+  // ═══ §8 Statsig cache ═══
   //
-  // my-agent 採 ADR-003（無 feature flag 全啟用），以下兩個 cache 物件理論
+  // my-agent 採 ADR-003（無 feature flag 全啟用），以下 cache 物件理論
   // 上用不到。但 createDefaultGlobalConfig 仍會初始化它們（為了跟 upstream
-  // Claude Code 殘留程式碼相容），留著為好。
-  //
-  // cachedStatsigGates / cachedDynamicConfigs 可保持空物件。
-  // cachedGrowthBookFeatures 在 createDefaultGlobalConfig 有一大串預設覆
-  // 寫（把 upstream 的 gating 全部設 true），以便 my-agent 走「全功能」
-  // 路徑。勿手改其中的值，否則某些 code path 可能 guard 失敗。
+  // 殘留程式碼相容），留著為好。保持空物件即可。
 
   "cachedStatsigGates": {},
   "cachedDynamicConfigs": {},
-
-  // GrowthBook feature flag 快取。my-agent createDefaultGlobalConfig() 會初始化
-  // 一大串預設值把 upstream Claude Code 的 feature gating 全部設 true（或反向
-  // 邏輯的設 false），以啟用「全功能」路徑。勿手改其中任何 key，否則某些
-  // code path 的 guard 會失敗。
-  "cachedGrowthBookFeatures": {},
 
   // Penguin mode（org 層級 fast mode）快取。my-agent 無此概念，保留 false。
   "penguinModeOrgEnabled": false

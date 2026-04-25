@@ -6,7 +6,7 @@ import {
   getProjectRoot,
 } from '../bootstrap/state.js'
 import {
-  getClaudeConfigHomeDir,
+  getMyAgentConfigHomeDir,
   isEnvDefinedFalsy,
   isEnvTruthy,
 } from '../utils/envUtils.js'
@@ -85,7 +85,7 @@ export function getMemoryBaseDir(): string {
   if (process.env.MY_AGENT_REMOTE_MEMORY_DIR) {
     return process.env.MY_AGENT_REMOTE_MEMORY_DIR
   }
-  return getClaudeConfigHomeDir()
+  return getMyAgentConfigHomeDir()
 }
 
 const AUTO_MEM_DIRNAME = 'memory'

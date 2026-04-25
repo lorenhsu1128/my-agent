@@ -1917,12 +1917,12 @@ async function printHelp(): Promise<void> {
 `
     : ''
   const help = `
-Remote Control - Connect your local environment to claude.ai/code
+Remote Control - Expose this local my-agent session to a remote front-end
 
 USAGE
   my-agent remote-control [options]
 OPTIONS
-  --name <name>                    Name for the session (shown in claude.ai/code)
+  --name <name>                    Name for the session (shown to the remote front-end)
 ${
   feature('KAIROS')
     ? `  -c, --continue                   Resume the last session in this directory
@@ -1937,13 +1937,13 @@ ${
   -h, --help                       Show this help
 ${serverOptions}
 DESCRIPTION
-  Remote Control allows you to control sessions on your local device from
-  claude.ai/code (https://claude.ai/code). Run this command in the
-  directory you want to work in, then connect from the Claude app or web.
+  Remote Control lets a remote front-end drive sessions running on this
+  local device over a WebSocket bridge. Run this command in the directory
+  you want to work in, then connect from your remote client.
 ${serverDescription}
 NOTES
-  - You must be logged in with a Claude account that has a subscription
-  - Run \`claude\` first in the directory to accept the workspace trust dialog
+  - Requires a configured remote front-end / bridge endpoint
+  - Run \`my-agent\` first in the directory to accept the workspace trust dialog
 ${serverNote}`
   // biome-ignore lint/suspicious/noConsole: intentional help output
   console.log(help)
