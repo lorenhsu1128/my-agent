@@ -16,7 +16,7 @@
  *   - 現有使用者可以透過手動觸發（未來 slash command /config-rewrite-with-docs）
  *     重新落盤看完整版本
  */
-import { existsSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { dirname } from 'path'
 import { mkdir, writeFile } from 'fs/promises'
 import { GLOBAL_CONFIG_JSONC_TEMPLATE } from './bundledTemplate.js'
@@ -44,25 +44,48 @@ export async function seedGlobalConfigIfMissing(path: string): Promise<void> {
 }
 
 /**
+ * 同步版本 — 給 `enableConfigs()` 使用。在第一次 `getConfig` 之前 fallthrough
+ * 把 JSONC 模板落盤，避免新使用者第一次 saveGlobalConfig 寫出 stripped JSON。
+ */
+export function seedGlobalConfigIfMissingSync(path: string): void {
+  try {
+    if (existsSync(path)) return
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, GLOBAL_CONFIG_JSONC_TEMPLATE, 'utf-8')
+    logForDebugging(
+      `[global-config] seeded ${path} (JSONC with 繁中 comments, sync)`,
+    )
+  } catch (err) {
+    logForDebugging(
+      `[global-config] sync seed 失敗：${err instanceof Error ? err.message : String(err)}`,
+      { level: 'warn' },
+    )
+  }
+}
+
+/**
  * 手動觸發：重寫 ~/.my-agent/.my-agent.json 為當前 bundled 模板版本，
- * 保留使用者現有值。寫前備份為 `*.pre-rewrite-<timestamp>`。
+ * 保留使用者現有值，**並剔除非 my-agent schema 的欄位**（典型來源：使用者
+ * 從官方 Claude Code 的 `~/.claude/config.json` 整份複製過來，帶了 tipsHistory /
+ * cachedGrowthBookFeatures / btwUseCount / oauthAccount 等 my-agent 不使用
+ * 的欄位）。被剔除的 keys 列在回傳值，呼叫端可顯示給使用者。
  *
- * 用途：
- *   - 使用者看過舊版註解後，想取得最新模板（欄位新增 / 說明更新）
- *   - 一次性強制升級 strict JSON → JSONC 版本
+ * 寫前備份為 `*.pre-rewrite-<timestamp>`，原始值不會丟失。
  *
- * 此函式會讀 current config、JSON.parse、以模板為底套回所有欄位，然後
- * 透過 jsoncStore.writeJsoncPreservingComments 寫出（保留模板註解）。
+ * Allowlist 來源：`createDefaultGlobalConfig()` 的 top-level keys。新增 my-agent
+ * 欄位時自動納入；被剔除的欄位若日後 my-agent 想用，把它加進 default config
+ * 即可。
  */
 export async function forceRewriteGlobalConfigWithDocs(
   path: string,
-): Promise<{ backupPath: string | null }> {
+): Promise<{ backupPath: string | null; droppedKeys: string[] }> {
   const {
     forceRewriteJsoncFile,
     writeJsoncPreservingComments,
     parseJsonc,
   } = await import('../utils/jsoncStore.js')
   const { readFile } = await import('fs/promises')
+  const { DEFAULT_GLOBAL_CONFIG } = await import('../utils/config.js')
 
   let currentValue: Record<string, unknown> = {}
   if (existsSync(path)) {
@@ -75,12 +98,22 @@ export async function forceRewriteGlobalConfigWithDocs(
     }
   }
 
-  // 以模板為 baseline，套用使用者現有值
+  // 以模板為 baseline，套用使用者現有值；非 my-agent schema 的 key 剔除
   const templateParsed = parseJsonc<Record<string, unknown>>(
     GLOBAL_CONFIG_JSONC_TEMPLATE,
   )
+  const allowedKeys = new Set<string>([
+    ...Object.keys(DEFAULT_GLOBAL_CONFIG as Record<string, unknown>),
+    // 模板裡標註過的欄位也視為合法（包含 deprecated 但我們仍接受讀回的）
+    ...Object.keys(templateParsed),
+  ])
   const merged: Record<string, unknown> = { ...templateParsed }
+  const droppedKeys: string[] = []
   for (const [key, value] of Object.entries(currentValue)) {
+    if (!allowedKeys.has(key)) {
+      droppedKeys.push(key)
+      continue
+    }
     merged[key] = value
   }
 
@@ -91,5 +124,6 @@ export async function forceRewriteGlobalConfigWithDocs(
     merged,
   )
   // 再用 forceRewrite 完成備份 + atomic overwrite
-  return await forceRewriteJsoncFile(path, newText)
+  const { backupPath } = await forceRewriteJsoncFile(path, newText)
+  return { backupPath, droppedKeys }
 }

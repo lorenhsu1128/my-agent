@@ -21,7 +21,7 @@ startKeychainPrefetch();
 // my-agent 首次啟動時產生全域 settings.json（JSONC 帶繁中註解）+ 補完目錄結構
 import { getClaudeConfigHomeDir } from './utils/envUtils.js';
 import { generateDefaultSettingsContent } from './utils/settings/defaultSettingsGenerator.js';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, renameSync, writeFileSync } from 'fs';
 import { join } from 'path';
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 (function ensureGlobalConfigExists(): void {
@@ -31,10 +31,18 @@ import { join } from 'path';
     for (const dir of [configDir, join(configDir, 'projects'), join(configDir, 'cache'), join(configDir, 'plans')]) {
       mkdirSync(dir, { recursive: true })
     }
-    // 若 settings.json 不存在，產生帶註解的預設檔
-    const settingsPath = join(configDir, 'settings.json')
-    if (!existsSync(settingsPath)) {
-      writeFileSync(settingsPath, generateDefaultSettingsContent(), 'utf-8')
+    // 若 settings.jsonc 不存在，產生帶註解的預設檔；舊 settings.json 自動 rename
+    const settingsJsoncPath = join(configDir, 'settings.jsonc')
+    const settingsJsonPath = join(configDir, 'settings.json')
+    if (!existsSync(settingsJsoncPath) && existsSync(settingsJsonPath)) {
+      try {
+        renameSync(settingsJsonPath, settingsJsoncPath)
+      } catch {
+        // 失敗就讓下面的條件再 seed
+      }
+    }
+    if (!existsSync(settingsJsoncPath)) {
+      writeFileSync(settingsJsoncPath, generateDefaultSettingsContent(), 'utf-8')
     }
   } catch {
     // 靜默失敗 — 不影響 bootstrap

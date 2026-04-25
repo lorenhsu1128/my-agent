@@ -18,6 +18,12 @@ import { writeFileSyncAndFlush_DEPRECATED } from '../file.js'
 import { readFileSync } from '../fileRead.js'
 import { getFsImplementation, safeResolvePath } from '../fsOperations.js'
 import { addFileGlobRuleToGitignore } from '../git/gitignore.js'
+import {
+  diffPaths,
+  hasJsoncComments,
+  migrateJsonToJsoncIfNeeded,
+} from '../jsoncStore.js'
+import * as jsonc from 'jsonc-parser'
 import { safeParseJSONC } from '../json.js'
 import { logError } from '../log.js'
 import { getPlatform } from '../platform.js'
@@ -254,38 +260,41 @@ export function getSettingsRootPathForSource(source: SettingSource): string {
 
 /**
  * Get the user settings filename based on cowork mode.
- * Returns 'cowork_settings.json' when in cowork mode, 'settings.json' otherwise.
+ * Returns 'cowork_settings.jsonc' when in cowork mode, 'settings.jsonc' otherwise.
  *
  * Priority:
  * 1. Session state (set by CLI flag --cowork)
  * 2. Environment variable MY_AGENT_USE_COWORK_PLUGINS
- * 3. Default: 'settings.json'
+ * 3. Default: 'settings.jsonc'
  */
 function getUserSettingsFilePath(): string {
   if (
     getUseCoworkPlugins() ||
     isEnvTruthy(process.env.MY_AGENT_USE_COWORK_PLUGINS)
   ) {
-    return 'cowork_settings.json'
+    return 'cowork_settings.jsonc'
   }
-  return 'settings.json'
+  return 'settings.jsonc'
 }
 
 export function getSettingsFilePathForSource(
   source: SettingSource,
 ): string | undefined {
+  let p: string | undefined
   switch (source) {
     case 'userSettings':
-      return join(
+      p = join(
         getSettingsRootPathForSource(source),
         getUserSettingsFilePath(),
       )
+      break
     case 'projectSettings':
     case 'localSettings': {
-      return join(
+      p = join(
         getSettingsRootPathForSource(source),
         getRelativeSettingsFilePathForSource(source),
       )
+      break
     }
     case 'policySettings':
       return getManagedSettingsFilePath()
@@ -293,6 +302,9 @@ export function getSettingsFilePathForSource(
       return getFlagSettingsPath()
     }
   }
+  // 自動遷移：若 .jsonc 不存在但舊 .json 存在 → rename
+  if (p) migrateJsonToJsoncIfNeeded(p)
+  return p
 }
 
 export function getRelativeSettingsFilePathForSource(
@@ -300,9 +312,9 @@ export function getRelativeSettingsFilePathForSource(
 ): string {
   switch (source) {
     case 'projectSettings':
-      return join('.my-agent', 'settings.json')
+      return join('.my-agent', 'settings.jsonc')
     case 'localSettings':
-      return join('.my-agent', 'settings.local.json')
+      return join('.my-agent', 'settings.local.jsonc')
   }
 }
 
@@ -497,9 +509,56 @@ export function updateSettingsForSource(
     // Mark this as an internal write before writing the file
     markInternalWrite(filePath)
 
+    // JSONC 保留註解路徑：若原檔含 // 或 /* 註解（jsonc.visit 偵測，不會被
+    // string 內 URL 誤判），對變更路徑套 jsonc.modify 保留註解；偵測不到註
+    // 解 → 走原本 strict JSON 寫回。
+    let payload: string | null = null
+    try {
+      const fs = getFsImplementation()
+      const existingRaw = fs
+        .readFileSync(filePath, { encoding: 'utf-8' })
+        .replace(/^﻿/, '')
+      if (hasJsoncComments(existingRaw)) {
+        const currentParsed = safeParseJSONC(existingRaw)
+        if (currentParsed && typeof currentParsed === 'object') {
+          const edits = diffPaths(currentParsed, updatedSettings)
+          let working = existingRaw
+          let rootReplaced = false
+          for (const { path: editPath, value } of edits) {
+            if (editPath.length === 0) {
+              working = jsonStringify(value, null, 2) + '\n'
+              rootReplaced = true
+              break
+            }
+            const modifyEdits = jsonc.modify(working, editPath, value, {
+              formattingOptions: { tabSize: 2, insertSpaces: true, eol: '\n' },
+            })
+            working = jsonc.applyEdits(working, modifyEdits)
+          }
+          payload = rootReplaced
+            ? working
+            : working.endsWith('\n')
+              ? working
+              : working + '\n'
+        }
+      }
+    } catch (err) {
+      const code = getErrnoCode(err)
+      if (code !== 'ENOENT') {
+        logForDebugging(
+          `[settings] JSONC preserve 失敗，fallback strict JSON：${
+            err instanceof Error
+              ? err.message + '\n' + err.stack
+              : String(err)
+          }`,
+          { level: 'error' },
+        )
+      }
+    }
+
     writeFileSyncAndFlush_DEPRECATED(
       filePath,
-      jsonStringify(updatedSettings, null, 2) + '\n',
+      payload ?? jsonStringify(updatedSettings, null, 2) + '\n',
     )
 
     // Invalidate the session cache since settings have been updated

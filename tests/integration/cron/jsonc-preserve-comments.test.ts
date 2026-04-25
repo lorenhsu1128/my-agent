@@ -1,5 +1,5 @@
 /**
- * scheduled_tasks.json 寫回保留註解測試。
+ * scheduled_tasks.jsonc 寫回保留註解測試。
  *
  * 核心場景：使用者在 tasks 陣列外加檔頭註解，my-agent 因 markCronFiredBatch
  * 更新 lastFiredAt 寫回，註解仍在。
@@ -64,7 +64,7 @@ describe('writeCronTasks + readCronTasks JSONC 行為', () => {
       ],
       testDir,
     )
-    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.json')
+    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.jsonc')
     expect(existsSync(filePath)).toBe(true)
     const text = readFileSync(filePath, 'utf-8')
     // 檔頭註解（模板帶的）應該留著
@@ -94,7 +94,7 @@ describe('writeCronTasks + readCronTasks JSONC 行為', () => {
   })
 
   test('保留使用者手加的檔頭註解（模擬 fire 後寫回 lastFiredAt）', async () => {
-    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.json')
+    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.jsonc')
     // 使用者手寫的註解版本
     const userVersion = `{
   // 使用者加的備註：這些是我每天的例行任務
@@ -137,7 +137,7 @@ describe('writeCronTasks + readCronTasks JSONC 行為', () => {
   })
 
   test('相容既有 strict JSON 檔（parseJsonc fallback 成 safeParseJSON）', async () => {
-    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.json')
+    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.jsonc')
     // 舊的 strict JSON 格式（無註解）
     writeFileSync(
       filePath,
@@ -177,7 +177,7 @@ describe('writeCronTasks + readCronTasks JSONC 行為', () => {
       testDir,
     )
     await writeCronTasks([], testDir)
-    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.json')
+    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.jsonc')
     expect(existsSync(filePath)).toBe(true)
     const tasks = await readCronTasks(testDir)
     expect(tasks).toEqual([])

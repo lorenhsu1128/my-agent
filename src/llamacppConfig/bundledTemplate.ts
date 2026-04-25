@@ -2,7 +2,7 @@
  * llama.cpp 設定檔 JSONC 模板（bundled）。
  *
  * 用途：
- *   - 首次 seed 時寫入 ~/.my-agent/llamacpp.json（使用者看到帶繁中註解版本）
+ *   - 首次 seed 時寫入 ~/.my-agent/llamacpp.jsonc（使用者看到帶繁中註解版本）
  *   - Migration 時作為新格式基底（既有值會覆蓋模板預設值）
  *
  * 同步規則（schema.ts 改動時需同步本檔）：
@@ -13,7 +13,7 @@
 
 export const LLAMACPP_JSONC_TEMPLATE = `{
   // ═══════════════════════════════════════════════════════════════════
-  // llama.cpp 本地模型設定（~/.my-agent/llamacpp.json）
+  // llama.cpp 本地模型設定（~/.my-agent/llamacpp.jsonc）
   //
   // 本檔為 my-agent 與 scripts/llama/serve.sh **共用**的單一來源：
   //   - my-agent TS 端：透過 src/llamacppConfig/loader.ts 讀取，session 啟動時凍結快照

@@ -19,7 +19,13 @@ type ExtraKnownMarketplace = z.infer<
   ReturnType<typeof ExtraKnownMarketplaceSchema>
 >
 
-const SETTINGS_FILES = ['settings.json', 'settings.local.json'] as const
+// 優先讀 .jsonc，找不到才 fallback .json（為了不破壞使用者既有 .json）
+const SETTINGS_FILES = [
+  'settings.jsonc',
+  'settings.json',
+  'settings.local.jsonc',
+  'settings.local.json',
+] as const
 
 /**
  * Returns a merged record of enabledPlugins from all --add-dir directories.

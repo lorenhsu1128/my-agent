@@ -1,6 +1,6 @@
 /**
  * Keybindings template generator.
- * Generates a well-documented template file for ~/.my-agent/keybindings.json
+ * Generates a well-documented template file for ~/.my-agent/keybindings.jsonc
  */
 
 import { jsonStringify } from '../utils/slowOperations.js'
@@ -34,7 +34,7 @@ function filterReservedShortcuts(blocks: KeybindingBlock[]): KeybindingBlock[] {
 }
 
 /**
- * Generate a template keybindings.json file content.
+ * Generate a template keybindings.jsonc file content.
  * Creates a fully valid JSON file with all default bindings that users can customize.
  */
 export function generateKeybindingsTemplate(): string {

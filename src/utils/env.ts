@@ -11,7 +11,7 @@ import { which } from './which.js'
 type Platform = 'win32' | 'darwin' | 'linux'
 
 // Config and data paths
-// config 檔案位於 ~/.my-agent/.my-agent.json（config 目錄內）
+// config 檔案位於 ~/.my-agent/.my-agent.jsonc（config 目錄內，JSONC 格式）
 export const getGlobalClaudeFile = memoize((): string => {
   const fs = getFsImplementation()
   const configHome = getClaudeConfigHomeDir() // ~/.my-agent/
@@ -22,20 +22,35 @@ export const getGlobalClaudeFile = memoize((): string => {
   }
 
   const suffix = fileSuffixForOauthConfig()
-  const filename = `.my-agent${suffix}.json`
-  const newPath = join(configHome, filename) // ~/.my-agent/.my-agent.json
+  const jsoncFilename = `.my-agent${suffix}.jsonc`
+  const jsonFilename = `.my-agent${suffix}.json`
+  const jsoncPath = join(configHome, jsoncFilename) // ~/.my-agent/.my-agent.jsonc
+  const jsonPath = join(configHome, jsonFilename) // ~/.my-agent/.my-agent.json
 
-  if (!fs.existsSync(newPath)) {
+  // 若 .jsonc 不存在但 .json 存在，rename 過去
+  if (!fs.existsSync(jsoncPath) && fs.existsSync(jsonPath)) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fsSync = require('fs') as typeof import('fs')
+      fsSync.renameSync(jsonPath, jsoncPath)
+    } catch {
+      // 失敗則 fallback 用舊 .json 路徑
+      return jsonPath
+    }
+  }
+
+  if (!fs.existsSync(jsoncPath)) {
     // Migration：從舊位置（home 根下）複製到新位置（config 目錄內）
     const homeDir = process.env.CLAUDE_CONFIG_DIR || homedir()
     const oldPaths = [
-      join(homeDir, `.my-agent${suffix}.json`),  // M6c 版本
-      join(homeDir, `.claude${suffix}.json`),     // M6c 之前的舊品牌
+      join(homeDir, `.my-agent${suffix}.jsonc`),
+      join(homeDir, `.my-agent${suffix}.json`),
+      join(homeDir, `.claude${suffix}.json`),
     ]
     for (const oldPath of oldPaths) {
       if (fs.existsSync(oldPath)) {
         try {
-          fs.copyFileSync(oldPath, newPath)
+          fs.copyFileSync(oldPath, jsoncPath)
         } catch {
           return oldPath // 複製失敗就沿用舊路徑
         }
@@ -44,7 +59,7 @@ export const getGlobalClaudeFile = memoize((): string => {
     }
   }
 
-  return newPath
+  return jsoncPath
 })
 
 const hasInternetAccess = memoize(async (): Promise<boolean> => {

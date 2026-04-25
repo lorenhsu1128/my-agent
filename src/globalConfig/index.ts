@@ -10,5 +10,6 @@
 export { GLOBAL_CONFIG_JSONC_TEMPLATE } from './bundledTemplate.js'
 export {
   seedGlobalConfigIfMissing,
+  seedGlobalConfigIfMissingSync,
   forceRewriteGlobalConfigWithDocs,
 } from './seed.js'

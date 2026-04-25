@@ -1,12 +1,12 @@
 /**
  * Discord gateway 設定檔 JSONC 模板（bundled）。
  *
- * 首次 seed 時寫入 ~/.my-agent/discord.json。schema.ts 有欄位改動需同步本檔。
+ * 首次 seed 時寫入 ~/.my-agent/discord.jsonc。schema.ts 有欄位改動需同步本檔。
  */
 
 export const DISCORD_JSONC_TEMPLATE = `{
   // ═══════════════════════════════════════════════════════════════════
-  // Discord Gateway 設定（~/.my-agent/discord.json）
+  // Discord Gateway 設定（~/.my-agent/discord.jsonc）
   //
   // 讓 my-agent daemon 接上 Discord bot，使用者可透過 DM / guild channel
   // 跨專案跟 agent 對話。單 daemon 多 project（M-DISCORD）。

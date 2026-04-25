@@ -21,6 +21,16 @@ import { getClaudeConfigHomeDir } from '../utils/envUtils.js'
 import { errorMessage, isENOENT } from '../utils/errors.js'
 import { createSignal } from '../utils/signal.js'
 import { jsonParse } from '../utils/slowOperations.js'
+import { parseJsonc } from '../utils/jsoncStore.js'
+
+// JSONC 容錯解析：先試 jsonc-parser（允許 //, /* */, 尾部逗號），失敗再 fallback strict JSON
+function parseKeybindingsContent(content: string): unknown {
+  try {
+    return parseJsonc(content)
+  } catch {
+    return jsonParse(content)
+  }
+}
 import { DEFAULT_BINDINGS } from './defaultBindings.js'
 import { parseBindings } from './parser.js'
 import type { KeybindingBlock, ParsedBinding } from './types.js'
@@ -111,9 +121,15 @@ function isKeybindingBlockArray(arr: unknown): arr is KeybindingBlock[] {
 
 /**
  * Get the path to the user keybindings file.
+ *
+ * 預設 .jsonc；若 .jsonc 不存在但舊 .json 存在 → rename 過去。
  */
 export function getKeybindingsPath(): string {
-  return join(getClaudeConfigHomeDir(), 'keybindings.json')
+  const jsoncPath = join(getClaudeConfigHomeDir(), 'keybindings.jsonc')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { migrateJsonToJsoncIfNeeded } = require('../utils/jsoncStore.js') as typeof import('../utils/jsoncStore.js')
+  migrateJsonToJsoncIfNeeded(jsoncPath)
+  return jsoncPath
 }
 
 /**
@@ -142,7 +158,7 @@ export async function loadKeybindings(): Promise<KeybindingsLoadResult> {
 
   try {
     const content = await readFile(userPath, 'utf-8')
-    const parsed: unknown = jsonParse(content)
+    const parsed: unknown = parseKeybindingsContent(content)
 
     // Extract bindings array from object wrapper format: { "bindings": [...] }
     let userBlocks: unknown
@@ -275,7 +291,7 @@ export function loadKeybindingsSyncWithWarnings(): KeybindingsLoadResult {
   try {
     // sync IO: called from sync context (React useState initializer)
     const content = readFileSync(userPath, 'utf-8')
-    const parsed: unknown = jsonParse(content)
+    const parsed: unknown = parseKeybindingsContent(content)
 
     // Extract bindings array from object wrapper format: { "bindings": [...] }
     let userBlocks: unknown

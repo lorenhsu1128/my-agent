@@ -1983,3 +1983,23 @@
 - 2026-04-25 08:59: Session 結束 | 進度：505/550 任務 | 7f11a35 chore(todo): session 結束 log — ctx size fix 驗收與 daemon 重啟
 
 - 2026-04-25 09:09: Session 結束 | 進度：505/550 任務 | 340b5d1 docs(p2): 已完成 milestone 規劃文件歸檔至 docs/archive/
+
+- 2026-04-25 09:11: Session 結束 | 進度：505/550 任務 | 0959005 chore(todo): session 結束 log — md 文件 P0/P1/P2 整理
+
+- 2026-04-25 09:18: Session 結束 | 進度：505/550 任務 | 0959005 chore(todo): session 結束 log — md 文件 P0/P1/P2 整理
+
+- 2026-04-25 09:55: Session 結束 | 進度：505/550 任務 | 0959005 chore(todo): session 結束 log — md 文件 P0/P1/P2 整理
+
+- 2026-04-25 10:00: Session 結束 | 進度：505/550 任務 | 0959005 chore(todo): session 結束 log — md 文件 P0/P1/P2 整理
+
+- 2026-04-25 10:03: Session 結束 | 進度：505/550 任務 | 0959005 chore(todo): session 結束 log — md 文件 P0/P1/P2 整理
+
+- 2026-04-25 10:08: Session 結束 | 進度：505/550 任務 | 0959005 chore(todo): session 結束 log — md 文件 P0/P1/P2 整理
+
+- 2026-04-25 11:10: Session 結束 | 進度：505/550 任務 | 0f850e2 test(globalConfig): 加入 bundled 模板覆蓋率自動檢查 + 補上 5 個漏掉的欄位
+
+- 2026-04-25 11:13: Session 結束 | 進度：505/550 任務 | 0f850e2 test(globalConfig): 加入 bundled 模板覆蓋率自動檢查 + 補上 5 個漏掉的欄位
+
+- 2026-04-25 11:16: Session 結束 | 進度：505/550 任務 | 0f850e2 test(globalConfig): 加入 bundled 模板覆蓋率自動檢查 + 補上 5 個漏掉的欄位
+
+- 2026-04-25 11:42: Session 結束 | 進度：505/550 任務 | 0f850e2 test(globalConfig): 加入 bundled 模板覆蓋率自動檢查 + 補上 5 個漏掉的欄位

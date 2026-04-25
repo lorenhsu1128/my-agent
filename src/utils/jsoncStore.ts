@@ -47,6 +47,43 @@ const FORMATTING_OPTIONS: jsonc.FormattingOptions = {
 }
 
 /**
+ * 若 `<base>.jsonc` 不存在但 `<base>.json` 存在，將 `.json` rename 為 `.jsonc`。
+ *
+ * 用於把舊的 strict-JSON 設定檔自動遷移到 `.jsonc` 副檔名（內容是 JSONC，
+ * 副檔名與內容對齊讓編輯器正確語法上色）。失敗則 silent —— 後續寫入會
+ * 自動建立 `.jsonc`，舊 `.json` 留著當意外備份。
+ */
+export function migrateJsonToJsoncIfNeeded(jsoncPath: string): void {
+  if (!jsoncPath.endsWith('.jsonc')) return
+  if (existsSync(jsoncPath)) return
+  const jsonPath = jsoncPath.slice(0, -1) // 去掉結尾 'c'
+  if (!existsSync(jsonPath)) return
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fsSync = require('fs') as typeof import('fs')
+    fsSync.renameSync(jsonPath, jsoncPath)
+  } catch {
+    // ignore — 後續 seed/write 會建立新的 .jsonc
+  }
+}
+
+/**
+ * 偵測字串是否含 JSONC 結構性註解（line 雙斜線或 block 註解）。
+ *
+ * 用 jsonc-parser 的 visit() onComment callback，避免「字串值內含 `//`」
+ * （例如 URL `https://...`）被誤判為有註解。
+ */
+export function hasJsoncComments(text: string): boolean {
+  let found = false
+  jsonc.visit(text, {
+    onComment: () => {
+      found = true
+    },
+  })
+  return found
+}
+
+/**
  * 解析 JSONC 字串為物件。
  *
  * 容錯：allowTrailingComma + allowEmptyContent；語法錯誤累積在 errors

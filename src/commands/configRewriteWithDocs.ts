@@ -24,11 +24,20 @@ const call: LocalCommandCall = async () => {
   // 1. 全域 config
   const globalPath = getGlobalClaudeFile()
   try {
-    const { backupPath } = await forceRewriteGlobalConfigWithDocs(globalPath)
-    messages.push(
-      `✅ ${globalPath}\n` +
-        (backupPath ? `   備份：${backupPath}\n` : '   （原檔不存在，直接建立）\n'),
+    const { backupPath, droppedKeys } = await forceRewriteGlobalConfigWithDocs(
+      globalPath,
     )
+    let line =
+      `✅ ${globalPath}\n` +
+      (backupPath ? `   備份：${backupPath}\n` : '   （原檔不存在，直接建立）\n')
+    if (droppedKeys.length > 0) {
+      line +=
+        `   清理：剔除 ${droppedKeys.length} 個非 my-agent schema 欄位\n` +
+        `         （典型為從 ~/.claude/config.json 複製過來的 Claude Code 遺留）：\n` +
+        `         ${droppedKeys.join(', ')}\n` +
+        `         （完整原值仍在備份檔，要找回特定欄位請從備份撈）\n`
+    }
+    messages.push(line)
   } catch (err) {
     messages.push(
       `❌ ${globalPath} 重寫失敗：${err instanceof Error ? err.message : String(err)}\n`,

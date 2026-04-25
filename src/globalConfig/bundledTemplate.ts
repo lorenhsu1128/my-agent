@@ -1,5 +1,5 @@
 /**
- * 全域設定檔 JSONC 模板（~/.my-agent/.my-agent.json）。
+ * 全域設定檔 JSONC 模板（~/.my-agent/.my-agent.jsonc）。
  *
  * 100+ 欄位完整含繁中 // 註解。首次 seed 時直接寫入；migration 時作為
  * baseline（使用者既有值會覆蓋 template 的預設值、同時保留模板所有註解）。
@@ -20,7 +20,7 @@
 
 export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
   // ═══════════════════════════════════════════════════════════════════
-  // my-agent 全域設定（~/.my-agent/.my-agent.json）
+  // my-agent 全域設定（~/.my-agent/.my-agent.jsonc）
   //
   // 此檔為 JSONC（JSON with Comments）— 允許 // 與 /* */ 註解、尾部逗號。
   // my-agent 寫回此檔時會**保留註解**（deep diff + jsonc.modify），使用者

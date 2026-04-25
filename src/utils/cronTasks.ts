@@ -189,15 +189,31 @@ export type CronCondition =
 
 type CronFile = { tasks: CronTask[] }
 
-const CRON_FILE_REL = join('.my-agent', 'scheduled_tasks.json')
+const CRON_FILE_REL = join('.my-agent', 'scheduled_tasks.jsonc')
+const CRON_FILE_REL_LEGACY = join('.my-agent', 'scheduled_tasks.json')
 
 /**
  * Path to the cron file. `dir` defaults to getProjectRoot() — pass it
  * explicitly from contexts that don't run through main.tsx (e.g. the Agent
  * SDK daemon, which has no bootstrap state).
+ *
+ * 自動遷移：若 `.jsonc` 不存在但舊 `.json` 存在 → rename 過去。
  */
 export function getCronFilePath(dir?: string): string {
-  return join(dir ?? getProjectRoot(), CRON_FILE_REL)
+  const root = dir ?? getProjectRoot()
+  const jsoncPath = join(root, CRON_FILE_REL)
+  const jsonPath = join(root, CRON_FILE_REL_LEGACY)
+  const fs = getFsImplementation()
+  if (!fs.existsSync(jsoncPath) && fs.existsSync(jsonPath)) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fsSync = require('fs') as typeof import('fs')
+      fsSync.renameSync(jsonPath, jsoncPath)
+    } catch {
+      return jsonPath
+    }
+  }
+  return jsoncPath
 }
 
 /**

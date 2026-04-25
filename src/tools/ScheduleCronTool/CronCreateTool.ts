@@ -324,7 +324,7 @@ export const CronCreateTool = buildTool({
   },
   mapToolResultToToolResultBlockParam(output, toolUseID) {
     const where = output.durable
-      ? 'Persisted to .my-agent/scheduled_tasks.json'
+      ? 'Persisted to .my-agent/scheduled_tasks.jsonc'
       : 'Session-only (not written to disk, dies when Claude exits)'
     const label = output.name ? ` [${output.name}]` : ''
     const repeatSuffix =

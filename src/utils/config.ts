@@ -25,7 +25,7 @@ import { findCanonicalGitRoot } from './git.js'
 import { safeParseJSON } from './json.js'
 import { stripBOM } from './jsonRead.js'
 import * as jsonc from 'jsonc-parser'
-import { diffPaths, parseJsonc } from './jsoncStore.js'
+import { diffPaths, hasJsoncComments, parseJsonc } from './jsoncStore.js'
 import * as lockfile from './lockfile.js'
 import { logError } from './log.js'
 import type { MemoryType } from './memory/types.js'
@@ -1252,8 +1252,10 @@ function saveConfig<A extends object>(
   // 註解，對變更路徑套 jsonc.modify 保留註解，而非整檔 jsonStringify。
   let jsoncPreservedText: string | null = null
   try {
-    const existingRaw = fs.readFileStringSync(file, 'utf-8').replace(/^﻿/, '')
-    if (/\/\/|\/\*/.test(existingRaw)) {
+    const existingRaw = fs
+      .readFileSync(file, { encoding: 'utf-8' })
+      .replace(/^﻿/, '')
+    if (hasJsoncComments(existingRaw)) {
       const currentParsed = parseJsonc<A>(existingRaw)
       const edits = diffPaths(currentParsed, config)
       let working = existingRaw
@@ -1273,8 +1275,12 @@ function saveConfig<A extends object>(
     const code = getErrnoCode(err)
     if (code !== 'ENOENT') {
       logForDebugging(
-        `[config] saveConfig JSONC preserve 失敗，fallback strict JSON：${err instanceof Error ? err.message : String(err)}`,
-        { level: 'warn' },
+        `[config] saveConfig JSONC preserve 失敗，fallback strict JSON：${
+          err instanceof Error
+            ? err.message + '\n' + err.stack
+            : String(err)
+        }`,
+        { level: 'error' },
       )
     }
   }
@@ -1392,8 +1398,10 @@ function saveConfigWithLock<A extends object>(
     // jsonStringify），確保 legacy 使用者零行為變更。
     let jsoncPreservedText: string | null = null
     try {
-      const existingRaw = fs.readFileStringSync(file, 'utf-8').replace(/^﻿/, '')
-      if (/\/\/|\/\*/.test(existingRaw)) {
+      const existingRaw = fs
+        .readFileSync(file, { encoding: 'utf-8' })
+        .replace(/^﻿/, '')
+      if (hasJsoncComments(existingRaw)) {
         // 以原 raw 文字為基底，對每個變更路徑套 jsonc.modify
         const edits = diffPaths(currentConfig, mergedConfig)
         let working = existingRaw
@@ -1415,8 +1423,12 @@ function saveConfigWithLock<A extends object>(
       const code = getErrnoCode(err)
       if (code !== 'ENOENT') {
         logForDebugging(
-          `[config] JSONC preserve 偵測失敗，fallback strict JSON：${err instanceof Error ? err.message : String(err)}`,
-          { level: 'warn' },
+          `[config] JSONC preserve 失敗，fallback strict JSON：${
+            err instanceof Error
+              ? err.message + '\n' + err.stack
+              : String(err)
+          }`,
+          { level: 'error' },
         )
       }
     }
@@ -1533,6 +1545,13 @@ export function enableConfigs(): void {
   // Any reads to configuration before this flag is set show an console warning
   // to prevent us from adding config reading during module initialization
   configReadingAllowed = true
+  // 首次落盤：若 ~/.my-agent/.my-agent.json 不存在，先寫入帶繁中 JSONC 註解
+  // 的模板，後續 saveGlobalConfig 走 jsonc.modify 路徑保留註解。已存在則不
+  // 動。需在第一次 getConfig 之前完成。
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const globalConfigSeed =
+    require('../globalConfig/seed.js') as typeof import('../globalConfig/seed.js')
+  globalConfigSeed.seedGlobalConfigIfMissingSync(getGlobalClaudeFile())
   // We only check the global config because currently all the configs share a file
   getConfig(
     getGlobalClaudeFile(),

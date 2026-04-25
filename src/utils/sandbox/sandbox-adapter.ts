@@ -240,7 +240,10 @@ export function convertToSandboxRuntimeConfig(
   const cwd = getCwdState()
   const originalCwd = getOriginalCwd()
   if (cwd !== originalCwd) {
+    // 同時 deny .json 與 .jsonc 兩種副檔名（migration 期間兩者都可能存在）
+    denyWrite.push(resolve(cwd, '.my-agent', 'settings.jsonc'))
     denyWrite.push(resolve(cwd, '.my-agent', 'settings.json'))
+    denyWrite.push(resolve(cwd, '.my-agent', 'settings.local.jsonc'))
     denyWrite.push(resolve(cwd, '.my-agent', 'settings.local.json'))
   }
 
