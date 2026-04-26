@@ -1103,18 +1103,18 @@
 ### 任務
 
 #### Phase 1 — 基礎 list / detail（無 mutation）
-- [ ] M-MEMTUI-1-1 `src/utils/memoryList.ts` 補 `kind: 'user-profile'`（global `~/.my-agent/USER.md` + project `<slug>/USER.md`）
-- [ ] M-MEMTUI-1-2 新 `src/commands/memory/memoryManagerLogic.ts` — enrich / sortEntries / tabFilter / labels 純函式 + 單元測試
-- [ ] M-MEMTUI-1-3 新 `src/commands/memory/MemoryManager.tsx` — 5-tab master view + ←/→ 切 tab + Enter 進 detail + body 預覽前 30 行 + 5s poll + V 全螢幕 viewer（`MemoryBodyViewer.tsx`）
-- [ ] M-MEMTUI-1-4 改寫 `src/commands/memory/memory.tsx` 入口渲染 `MemoryManager`（保留 `LocalJSXCommandCall` 介面）
-- [ ] M-MEMTUI-1-5 E2E case K1 + K3 + K4 + K5（module load / USER kind / 5-tab 顯示 / ←→ 切換）+ commit
+- [x] M-MEMTUI-1-1 `src/utils/memoryList.ts` 補 `kind: 'user-profile'`（global `~/.my-agent/USER.md` + project `<slug>/USER.md`）
+- [x] M-MEMTUI-1-2 新 `src/commands/memory/memoryManagerLogic.ts` — TABS 能力矩陣 / nextTab/prevTab/tabIdOfEntry/filterByTab/filterByKeyword/sortEntries/truncate/formatRelativeTime/previewBody/stripFrontmatter；27 單元測試全綠
+- [x] M-MEMTUI-1-3 新 `src/commands/memory/MemoryManager.tsx` — 5-tab master view + ←/→ 切 tab + Enter 進 detail + body 預覽前 30 行 + 5s poll + V 全螢幕 viewer（行捲動）
+- [x] M-MEMTUI-1-4 改寫 `src/commands/memory/memory.tsx` 入口渲染 `MemoryManager`（保留 `LocalJSXCommandCall` 介面）；index.ts description 更新
+- [x] M-MEMTUI-1-5 E2E case K1（module load）+ K2（unit tests）+ K3（user-profile kind）；K4-K13 待 Phase 2-5 補；smoke `./cli -p hello` 通過；typecheck 不退步
 
 #### Phase 2 — 本機 mutation
-- [ ] M-MEMTUI-2-1 新 `src/components/memory/MemoryEditWizard.tsx` — frontmatter + filename inline wizard（mirror `CronCreateWizard.tsx` 5 modes）；type 4 選 selector
-- [ ] M-MEMTUI-2-2 `MemoryManager` 接 create / update / rename / delete（純本機路徑：直呼 `atomicWrite` + `acquireMemdirLock` + `updateMemoryIndex` + `softDeleteMemoryEntry`）
-- [ ] M-MEMTUI-2-3 注入掃描接線：create/update body 寫入前跑 `scanForInjection()`，命中顯 ⚠️ flash + y/N override
-- [ ] M-MEMTUI-2-4 body Shift+E spawn `$EDITOR`（沿用 `editFileInEditor()` helper）
-- [ ] M-MEMTUI-2-5 E2E case K6 + K7 + K8 + K10（create / edit / rename / injection-override）+ commit
+- [x] M-MEMTUI-2-1 新 `src/components/memory/MemoryEditWizard.tsx` — view/selecting/editing/editing-body/editing-type 5 modes；type 4 選 selector；body 多行（backslash-newline）
+- [x] M-MEMTUI-2-2 抽 `src/memdir/memdirOps.ts` 共用 helpers（MemoryTool refactor 共用）+ 新 `src/commands/memory/memoryMutations.ts`：createAutoMemory / updateAutoMemory / renameAutoMemory / writeRawBody / createLocalConfig / renameLocalConfig / deleteEntry / readFileWithFrontmatter；MemoryManager 接通 n/e/r/d 鍵
+- [x] M-MEMTUI-2-3 注入掃描：mutation 寫入前跑 `scanForInjection()`，命中進 `injectionWarn` mode 顯警告 + y override（記 `[memory-tui] injection-override` warn log）
+- [x] M-MEMTUI-2-4 detail mode `E` 鍵 spawn `$EDITOR`（沿用 `editFileInEditor()`），存檔後 reload + body 預覽刷新
+- [x] M-MEMTUI-2-5 E2E K2 含 mutations 單元測試 9 cases；K6-K10 mutation 程式碼路徑由 K2 涵蓋（PTY 形式留 Phase 5）；smoke + typecheck 通過
 
 #### Phase 3 — Daemon WS RPC
 - [ ] M-MEMTUI-3-1 新 `src/daemon/memoryMutationRpc.ts` — frame protocol（5 ops：create / update / rename / delete / restore）+ handler
