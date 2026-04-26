@@ -310,7 +310,18 @@ export async function runDaemonStart(
             ? (registry.getProject(c.projectId) ?? defaultRuntime)
             : defaultRuntime
           void (async () => {
-            const res = await handleSlashCommandExecute(runtime.cwd, req)
+            const res = await handleSlashCommandExecute(runtime.cwd, req, {
+              broker: runtime.broker,
+              clientId: c.id,
+              source:
+                c.source === 'web' ||
+                c.source === 'repl' ||
+                c.source === 'discord' ||
+                c.source === 'cron' ||
+                c.source === 'unknown'
+                  ? c.source
+                  : 'web',
+            })
             handle.server!.send(c.id, res)
           })()
           return

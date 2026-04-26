@@ -3,6 +3,7 @@
  */
 import { describe, expect, test, mock, beforeEach, afterEach } from 'bun:test'
 import type { Command } from '../../../src/types/command'
+import type { ContentBlockParam } from 'my-agent-ai/sdk/resources/index'
 
 // 把 commands.getCommands 換成 fake 清單，避免 daemon 全 registry 載入耗時
 const fakeCommands: Command[] = [
@@ -13,7 +14,9 @@ const fakeCommands: Command[] = [
     progressMessage: '',
     contentLength: 0,
     source: 'builtin',
-    getPromptForCommand: async () => [],
+    getPromptForCommand: async () => [
+      { type: 'text', text: 'do init now' },
+    ],
   } as Command,
   {
     name: 'help',
@@ -125,15 +128,64 @@ describe('handleSlashCommandList', () => {
 })
 
 describe('handleSlashCommandExecute', () => {
-  test('prompt 命令回 prompt-injected stub', async () => {
+  test('prompt 命令無 broker 時回 ok=false', async () => {
     const res = await handleSlashCommandExecute('/cwd', {
       type: 'slashCommand.execute',
       requestId: 'r3',
       name: 'init',
       args: '',
     })
+    expect(res.ok).toBe(false)
+    expect(res.error).toContain('broker')
+  })
+
+  test('prompt 命令有 broker 時 submit 並回 prompt-injected + inputId', async () => {
+    const submitted: Array<{ payload: unknown; opts: unknown }> = []
+    const fakeBroker = {
+      queue: {
+        submit: (payload: unknown, opts: unknown) => {
+          submitted.push({ payload, opts })
+          return 'fake-input-id-1'
+        },
+      },
+    } as unknown as Parameters<typeof handleSlashCommandExecute>[2]['broker']
+    const res = await handleSlashCommandExecute(
+      '/cwd',
+      {
+        type: 'slashCommand.execute',
+        requestId: 'r3b',
+        name: 'init',
+        args: '',
+      },
+      { broker: fakeBroker, clientId: 'c1', source: 'web' },
+    )
     expect(res.ok).toBe(true)
     expect(res.result?.kind).toBe('prompt-injected')
+    if (res.result?.kind === 'prompt-injected') {
+      expect(res.result.inputId).toBe('fake-input-id-1')
+    }
+    expect(submitted.length).toBe(1)
+    expect(typeof submitted[0].payload).toBe('string')
+    expect((submitted[0].payload as string).length).toBeGreaterThan(0)
+  })
+
+  test('flattenContentBlocksToText 攤平 text + 描述非 text', async () => {
+    const { flattenContentBlocksToText } = await import(
+      '../../../src/daemon/slashCommandRpc'
+    )
+    expect(
+      flattenContentBlocksToText([
+        { type: 'text', text: 'hello' },
+        { type: 'text', text: 'world' },
+      ]),
+    ).toBe('hello\nworld')
+    expect(
+      flattenContentBlocksToText([
+        { type: 'text', text: 'before' },
+        { type: 'image' } as unknown as ContentBlockParam,
+        { type: 'text', text: 'after' },
+      ]),
+    ).toContain('[image]')
   })
 
   test('local 命令回 A2 stub text', async () => {

@@ -38,6 +38,26 @@ import {
 } from './slashCommandRegistry.js'
 import { getCommands } from '../commands.js'
 import type { Command } from '../types/command.js'
+import type { ContentBlockParam } from 'my-agent-ai/sdk/resources/index'
+import type { SessionBroker } from './sessionBroker.js'
+
+/**
+ * 把 prompt 命令展開後的 ContentBlockParam[] 攤平成單一 text 字串，
+ * 給 broker.queue.submit 用（queue payload 是 string）。非 text block 退化成
+ * 描述文字（image/document 在 prompt slash 場景幾乎不會出現，僅做 defensive）。
+ */
+export function flattenContentBlocksToText(blocks: ContentBlockParam[]): string {
+  return blocks
+    .map(b => {
+      if (b.type === 'text') return b.text
+      if (b.type === 'image') return '[image]'
+      if (b.type === 'document') return '[document]'
+      if (b.type === 'thinking') return ''
+      return `[${(b as { type: string }).type}]`
+    })
+    .join('\n')
+    .trim()
+}
 
 // ─── Frame types ────────────────────────────────────────────────────────────
 
@@ -64,7 +84,7 @@ export type SlashCommandExecuteRequest = {
 
 export type SlashCommandExecutionResult =
   | { kind: 'text'; value: string }
-  | { kind: 'prompt-injected' }
+  | { kind: 'prompt-injected'; inputId: string }
   | { kind: 'jsx-handoff'; name: string }
   | { kind: 'web-redirect'; tabId: string }
   | { kind: 'skip' }
@@ -140,18 +160,28 @@ function findCommandByName(
   )
 }
 
+export interface SlashCommandExecuteContext {
+  /** Project broker — prompt 注入會用 broker.queue.submit。沒給的話 prompt 命令回 ok=false。 */
+  broker?: SessionBroker
+  /** 來源 client id；submit 時帶；沒給用 'web-anonymous' fallback */
+  clientId?: string
+  /** 來源（決定 default intent；web 預設 interactive） */
+  source?: 'web' | 'repl' | 'discord' | 'cron' | 'unknown'
+}
+
 /**
- * Phase A2 的 execute：
+ * Phase B1 的 execute：
  *
  * - local-jsx + 已被 redirect 的 → 回 web-redirect
  * - local-jsx + 尚未 redirect → 回 jsx-handoff（web 端查表 render React 元件）
- * - prompt → 回 prompt-injected stub（B1 真注入）
- * - local → A2 暫回 jsx-handoff='__local_a2_pending__' 標示「等 B2 接 call()」
- *   （不直接跑 load().call() 因為 A2 還沒接 LocalJSXCommandContext callback）
+ * - prompt → 真展開 + 注入 broker.queue（**B1**）；context 為 stub（多數 prompt
+ *   命令不依賴 ToolUseContext；依賴的會在 catch 內回 ok=false）
+ * - local → A2 暫回 stub text（B2 接 cmd.load().call()）
  */
 export async function handleSlashCommandExecute(
   cwd: string,
   req: SlashCommandExecuteRequest,
+  ctx: SlashCommandExecuteContext = {},
 ): Promise<SlashCommandExecuteResult> {
   try {
     const commands = await getCommands(cwd)
@@ -186,12 +216,53 @@ export async function handleSlashCommandExecute(
     }
 
     if (cmd.type === 'prompt') {
-      // B1 實作真注入；A2 stub
+      if (!ctx.broker) {
+        return {
+          type: 'slashCommand.executeResult',
+          requestId: req.requestId,
+          ok: false,
+          error: 'prompt command requires broker context (no project runtime)',
+        }
+      }
+      // 多數 prompt 命令不需 ToolUseContext；用 stub。少數依賴 context（如
+      // skillify 讀 sessionMemory）會在這 try 內 throw → 走 catch 回 ok=false。
+      const stubContext = {
+        abortController: { signal: new AbortController().signal },
+        options: { isNonInteractiveSession: true },
+        readFileTimestamps: {},
+      } as unknown as Parameters<typeof cmd.getPromptForCommand>[1]
+      let blocks: ContentBlockParam[]
+      try {
+        blocks = await cmd.getPromptForCommand(req.args, stubContext)
+      } catch (err) {
+        return {
+          type: 'slashCommand.executeResult',
+          requestId: req.requestId,
+          ok: false,
+          error: `prompt expansion failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        }
+      }
+      const text = flattenContentBlocksToText(blocks)
+      if (text.length === 0) {
+        return {
+          type: 'slashCommand.executeResult',
+          requestId: req.requestId,
+          ok: false,
+          error: 'prompt expanded to empty text',
+        }
+      }
+      const inputId = ctx.broker.queue.submit(text, {
+        clientId: ctx.clientId ?? 'web-anonymous',
+        source: ctx.source ?? 'web',
+        intent: 'interactive',
+      })
       return {
         type: 'slashCommand.executeResult',
         requestId: req.requestId,
         ok: true,
-        result: { kind: 'prompt-injected' },
+        result: { kind: 'prompt-injected', inputId },
       }
     }
 
