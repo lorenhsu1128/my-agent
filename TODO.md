@@ -1260,13 +1260,14 @@
 - [x] M-WEB-7：`/web` 指令（args + 簡易 TUI）+ `src/daemon/webRpc.ts` + `src/web/webController.ts`（lifecycle 管理）+ daemonCli 整合（autoStart）+ fallbackManager.sendWebControl + commands.ts 註冊 + `web.statusChanged` 廣播 — 9 controller/RPC tests
 - [x] Phase 1 E2E：`tests/integration/web/daemon-web-e2e.test.ts` 4/4 — 真 daemon auto-start web → `/api/health` 200 → `/api/foo` 404 → WS hello/subscribe/ping/pong → thin-client `web.control` op=status/stop + `web.statusChanged` broadcast。新 ClientSource='web' / `defaultIntentForSource='interactive'`
 
-### Phase 2 — Chat 核心（3 週）
-- [ ] M-WEB-8：`/api/projects` + `/api/sessions` REST（GET/POST/DELETE；S3 廣播 `session.created`）
-- [ ] M-WEB-9：三欄 layout 骨架 + 左欄 ProjectList + SessionTree（M1 兩層樹）+ Q2 add/remove project dialog
-- [ ] M-WEB-10：中欄 MessageList + MessageItem + ToolCallCard + ThinkingBlock + CodeBlock（shiki）+ DiffViewer；對齊 `messages.ts` `StreamingToolUse / StreamingThinking`
-- [ ] M-WEB-11：WS `turn.start/event/end` 串流接收 + 增量 render；`messageBackfill.ts` 讀 sessionIndex 最近 100 條
-- [ ] M-WEB-12：InputBar 雙向送訊息（multi-line + 5 個核心 slash autocomplete）+ turn 進行中其他 client disabled lock
-- [ ] M-WEB-13：PermissionPrompt modal + first-wins race + `permission.resolved` 清 modal；permission mode toggle（status bar）
+### Phase 2 — Chat 核心（3 週）✅ 2026-04-26 完成
+- [x] M-WEB-8：`/api/projects` REST（GET 列表 / POST 載入 / DELETE 卸載 / GET single / GET sessions）+ CORS preflight + path traversal 防護 — 15 unit tests；`/api/projects/:id/sessions` POST 留 501 stub 給 M-WEB-11
+- [x] M-WEB-9：三欄 layout（ProjectList 左 / ChatView 中 / ContextPanel 右）+ M1 兩層樹（Project → Session 子節點）+ Q2 AddProjectDialog（POST /api/projects）+ unload (× 按鈕) + DisconnectedBanner — Vite build 72 modules 188 KB JS
+- [x] M-WEB-10：MessageList + MessageItem + ToolCallCard（Discord embed 風 / collapsed details）+ ThinkingBlock（80 char preview / 點擊展開）+ messageStore（per-session UiMessage 陣列、startUserTurn/startAssistantTurn/appendBlock/setToolResult/endTurn）
+- [x] M-WEB-11：useTurnEvents hook 把 WS turn.start/event/end 寫入 messageStore，解析 SDK content blocks（text/thinking/tool_use/tool_result）；自動 scroll-to-bottom（接近底時才 follow）；100-msg backfill 留 M-WEB-18（需 sessionIndex read API）
+- [x] M-WEB-12：InputBar（multi-line textarea + auto-resize + IME 安全 Enter / Shift+Enter / / 觸發 5 個核心 slash autocomplete dropdown / Tab 補全 / ArrowUp/Down / Esc 清空）；ChatView 連動 send/interrupt/permissionResponse/setMode/clear
+- [x] M-WEB-13：PermissionModal（pending 從 permissionStore；first-wins race — daemon broadcast permission.resolved 清 modal）+ permission mode 經 WS 傳；usePermissionStore + permission.modeChanged frame 訂閱
+- [x] Phase 2 E2E：`tests/integration/web/phase2-e2e.test.ts` 4/4 — GET /api/projects 看到 default project / POST 載入 + project.added broadcast / DELETE + project.removed broadcast / GET sessions 看到 active session / 多 WS client 同步廣播
 
 ### Phase 3 — 右欄 R3 全 CRUD（3-4 週）
 - [ ] M-WEB-14：`/api/cron` REST + CronTab + CronCreateForm + CronScheduleEditor（reuse `cronPickerLogic`）

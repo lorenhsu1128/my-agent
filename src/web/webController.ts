@@ -12,6 +12,7 @@ import {
 } from './httpServer.js'
 import { createWebWsServer, type WebWsServerHandle } from './wsServer.js'
 import { createWebGateway, type WebGatewayHandle } from './webGateway.js'
+import { createRestRoutes } from './restRoutes.js'
 import type { WebConfig } from '../webConfig/schema.js'
 import { logForDebugging } from '../utils/debug.js'
 
@@ -83,12 +84,14 @@ export function createWebServerController(
         registry: opts.registry,
         browserSessions: ws.registry,
       })
+      const rest = createRestRoutes({ registry: opts.registry })
       const http = await startImpl({
         host: cfg.bindHost,
         port: cfg.port,
         maxPortProbes: cfg.maxPortProbes,
         devProxyUrl: cfg.devProxyUrl,
         websocketHandler: ws.websocketHandler,
+        fetchHandler: req => rest.handle(req),
         log,
       })
       httpHandle = http
