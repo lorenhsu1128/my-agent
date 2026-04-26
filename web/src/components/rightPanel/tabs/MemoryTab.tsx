@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, ApiError, type WebMemoryEntry } from '../../../api/client'
 import { useWsClient } from '../../../hooks/useWsClient'
 import { Modal } from '../../common/Modal'
+import { MemoryEditWizard } from './MemoryEditWizard'
 
 export interface MemoryTabProps {
   projectId: string
@@ -21,6 +22,11 @@ export function MemoryTab({ projectId }: MemoryTabProps) {
   const [error, setError] = useState<string | null>(null)
   const [viewing, setViewing] = useState<WebMemoryEntry | null>(null)
   const [body, setBody] = useState<string>('')
+  const [editing, setEditing] = useState<WebMemoryEntry | null>(null)
+  const [editBody, setEditBody] = useState<string>('')
+  const [creating, setCreating] = useState<
+    'auto-memory' | 'local-config' | null
+  >(null)
   const ws = useWsClient()
 
   async function refresh() {
@@ -69,6 +75,18 @@ export function MemoryTab({ projectId }: MemoryTabProps) {
     }
   }
 
+  async function startEdit(entry: WebMemoryEntry) {
+    setEditing(entry)
+    setEditBody('')
+    try {
+      const { body: text } = await api.memory.body(projectId, entry.absolutePath)
+      setEditBody(text)
+    } catch (e) {
+      alert(`讀取失敗：${e instanceof Error ? e.message : String(e)}`)
+      setEditing(null)
+    }
+  }
+
   async function del(entry: WebMemoryEntry) {
     if (!confirm(`刪除 ${entry.displayName}？（軟刪除到 .trash/）`)) return
     try {
@@ -94,12 +112,28 @@ export function MemoryTab({ projectId }: MemoryTabProps) {
         <span className="text-text-muted text-xs uppercase tracking-wide">
           Memory ({entries.length})
         </span>
-        <button
-          onClick={() => void refresh()}
-          className="text-text-muted hover:text-text-primary text-xs"
-        >
-          ⟳
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCreating('auto-memory')}
+            className="text-xs px-2 py-0.5 rounded bg-bg-accent hover:bg-bg-floating text-text-secondary"
+            title="新增 auto-memory（含 frontmatter）"
+          >
+            + AUTO
+          </button>
+          <button
+            onClick={() => setCreating('local-config')}
+            className="text-xs px-2 py-0.5 rounded bg-bg-accent hover:bg-bg-floating text-text-secondary"
+            title="新增 local-config（純 body）"
+          >
+            + LOCAL
+          </button>
+          <button
+            onClick={() => void refresh()}
+            className="text-text-muted hover:text-text-primary text-xs"
+          >
+            ⟳
+          </button>
+        </div>
       </div>
       {error && <div className="text-status-dnd text-xs">⚠ {error}</div>}
       {loading && entries.length === 0 && (
@@ -139,6 +173,14 @@ export function MemoryTab({ projectId }: MemoryTabProps) {
                 >
                   View
                 </button>
+                {e.kind !== 'daily-log' && (
+                  <button
+                    onClick={() => void startEdit(e)}
+                    className="text-xs px-2 py-0.5 rounded bg-bg-accent hover:bg-bg-floating text-text-secondary"
+                  >
+                    Edit
+                  </button>
+                )}
                 {(e.kind === 'auto-memory' || e.kind === 'local-config') && (
                   <button
                     onClick={() => del(e)}
@@ -161,6 +203,22 @@ export function MemoryTab({ projectId }: MemoryTabProps) {
           {body || '（載入中…）'}
         </pre>
       </Modal>
+      <MemoryEditWizard
+        projectId={projectId}
+        entry={editing}
+        initialBody={editBody}
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => void refresh()}
+      />
+      <MemoryEditWizard
+        projectId={projectId}
+        entry={null}
+        createKind={creating ?? 'auto-memory'}
+        open={!!creating}
+        onClose={() => setCreating(null)}
+        onSaved={() => void refresh()}
+      />
     </div>
   )
 }

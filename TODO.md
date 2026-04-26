@@ -1316,11 +1316,11 @@
 - [x] M-WEB-CLOSEOUT-2：LlamacppTab 加 SlotsPanel 子組件（5s polling、active slots 列表 + decoded/remain、reasoning loop hint、erase 按鈕、unavailable fallback、flash toast）
 - [x] M-WEB-CLOSEOUT-3：typecheck/build:web/build:dev 綠 + ./cli -p hello 冒煙過 + 6 unit tests + 24 REST routes 全綠
 
-### Phase B — M-WEB-15b Memory edit wizard + injection 掃描
-- [ ] M-WEB-CLOSEOUT-4：REST `PUT /api/memory`（write body + frontmatter，path traversal 防護同 GET）+ `POST /api/memory`（new file，含 wizard 全欄位）+ 單元測試
-- [ ] M-WEB-CLOSEOUT-5：MemoryEditWizard React 組件（複刻 TUI 5 tab 行為矩陣 — USER 不可刪/重命名、daily-log 唯讀、project MY-AGENT.md 不可新建/重命名、local-config 全功能無 frontmatter）
-- [ ] M-WEB-CLOSEOUT-6：inline `secretScan.ts` 掃描（reuse `src/utils/web/secretScan.ts`），存檔前提示
-- [ ] M-WEB-CLOSEOUT-7：訂閱既有 `memory.itemsChanged` broadcast 自動刷 UI；commit + smoke
+### Phase B — M-WEB-15b Memory edit wizard + injection 掃描 ✅ 2026-04-26
+- [x] M-WEB-CLOSEOUT-4：REST `PUT /api/projects/:id/memory`（user-profile / project-memory / local-config body update + auto-memory body+frontmatter update；daily-log 403 READ_ONLY；path traversal 過 entries 列表；secret 偵測 422 + override:true 通過）+ `POST /api/projects/:id/memory`（auto-memory + local-config 才允許 create；其他 kind 403 KIND_NOT_CREATABLE）+ 10 unit tests
+- [x] M-WEB-CLOSEOUT-5：MemoryEditWizard React 組件（行為矩陣 — auto-memory 全 frontmatter+body、user-profile/project-memory body only、local-config body only 無 frontmatter、daily-log 不顯 Edit；create 模式只允許 auto-memory + local-config）
+- [x] M-WEB-CLOSEOUT-6：`web/src/utils/secretScan.ts`（複刻 server `containsSecret` 30+ token 前綴 + private key regex）；wizard 內 inline 警告 + 「我已確認可寫入」checkbox；server 422 雙重保護
+- [x] M-WEB-CLOSEOUT-7：MemoryTab 訂閱既有 `memory.itemsChanged` broadcast 自動 refresh（沿用 M-WEB-15）；typecheck/build:web/build:dev 綠 + ./cli -p smoke 過 + 34 REST tests 全綠
 
 ### Phase C — M-WEB-17b Discord admin RPC 接 web（Q1=c 全範圍）
 - [ ] M-WEB-CLOSEOUT-8：列出 admin 操作清單並對齊（先列再實作）：list bindings / bind channel / unbind channel / reload config / restart gateway。如有疑問再問
@@ -2426,3 +2426,5 @@
 - 2026-04-26 18:43: Session 結束 | 進度：613/663 任務 | 03e148a fix(web): assistant turn UI 完全空 — 修 RunnerEvent wrapper 解析 + 加 stream delta 支援
 
 - 2026-04-26 18:54: Session 結束 | 進度：613/663 任務 | 1014c96 feat(web): M-WEB-22 — Session 切換 backfill + 清單 UX 修補（Phase 5）
+
+- 2026-04-26 19:08: Session 結束 | 進度：616/686 任務 | 048aebd feat(web): M-WEB-CLOSEOUT-1/2/3 — Llamacpp slot inspector REST + SlotsPanel

@@ -525,6 +525,222 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
       }
     }
 
+    // M-WEB-CLOSEOUT-4：PUT /api/projects/:id/memory — update body / frontmatter
+    // body { kind, absolutePath?, filename?, body, frontmatter? { name, description, type }, override? }
+    {
+      const m = /^\/api\/projects\/([^/]+)\/memory$/.exec(url.pathname)
+      if (m && method === 'PUT') {
+        const id = decodeURIComponent(m[1]!)
+        const runtime = registry.getProject(id)
+        if (!runtime) return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
+        let body: Record<string, unknown>
+        try {
+          body = (await req.json()) as Record<string, unknown>
+        } catch {
+          return errorResponse('BAD_JSON', 'invalid JSON body', 400)
+        }
+        const kind = body.kind
+        const newBody = body.body
+        if (typeof kind !== 'string' || typeof newBody !== 'string') {
+          return errorResponse('BAD_FIELDS', 'kind + body required', 400)
+        }
+        if (kind === 'daily-log') {
+          return errorResponse('READ_ONLY', 'daily-log entries are read-only', 403)
+        }
+        // 注入掃描（reuse 既有 secretScan）— 命中且未 override 則回 422
+        if (!body.override) {
+          const { containsSecret } = await import('../utils/web/secretScan.js')
+          if (containsSecret(newBody)) {
+            return errorResponse(
+              'SECRET_DETECTED',
+              'body contains potential secret; resend with override:true to confirm',
+              422,
+            )
+          }
+        }
+        let mutation: MemoryMutationRequest
+        if (kind === 'auto-memory') {
+          const filename = body.filename
+          const fm = body.frontmatter as Record<string, unknown> | undefined
+          if (typeof filename !== 'string' || !fm) {
+            return errorResponse(
+              'BAD_FIELDS',
+              'auto-memory update requires filename + frontmatter',
+              400,
+            )
+          }
+          if (
+            typeof fm.name !== 'string' ||
+            typeof fm.description !== 'string' ||
+            typeof fm.type !== 'string'
+          ) {
+            return errorResponse(
+              'BAD_FIELDS',
+              'frontmatter.name/description/type all required',
+              400,
+            )
+          }
+          mutation = {
+            type: 'memory.mutation',
+            requestId: `web-${Date.now()}`,
+            op: 'update',
+            payload: {
+              kind: 'auto-memory',
+              filename,
+              name: fm.name,
+              description: fm.description,
+              type: fm.type as never,
+              body: newBody,
+            },
+          }
+        } else {
+          const absolutePath = body.absolutePath
+          if (typeof absolutePath !== 'string') {
+            return errorResponse(
+              'BAD_FIELDS',
+              `${kind} update requires absolutePath`,
+              400,
+            )
+          }
+          // path traversal 防護：path 必須在 entries 列表內
+          const entries = listAllMemoryEntries(runtime.cwd)
+          const target = resolvePath(absolutePath)
+          const allowed = entries.some(
+            e => resolvePath(e.absolutePath) === target,
+          )
+          if (!allowed) {
+            return errorResponse(
+              'PATH_NOT_ALLOWED',
+              'path not in memory entries',
+              403,
+            )
+          }
+          mutation = {
+            type: 'memory.mutation',
+            requestId: `web-${Date.now()}`,
+            op: 'update',
+            payload: {
+              kind: kind as never,
+              absolutePath,
+              body: newBody,
+            },
+          }
+        }
+        const r = await handleMemoryMutation(mutation, {
+          projectRoot: runtime.cwd,
+          projectId: runtime.projectId,
+        })
+        if (!r.ok) {
+          return errorResponse('MEMORY_UPDATE_FAILED', r.error ?? 'unknown', 400)
+        }
+        opts.broadcastToProject?.(runtime.projectId, {
+          type: 'memory.itemsChanged',
+          projectId: runtime.projectId,
+        })
+        return jsonResponse({ ok: true, message: r.message })
+      }
+    }
+
+    // M-WEB-CLOSEOUT-4：POST /api/projects/:id/memory — create new entry
+    // body { kind: 'auto-memory' | 'local-config', filename, body, frontmatter?, override? }
+    {
+      const m = /^\/api\/projects\/([^/]+)\/memory$/.exec(url.pathname)
+      if (m && method === 'POST') {
+        const id = decodeURIComponent(m[1]!)
+        const runtime = registry.getProject(id)
+        if (!runtime) return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
+        let body: Record<string, unknown>
+        try {
+          body = (await req.json()) as Record<string, unknown>
+        } catch {
+          return errorResponse('BAD_JSON', 'invalid JSON body', 400)
+        }
+        const kind = body.kind
+        const filename = body.filename
+        const newBody = body.body
+        if (
+          typeof kind !== 'string' ||
+          typeof filename !== 'string' ||
+          typeof newBody !== 'string'
+        ) {
+          return errorResponse(
+            'BAD_FIELDS',
+            'kind + filename + body required',
+            400,
+          )
+        }
+        if (kind !== 'auto-memory' && kind !== 'local-config') {
+          return errorResponse(
+            'KIND_NOT_CREATABLE',
+            `cannot create kind=${kind}; only auto-memory + local-config support create`,
+            403,
+          )
+        }
+        if (!body.override) {
+          const { containsSecret } = await import('../utils/web/secretScan.js')
+          if (containsSecret(newBody)) {
+            return errorResponse(
+              'SECRET_DETECTED',
+              'body contains potential secret; resend with override:true to confirm',
+              422,
+            )
+          }
+        }
+        let mutation: MemoryMutationRequest
+        if (kind === 'auto-memory') {
+          const fm = body.frontmatter as Record<string, unknown> | undefined
+          if (
+            !fm ||
+            typeof fm.name !== 'string' ||
+            typeof fm.description !== 'string' ||
+            typeof fm.type !== 'string'
+          ) {
+            return errorResponse(
+              'BAD_FIELDS',
+              'auto-memory create requires frontmatter.name/description/type',
+              400,
+            )
+          }
+          mutation = {
+            type: 'memory.mutation',
+            requestId: `web-${Date.now()}`,
+            op: 'create',
+            payload: {
+              kind: 'auto-memory',
+              filename,
+              name: fm.name,
+              description: fm.description,
+              type: fm.type as never,
+              body: newBody,
+            },
+          }
+        } else {
+          mutation = {
+            type: 'memory.mutation',
+            requestId: `web-${Date.now()}`,
+            op: 'create',
+            payload: {
+              kind: 'local-config',
+              filename,
+              body: newBody,
+            },
+          }
+        }
+        const r = await handleMemoryMutation(mutation, {
+          projectRoot: runtime.cwd,
+          projectId: runtime.projectId,
+        })
+        if (!r.ok) {
+          return errorResponse('MEMORY_CREATE_FAILED', r.error ?? 'unknown', 400)
+        }
+        opts.broadcastToProject?.(runtime.projectId, {
+          type: 'memory.itemsChanged',
+          projectId: runtime.projectId,
+        })
+        return jsonResponse({ ok: true, message: r.message })
+      }
+    }
+
     // DELETE /api/projects/:id/memory — body { kind, absolutePath, filename? }
     {
       const m = /^\/api\/projects\/([^/]+)\/memory$/.exec(url.pathname)

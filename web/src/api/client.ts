@@ -169,6 +169,25 @@ export const api = {
         { method: 'DELETE', json: payload },
       )
     },
+    // M-WEB-CLOSEOUT-4：update / create
+    update(
+      projectId: string,
+      payload: WebMemoryUpdatePayload,
+    ): Promise<{ ok: boolean; message?: string }> {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/memory`,
+        { method: 'PUT', json: payload },
+      )
+    },
+    create(
+      projectId: string,
+      payload: WebMemoryCreatePayload,
+    ): Promise<{ ok: boolean; message?: string }> {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/memory`,
+        { method: 'POST', json: payload },
+      )
+    },
   },
   // M-WEB-16：Llamacpp watchdog（daemon 全域；不需 projectId）
   llamacpp: {
@@ -212,6 +231,44 @@ export interface WebMemoryEntry {
   mtimeMs: number
   userProfileScope?: 'global' | 'project'
 }
+
+export type MemoryAutoType = 'user' | 'feedback' | 'project' | 'reference'
+
+export interface WebMemoryFrontmatter {
+  name: string
+  description: string
+  type: MemoryAutoType
+}
+
+export type WebMemoryUpdatePayload =
+  | {
+      kind: 'auto-memory'
+      filename: string
+      body: string
+      frontmatter: WebMemoryFrontmatter
+      override?: boolean
+    }
+  | {
+      kind: 'user-profile' | 'project-memory' | 'local-config'
+      absolutePath: string
+      body: string
+      override?: boolean
+    }
+
+export type WebMemoryCreatePayload =
+  | {
+      kind: 'auto-memory'
+      filename: string
+      body: string
+      frontmatter: WebMemoryFrontmatter
+      override?: boolean
+    }
+  | {
+      kind: 'local-config'
+      filename: string
+      body: string
+      override?: boolean
+    }
 
 export interface WebSlotInfo {
   id: number
