@@ -1291,6 +1291,46 @@ if scope_includes "M" || scope_includes "web" \
 fi
 
 # ═══════════════════════════════════════════════
+# M6. M-WEB-SLASH-FULL — Web 端 87 個 slash command 全支援
+#     aliases: web | slash | slashfull
+# ═══════════════════════════════════════════════
+if scope_includes "M" || scope_includes "web" \
+  || scope_includes "slash" || scope_includes "slashfull"; then
+  section "M6. M-WEB-SLASH-FULL"
+
+  # M6.1：daemon RPC + registry 單元
+  log "  ▶ daemon slashCommandRegistry + slashCommandRpc 單元"
+  if bun test \
+      tests/integration/daemon/slash-command-registry.test.ts \
+      tests/integration/daemon/slash-command-rpc.test.ts \
+    > /tmp/m6-daemon.log 2>&1
+  then
+    test_pass "M6.1 daemon registry + rpc 單元（28 tests）"
+  else
+    test_fail "M6.1 daemon registry + rpc 單元" "$(tail -20 /tmp/m6-daemon.log)"
+  fi
+
+  # M6.2：web REST + store + dispatcher 單元
+  log "  ▶ web REST + store + dispatcher + category 單元"
+  if bun test \
+      tests/integration/web/restRoutes-slash.test.ts \
+      tests/integration/web/slash-command-store-filter.test.ts \
+      tests/integration/web/ui-store.test.ts \
+      tests/integration/web/command-dispatcher-store.test.ts \
+      tests/integration/web/command-category.test.ts \
+    > /tmp/m6-web.log 2>&1
+  then
+    test_pass "M6.2 web REST + store + dispatcher + category 單元（27 tests）"
+  else
+    test_fail "M6.2 web 單元" "$(tail -20 /tmp/m6-web.log)"
+  fi
+
+  # M6.3：手動 E2E sanity（瀏覽器抽測）
+  log "  ▶ 手動 sanity（瀏覽器抽測 8-10 個 command）"
+  test_skip "M6.3 手動 sanity" "需實機：開 web → /help (local 文字回顯) → /init (prompt 注入觸 turn) → /cron (跳右欄 cron tab) → /config (jsx-handoff Modal + config 分類 hint) → /unknown-xyz (toast.error)"
+fi
+
+# ═══════════════════════════════════════════════
 # 總結
 # ═══════════════════════════════════════════════
 log ""

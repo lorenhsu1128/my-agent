@@ -63,6 +63,24 @@
 
 ---
 
+### TS 不在 arrow callback 內 narrow union discriminant property
+- **發生什麼事**：M-WEB-SLASH-D1 在 `ws.on('frame', f => { ... f.result?.name ... })` 對 `SlashCommandExecutionResultPayload` union（含 `text|prompt-injected|jsx-handoff|web-redirect|skip` 五個 kind）的 `name` 欄位做存取，TS 報 `error TS2339: Property 'name' does not exist on type '{ kind: "text"; value: string; }'`，即使前面已用 `if (f.result?.kind === 'jsx-handoff')` 守衛。
+- **根本原因**：optional chaining 在 callback 閉包內不會持續 narrow；TS 認為 callback 可能在後續 tick 被呼叫時 `f.result` 已變動。
+- **正確做法**：在 if 守衛 block 開頭先 `const handoffName = f.result.name`（此時 `f.result` 已 narrow 成 jsx-handoff variant），後續用 local var 不再透過 optional chain 拿 union member。
+- **相關檔案**：`web/src/components/chat/ChatView.tsx`
+- **日期**：2026-04-26
+
+---
+
+### autocomplete 不要把 description includes(query) 當 fallback rank
+- **發生什麼事**：M-WEB-SLASH-A3 第一版 `filterCommandsForAutocomplete` 把 description 含 query 也算 rank-3 命中，於是輸入 `/co` 撈到 `/help`（描述 "show command help" 含 "co"），dropdown 變雜訊。
+- **根本原因**：autocomplete 的 mental model 是 prefix-driven，使用者打前幾個字母期望看到 name 開頭命中；description 比對在大型 registry（87+）很容易誤撈。
+- **正確做法**：只用 name exact / alias exact (rank 0) > name prefix (rank 1) > alias prefix (rank 2)。description 留給 dropdown 顯示用、不參與 ranking。
+- **相關檔案**：`web/src/store/slashCommandStore.ts`
+- **日期**：2026-04-26
+
+---
+
 ## Provider 整合相關
 
 ### 新增 APIProvider enum 值時必須補全所有「provider-aware lookup」fallback

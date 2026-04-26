@@ -239,6 +239,86 @@ export CLAUDE_CONFIG_DIR=~/.claude
 
 ---
 
+### 2026-04-26 — M-WEB-SLASH-FULL：Web 端 87 個 slash command 全支援
+
+**範圍**：M-WEB 主線完成後 web `InputBar` 只認 5 個核心 slash command；本 milestone 補上通用 RPC + 自動拉 metadata + 全部 87 個 command（8 prompt + 27 local + 48 local-jsx + 4 web-redirect）皆可從 web 觸發。完整計畫：`~/.claude/plans/m-web-zesty-rabin.md`。
+
+**9 commit 序列（A→B→C→D→E）**：
+1. `369ce8b` A1 — `slashCommandRegistry.ts` 抽出 metadata snapshot（14 unit）
+2. `d98f2a4` A2 — `slashCommandRpc.ts` list/execute WS RPC + daemonCli dispatch（10 unit）
+3. `78ab408` A3 — `GET /api/slash-commands` REST + `slashCommandStore` zustand + filterCommandsForAutocomplete（12 unit）
+4. `546a0f0` A4 — `InputBar.tsx` 改吃 store + 三色 Badge + 移除「未知當訊息送」fallback
+5. `3cb0bee` B1 — Prompt 命令真注入 broker.queue（flattenContentBlocksToText + stub ToolUseContext）
+6. `5acd9e0` B2 — Local 命令真執行 cmd.load().call() + WS execute/executeResult ChatView frame handler
+7. `57ddee5` C1 — `uiStore.ts` + ContextPanel 受控 tab + ChatView 收 web-redirect 切 tab（3 unit）
+8. `f0fc07b` D1 — `commandDispatcherStore` + `CommandDispatcher.tsx` + `GenericLocalJsxModal.tsx` + Layout mount（4 unit）
+9. `0690c16` D2 — `commandCategory.ts` 6 類分類（config/memory/session/project/agent-tool/misc）+ Modal 顯示分類 label + hint + relatedTab 跳轉按鈕（8 unit）
++ E1（本 commit）— Section M6 E2E + TODO 收尾
+
+**新模組**：
+- daemon 端：`src/daemon/slashCommandRegistry.ts`（projectCommand / projectCommands / getSlashCommandMetadataSnapshot / summarizeSnapshot + WEB_TAB_REDIRECTS）+ `slashCommandRpc.ts`（list / execute handler + flattenContentBlocksToText + makeStubLocalContext）
+- web 端：`web/src/store/{slashCommandStore,uiStore,commandDispatcherStore}.ts`、`web/src/components/slash/{CommandDispatcher,GenericLocalJsxModal,commandCategory}.{ts,tsx}`
+
+**改動既有**：
+- `src/daemon/daemonCli.ts` — `slashCommand.list/execute` 兩個 dispatch 分支（before web.control）
+- `src/web/restRoutes.ts` — `GET /api/slash-commands?projectId=` endpoint（fallback default cwd 不報錯）
+- `web/src/api/{client,types,ws}.ts` — `WebSlashCommandMetadata` / `SlashCommandExecuteFrame` / `SlashCommandExecuteResultEvent` 對外 schema
+- `web/src/components/chat/InputBar.tsx` — 統一所有非 LOCAL_ACTION 命令走 onSlashExecute；dropdown 加 Badge 三色（default=runnable / secondary=web tab / outline=jsx）
+- `web/src/components/chat/ChatView.tsx` — pendingSlashRef 改 `{name, args}` tuple；frame handler 5 種 result kind 各自處理（text→toast.success / prompt-injected→toast.success / skip→toast.info / web-redirect→setRightTab + toast.info / jsx-handoff→openCommandDispatcher）
+- `web/src/components/rightPanel/ContextPanel.tsx` — uncontrolled `defaultValue` 改 controlled `value/onValueChange` 讀寫 useUiStore
+- `web/src/pages/Layout.tsx` — 全域 mount `<CommandDispatcher />`
+
+**對外 frame 協議**：
+```jsonc
+// client → daemon
+{ "type": "slashCommand.list", "requestId": "..." }
+{ "type": "slashCommand.execute", "requestId": "...", "projectId": "...", "name": "init", "args": "" }
+
+// daemon → client
+{ "type": "slashCommand.listResult", "requestId": "...", "ok": true, "commands": [...] }
+{ "type": "slashCommand.executeResult", "requestId": "...", "ok": true,
+  "result": { "kind": "text" | "prompt-injected" | "jsx-handoff" | "web-redirect" | "skip", ... } }
+```
+
+**ADR-018（新）**：通用 `slashCommand.execute` 走單一 WS RPC frame、回 5 種 result kind，由 web 端 frame handler 路由到對應 UI 行為（toast / setRightTab / openCommandDispatcher）。理由：(a) 87 個命令各開 RPC 維護成本爆表；(b) 三類 webKind（runnable/jsx-handoff/web-redirect）的處理邏輯只在 daemon 跟 web 各 1 處集中；(c) 新 plugin / skill 命令自動就在 list 結果出現，不需另寫程式碼；(d) jsx-handoff 由 web 端查 store metadata 而非 daemon 端塞 React node — 因為 daemon 是 headless。
+
+**ADR-019（新）**：D 階段先做框架（GenericLocalJsxModal 顯示 metadata + 分類 hint + TUI fallback 引導），48 個 local-jsx 的真 per-command React port 推遲到 M-WEB-SLASH-D-FULL 後續 milestone。理由：完整 port 48 個元件需 6-10 天工作量、每個都要對 ink TUI 互動研究；本 milestone 主要交付物（87 個命令在 web 都可被觸發 + 顯示有意義回饋 + ChatView 收到 result 後 dispatch 正確）已達；CommandDispatcher.tsx 的 switch 點預留給 D-FULL 逐個替換不影響其他模組。
+
+**測試**：daemon 24 + web 31 = **55 unit tests** 全綠；E2E Section M6 PASS（M6.1 + M6.2 自動化、M6.3 manual sanity skip）；既有 232 web tests + 200+ daemon tests 全綠（vision-locate 1 pre-existing fail 與本 milestone 無關）。`bun run typecheck:web` + `build:web`（478 KB JS）+ `build:dev` 全綠；`./cli -p hello` 冒煙過。
+
+**踩坑 / 教訓**：
+1. **TS 不在 arrow callback 內 narrow `f.result?.name`**：`SlashCommandExecutionResultPayload` 是 union，必須先 `const handoffName = f.result.name` 才能用，否則 TS error TS2339 'Property name does not exist on { kind: text, value: string }'
+2. **InputBar 原本 hardcode 5 個 + 「不認得當訊息送」fallback** — 移除 fallback 後新命令出現要先 `useSlashCommandStore.refresh()` 強制重拉，否則 5min cache 內 / 命令 dropdown 不會出現；目前 ensureLoaded 第一次顯示 dropdown 時拉，正常使用流程沒問題
+3. **ContextPanel 從 uncontrolled 改 controlled** — `defaultValue="overview"` 改 `value/onValueChange` 後測試初值要 reset useUiStore；之前測試環境 globally mock setState 留下髒資料
+4. **autocomplete 不要 desc 比對**：第一版 filterCommandsForAutocomplete 把 description 含 query 也算 rank-3 hit，導致 `/co` 撈到 `/help`（描述 "show command help" 含 "co"）；改成只看 name/alias prefix
+5. **WS frame `slashCommand.execute` 對 daemon 是 input frame；對 web SDK 視為 ClientFrame**：types.ts 雙邊都要更新，不要只更新 daemon 端
+6. **Prompt 命令的 ToolUseContext stub**：多數 prompt（init/review）忽略 context 沒問題；少數 bundled skills（skillify 讀 sessionMemory）會在 stub 上 throw，handler catch 回 ok=false 'prompt expansion failed: ...'，使用者看到 toast.error 即可知不適用 web
+
+**E2E 跑法**：
+```bash
+bash tests/e2e/decouple-comprehensive.sh slash      # 跑 M6.1 + M6.2（55 unit）+ M6.3 skip
+bash tests/e2e/decouple-comprehensive.sh slashfull  # alias
+```
+
+**核心使用流程（手動驗）**：
+```
+開 web → 輸入 /
+  → dropdown 顯示 87 個命令含三色 badge
+  → 輸入 /help → toast.success 顯示 help 文字（local 真執行）
+  → 輸入 /init → toast.success「已注入」+ chat 開始 turn（prompt 展開）
+  → 輸入 /cron → 右欄切到 Cron tab + toast.info「→ cron tab」
+  → 輸入 /config → 開 GenericLocalJsxModal（標題含 config 分類 badge + 「開 permissions tab」按鈕）
+  → 輸入 /xyz → toast.error「未知 slash 命令」
+```
+
+**未做（→ 後續 milestone）**：
+- `M-WEB-SLASH-D-FULL`：48 個 local-jsx 各自的真 React port（取代 GenericLocalJsxModal，逐個按 ink TUI 互動等價）
+- TUI 端反向「該命令請去 web 用」提示
+- Slash command chord 快捷鍵
+- Skills / MCP dynamic commands hot-reload
+
+---
+
 ### 2026-04-26 — M-WEB-SHADCN：Web UI 換成 shadcn/ui + tweakcn Light Green 主題（big-bang）
 
 **範圍**：把 `web/`（Phase 1-4 後的 Discord 風 daemon Web UI，~30 個元件）一次全部換成 [shadcn/ui](https://github.com/shadcn-ui/ui)（Radix + Tailwind + cva）+ [tweakcn Light Green](https://tweakcn.com/themes/cmlhfpjhw000004l4f4ax3m7z)。light/dark 雙主題 + ThemeToggle。`/api`、`/ws` schema、6 個 zustand store、daemon TS 端零修改。完整計畫：`~/.claude/plans/web-ui-https-github-com-shadcn-ui-ui-cosmic-platypus.md`。

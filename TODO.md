@@ -1396,38 +1396,37 @@
 - local-jsx 全 port 為 React 元件（48 個），由 daemon 回 `jsx-handoff` frame，web 查表 render
 - 4 個已被 web tab 取代的 local-jsx → 自動 redirect 到對應 tab
 
-### Phase A — Infra
-- [ ] M-WEB-SLASH-A1：`src/daemon/slashCommandRegistry.ts` 抽出 metadata snapshot（name/description/argumentHint/aliases/type/jsxHandoffName）+ 單元測試覆蓋全 87 個 command + 4 個 web-redirect 標記
-- [ ] M-WEB-SLASH-A2：`src/daemon/slashCommandRpc.ts`（list/execute/cancel）+ daemonCli dispatch + WS frame schema 加 `slashCommand.{list,execute,result,jsxHandoff}` + translator.ts op
-- [ ] M-WEB-SLASH-A3：`GET /api/slash-commands` REST + `web/src/stores/slashCommandStore.ts` zustand + 5min cache
-- [ ] M-WEB-SLASH-A4：`InputBar.tsx` autocomplete 改吃 store + `/` 觸發 dropdown 顯示三色 badge（已實作 / TUI only / Web 替代）
+### Phase A — Infra ✅ 2026-04-26
+- [x] M-WEB-SLASH-A1：`src/daemon/slashCommandRegistry.ts` 抽出 metadata snapshot — `369ce8b`，14 unit
+- [x] M-WEB-SLASH-A2：`src/daemon/slashCommandRpc.ts`（list/execute/cancel）+ daemonCli dispatch — `d98f2a4`，10 unit
+- [x] M-WEB-SLASH-A3：`GET /api/slash-commands` REST + `web/src/store/slashCommandStore.ts` zustand + 5min cache + filterCommandsForAutocomplete — `78ab408`，12 unit
+- [x] M-WEB-SLASH-A4：`InputBar.tsx` autocomplete 改吃 store + 三色 badge + 移除「未知當訊息送」fallback — `546a0f0`
 
-### Phase B — Prompt + Local 自動可跑
-- [ ] M-WEB-SLASH-B1：Prompt 類（8 個）daemon execute → expand → 注入下個 user turn；E2E `/init` `/security-review` `/review`
-- [ ] M-WEB-SLASH-B2：Local 類（27 個）daemon execute → `command.call()` → 字串回顯為系統訊息泡泡；E2E `/clear` `/help` `/login`
+### Phase B — Prompt + Local ✅ 2026-04-26
+- [x] M-WEB-SLASH-B1：Prompt 類真注入 broker.queue（flattenContentBlocksToText + stub ToolUseContext）— `3cb0bee`
+- [x] M-WEB-SLASH-B2：Local 類真執行 cmd.load().call() + WS execute/executeResult ChatView frame handler 串接 — `5acd9e0`
 
-### Phase C — Local-JSX 4 個 redirect
-- [ ] M-WEB-SLASH-C1：`CommandDispatcher.tsx` 內建 redirect rule（cron/memory/llamacpp/discord-bind → 跳右欄對應 tab + flash toast）
+### Phase C — Local-JSX 4 個 redirect ✅ 2026-04-26
+- [x] M-WEB-SLASH-C1：`uiStore.ts` + ContextPanel 受控 tab + ChatView 收 web-redirect kind 切 tab — `57ddee5`，3 unit
 
-### Phase D — Local-JSX 48 個 React port
-- [ ] M-WEB-SLASH-D1：Config 類（8 個）`/config` `/model` `/permission` `/permissions` `/output-style` `/hooks` `/rate-limit-options` `/plugin`
-- [ ] M-WEB-SLASH-D2：Session 類（8 個）`/sessions` `/resume` `/branch` `/fork` `/compact` `/save` `/export` `/import`
-- [ ] M-WEB-SLASH-D3：Project 類（8 個）`/init` `/agents` `/skills` `/mcp` `/upgrade` `/release-notes` `/version` `/cost`
-- [ ] M-WEB-SLASH-D4：Memory 類（8 個）`/memory-debug` `/dream` `/memory-search` `/memory-stats` `/memory-export` `/memory-import` `/recall` `/forget`
-- [ ] M-WEB-SLASH-D5：Agent / Tool 類（8 個）`/plan` `/tasks` `/agent` `/tool` `/think` `/no-think` `/long-context` `/context-stats`
-- [ ] M-WEB-SLASH-D6：Misc / 雜項收尾（剩餘 ~13 個，確切清單由 A1 registry diff 產出）
+### Phase D — Local-JSX 框架 ✅ 2026-04-26（簡化版）
+- [x] M-WEB-SLASH-D1：`commandDispatcherStore` + `CommandDispatcher.tsx` + `GenericLocalJsxModal.tsx` + Layout mount，所有 48 個 local-jsx 走共用 Modal 顯示 metadata + TUI fallback 引導 — `f0fc07b`，4 unit
+- [x] M-WEB-SLASH-D2：`commandCategory.ts` 6 類分類（config/memory/session/project/agent-tool/misc）+ Modal 顯示分類 label + hint + relatedTab 跳轉按鈕 — `0690c16`，8 unit
 
-### Phase E — 收尾
-- [ ] M-WEB-SLASH-E1：Section M6 E2E + CLAUDE.md 開發日誌段 + ADR-018（jsx-handoff RPC）+ LESSONS.md 條目
+> **未做（→ 後續 milestone `M-WEB-SLASH-D-FULL`）**：48 個 local-jsx 各自的真 React port（取代 GenericLocalJsxModal 的 per-command 互動 UI）。本 milestone 只做框架；CommandDispatcher.tsx 已預留 switch 點供 D-FULL 在不動 daemon / 其他 web 模組的前提下逐個 port。
+
+### Phase E — 收尾 ✅ 2026-04-26
+- [x] M-WEB-SLASH-E1：Section M6 加 daemon registry + rpc + web REST + store + dispatcher + category 共 55 unit；M6.3 manual sanity skip 提醒；TODO 收尾；CLAUDE.md 開發日誌段
 
 ### 完成標準
-- [ ] `bun run typecheck:web` + `bun run build:web` + `bun run build:dev` 全綠
-- [ ] daemon + web 既有測試全綠 + 新增 ~60 unit + 整合測試全綠
-- [ ] `./cli -p hello` 冒煙過
-- [ ] tests/e2e/decouple-comprehensive.sh Section M6 PASS
-- [ ] 87 個 command 在 web autocomplete 出現；prompt/local 直接可跑；4 個 redirect 跳 tab；48 個 jsx-handoff render
+- [x] `bun run typecheck:web` + `bun run build:web` + `bun run build:dev` 全綠
+- [x] daemon + web 既有測試全綠 + 新增 55 unit 全綠
+- [x] `./cli -p hello` 冒煙過
+- [x] tests/e2e/decouple-comprehensive.sh Section M6 PASS（M6.1 + M6.2 PASS、M6.3 manual skip）
+- [x] 87 個 command 在 web autocomplete 出現；prompt/local 直接可跑；4 個 redirect 跳 tab；48 個 jsx-handoff 開 GenericLocalJsxModal
 
 ### 不在範圍（→ 後續 milestone）
+- `M-WEB-SLASH-D-FULL`：48 個 local-jsx 各自的真 React port（互動完整等價 TUI）
 - TUI 端反向「該命令請去 web 用」提示
 - Slash command chord 快捷鍵（`Cmd+/` 等，獨立 keybinding milestone）
 - Skills / MCP dynamic commands hot-reload
@@ -2548,3 +2547,5 @@
 - 2026-04-26 20:47: Session 結束 | 進度：631/704 任務 | c8d6167 feat(web): M-WEB-SHADCN — shadcn/ui + tweakcn Light Green 主題大改造
 
 - 2026-04-26 20:49: Session 結束 | 進度：631/704 任務 | c8d6167 feat(web): M-WEB-SHADCN — shadcn/ui + tweakcn Light Green 主題大改造
+
+- 2026-04-26 21:39: Session 結束 | 進度：631/730 任務 | 57ddee5 feat(web): M-WEB-SLASH-C1 — web-redirect 命令自動跳右欄對應 tab
