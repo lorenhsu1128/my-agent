@@ -4,7 +4,11 @@
  * - 預設走相對 URL（同 origin），dev 模式靠 vite proxy 把 /api → daemon
  * - 統一錯誤格式：fail 時 throw `ApiError`，含 status + code + message
  */
-import type { WebProjectInfo, WebSessionInfo } from './types'
+import type {
+  IndexedMessage,
+  WebProjectInfo,
+  WebSessionInfo,
+} from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -79,6 +83,22 @@ export const api = {
     return request(
       `/api/projects/${encodeURIComponent(projectId)}/sessions`,
     )
+  },
+  // M-WEB-22：messages backfill — 從 sessionIndex（FTS5 表）拉某 session 最近 N 條
+  messages: {
+    list(
+      projectId: string,
+      sessionId: string,
+      opts?: { before?: number; limit?: number },
+    ): Promise<{ messages: IndexedMessage[]; sessionId: string }> {
+      const params = new URLSearchParams()
+      if (opts?.before !== undefined) params.set('before', String(opts.before))
+      if (opts?.limit !== undefined) params.set('limit', String(opts.limit))
+      const qs = params.toString()
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/messages${qs ? '?' + qs : ''}`,
+      )
+    },
   },
   // M-WEB-14：cron CRUD
   cron: {

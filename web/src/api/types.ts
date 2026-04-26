@@ -21,10 +21,29 @@ export interface WebSessionInfo {
   sessionId: string
   isActive: boolean
   startedAt: number
+  endedAt?: number
   /** 訊息數（後續 sessionIndex read API 補上後填）。 */
   messageCount?: number
+  /** 第一條 user message snippet — 給 SessionTree 顯示有意義的 label。 */
+  firstUserMessage?: string
   /** 最近一條訊息預覽。 */
   lastMessageSnippet?: string
+  /** 該 session 用的模型（如 'qwen3.5-9b-neo' / 'claude-sonnet-...'）。 */
+  model?: string
+}
+
+/**
+ * M-WEB-22：sessionIndex 表的 row 鏡像（與 src/services/sessionIndex/readApi.ts
+ * `IndexedMessage` 型別保持一致）。/api/.../messages 回的就是這個。
+ */
+export interface IndexedMessage {
+  sessionId: string
+  messageIndex: number
+  role: string
+  timestamp: number
+  toolName: string | null
+  finishReason: string | null
+  content: string
 }
 
 export type TurnSource =

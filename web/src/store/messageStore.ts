@@ -71,6 +71,13 @@ interface MessageState {
   endTurn(sessionId: string, inputId: string, endedAt: number): void
   /** 切 session 時用：清掉某 session 的 in-flight 旗標（若 daemon 還在跑會自動同步）。 */
   clearSession(sessionId: string): void
+  /**
+   * M-WEB-22：以 backfill 結果整段取代 bySession[sessionId]。
+   * 用於切到歷史 session 時從 sessionIndex 一次撈最近 N 條訊息。
+   * 若該 session 後續又收到 turn.event 仍會 append（active session 的 backfill
+   * 之後 daemon push 進來都接得上）。
+   */
+  backfillMessages(sessionId: string, messages: UiMessage[]): void
 }
 
 function ensureArr(s: MessageState, sessionId: string): UiMessage[] {
@@ -190,6 +197,10 @@ export const useMessageStore = create<MessageState>(set => ({
       delete next[sessionId]
       return { bySession: next }
     }),
+  backfillMessages: (sessionId, messages) =>
+    set(s => ({
+      bySession: { ...s.bySession, [sessionId]: messages },
+    })),
 }))
 
 void ensureArr // 保留 helper（型別 reserved）
