@@ -30,6 +30,11 @@ import { getEffectiveWatchdogConfig } from '../llamacppConfig/loader.js'
 import { writeWatchdogConfig } from '../commands/llamacpp/llamacppMutations.js'
 import { existsSync } from 'fs'
 import { resolve as resolvePath } from 'path'
+import {
+  getMessagesBySession,
+  listSessionsForProject,
+  searchProject,
+} from '../services/sessionIndex/index.js'
 
 export interface RestRoutesOptions {
   registry: ProjectRegistry
@@ -163,21 +168,118 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
       }
     }
 
-    // GET /api/projects/:id/sessions
+    // GET /api/projects/:id/sessions — M-WEB-18：sessionIndex 真資料
     {
       const m = /^\/api\/projects\/([^/]+)\/sessions$/.exec(url.pathname)
       if (m && method === 'GET') {
         const id = decodeURIComponent(m[1]!)
         const runtime = registry.getProject(id)
         if (!runtime) return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
-        // Phase 1：暫時只回當前 active session。Full session list（H3 跨 session
-        // 切換）將於 M-WEB-11/M-WEB-18 sessionIndex read API 補上後接入。
-        const current = {
-          sessionId: runtime.sessionHandle.sessionId,
-          isActive: true,
-          startedAt: runtime.lastActivityAt,
+        const limit = Number(url.searchParams.get('limit') ?? '100')
+        const activeSessionId = runtime.sessionHandle.sessionId
+        try {
+          const rows = listSessionsForProject(
+            runtime.cwd,
+            Number.isFinite(limit) ? limit : 100,
+          )
+          const sessions = rows.map(r => ({
+            sessionId: r.sessionId,
+            isActive: r.sessionId === activeSessionId,
+            startedAt: r.startedAt,
+            endedAt: r.endedAt ?? undefined,
+            messageCount: r.messageCount,
+            firstUserMessage: r.firstUserMessage ?? undefined,
+            model: r.model ?? undefined,
+          }))
+          if (!sessions.some(s => s.sessionId === activeSessionId)) {
+            sessions.unshift({
+              sessionId: activeSessionId,
+              isActive: true,
+              startedAt: runtime.lastActivityAt,
+              endedAt: undefined,
+              messageCount: 0,
+              firstUserMessage: undefined,
+              model: undefined,
+            })
+          }
+          return jsonResponse({ sessions, activeSessionId })
+        } catch (e) {
+          // sessionIndex 失敗 graceful fallback 到只回 active
+          return jsonResponse({
+            sessions: [
+              {
+                sessionId: activeSessionId,
+                isActive: true,
+                startedAt: runtime.lastActivityAt,
+              },
+            ],
+            activeSessionId,
+            indexError: e instanceof Error ? e.message : String(e),
+          })
         }
-        return jsonResponse({ sessions: [current], activeSessionId: current.sessionId })
+      }
+    }
+
+    // GET /api/projects/:id/sessions/:sid/messages?before=&limit=100
+    {
+      const m =
+        /^\/api\/projects\/([^/]+)\/sessions\/([^/]+)\/messages$/.exec(
+          url.pathname,
+        )
+      if (m && method === 'GET') {
+        const id = decodeURIComponent(m[1]!)
+        const sid = decodeURIComponent(m[2]!)
+        const runtime = registry.getProject(id)
+        if (!runtime) return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
+        const beforeRaw = url.searchParams.get('before')
+        const limitRaw = url.searchParams.get('limit')
+        const before = beforeRaw !== null ? Number(beforeRaw) : undefined
+        const limit = limitRaw !== null ? Number(limitRaw) : 100
+        try {
+          const messages = getMessagesBySession(runtime.cwd, sid, {
+            before:
+              before !== undefined && Number.isFinite(before)
+                ? before
+                : undefined,
+            limit: Number.isFinite(limit)
+              ? Math.min(Math.max(limit, 1), 500)
+              : 100,
+          })
+          return jsonResponse({ messages, sessionId: sid })
+        } catch (e) {
+          return errorResponse(
+            'MESSAGES_READ_FAILED',
+            e instanceof Error ? e.message : String(e),
+            500,
+          )
+        }
+      }
+    }
+
+    // GET /api/projects/:id/search?q=&limit=50
+    {
+      const m = /^\/api\/projects\/([^/]+)\/search$/.exec(url.pathname)
+      if (m && method === 'GET') {
+        const id = decodeURIComponent(m[1]!)
+        const runtime = registry.getProject(id)
+        if (!runtime) return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
+        const q = url.searchParams.get('q') ?? ''
+        const limitRaw = url.searchParams.get('limit')
+        const limit = limitRaw !== null ? Number(limitRaw) : 50
+        try {
+          const hits = searchProject(
+            runtime.cwd,
+            q,
+            Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 500) : 50,
+          )
+          return jsonResponse({ hits, query: q })
+        } catch (e) {
+          return errorResponse(
+            'SEARCH_FAILED',
+            e instanceof Error ? e.message : String(e),
+            500,
+          )
+        }
       }
     }
 
@@ -463,6 +565,37 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
           projectId: runtime.projectId,
         })
         return jsonResponse({ ok: true })
+      }
+    }
+
+    // ----- M-WEB-20：PNG QR code endpoint（給瀏覽器顯示給手機掃）-----
+    if (url.pathname === '/api/qr' && method === 'GET') {
+      const target = url.searchParams.get('url')
+      if (!target) {
+        return errorResponse('MISSING_URL', 'query.url required', 400)
+      }
+      try {
+        const { toBuffer } = await import('qrcode')
+        const png = await toBuffer(target, {
+          type: 'png',
+          errorCorrectionLevel: 'M',
+          margin: 2,
+          width: 320,
+        })
+        return new Response(png, {
+          status: 200,
+          headers: {
+            'content-type': 'image/png',
+            'cache-control': 'public, max-age=300',
+            'access-control-allow-origin': '*',
+          },
+        })
+      } catch (e) {
+        return errorResponse(
+          'QR_FAILED',
+          e instanceof Error ? e.message : String(e),
+          500,
+        )
       }
     }
 

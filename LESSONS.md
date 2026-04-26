@@ -25,6 +25,44 @@
 
 ---
 
+## Web / HTTP / WS 相關
+
+### Bun directConnectServer 是 newline-delimited JSON — 測試送 frame 必須加 \\n
+- **發生什麼事**：M-WEB Phase 1 E2E 寫 thin-client WS 測試送 `web.control` op=status frame，server 完全沒回覆 → timeout 5s。試過更長 timeout、確認 isWebControlRequest 邏輯、確認 webController 已初始化都沒解。
+- **根本原因**：`src/server/directConnectServer.ts:195-203` 的 message handler 用 `buffer.split('\n')` + `pop()` 留最後一個 incomplete fragment 在 buffer。測試送 `JSON.stringify(...)` 沒加 `\n` → split 出單一 element → pop 後 lines 是空陣列 → 永遠不處理。
+- **正確做法**：寫 thin-client / 測試 client 送 frame 一律 `JSON.stringify(...) + '\n'`。`src/repl/thinClient/thinClientSocket.ts:199` 是同樣寫法。注意 web `/ws` 那邊是另一條路徑（wsServer.ts），不需要 `\n` 終結（一個 WS message 就是一個 frame）。
+- **相關檔案**：`src/server/directConnectServer.ts:195`、`tests/integration/web/daemon-web-e2e.test.ts`。
+- **日期**：2026-04-26
+
+### addCronTask 不收 dir 參數 — daemon 多 project 場景寫到錯位置
+- **發生什麼事**：M-WEB-14 在 REST `/api/projects/:id/cron` POST 走 `handleCronMutation` op=create，cron 檔寫到 daemon bootstrap state 的 STATE.projectRoot 而非 runtime.cwd。多 project 場景下使用者在 web 對 project-A 加 cron，結果寫到 project-B 的 cron-tasks.json。
+- **根本原因**：`src/utils/cronTasks.ts:474` 的 `addCronTask(cron, prompt, recurring, durable, agentId, extras)` 沒收 `dir` 參數；內部呼 `readCronTasks() + writeCronTasks()` 都走 default `getProjectRoot()`，而 daemon `bootstrapDaemonContext` 的 finally 會把 STATE.projectRoot 還原 — 所以 REST handler 跑時 STATE.projectRoot 不一定是當前 runtime.cwd。
+- **正確做法**：M-WEB-14 改在 restRoutes 內直接走 `readCronTasks(runtime.cwd)` + 手寫 task object + `writeCronTasks(tasks, runtime.cwd)` bypass `addCronTask`。長期解：給 `addCronTask` 加 `dir` 參數，影響 `cronCreateTool` / `assistant/install.ts` 等 caller，獨立改動立 M-CRON-DIR-PARAM milestone。
+- **相關檔案**：`src/utils/cronTasks.ts:474`、`src/web/restRoutes.ts`（M-WEB-14 bypass）、`src/daemon/cronMutationRpc.ts:175`。
+- **日期**：2026-04-26
+
+### Bun.serve port 衝突訊息不是 EADDRINUSE
+- **發生什麼事**：M-WEB-3 寫 port probing helper 預期 `EADDRINUSE` 字串，第一次測試 port 占用第二個 server 噴 `HttpServerStartError` 直接 fail 而非自動 +1。
+- **根本原因**：Bun（至少 1.3.x）在 port 衝突時 throw 的訊息是 `Failed to start server. Is port X in use?`，不是 Node 慣例的 EADDRINUSE。
+- **正確做法**：`isPortInUseError()` 檢查多種訊息：`eaddrinuse / address in use / already in use / already bound / failed to start server.*port`。
+- **相關檔案**：`src/web/httpServer.ts:isPortInUseError`。
+- **日期**：2026-04-26
+
+### `import.meta.url` 在 Windows 帶前導 `/C:`
+- **發生什麼事**：M-WEB-3 `resolveDefaultWebRoot()` 用 `new URL('.', import.meta.url).pathname` 在 Windows 拿到 `/C:/Users/.../src/web/`，多了個前導斜線；直接 join 出來的 web/dist 路徑變成 `/C:\\...` 失敗。
+- **正確做法**：偵測 `process.platform === 'win32' && /^\/[a-zA-Z]:/.test(here)` → `here.slice(1)` strip 掉前導 `/`。
+- **相關檔案**：`src/web/staticServer.ts:resolveDefaultWebRoot`。
+- **日期**：2026-04-26
+
+### TS Edit 連續多次同檔 race「File modified since read」
+- **發生什麼事**：M-WEB Phase 3 連續對 `restRoutes.ts` 做 5+ 次 Edit，第三次起被擋「File has not been read yet」或「modified since read」。
+- **根本原因**：post-tool-use linter（例如 typecheck hook）改 mtime / `\r\n` 換行轉換觸發；harness 視為外部 modify。
+- **正確做法**：每次 Edit 失敗後先重 Read 該檔再 Edit；別連續猛改。
+- **相關檔案**：通用問題，無特定檔案。
+- **日期**：2026-04-26
+
+---
+
 ## Provider 整合相關
 
 ### 新增 APIProvider enum 值時必須補全所有「provider-aware lookup」fallback

@@ -239,6 +239,95 @@ export CLAUDE_CONFIG_DIR=~/.claude
 
 ---
 
+### 2026-04-26 — M-WEB：Discord 風格 Web UI 嵌入 daemon（Phase 1-4 全完）
+
+**範圍**：在 daemon 內嵌第三個前端（TUI / Discord 之外），瀏覽器透過 LAN IP 連入即可使用 Discord 風三欄式 UI。TUI / Discord / Web 三端對同一 ProjectRuntime 雙向同步（送訊息、permission 批准、cron / memory / llamacpp 設定任一端均同步）。完整計畫：`docs/plans/M-WEB.md`、使用者指南：`docs/web-mode.md`。
+
+**架構決策（與使用者 12 輪對齊鎖定）**：F3 嵌在 daemon 內額外開 port、K2 web 內部 protocol bridge、G1 完全 React 重寫、H3 跨 session 切換、J2 Phase A 含 chat、L2 右欄 Discord context-panel、M1 兩層樹、Q2 web add/remove project、R3 右欄全 CRUD、S3 雙向 session 建立、T1 一刀切、V3 web.jsonc 控 port + autoStart、W2 預設 0.0.0.0 無認證。
+
+**4 階段 commit 序列**：
+1. `b07c93e` Phase 1 — Infra（scaffold / config / 第二 Bun.serve / WS server / gateway / translator / `/web` 指令 / E2E 4/4）
+2. `82da68e` Phase 2 — Chat 核心（三欄 layout / project & session 兩層樹 / message 渲染 / WS streaming / InputBar + 5 slash / permission first-wins / E2E 4/4）
+3. `3708551` Phase 3 — 右欄全 CRUD（cron / memory / llamacpp / discord / permissions tabs / E2E 5/5）
+4. （本 commit）Phase 4 — sessionIndex backfill + FTS search + QR endpoint + docs/web-mode.md / E2E 6/6
+
+**新模組**：
+- `src/webConfig/` 6 檔（schema / paths / loader / seed / bundledTemplate / index）— `~/.my-agent/web.jsonc` 設定
+- `src/web/` 8 檔（httpServer / staticServer / wsServer / browserSession / webGateway / translator / restRoutes / webController / webTypes）— daemon 端 web infrastructure
+- `src/daemon/webRpc.ts` — `/web start/stop/status` WS RPC handler
+- `src/services/sessionIndex/readApi.ts` — getMessagesBySession / listSessionsForProject / searchProject
+- `src/commands/web/` 4 檔（index / web.tsx / WebManager.tsx / argsParser.ts）— `/web` master TUI
+- `web/` 獨立 Vite + React 18 + TS + Tailwind + zustand 專案（30+ 檔）
+
+**改造既有**：
+- `src/server/clientRegistry.ts` 加 `'web'` ClientSource
+- `src/daemon/inputQueue.ts` `defaultIntentForSource('web')='interactive'`
+- `src/daemon/daemonCli.ts` 接 webController + web.control RPC dispatch + web.statusChanged broadcast
+- `src/repl/thinClient/fallbackManager.ts` 加 sendWebControl + WebControlStatus type
+- `src/hooks/useDaemonMode.ts` export sendWebControlToDaemon
+- `src/commands.ts` 註冊 `/web`
+- `package.json` 加 `build:web` / `dev:web` / `typecheck:web`
+
+**REST + WS 對外協議**：
+- REST：`/api/health`、`/api/version`、`/api/projects` (CRUD)、`/api/sessions` (list)、`/api/messages` (backfill)、`/api/search` (FTS)、`/api/cron` (CRUD)、`/api/memory` (read+delete)、`/api/llamacpp/watchdog`、`/api/qr`（PNG QR code）
+- WS：`/ws` 端點，broadcast 涵蓋 turn 串流、permission lifecycle、cron / memory / llamacpp / project / web 狀態變更
+
+**測試**：~210 個新 tests 全綠：webConfig 19 + staticServer 18 + httpServer 10 + wsServer 10 + webGateway 15 + translator 32 + webController 9 + restRoutes 15 + restRoutes-cron 3 + Phase 1 E2E 4 + Phase 2 E2E 4 + Phase 3 E2E 5 + Phase 4 E2E 6。daemon 整合 222/222 不受影響；frontend `bun run build:web` 78 modules / 205.71 KB JS / 13.26 KB CSS。
+
+**ADR-016（新）**：F3（嵌在 daemon 內）+ K2（內部 protocol bridge）+ G1（完全 React 重寫）的組合決策。F3 換來零 IPC + broker reference 共用、daemon 死 web 也死的取捨；K2 的乾淨對外 schema 讓 browser code 不被 daemon 內部協議改動牽連；G1 長期維護乾淨但前期投入大，已收斂 4 phases / ~10 週工作量。WS frame 命名採點分隔（`turn.start`、`project.added`、`permission.pending`），與 daemon thin-client camelCase frame（`turnStart`、`permissionRequest`）解耦避免 schema 演化彼此牽連。
+
+**踩坑 / 教訓**：
+1. **Bun directConnectServer 是 newline-delimited JSON** — 測試送 frame 必須加 `\n` terminator，否則 server 把它當 buffer 的「未完成」訊息留在後面。
+2. **addCronTask 不收 dir 參數** — daemon 多 project 場景下會走 bootstrap state 的 STATE.projectRoot 寫到錯位置；M-WEB-14 改直接走 `readCronTasks(dir) + writeCronTasks(dir)` bypass。長期應改 addCronTask API（影響 cronCreateTool / 全部 caller 獨立改動）。
+3. **Bun.serve port 衝突訊息** — 是 `Failed to start server. Is port X in use?`（而非 EADDRINUSE）；port probing helper 必須匹配此字串。
+4. **Web/dist 路徑解析** — `import.meta.url` 在 Windows 帶前導 `/C:` 必須 strip；用 `URL('.', import.meta.url).pathname` + drive letter 處理。
+5. **單一 Bun.serve 不夠用** — daemon 既有 thin-client server (loopback bearer auth) 與 web server (LAN unauth) 認證模型 / 故障域不同，必須開第二個 Bun.serve listener；不複用 fetch 路由分支。
+6. **Trigram FTS5 最少 3 字元** — `searchProject` query.length < 3 直接回空，避免 trigram tokenizer 噴 warning。
+7. **TS Edit 連續多次同檔可能 race**：linter 觸發 mtime 變更導致「File modified since read」；解法：重 Read + 重 Edit。
+
+**E2E 跑法**：
+```bash
+# Phase 1：基礎 + WS handshake
+bun test tests/integration/web/daemon-web-e2e.test.ts
+
+# Phase 2：REST projects + 多 client 廣播
+bun test tests/integration/web/phase2-e2e.test.ts
+
+# Phase 3：cron / memory / llamacpp CRUD
+bun test tests/integration/web/phase3-e2e.test.ts
+
+# Phase 4：sessionIndex + FTS + QR
+bun test tests/integration/web/phase4-e2e.test.ts
+
+# 全部 web 測試一次跑
+bun test tests/integration/web/
+```
+
+**核心 opt-in 路徑**：
+```bash
+# 1. 編輯 web.jsonc：{"enabled": true, "autoStart": true}
+my-agent daemon start
+
+# 2. 開 browser
+http://<lan-ip>:9090
+
+# 或 REPL 內快捷
+/web start
+/web open
+/web qr
+```
+
+**未做（後續 milestone）**：
+- M-WEB-MOBILE（手機 responsive 折三欄）
+- M-WEB-AUTH（bearer token / 帳號登入）
+- M-WEB-NOTIF（browser native notification）
+- M-WEB-15b（Memory edit wizard + injection 掃描 client 端）
+- M-WEB-16b（Llamacpp slot inspector 即時 polling）
+- M-WEB-17b（Discord admin RPC 接 web）
+- M-WEB-SLASH-FULL（剩 80+ slash command 的 React-DOM port）
+
+---
+
 ### 2026-04-26 — M-LLAMACPP-WATCHDOG：防 llama.cpp 失控生成的 client-side 守門
 
 **範圍**：M-MEMTUI 開發過程診斷出 llama.cpp 持續運算 bug — qwen3.5-9b-neo `<think>` reasoning loop 不收尾跑滿 max_tokens=32000（30+ min），加上兩個 cli 孤兒 process hold slot。my-agent 既有 `AbortSignal` 只在 Esc 時才觸發、背景呼叫無人能中斷。本 milestone 補三層 watchdog（**預設關閉**，opt-in），加 `/llamacpp` master TUI（Hybrid args + TUI），加 daemon broadcast 多 REPL 同步。完整計畫：`docs/plans/M-LLAMACPP-WATCHDOG.md`、使用者指南：`docs/llamacpp-watchdog.md`。

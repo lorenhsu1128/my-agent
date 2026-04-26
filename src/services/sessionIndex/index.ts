@@ -29,3 +29,11 @@ export {
   type ListSessionsOptions,
   type SessionSummary,
 } from './delete.js'
+export {
+  getMessagesBySession,
+  listSessionsForProject,
+  searchProject,
+  type IndexedMessage,
+  type SearchHit,
+  type SessionRow,
+} from './readApi.js'
