@@ -80,4 +80,132 @@ export const api = {
       `/api/projects/${encodeURIComponent(projectId)}/sessions`,
     )
   },
+  // M-WEB-14：cron CRUD
+  cron: {
+    list(projectId: string): Promise<{ tasks: WebCronTask[] }> {
+      return request(`/api/projects/${encodeURIComponent(projectId)}/cron`)
+    },
+    create(
+      projectId: string,
+      payload: {
+        cron: string
+        prompt: string
+        recurring?: boolean
+        name?: string
+        preRunScript?: string
+        modelOverride?: string
+      },
+    ): Promise<{ task: WebCronTask; taskId: string }> {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/cron`,
+        { method: 'POST', json: payload },
+      )
+    },
+    pause(projectId: string, taskId: string) {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/cron/${encodeURIComponent(taskId)}`,
+        { method: 'PATCH', json: { op: 'pause' } },
+      )
+    },
+    resume(projectId: string, taskId: string) {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/cron/${encodeURIComponent(taskId)}`,
+        { method: 'PATCH', json: { op: 'resume' } },
+      )
+    },
+    update(
+      projectId: string,
+      taskId: string,
+      patch: Partial<WebCronTask>,
+    ): Promise<{ task: WebCronTask }> {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/cron/${encodeURIComponent(taskId)}`,
+        { method: 'PATCH', json: { op: 'update', patch } },
+      )
+    },
+    delete(projectId: string, taskId: string): Promise<{ ok: boolean }> {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/cron/${encodeURIComponent(taskId)}`,
+        { method: 'DELETE' },
+      )
+    },
+  },
+  // M-WEB-15：Memory（read + delete；編輯 wizard M-WEB-15b 補）
+  memory: {
+    list(projectId: string): Promise<{ entries: WebMemoryEntry[] }> {
+      return request(`/api/projects/${encodeURIComponent(projectId)}/memory`)
+    },
+    body(projectId: string, absolutePath: string): Promise<{ body: string }> {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/memory/body?path=${encodeURIComponent(absolutePath)}`,
+      )
+    },
+    delete(
+      projectId: string,
+      payload: { kind: string; absolutePath: string; filename?: string },
+    ): Promise<{ ok: boolean }> {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/memory`,
+        { method: 'DELETE', json: payload },
+      )
+    },
+  },
+  // M-WEB-16：Llamacpp watchdog（daemon 全域；不需 projectId）
+  llamacpp: {
+    getWatchdog(): Promise<{ config: WebWatchdogConfig }> {
+      return request('/api/llamacpp/watchdog')
+    },
+    setWatchdog(config: WebWatchdogConfig): Promise<{ ok: boolean }> {
+      return request('/api/llamacpp/watchdog', {
+        method: 'PUT',
+        json: config,
+      })
+    },
+  },
+}
+
+export interface WebMemoryEntry {
+  kind:
+    | 'auto-memory'
+    | 'user-profile'
+    | 'project-memory'
+    | 'local-config'
+    | 'daily-log'
+  displayName: string
+  description: string
+  absolutePath: string
+  filename?: string
+  sizeBytes: number
+  mtimeMs: number
+  userProfileScope?: 'global' | 'project'
+}
+
+export interface WebWatchdogConfig {
+  enabled: boolean
+  interChunk: { enabled: boolean; gapMs: number }
+  reasoning: { enabled: boolean; blockMs: number }
+  tokenCap: {
+    enabled: boolean
+    default: number
+    memoryPrefetch: number
+    sideQuery: number
+    background: number
+  }
+}
+
+// 輕量鏡像（避免 import daemon types）。寫入欄位才列；讀回的 task 含更多 optional 欄位。
+export interface WebCronTask {
+  id: string
+  cron: string
+  prompt: string
+  createdAt: number
+  recurring?: boolean
+  name?: string
+  state?: 'scheduled' | 'paused' | 'completed'
+  lastFiredAt?: number
+  lastStatus?: 'ok' | 'error'
+  pausedAt?: string
+  scheduleSpec?: { kind: 'cron' | 'nl'; raw: string }
+  preRunScript?: string
+  modelOverride?: string
 }

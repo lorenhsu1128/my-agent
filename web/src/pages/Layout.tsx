@@ -1,7 +1,7 @@
 import { useAppData } from '../hooks/useAppData'
 import { ProjectList } from '../components/leftPanel/ProjectList'
 import { ChatView } from '../components/chat/ChatView'
-import { ContextPanelPlaceholder } from '../components/rightPanel/ContextPanelPlaceholder'
+import { ContextPanel } from '../components/rightPanel/ContextPanel'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { PermissionModal } from '../components/chat/PermissionModal'
 
@@ -13,7 +13,7 @@ export function Layout() {
       <div className="flex-1 flex min-h-0">
         <ProjectList />
         <ChatView />
-        <ContextPanelPlaceholder />
+        <ContextPanel />
       </div>
       <PermissionModal />
     </div>

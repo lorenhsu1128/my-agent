@@ -84,7 +84,15 @@ export function createWebServerController(
         registry: opts.registry,
         browserSessions: ws.registry,
       })
-      const rest = createRestRoutes({ registry: opts.registry })
+      const rest = createRestRoutes({
+        registry: opts.registry,
+        broadcastToProject: (projectId, payload) => {
+          ws.registry.broadcast(JSON.stringify(payload), projectId)
+        },
+        broadcastAll: payload => {
+          ws.registry.broadcastAll(JSON.stringify(payload))
+        },
+      })
       const http = await startImpl({
         host: cfg.bindHost,
         port: cfg.port,

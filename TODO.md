@@ -1269,11 +1269,12 @@
 - [x] M-WEB-13：PermissionModal（pending 從 permissionStore；first-wins race — daemon broadcast permission.resolved 清 modal）+ permission mode 經 WS 傳；usePermissionStore + permission.modeChanged frame 訂閱
 - [x] Phase 2 E2E：`tests/integration/web/phase2-e2e.test.ts` 4/4 — GET /api/projects 看到 default project / POST 載入 + project.added broadcast / DELETE + project.removed broadcast / GET sessions 看到 active session / 多 WS client 同步廣播
 
-### Phase 3 — 右欄 R3 全 CRUD（3-4 週）
-- [ ] M-WEB-14：`/api/cron` REST + CronTab + CronCreateForm + CronScheduleEditor（reuse `cronPickerLogic`）
-- [ ] M-WEB-15：`/api/memory` REST + MemoryTab 5-tab（reuse `memoryManagerLogic`）+ MemoryEditWizard + injection 警告
-- [ ] M-WEB-16：`/api/llamacpp/config` REST + LlamacppTab（reuse `llamacppManagerLogic.WATCHDOG_FIELDS`）+ slot inspector 即時 polling
-- [ ] M-WEB-17：DiscordTab（bind/unbind/whitelist via discordBindRpc/discordAdminRpc）+ PermissionsTab（mode + recent requests log）
+### Phase 3 — 右欄 R3 全 CRUD（3-4 週）✅ 2026-04-26 完成
+- [x] M-WEB-14：`/api/cron` REST（GET list / POST create / PATCH pause/resume/update / DELETE）+ CronTab + 內嵌 create form（cron + name + prompt）+ pause/resume/delete buttons + WS cron.tasksChanged 訂閱自動 refresh — 3 E2E tests
+- [x] M-WEB-15：`/api/memory` REST（GET list / GET body / DELETE 軟刪到 .trash/）+ MemoryTab 按 kind 分組（AUTO/USER/PROJECT/LOCAL/LOG）+ View modal + 條件性 Delete + path traversal 防護（path 必須在 entries 列表內 → 403 PATH_NOT_ALLOWED）。Edit wizard 留 M-WEB-15b
+- [x] M-WEB-16：`/api/llamacpp/watchdog` REST（GET / PUT，daemon 全域不需 projectId）+ LlamacppTab（Master enable + 三層 NestedToggle ABC + 數值欄位編輯 + WS llamacpp.configChanged 訂閱）+ 廣播全 client。Slot inspector 即時 polling 留 M-WEB-16b
+- [x] M-WEB-17：DiscordTab（read-only 引導去 TUI；admin RPC 接 web 留 M-WEB-17b）+ PermissionsTab（4 mode radio + 經 WS permission.modeSet 廣播 + 顯示當前 pending request + attached REPL 計數）
+- [x] Phase 3 E2E：`tests/integration/web/phase3-e2e.test.ts` 5/5 — memory list / memory body 拒 traversal / llamacpp watchdog GET / llamacpp watchdog PUT + 廣播 / cron CRUD + memory 不誤觸；`restRoutes-cron.test.ts` 3/3：empty list、create+broadcast、bad fields rejection
 
 ### Phase 4 — H3 搜尋 + 收尾（1-2 週）
 - [ ] M-WEB-18：`src/services/sessionIndex/` 加 `getMessagesBySession` / `searchProject` read API；上滑 lazy load + FTS 搜尋框
@@ -2364,3 +2365,5 @@
 - 2026-04-26 16:33: Session 結束 | 進度：585/633 任務 | 2bd250a feat(daemon): M-DAEMON-STREAM — daemon 模式 thinking / text 即時 streaming
 
 - 2026-04-26 17:23: Session 結束 | 進度：593/661 任務 | 2bd250a feat(daemon): M-DAEMON-STREAM — daemon 模式 thinking / text 即時 streaming
+
+- 2026-04-26 17:43: Session 結束 | 進度：600/662 任務 | 82da68e feat(web): M-WEB Phase 2 — chat 核心 + 三欄 UI + permission first-wins
