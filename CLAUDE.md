@@ -239,6 +239,84 @@ export CLAUDE_CONFIG_DIR=~/.claude
 
 ---
 
+### 2026-04-26 — M-LLAMACPP-WATCHDOG：防 llama.cpp 失控生成的 client-side 守門
+
+**範圍**：M-MEMTUI 開發過程診斷出 llama.cpp 持續運算 bug — qwen3.5-9b-neo `<think>` reasoning loop 不收尾跑滿 max_tokens=32000（30+ min），加上兩個 cli 孤兒 process hold slot。my-agent 既有 `AbortSignal` 只在 Esc 時才觸發、背景呼叫無人能中斷。本 milestone 補三層 watchdog（**預設關閉**，opt-in），加 `/llamacpp` master TUI（Hybrid args + TUI），加 daemon broadcast 多 REPL 同步。完整計畫：`docs/plans/M-LLAMACPP-WATCHDOG.md`、使用者指南：`docs/llamacpp-watchdog.md`。
+
+**5 階段 commit 序列**：
+1. `ad6e146` Phase 1 — Schema + 三層 watchdog 純函式 + adapter 整合 + 23 unit
+2. `5aa1ee8` Phase 2 — per-call-site max_tokens ceiling + 7 unit
+3. `4bb64fb` Phase 3 — `/llamacpp` master TUI + Hybrid args + daemon broadcast + hot-reload + serve.sh + 36 unit
+4. （本 commit）Phase 4 + 5 — Section L 9 cases + docs
+
+**新模組**：
+- `src/services/api/llamacppWatchdog.ts` — `WatchdogAbortError` class + `tickChunk` state machine + `watchSseStream` async iterator wrapper（含 5s 低頻 timer 模型 silent 時也觸發）
+- `src/commands/llamacpp/{index, llamacpp.tsx, LlamacppManager.tsx, llamacppManagerLogic.ts, llamacppMutations.ts, argsParser.ts}` — master TUI + 純函式 + 寫入 helpers + Hybrid 解析器
+- `src/components/llamacpp/{WatchdogTab.tsx, SlotsTab.tsx}` — 兩個 tab 子組件
+- `src/daemon/llamacppConfigRpc.ts` — daemon WS frame protocol + handler
+- `tests/integration/llamacpp/{watchdog,managerLogic,configMutationRpc,translate-clamp}.test.ts` — 96 unit tests
+- `tests/e2e/_llamacpp{HungSimulator,ManagerInteractive,ConfigRpcClient}.ts` — 3 個 E2E helper
+- `docs/llamacpp-watchdog.md` — 使用者指南
+- `docs/plans/M-LLAMACPP-WATCHDOG.md` — milestone 完整計畫
+
+**改造既有**：
+- `src/llamacppConfig/schema.ts` — 加 `LlamaCppWatchdogSchema` + 子 schema（master + interChunk + reasoning + tokenCap）+ `LlamaCppCallSite` type
+- `src/llamacppConfig/loader.ts` — `getEffectiveWatchdogConfig()` 含 env override（DISABLE > ENABLE > config）；mtime 偵測 hot-reload（cache 比磁碟舊就重讀）
+- `src/services/api/llamacpp-fetch-adapter.ts` — `translateOpenAIStreamToAnthropic` 加 `callSite`、wrap SSE stream with watchdog；`translateRequestToOpenAI` 加 callSite + watchdogCfg、clamp `max_tokens = min(caller, getTokenCap(cfg, callSite))`
+- `src/repl/thinClient/fallbackManager.ts` — 加 `LlamacppConfigMutationPayload` + `sendLlamacppConfigMutation` + frame handlers（mutationResult resolve、configChanged bubble up）
+- `src/hooks/useDaemonMode.ts` — export `sendLlamacppConfigMutationToDaemon`
+- `src/daemon/daemonCli.ts` — dispatch `llamacpp.configMutation` + broadcast `llamacpp.configChanged`（**無 projectId**：daemon 全域狀態，所有 attached client 都收到）
+- `src/commands.ts` — 註冊 `/llamacpp`
+- `scripts/llama/serve.sh` — 加 `--slot-save-path`（`LLAMA_SLOT_SAVE_PATH` env 可覆蓋；自動 mkdir）
+
+**關鍵決策**（與使用者對齊 6 輪）：
+- Q1 不採固定 wall-clock（誤殺率高）
+- Q2 三層分開精準偵測：A 30s / B 120s / C 16000 主 turn / 4000 背景
+- Q3 **預設全部關閉** — opt-in via `/llamacpp` 或 env；master + 該層雙層 enabled AND 才生效
+- Q4 命令合併 `/llamacpp`（master TUI），TAB 1 Watchdog / TAB 2 Slots
+- Q5 UI Hybrid（無參數 TUI / 有參數直套）；持久化雙線（寫 llamacpp.json + adapter hot-reload）
+- Q6 Daemon broadcast `llamacpp.configChanged` mirror cron pattern
+
+**ADR-015**（新）：Watchdog 採三層分層偵測 + hot-reload 而非固定 wall-clock。理由：(a) 固定 wall-clock 對 legit 長 turn 誤殺率太高；(b) 三層各管不同失控模式（A 連線 hung / B reasoning loop / C 失控總量）；(c) 預設關閉避免影響不知情使用者；(d) hot-reload 讓 opt-in 成本極低（不需重啟 daemon）；(e) client 端斷連 → server 自動釋放 slot 是 HTTP 標準行為，比 server 端 cancel 更通用。
+
+**測試**：96 unit tests 全綠（watchdog 23 + translate-clamp 7 + manager 31 + RPC 5 + 既有 30）+ Section L 5 PASS + 1 skip（L9 slot kill 需 server 帶 `--slot-save-path`）。實機驗 L8 daemon broadcast：`A 設 setWatchdog → B 1s 內收 llamacpp.configChanged`。
+
+**踩坑 / 教訓**：
+1. **Bun 1.3 ESM `mock.module()` 替換子模組要 spread 原始 export**（與 M-MEMTUI 同條教訓重現於 configMutationRpc.test.ts）
+2. **ConPTY 在 Windows 把連續空格壓掉** — `/llamacpp` PTY 測試原本 grep `Master enabled` 失敗（變成 `Masterenabled`）；改 `/Master\s*enabled/` regex 即過
+3. **`adapter.ts` 在 stream loop 中 `await import()` watchdog 模組** vs `require()` — `await import` 走 ESM 動態 import 比較乾淨；`require` 在 bun + ESM 也通但需 disable-eslint comment（譯碼用兩種；watchdog SSE 包裝走 dynamic import）
+4. **daemon broadcast 不帶 projectId 是 design decision** — llamacpp config 是 daemon 全域狀態（不 per-project），所有 attached client 都收到 frame；mirror cron 是 per-project，要看清差異
+5. **`getEffectiveWatchdogConfig()` env override 優先序** — `LLAMACPP_WATCHDOG_DISABLE` > `LLAMACPP_WATCHDOG_ENABLE` > config 檔；DISABLE 是 escape hatch 必須最高優先
+
+**E2E Section L 跑法**：
+```bash
+bash tests/e2e/decouple-comprehensive.sh L          # 5 PASS + 1 skip（L9 需 --slot-save-path）
+bash tests/e2e/decouple-comprehensive.sh llamacpp   # alias
+bash tests/e2e/decouple-comprehensive.sh watchdog   # alias
+
+# L8 真 broadcast 驗證：
+./cli-dev daemon start && bash tests/e2e/decouple-comprehensive.sh L && ./cli-dev daemon stop
+```
+
+**核心 opt-in 路徑**：
+```bash
+# 一鍵全開
+/llamacpp watchdog all on
+
+# 或 env var（quick test）
+LLAMACPP_WATCHDOG_ENABLE=1 ./cli
+
+# debug 強制關
+LLAMACPP_WATCHDOG_DISABLE=1 ./cli
+```
+
+**未做（後續 milestone）**：
+- `M-LLAMACPP-NOTHINK` — `/no_think` system prompt trigger + `</think>` stop sequence（prompt-engineering 層補強，與 watchdog 互補）
+- `M-CLI-SIGINT-CLEANUP` — cli SIGINT 時強制斷 fetch（防孤兒 cli process 持續占 slot）
+- GUI dashboard 監控 slot
+
+---
+
 ### 2026-04-26 — M-MEMTUI：`/memory` 全面升級為 5-tab master TUI
 
 **範圍**：把 `/memory` 從「Dialog + spawn $EDITOR」升級成 cron 風格 master-detail TUI（5-tab：auto-memory / USER / project (MY-AGENT.md) / local-config (.my-agent/*.md) / daily-log）。吸收 `/memory-delete` 為 alias（直接進 multi-delete 模式）；補新建（含 frontmatter wizard）+ inline 編 frontmatter + Shift+E spawn `$EDITOR` + 重命名 + 注入掃描 + body 預覽 + 全螢幕 viewer + daemon WS RPC 同步 + 輔助畫面（Session-index rebuild + Trash 還原）。完整計畫：`~/.claude/plans/tui-memory-cron-validated-abelson.md`。

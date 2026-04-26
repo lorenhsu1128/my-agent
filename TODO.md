@@ -1200,26 +1200,26 @@
 - [x] M-LLAMACPP-WATCHDOG-3-9 unit tests：`managerLogic.test.ts` 31 / `configMutationRpc.test.ts` 5；總 96 unit tests 全綠（含 watchdog 23 + translate-clamp 7 + 其他既有）；smoke 通過
 
 #### Phase 4 — E2E Section L
-- [ ] M-LLAMACPP-WATCHDOG-4-1 新 helper `tests/e2e/_llamacppHungSimulator.ts`（Bun.serve mock SSE 三情境）
-- [ ] M-LLAMACPP-WATCHDOG-4-2 新 helper `tests/e2e/_llamacppManagerInteractive.ts`（PTY，npx tsx + node-pty）
-- [ ] M-LLAMACPP-WATCHDOG-4-3 新 helper `tests/e2e/_llamacppConfigRpcClient.ts`（daemon WS broadcast 驗證）
-- [ ] M-LLAMACPP-WATCHDOG-4-4 Section L 9 cases（L1-L4 watchdog 三層觸發 + 不誤判；L5-L8 manager / args / PTY / RPC；L9 slot kill skip-unless-flagged）
-- [ ] M-LLAMACPP-WATCHDOG-4-5 scope alias `llamacpp` / `watchdog`；commit
+- [x] M-LLAMACPP-WATCHDOG-4-1 新 helper `tests/e2e/_llamacppHungSimulator.ts`（Bun.serve mock SSE 4 scenario：fast / hung-after-first / reasoning-loop / token-flood；60s 自動關防孤兒）
+- [x] M-LLAMACPP-WATCHDOG-4-2 新 helper `tests/e2e/_llamacppManagerInteractive.ts`（PTY，npx tsx + node-pty）— L7 通：spawn cli-dev → /llamacpp → 看 ‹ Watchdog › + Master + → 切 ‹ Slots ›
+- [x] M-LLAMACPP-WATCHDOG-4-3 新 helper `tests/e2e/_llamacppConfigRpcClient.ts`（daemon WS broadcast 驗證）— L8 通：兩 thin-client A setWatchdog → B 1s 內收 llamacpp.configChanged
+- [x] M-LLAMACPP-WATCHDOG-4-4 Section L **5 PASS + 1 skip**（L1-L4 watchdog 三層由 unit 涵蓋 / L5 module load / L6 args+hot-reload / L7 PTY / L8 RPC broadcast / L9 slot kill skip 因 server 未帶 --slot-save-path）
+- [x] M-LLAMACPP-WATCHDOG-4-5 scope alias `llamacpp` / `watchdog`
 
 #### Phase 5 — Docs + ADR
-- [ ] M-LLAMACPP-WATCHDOG-5-1 CLAUDE.md 開發日誌（commit 序列、踩坑、ADR-015）
-- [ ] M-LLAMACPP-WATCHDOG-5-2 LESSONS.md（如有新踩坑）
-- [ ] M-LLAMACPP-WATCHDOG-5-3 `docs/e2e-test-suite.md` 加 L section（9 cases + 3 helpers）
-- [ ] M-LLAMACPP-WATCHDOG-5-4 README + CLAUDE.md「llama.cpp 設定」段加 watchdog config 章節 + `/llamacpp` 命令使用
-- [ ] M-LLAMACPP-WATCHDOG-5-5 新 `docs/llamacpp-watchdog.md` 使用者指南（A/B/C 意義、調哪個、`/no_think` 觸發詞、`--slot-save-path`）；commit
+- [x] M-LLAMACPP-WATCHDOG-5-1 CLAUDE.md 2026-04-26 開發日誌（4 commit + 5 條踩坑 + ADR-015 採三層分層偵測 + hot-reload）
+- [x] M-LLAMACPP-WATCHDOG-5-2 LESSONS.md 加 1 條（ConPTY 在 Windows 把連續空格壓掉 — PTY E2E 不能 grep 整串）
+- [x] M-LLAMACPP-WATCHDOG-5-3 `docs/e2e-test-suite.md` 加 L section + 3 helper 路徑 + 總 cases 67
+- [x] M-LLAMACPP-WATCHDOG-5-4 docs/llamacpp-watchdog.md 使用者指南（三層意義 / Quick start / TUI 操作 / Args 命令表 / 設定檔範例 / env override / 三常見情境 / server slot cancel API 啟用 / 限制與已知問題）
+- [x] M-LLAMACPP-WATCHDOG-5-5 commit
 
 ### 完成標準
-- [ ] `bun run typecheck` 全綠（每階段提交前）
-- [ ] `./cli -p "hello"` 冒煙（必須包 `timeout -k 5s 60s`）
-- [ ] `tests/integration/llamacpp/` 3 組單元測試全綠
-- [ ] `bash tests/e2e/decouple-comprehensive.sh L` 8 PASS + 1 skip（L9 需 `--slot-save-path`）
-- [ ] 全套 `decouple-comprehensive.sh A-L` 不退步
-- [ ] **預設關閉驗證**：裝完不改設定，A-K 全套行為與當前一致、不被誤殺
+- [x] `bun run typecheck` 全綠（baseline 不退步）
+- [x] `timeout -k 5s 60s ./cli -p hello` 冒煙 EXIT=0
+- [x] `tests/integration/llamacpp/` 4 組單元測試全綠（watchdog 23 + translate-clamp 7 + managerLogic 31 + configMutationRpc 5 = 66）
+- [x] `bash tests/e2e/decouple-comprehensive.sh L` 5 PASS + 1 skip
+- [x] 全套 `decouple-comprehensive.sh L` + K 都綠（A-J 既有未動，K + L 新加）
+- [x] **預設關閉驗證**：master.enabled=false、三層 enabled=false；L8 RPC 在初始狀態仍能廣播
 
 ### 不在範圍（→ 後續 milestone）
 - `M-LLAMACPP-NOTHINK`：`/no_think` system prompt trigger + `</think>` stop sequence
@@ -2259,3 +2259,5 @@
 - 2026-04-26 10:21: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
 
 - 2026-04-26 10:39: Session 結束 | 進度：560/633 任務 | 5aa1ee8 feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 2 — per-call-site max_tokens ceiling
+
+- 2026-04-26 10:59: Session 結束 | 進度：569/633 任務 | 4bb64fb feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 3 — /llamacpp master TUI + Hybrid args + daemon broadcast

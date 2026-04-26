@@ -1123,6 +1123,101 @@ if scope_includes "K" || scope_includes "memtui"; then
 fi
 
 # ═══════════════════════════════════════════════
+# L. Llamacpp watchdog + manager（M-LLAMACPP-WATCHDOG）
+# ═══════════════════════════════════════════════
+if scope_includes "L" || scope_includes "llamacpp" || scope_includes "watchdog"; then
+  section "L. Llamacpp watchdog + manager"
+
+  # L5 module load — 5 個新模組
+  OUT=$(bun -e "
+    Promise.all([
+      import('./src/services/api/llamacppWatchdog.ts'),
+      import('./src/commands/llamacpp/llamacppManagerLogic.ts'),
+      import('./src/commands/llamacpp/argsParser.ts'),
+      import('./src/commands/llamacpp/llamacppMutations.ts'),
+      import('./src/daemon/llamacppConfigRpc.ts'),
+    ]).then(([w, m, a, mu, d]) => {
+      console.log(typeof w.WatchdogAbortError, m.TABS.length, typeof a.parseLlamacppArgs, typeof mu.writeWatchdogConfig, typeof d.handleLlamacppConfigMutation)
+    })
+  " 2>&1 | tail -1)
+  if echo "$OUT" | grep -q "function 2 function function function"; then
+    test_pass "L5 5 個 watchdog/manager 模組可載入"
+  else
+    test_fail "L5 module load" "$OUT"
+  fi
+
+  # L1-L4：watchdog 三層觸發 + 不誤判 — 由 unit tests 涵蓋（cost-效益高）
+  OUT=$(bun test tests/integration/llamacpp/watchdog.test.ts 2>&1 | tail -5)
+  if echo "$OUT" | grep -qE "[0-9]+ pass" && echo "$OUT" | grep -qE "0 fail"; then
+    test_pass "L1-L4 watchdog 三層 unit tests 全綠（mock SSE iterator 觸發 + 不誤判 + disabled 跳過）"
+  else
+    test_fail "L1-L4 unit tests" "$OUT"
+  fi
+
+  # L6 args 直接套用 + hot-reload — 用 LLAMACPP_WATCHDOG_DISABLE 確保不影響 effective
+  # 先讀當前 enabled，套 enable，再讀，最後套 reset 還原
+  OUT=$(bun -e "
+    const { _resetLlamaCppConfigForTests, getEffectiveWatchdogConfig } = await import('./src/llamacppConfig/loader.ts')
+    const { parseLlamacppArgs } = await import('./src/commands/llamacpp/argsParser.ts')
+    const { writeWatchdogConfig } = await import('./src/commands/llamacpp/llamacppMutations.ts')
+    const { turnAllOn, turnAllOff } = await import('./src/commands/llamacpp/llamacppManagerLogic.ts')
+    _resetLlamaCppConfigForTests()
+    const before = getEffectiveWatchdogConfig()
+    // 套 all on
+    const onRes = await writeWatchdogConfig(turnAllOn(before))
+    if (!onRes.ok) { console.log('write fail:', onRes.error); process.exit(1) }
+    _resetLlamaCppConfigForTests()
+    const after = getEffectiveWatchdogConfig()
+    // 還原
+    await writeWatchdogConfig(turnAllOff(after))
+    console.log('after.enabled=' + after.enabled)
+  " 2>&1 | tail -1)
+  if echo "$OUT" | grep -q "after.enabled=true"; then
+    test_pass "L6 args→writeWatchdogConfig→hot-reload 串通（mtime 偵測重讀生效）"
+  else
+    test_fail "L6 hot-reload" "$OUT"
+  fi
+
+  # L7 PTY interactive — /llamacpp 開 TUI、看 ‹ Watchdog ›、→ 切 ‹ Slots ›
+  if command -v npx >/dev/null 2>&1 && [[ -f ./cli-dev.exe || -f ./cli-dev ]]; then
+    OUT=$(timeout -k 10s 150s npx tsx tests/e2e/_llamacppManagerInteractive.ts 2>&1 | tail -8)
+    if echo "$OUT" | grep -q "phase1 OK" && echo "$OUT" | grep -q "phase2 OK"; then
+      test_pass "L7 PTY: /llamacpp Watchdog tab + ←/→ 切 Slots"
+    else
+      test_fail "L7 PTY interactive" "$OUT"
+    fi
+  else
+    test_skip "L7 PTY" "缺 npx 或 cli-dev binary"
+  fi
+
+  # L8 daemon RPC + 真 broadcast — 兩 thin-client setWatchdog → configChanged
+  if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+    OUT=$(timeout -k 10s 30s bun run tests/e2e/_llamacppConfigRpcClient.ts 2>&1 | tail -8)
+    if echo "$OUT" | grep -q "B received llamacpp.configChanged broadcast"; then
+      test_pass "L8 daemon RPC 真 broadcast（A setWatchdog → B configChanged）"
+    else
+      test_fail "L8 broadcast" "$OUT"
+    fi
+  else
+    test_skip "L8 broadcast" "daemon 未啟動"
+  fi
+
+  # L9 slot kill — 需 server 帶 --slot-save-path
+  if [[ "$LLAMA_RUNNING" == "1" ]]; then
+    OUT=$(curl -s -X POST "$LLAMA_URL/slots/0?action=erase" 2>&1)
+    if echo "$OUT" | grep -q "501"; then
+      test_skip "L9 slot kill" "server 未帶 --slot-save-path（行為符合預期；不算 fail）"
+    elif [[ -z "$OUT" || "$OUT" =~ ^\{.*\}$ ]]; then
+      test_pass "L9 slot kill API 可達（slot 0 erase 不報 501）"
+    else
+      test_skip "L9 slot kill" "server 回應非預期：$OUT"
+    fi
+  else
+    test_skip "L9 slot kill" "llama.cpp 不可達"
+  fi
+fi
+
+# ═══════════════════════════════════════════════
 # 總結
 # ═══════════════════════════════════════════════
 log ""

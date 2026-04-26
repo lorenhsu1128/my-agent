@@ -538,6 +538,14 @@
 - **預防**：在 `tests/e2e/decouple-comprehensive.sh` 各 section 末尾加 `pkill -f "cli -p"` 防累積（已有 prophylactic 殺 cron task，類比加殺孤兒 cli）。
 - **日期**：2026-04-26
 
+### ConPTY 在 Windows 把連續空格壓掉 — PTY E2E 不能 grep 整串
+
+- **發生什麼事**：`_llamacppManagerInteractive.ts` 想驗 PTY 輸出含 `Master enabled` 字樣，phase1 60s timeout 失敗。但 dump stripped output 看到的是 `Masterenabled`（兩個字之間沒空格）。
+- **根本原因**：Windows ConPTY 在輸出表格 / box-drawing 內容時會把連續空格壓掉。可能是 ANSI cursor positioning 取代了實際空格。`stripAnsi` 只移 escape sequence 不還原空格。
+- **正確做法**：PTY E2E 用 regex 含 `\s*`（match 0+ 空格）替代 literal 空格，例如 `/Master\s*enabled/` 取代 `'Master enabled'`。或抓更明顯的 unicode marker 如 `‹ X ›`（圍號不會被壓）。M-MEMTUI 的 K4+K5 用 `‹ auto-memory ›` 沒撞此坑。
+- **相關檔案**：`tests/e2e/_llamacppManagerInteractive.ts`
+- **日期**：2026-04-26
+
 ### llama.cpp 沒有 native slot cancel API（除非 `--slot-save-path`）
 
 - **發生什麼事**：診斷上面 reasoning loop 時想 cancel 跑歪的 slot，curl `POST /slots/1?action=erase` 回 `501 not_supported_error: This server does not support slots action. Start it with --slot-save-path`。
