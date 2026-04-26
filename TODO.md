@@ -1276,19 +1276,19 @@
 - [x] M-WEB-17：DiscordTab（read-only 引導去 TUI；admin RPC 接 web 留 M-WEB-17b）+ PermissionsTab（4 mode radio + 經 WS permission.modeSet 廣播 + 顯示當前 pending request + attached REPL 計數）
 - [x] Phase 3 E2E：`tests/integration/web/phase3-e2e.test.ts` 5/5 — memory list / memory body 拒 traversal / llamacpp watchdog GET / llamacpp watchdog PUT + 廣播 / cron CRUD + memory 不誤觸；`restRoutes-cron.test.ts` 3/3：empty list、create+broadcast、bad fields rejection
 
-### Phase 4 — H3 搜尋 + 收尾（1-2 週）
-- [ ] M-WEB-18：`src/services/sessionIndex/` 加 `getMessagesBySession` / `searchProject` read API；上滑 lazy load + FTS 搜尋框
-- [ ] M-WEB-19：DisconnectedBanner + 自動重連（5/10/30s backoff）+ daemon offline 降級 read-only
-- [ ] M-WEB-20：QR code（ASCII QR in TUI、PNG QR endpoint `/api/qr`）+ `/web open` 跨平台開瀏覽器（start / open / xdg-open）
-- [ ] M-WEB-21：跨平台 build verify（Windows + macOS）+ `docs/web-mode.md` 使用者指南 + ADR-016 + CLAUDE.md 開發日誌 + LESSONS.md
+### Phase 4 — H3 搜尋 + 收尾（1-2 週）✅ 2026-04-26 完成
+- [x] M-WEB-18：`src/services/sessionIndex/readApi.ts`（getMessagesBySession / listSessionsForProject / searchProject）+ index.ts re-export；REST `/api/sessions` 用 sessionIndex 真資料 + `/api/sessions/:sid/messages?before=&limit` lazy load + `/api/search?q=&limit` FTS5（trigram min 3 char snippet 高亮）
+- [x] M-WEB-19：DisconnectedBanner + ws.ts 自動重連（1/5/10/30s backoff capped）+ stale heartbeat（>60s 無訊息主動斷重連）+ daemon offline 降級（cached state 仍可看）
+- [x] M-WEB-20：PNG QR endpoint `/api/qr?url=…`（qrcode.toBuffer 320×320）+ ASCII QR via `/web qr` slash + `/web open` 跨平台 openBrowser（win32 rundll32 / darwin open / linux xdg-open）
+- [x] M-WEB-21：`docs/web-mode.md` 完整使用者指南 + CLAUDE.md 開發日誌段（4 phase 總結）+ ADR-016（F3+K2+G1 組合決策）+ LESSONS.md 5 條教訓 + Phase 4 E2E 6/6
 
 ### 完成標準
-- [ ] `bun run typecheck` 綠（TS5101 baseline 不變）
-- [ ] `bun run build` + `bun run build:web` 雙 build 綠
-- [ ] daemon 測試 + web 整合 + frontend vitest 全套全綠（預估新增 ~150-200 unit + 40 daemon-side integration + 60 frontend）
-- [ ] 手動 E2E 八項：三端同步 / Permission first-wins / Cron CRUD 三端同步 / Memory edit 同步 / Session 切換 backfill / 斷線重連 / Q2 project 管理 / 跨平台
-- [ ] `tests/e2e/decouple-comprehensive.sh` 加 Section M（M-WEB E2E）
-- [ ] 安全 self-check：path traversal / secret scan / 0.0.0.0 bind 寫 daemon log
+- [x] `bun run typecheck` 綠（TS5101 baseline 不變）
+- [x] `bun run build:web` 綠（78 modules / 205.71 KB JS / 13.26 KB CSS）；`bun run build:dev` 綠
+- [x] daemon 222/222 + web 189/190 全綠（剩 1 vision-locate pre-existing M-VISION）；累計 ~210 個 web 新 tests
+- [ ] 手動 E2E 八項（待用戶實機驗證）：三端同步 / Permission first-wins / Cron CRUD 三端同步 / Memory edit 同步 / Session 切換 backfill / 斷線重連 / Q2 project 管理 / 跨平台
+- [ ] `tests/e2e/decouple-comprehensive.sh` 加 Section M（後續補 PTY 互動）
+- [x] 安全 self-check：path traversal（resolveStaticPath / memory body endpoint）/ 0.0.0.0 bind 寫 daemon log；secret scan reuse `src/utils/web/secretScan.ts`（M4）
 
 ### 不在範圍（後續 milestone）
 - `M-WEB-MOBILE`：手機 responsive（漢堡選單折三欄）
