@@ -1158,6 +1158,76 @@
 
 ---
 
+## 當前里程碑：M-LLAMACPP-WATCHDOG — 防止 llama.cpp 失控生成（2026-04-26 啟動）
+
+**起因**：M-MEMTUI 開發過程診斷出 llama.cpp 持續運算 bug — qwen3.5-9b-neo `<think>` reasoning loop 不收尾（跑滿 max_tokens=32000，30+ 分鐘）+ 兩個 cli 孤兒 process hold slot。my-agent 現有 `AbortSignal` 只在 Esc 時觸發，背景呼叫沒人能中斷。詳見 `docs/plans/M-LLAMACPP-WATCHDOG.md`。
+
+**目標**：客戶端三層 watchdog（A inter-chunk gap / B reasoning-block / C token-cap），各精準擋不同失控情境，**預設全關**讓使用者 opt-in。新 `/llamacpp` master TUI（Hybrid：無參數 TUI、有參數直接套用）+ daemon broadcast 多 REPL 同步。
+
+**核心決策**（與使用者對齊）：
+- Q1 不採固定 wall-clock（誤殺率高）
+- Q2 三層分開精準偵測：A 30s / B 120s / C 16000 主 turn / 4000 背景
+- Q3 預設**全部關閉** — 使用者透過 `/llamacpp` opt-in；master + 該層雙層 enabled AND 才生效
+- Q4 命令合併 `/llamacpp`（master TUI），TAB 1 Watchdog / TAB 2 Slots
+- Q5 UI 走 Hybrid（無參數 TUI / 有參數直套）；持久化雙線（寫 llamacpp.json + adapter hot-reload）
+- Q6 Daemon broadcast `llamacpp.configChanged` mirror cron pattern
+
+**架構原則**：擴 `LlamaCppConfigSchema` + 新 `llamacppWatchdog.ts` 純函式；adapter SSE loop 接 timer + abort；不重寫核心；hot-reload via mtime 偵測；env override `LLAMACPP_WATCHDOG_ENABLE/DISABLE` 一鍵切換。
+
+### 任務
+
+#### Phase 1 — Config schema + adapter watchdog 三層
+- [ ] M-LLAMACPP-WATCHDOG-1-1 `src/llamacppConfig/schema.ts` 加 `LlamaCppWatchdogSchema`（master + 三層各自 enabled + 數值），loader 解析、snapshot 加 watchdog field；env override `LLAMACPP_WATCHDOG_ENABLE/DISABLE`
+- [ ] M-LLAMACPP-WATCHDOG-1-2 新 `src/services/api/llamacppWatchdog.ts` 純函式：`createWatchdogStream(stream, config, signal)` 包 SSE iterator + inter-chunk timer + reasoning timer + token counter；abort 帶 reason 字串
+- [ ] M-LLAMACPP-WATCHDOG-1-3 `createLlamaCppFetch` 串入 watchdog（fetch 前 wrap signal、stream 後接 watchdog iterator、error path 識別 watchdog abort 包成 Anthropic-shape error）
+- [ ] M-LLAMACPP-WATCHDOG-1-4 unit tests `tests/integration/llamacpp/watchdog.test.ts`（mock SSE → 三層各觸發 + 不誤判 + disabled 跳過 + master off 跳過）
+- [ ] M-LLAMACPP-WATCHDOG-1-5 typecheck + smoke + commit
+
+#### Phase 2 — Per-call-site max_tokens ceiling
+- [ ] M-LLAMACPP-WATCHDOG-2-1 `translateRequestToOpenAI()` 加 `callSite` 參數，clamp `max_tokens = min(caller, ceiling[callSite])`
+- [ ] M-LLAMACPP-WATCHDOG-2-2 `llamacppSideQuery.ts` / `findRelevantMemories.ts selectViaLlamaCpp()` / `extractMemories` 走 llamacpp path 各標 `callSite`
+- [ ] M-LLAMACPP-WATCHDOG-2-3 unit + 修改既有測試 expectation；commit
+
+#### Phase 3 — `/llamacpp` master TUI + Hybrid args + broadcast
+- [ ] M-LLAMACPP-WATCHDOG-3-1 新 `src/commands/llamacpp/{index.ts, llamacpp.tsx, LlamacppManager.tsx, llamacppManagerLogic.ts}` master TUI（mirror MemoryManager pattern；2 tabs：Watchdog / Slots）
+- [ ] M-LLAMACPP-WATCHDOG-3-2 Watchdog tab — Master + A/B/C + per-call-site ceilings；Space toggle / Enter 改值 / r reset / w 永久寫檔
+- [ ] M-LLAMACPP-WATCHDOG-3-3 Slots tab — `fetch /v1/slots` 5s poll；K kill slot（無 `--slot-save-path` 時 flash 提示）
+- [ ] M-LLAMACPP-WATCHDOG-3-4 Hybrid args parser：`/llamacpp watchdog A on/off/<num>` / `all on/off` / `reset` / `--session` / `slots kill N`；無參數 → TUI、有參數 → 直接套
+- [ ] M-LLAMACPP-WATCHDOG-3-5 `scripts/llama/serve.sh` 加 `--slot-save-path "$HOME/.cache/llama/slots"` 啟用 server cancel API + README 說明
+- [ ] M-LLAMACPP-WATCHDOG-3-6 Hot-reload：`getLlamaCppConfigSnapshot()` mtime 偵測重讀（保留 startup snapshot fallback；env override 仍優先）
+- [ ] M-LLAMACPP-WATCHDOG-3-7 新 `src/daemon/llamacppConfigRpc.ts`：frame `llamacpp.configMutation` / `configMutationResult` / `configChanged` broadcast；daemon 寫檔成功後廣播
+- [ ] M-LLAMACPP-WATCHDOG-3-8 `fallbackManager.sendLlamacppConfigMutation()` + `useDaemonMode` callback；TUI mutation daemon-aware
+- [ ] M-LLAMACPP-WATCHDOG-3-9 unit tests `tests/integration/llamacpp/{managerLogic, configMutationRpc}.test.ts`；commit
+
+#### Phase 4 — E2E Section L
+- [ ] M-LLAMACPP-WATCHDOG-4-1 新 helper `tests/e2e/_llamacppHungSimulator.ts`（Bun.serve mock SSE 三情境）
+- [ ] M-LLAMACPP-WATCHDOG-4-2 新 helper `tests/e2e/_llamacppManagerInteractive.ts`（PTY，npx tsx + node-pty）
+- [ ] M-LLAMACPP-WATCHDOG-4-3 新 helper `tests/e2e/_llamacppConfigRpcClient.ts`（daemon WS broadcast 驗證）
+- [ ] M-LLAMACPP-WATCHDOG-4-4 Section L 9 cases（L1-L4 watchdog 三層觸發 + 不誤判；L5-L8 manager / args / PTY / RPC；L9 slot kill skip-unless-flagged）
+- [ ] M-LLAMACPP-WATCHDOG-4-5 scope alias `llamacpp` / `watchdog`；commit
+
+#### Phase 5 — Docs + ADR
+- [ ] M-LLAMACPP-WATCHDOG-5-1 CLAUDE.md 開發日誌（commit 序列、踩坑、ADR-015）
+- [ ] M-LLAMACPP-WATCHDOG-5-2 LESSONS.md（如有新踩坑）
+- [ ] M-LLAMACPP-WATCHDOG-5-3 `docs/e2e-test-suite.md` 加 L section（9 cases + 3 helpers）
+- [ ] M-LLAMACPP-WATCHDOG-5-4 README + CLAUDE.md「llama.cpp 設定」段加 watchdog config 章節 + `/llamacpp` 命令使用
+- [ ] M-LLAMACPP-WATCHDOG-5-5 新 `docs/llamacpp-watchdog.md` 使用者指南（A/B/C 意義、調哪個、`/no_think` 觸發詞、`--slot-save-path`）；commit
+
+### 完成標準
+- [ ] `bun run typecheck` 全綠（每階段提交前）
+- [ ] `./cli -p "hello"` 冒煙（必須包 `timeout -k 5s 60s`）
+- [ ] `tests/integration/llamacpp/` 3 組單元測試全綠
+- [ ] `bash tests/e2e/decouple-comprehensive.sh L` 8 PASS + 1 skip（L9 需 `--slot-save-path`）
+- [ ] 全套 `decouple-comprehensive.sh A-L` 不退步
+- [ ] **預設關閉驗證**：裝完不改設定，A-K 全套行為與當前一致、不被誤殺
+
+### 不在範圍（→ 後續 milestone）
+- `M-LLAMACPP-NOTHINK`：`/no_think` system prompt trigger + `</think>` stop sequence
+- `M-CLI-SIGINT-CLEANUP`：cli SIGINT 強制斷 fetch（防孤兒 process）
+- GUI dashboard 監控 slot
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2165,3 +2235,25 @@
 - 2026-04-26 08:12: Session 結束 | 進度：522/566 任務 | 8413724 docs(todo): M-SIDEQUERY-PROVIDER + M-EXTRACT-LOCAL 標記完成
 
 - 2026-04-26 09:21: Session 結束 | 進度：542/599 任務 | 2913f32 feat(memory): M-MEMTUI Phase 4 — 輔助畫面 + multi-delete + /memory-delete alias
+
+- 2026-04-26 09:36: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+- 2026-04-26 09:42: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+- 2026-04-26 09:47: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+- 2026-04-26 09:56: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+- 2026-04-26 09:58: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+- 2026-04-26 10:03: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+- 2026-04-26 10:09: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+- 2026-04-26 10:14: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+- 2026-04-26 10:16: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+- 2026-04-26 10:20: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+- 2026-04-26 10:21: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs

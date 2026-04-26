@@ -518,3 +518,32 @@
 - **日期**：2026-04-26
 
 ---
+
+## llama.cpp / cli 進程管理
+
+### qwen3.5-neo 進 `<think>` block 後 reasoning loop 跑滿 max_tokens 不停
+
+- **發生什麼事**：M-MEMTUI 開發過程，使用者反映 llama.cpp 一直在運算（風扇沒停）。`/slots` 查 4 個 slot 中 2 個 `is_processing: true`、`n_decoded: 27343 / 30101`，max_tokens=32000，跑了 30 分鐘還沒結束。兩個 slot 的 `generation_prompt` 都是 `<|im_start|>assistant\n<think>\n` — 模型進 reasoning block 後**沒 emit `</think>` 收尾**，CoT 一直自我迴圈到吃滿 token budget 才停。
+- **根本原因**：qwen3.5-9b-neo 在某些 prompt 下會卡 reasoning loop（特別是短指令如 `"ok"`、`"hi"` 反而觸發長 CoT — 模型過度推理）。本機部署沒有 anthropic 那種 server-side budget cutoff。
+- **正確做法（短期止血）**：(a) `netstat -ano | grep 8080` 找 ESTABLISHED 連線的 client PID；(b) `Get-CimInstance Win32_Process -Filter "ProcessId=N" | select CommandLine` 確認是哪個 cli；(c) `Stop-Process -Id N -Force` 殺 client → 連線斷開 → llama.cpp slot 自動釋放（不需 server 端 cancel）。
+- **正確做法（中期）**：(1) llamacpp 服務端啟動加 `--slot-save-path /tmp/slots`，啟用 `POST /slots/N?action=erase` cancel endpoint；(2) prompt 包加 stop sequence `</think>`（Anthropic adapter 已用 reasoning_format=deepseek，但收不收 stop 看模型）；(3) 降 `max_tokens` 從 32000 到 8000；(4) system prompt 加 `/no_think` 指示（qwen 系列的 trigger word，會 suppress reasoning）。
+- **診斷指令**：`curl -s http://127.0.0.1:8080/slots | jq '.[] | {id, is_processing, n_decoded: .next_token[0].n_decoded, n_remain: .next_token[0].n_remain, prompt: .params.generation_prompt}'`
+- **日期**：2026-04-26
+
+### Bash tool 跑長 LLM 指令 timeout 後 child 變孤兒
+
+- **發生什麼事**：透過 Bash tool 跑 `./cli -p "ok"` 冒煙測試，預期 5-10s 完成。實際 LLM reasoning loop 卡住（見上條），90s tool timeout 到 → Bash tool 把指令切 background → cli 沒被 SIGTERM → cli 留著 30 分鐘繼續 hold llama.cpp slot。同 session 跑了兩次冒煙就累積 2 個孤兒 cli。
+- **根本原因**：Bash tool 的 timeout 是 wall-clock，到時切 background 不會 kill child（讓使用者有機會 reattach）。但對 LLM 呼叫這種「卡住等 stream」的指令，背景化等於放棄管理。
+- **正確做法**：(a) tool 內呼叫 LLM-bound 指令時包 `timeout -k 5s 60s <cmd>`（GNU coreutils），SIGTERM 30s 後不退強制 SIGKILL；(b) 同 session 多次冒煙前先 `pkill -f "cli -p"`（或 Windows `Stop-Process -Name cli`）清孤兒；(c) 觀察 llama.cpp 風扇 / GPU 用量為早期信號 — `curl /slots` 應該大多時候 `is_processing: false`。
+- **預防**：在 `tests/e2e/decouple-comprehensive.sh` 各 section 末尾加 `pkill -f "cli -p"` 防累積（已有 prophylactic 殺 cron task，類比加殺孤兒 cli）。
+- **日期**：2026-04-26
+
+### llama.cpp 沒有 native slot cancel API（除非 `--slot-save-path`）
+
+- **發生什麼事**：診斷上面 reasoning loop 時想 cancel 跑歪的 slot，curl `POST /slots/1?action=erase` 回 `501 not_supported_error: This server does not support slots action. Start it with --slot-save-path`。
+- **根本原因**：llama.cpp HTTP server 的 slot cancel/save/restore 都綁在 `--slot-save-path` flag，沒設就只能讀（GET /slots）不能寫。
+- **正確做法**：(a) `scripts/llama/serve.sh` 加 `--slot-save-path "$HOME/.cache/llama/slots"` 啟用 cancel endpoint；(b) 沒設時的替代 = kill client process（連線斷 → server 自然釋放 slot），別嘗試 server 端強斷；(c) 重啟 llama-server 是 nuclear option，會丟 KV cache 影響後續 prompt 速度。
+- **相關檔案**：`scripts/llama/serve.sh`（未改 — 列為後續調整選項）
+- **日期**：2026-04-26
+
+---
