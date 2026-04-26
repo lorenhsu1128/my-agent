@@ -1189,15 +1189,15 @@
 - [x] M-LLAMACPP-WATCHDOG-2-3 新 `tests/integration/llamacpp/translate-clamp.test.ts` 7 cases（watchdog off 不變 / clamp turn / caller 較小不 inflate / per call-site memoryPrefetch+background / 預設 callSite='turn' / caller 沒給 max_tokens 用 4096 再 clamp）；smoke 通過；commit
 
 #### Phase 3 — `/llamacpp` master TUI + Hybrid args + broadcast
-- [ ] M-LLAMACPP-WATCHDOG-3-1 新 `src/commands/llamacpp/{index.ts, llamacpp.tsx, LlamacppManager.tsx, llamacppManagerLogic.ts}` master TUI（mirror MemoryManager pattern；2 tabs：Watchdog / Slots）
-- [ ] M-LLAMACPP-WATCHDOG-3-2 Watchdog tab — Master + A/B/C + per-call-site ceilings；Space toggle / Enter 改值 / r reset / w 永久寫檔
-- [ ] M-LLAMACPP-WATCHDOG-3-3 Slots tab — `fetch /v1/slots` 5s poll；K kill slot（無 `--slot-save-path` 時 flash 提示）
-- [ ] M-LLAMACPP-WATCHDOG-3-4 Hybrid args parser：`/llamacpp watchdog A on/off/<num>` / `all on/off` / `reset` / `--session` / `slots kill N`；無參數 → TUI、有參數 → 直接套
-- [ ] M-LLAMACPP-WATCHDOG-3-5 `scripts/llama/serve.sh` 加 `--slot-save-path "$HOME/.cache/llama/slots"` 啟用 server cancel API + README 說明
-- [ ] M-LLAMACPP-WATCHDOG-3-6 Hot-reload：`getLlamaCppConfigSnapshot()` mtime 偵測重讀（保留 startup snapshot fallback；env override 仍優先）
-- [ ] M-LLAMACPP-WATCHDOG-3-7 新 `src/daemon/llamacppConfigRpc.ts`：frame `llamacpp.configMutation` / `configMutationResult` / `configChanged` broadcast；daemon 寫檔成功後廣播
-- [ ] M-LLAMACPP-WATCHDOG-3-8 `fallbackManager.sendLlamacppConfigMutation()` + `useDaemonMode` callback；TUI mutation daemon-aware
-- [ ] M-LLAMACPP-WATCHDOG-3-9 unit tests `tests/integration/llamacpp/{managerLogic, configMutationRpc}.test.ts`；commit
+- [x] M-LLAMACPP-WATCHDOG-3-1 新 `src/commands/llamacpp/{index, llamacpp.tsx, LlamacppManager.tsx, llamacppManagerLogic.ts, llamacppMutations.ts, argsParser.ts}` master TUI（2 tabs：Watchdog / Slots）+ 註冊到 `src/commands.ts`
+- [x] M-LLAMACPP-WATCHDOG-3-2 新 `src/components/llamacpp/WatchdogTab.tsx` — 10 fields（master + A/B/C + per-call-site）；Space/Enter toggle / 數字 input / r reset / w 寫檔；effective marker
+- [x] M-LLAMACPP-WATCHDOG-3-3 新 `src/components/llamacpp/SlotsTab.tsx` — fetchSlots 5s poll；K killSlot（501 顯 `--slot-save-path` 提示）；reasoning loop heuristic 標 `n_decoded > 20000` 為紅色
+- [x] M-LLAMACPP-WATCHDOG-3-4 `argsParser.ts` Hybrid 解析器（19 動詞分支）+ `llamacpp.tsx` 入口無參數 → TUI、有參數 → `runArgsCommand` 直接套 + 印 status
+- [x] M-LLAMACPP-WATCHDOG-3-5 `scripts/llama/serve.sh` 加 `--slot-save-path` flag（`LLAMA_SLOT_SAVE_PATH` env 可覆蓋；自動 mkdir）
+- [x] M-LLAMACPP-WATCHDOG-3-6 `loader.ts` 加 `cachedMtimeMs` + `isCacheStale()` mtime 偵測；snapshot getter 在 stale 時重讀
+- [x] M-LLAMACPP-WATCHDOG-3-7 新 `src/daemon/llamacppConfigRpc.ts` — types + 守衛 + `handleLlamacppConfigMutation`；`daemonCli.ts` dispatch + broadcast `llamacpp.configChanged`（無 projectId：daemon 全域狀態）
+- [x] M-LLAMACPP-WATCHDOG-3-8 `fallbackManager.ts` 加 `LlamacppConfigMutationPayload` type / `sendLlamacppConfigMutation()` / pending map + frame handlers；`useDaemonMode.ts` export `sendLlamacppConfigMutationToDaemon()`
+- [x] M-LLAMACPP-WATCHDOG-3-9 unit tests：`managerLogic.test.ts` 31 / `configMutationRpc.test.ts` 5；總 96 unit tests 全綠（含 watchdog 23 + translate-clamp 7 + 其他既有）；smoke 通過
 
 #### Phase 4 — E2E Section L
 - [ ] M-LLAMACPP-WATCHDOG-4-1 新 helper `tests/e2e/_llamacppHungSimulator.ts`（Bun.serve mock SSE 三情境）
@@ -2257,3 +2257,5 @@
 - 2026-04-26 10:20: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
 
 - 2026-04-26 10:21: Session 結束 | 進度：552/600 任務 | 3fb372a feat(memory): M-MEMTUI Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+- 2026-04-26 10:39: Session 結束 | 進度：560/633 任務 | 5aa1ee8 feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 2 — per-call-site max_tokens ceiling

@@ -7,7 +7,7 @@
  *   - 檔案不存在 / JSON 壞 / schema 失敗 → 走 DEFAULT_LLAMACPP_CONFIG + stderr warn
  */
 import { readFile } from 'fs/promises'
-import { readFileSync } from 'fs'
+import { readFileSync, statSync } from 'fs'
 import { getLlamaCppConfigPath } from './paths.js'
 import {
   DEFAULT_LLAMACPP_CONFIG,
@@ -17,8 +17,24 @@ import {
 import { parseJsonc } from '../utils/jsoncStore.js'
 
 let cached: LlamaCppConfig | null = null
+let cachedMtimeMs: number | null = null
 let loadInFlight: Promise<LlamaCppConfig> | null = null
 let warned = false
+
+/**
+ * M-LLAMACPP-WATCHDOG Phase 3-6：偵測 llamacpp.json 的 mtime；若已 cached
+ * 而磁碟上的 mtime 比 cache 新，視為 stale → 失效 cache 觸發重讀。
+ * 沒檔（mtime 取不到）保持 cache。
+ */
+function isCacheStale(): boolean {
+  if (cached === null || cachedMtimeMs === null) return true
+  try {
+    const m = statSync(getLlamaCppConfigPath()).mtimeMs
+    return m > cachedMtimeMs
+  } catch {
+    return false
+  }
+}
 
 function warnOnce(reason: string): void {
   if (warned) return
@@ -54,10 +70,15 @@ async function readLive(): Promise<LlamaCppConfig> {
 }
 
 export async function loadLlamaCppConfigSnapshot(): Promise<LlamaCppConfig> {
-  if (cached) return cached
+  if (cached && !isCacheStale()) return cached
   if (loadInFlight) return loadInFlight
   loadInFlight = readLive().then(cfg => {
     cached = cfg
+    try {
+      cachedMtimeMs = statSync(getLlamaCppConfigPath()).mtimeMs
+    } catch {
+      cachedMtimeMs = null
+    }
     loadInFlight = null
     return cfg
   })
@@ -65,14 +86,21 @@ export async function loadLlamaCppConfigSnapshot(): Promise<LlamaCppConfig> {
 }
 
 export function getLlamaCppConfigSnapshot(): LlamaCppConfig {
-  if (cached) return cached
+  // M-LLAMACPP-WATCHDOG Phase 3-6：mtime 偵測 hot-reload
+  if (cached && !isCacheStale()) return cached
   // setup.ts 的 fire-and-forget 載入可能還沒跑完，同步讀檔避免拿到錯誤的預設值
   try {
-    const raw = readFileSync(getLlamaCppConfigPath(), 'utf-8')
+    const path = getLlamaCppConfigPath()
+    const raw = readFileSync(path, 'utf-8')
     const parsed = parseJsonc(raw.replace(/^﻿/, ''))
     const result = LlamaCppConfigSchema.safeParse(parsed)
     if (result.success) {
       cached = result.data
+      try {
+        cachedMtimeMs = statSync(path).mtimeMs
+      } catch {
+        cachedMtimeMs = null
+      }
       return cached
     }
   } catch {
@@ -130,6 +158,7 @@ export function getEffectiveWatchdogConfig(): import('./schema.js').LlamaCppWatc
 
 export function _resetLlamaCppConfigForTests(): void {
   cached = null
+  cachedMtimeMs = null
   loadInFlight = null
   warned = false
 }

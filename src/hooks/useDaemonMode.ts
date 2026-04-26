@@ -211,6 +211,24 @@ export async function sendMemoryMutationToDaemon(
 }
 
 /**
+ * M-LLAMACPP-WATCHDOG Phase 3-8：發 llamacpp config mutation 到 daemon。
+ * attached 時走 WS（daemon 寫盤後 broadcast llamacpp.configChanged），否則
+ * 回 null 讓 caller fallback 本機寫入。
+ */
+export async function sendLlamacppConfigMutationToDaemon(
+  req: import('../repl/thinClient/fallbackManager.js').LlamacppConfigMutationPayload,
+  timeoutMs?: number,
+): Promise<
+  | { ok: true; message?: string }
+  | { ok: false; error: string }
+  | null
+> {
+  const mgr = currentManager
+  if (!mgr || mgr.state.mode !== 'attached') return null
+  return mgr.sendLlamacppConfigMutation(req, timeoutMs)
+}
+
+/**
  * M-CRON-W3-8b：回 cron wizard 決定。attached 才真送；回 true 表送出。
  */
 export function respondToCronWizard(

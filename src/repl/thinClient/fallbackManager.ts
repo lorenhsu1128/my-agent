@@ -54,6 +54,16 @@ export interface FallbackManagerOptions {
 }
 
 /**
+ * M-LLAMACPP-WATCHDOG Phase 3-7：llamacpp config mutation payload。
+ * 寫入後 daemon broadcast `llamacpp.configChanged`。
+ */
+export type LlamacppConfigMutationPayload =
+  | {
+      op: 'setWatchdog'
+      payload: import('../../llamacppConfig/schema.js').LlamaCppWatchdogConfig
+    }
+
+/**
  * M-MEMTUI Phase 3：memory mutation request payload — see daemon/memoryMutationRpc.ts。
  * client → daemon 帶 op + payload，daemon 回 memory.mutationResult；
  * 寫入後 daemon broadcast `memory.itemsChanged` 給同 project 所有 client。
@@ -187,6 +197,18 @@ export interface FallbackManager {
    */
   sendMemoryMutation(
     req: MemoryMutationPayload,
+    timeoutMs?: number,
+  ): Promise<
+    | { ok: true; message?: string }
+    | { ok: false; error: string }
+    | null
+  >
+  /**
+   * M-LLAMACPP-WATCHDOG Phase 3-8：送 llamacpp config mutation 到 daemon，
+   * daemon 寫盤後 broadcast llamacpp.configChanged。非 attached / timeout 回 null。
+   */
+  sendLlamacppConfigMutation(
+    req: LlamacppConfigMutationPayload,
     timeoutMs?: number,
   ): Promise<
     | { ok: true; message?: string }
@@ -385,6 +407,15 @@ export function createFallbackManager(
     string,
     { resolve: MemoryMutationResolve; timer: ReturnType<typeof setTimeout> }
   >()
+  /** M-LLAMACPP-WATCHDOG Phase 3-8：pending llamacpp.configMutation response */
+  type LlamacppConfigMutationResolve = MemoryMutationResolve
+  const pendingLlamacppConfigMutation = new Map<
+    string,
+    {
+      resolve: LlamacppConfigMutationResolve
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
 
   // M-CWD-FIX：帶 cwd 連線時等 hello frame 才切 attached。daemon 的
   // loadProject 是異步的；在 hello 到達前 input 會被 fallback 到 defaultRuntime。
@@ -504,6 +535,28 @@ export function createFallbackManager(
       }
       // M-MEMTUI Phase 3：memory.itemsChanged broadcast → bubble up
       if (f.type === 'memory.itemsChanged') {
+        emitter.emit('frame', f)
+        return
+      }
+      // M-LLAMACPP-WATCHDOG Phase 3-8：llamacpp.configMutationResult / configChanged
+      if (f.type === 'llamacpp.configMutationResult') {
+        const rid = String((f as { requestId?: unknown }).requestId ?? '')
+        const pending = pendingLlamacppConfigMutation.get(rid)
+        if (pending) {
+          clearTimeout(pending.timer)
+          pendingLlamacppConfigMutation.delete(rid)
+          const p = f as unknown as {
+            ok?: boolean
+            error?: string
+            message?: string
+          }
+          if (p.ok) pending.resolve({ ok: true, message: p.message })
+          else
+            pending.resolve({ ok: false, error: String(p.error ?? 'unknown') })
+        }
+        return
+      }
+      if (f.type === 'llamacpp.configChanged') {
         emitter.emit('frame', f)
         return
       }
@@ -987,6 +1040,32 @@ export function createFallbackManager(
         } catch {
           clearTimeout(timer)
           pendingMemoryMutation.delete(requestId)
+          resolve(null)
+        }
+      })
+    },
+    async sendLlamacppConfigMutation(req, timeoutMs = 10_000) {
+      if (mode !== 'attached' || !socket) return null
+      const requestId = `llamMut${nextQueryId++}-${Date.now()}`
+      return await new Promise<
+        | { ok: true; message?: string }
+        | { ok: false; error: string }
+        | null
+      >(resolve => {
+        const timer = setTimeout(() => {
+          pendingLlamacppConfigMutation.delete(requestId)
+          resolve(null)
+        }, timeoutMs)
+        pendingLlamacppConfigMutation.set(requestId, { resolve, timer })
+        try {
+          ;(
+            socket as unknown as {
+              send: (f: Record<string, unknown>) => void
+            }
+          ).send({ type: 'llamacpp.configMutation', requestId, ...req })
+        } catch {
+          clearTimeout(timer)
+          pendingLlamacppConfigMutation.delete(requestId)
           resolve(null)
         }
       })

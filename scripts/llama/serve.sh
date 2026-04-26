@@ -36,6 +36,12 @@ echo "    ctx     = $LLAMA_CTX    ngl = $LLAMA_NGL    alias = $LLAMA_ALIAS"
 echo "    extra   = ${LLAMA_EXTRA_ARGS_SHELL}"
 echo ""
 
+# M-LLAMACPP-WATCHDOG Phase 3-5：啟用 server 端 slot cancel API（POST /slots/N?action=erase）。
+# 沒這個 flag 的話 my-agent 的 `/llamacpp slots kill` 會收到 501。
+# 路徑可被 LLAMA_SLOT_SAVE_PATH 覆蓋（預設 ~/.cache/llama/slots）。
+SLOT_SAVE_PATH="${LLAMA_SLOT_SAVE_PATH:-$HOME/.cache/llama/slots}"
+mkdir -p "$SLOT_SAVE_PATH" 2>/dev/null || true
+
 # 使用 eval 讓 LLAMA_EXTRA_ARGS_SHELL 裡的 @sh 引用正確展開
 eval "exec \"\$SERVER\" \
   --model \"\$MODEL\" \
@@ -43,4 +49,5 @@ eval "exec \"\$SERVER\" \
   --n-gpu-layers \"\$LLAMA_NGL\" \
   --ctx-size \"\$LLAMA_CTX\" \
   --alias \"\$LLAMA_ALIAS\" \
+  --slot-save-path \"\$SLOT_SAVE_PATH\" \
   $LLAMA_EXTRA_ARGS_SHELL"

@@ -55,6 +55,10 @@ import {
   handleMemoryMutation,
   isMemoryMutationRequest,
 } from './memoryMutationRpc.js'
+import {
+  handleLlamacppConfigMutation,
+  isLlamacppConfigMutationRequest,
+} from './llamacppConfigRpc.js'
 import { isVisionEnabled } from '../llamacppConfig/loader.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 
@@ -229,6 +233,27 @@ export async function runDaemonStart(
                   },
                   x => x.projectId === runtime.projectId,
                 )
+              } catch {
+                // best-effort
+              }
+            }
+          })()
+          return
+        }
+        // M-LLAMACPP-WATCHDOG Phase 3-7：llamacpp config mutation RPC — daemon
+        // 全域狀態（非 per-project），broadcast 不帶 projectId、所有 attached
+        // client 都收到 llamacpp.configChanged。
+        if (isLlamacppConfigMutationRequest(m)) {
+          const req = m
+          void (async () => {
+            const res = await handleLlamacppConfigMutation(req)
+            handle.server!.send(c.id, res)
+            if (res.ok) {
+              try {
+                handle.server!.broadcast({
+                  type: 'llamacpp.configChanged',
+                  changedSection: 'watchdog',
+                })
               } catch {
                 // best-effort
               }
