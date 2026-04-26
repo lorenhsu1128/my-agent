@@ -1,18 +1,3 @@
-/**
- * M-WEB-CLOSEOUT-5/6：Memory edit wizard
- *
- * 行為矩陣（mirror TUI MemoryEditWizard）：
- *   auto-memory      → name + description + type + body（全 frontmatter + body）
- *   user-profile     → body only（不顯 frontmatter 欄位）
- *   project-memory   → body only
- *   local-config     → body only（無 frontmatter）
- *   daily-log        → 唯讀，不應進 wizard（caller 守 gate）
- *
- *   create mode 只允許 auto-memory + local-config（kind dropdown 限制）
- *
- *   存檔前用 client-side `containsSecret` 提示，hit 時要求使用者勾「override」
- *   才送 PUT/POST（server 端也會 422，雙重保護）。
- */
 import { useEffect, useState } from 'react'
 import {
   api,
@@ -20,27 +5,35 @@ import {
   type WebMemoryEntry,
   type MemoryAutoType,
 } from '../../../api/client'
-import { Modal } from '../../common/Modal'
 import { containsSecret } from '../../../utils/secretScan'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
-const MEMORY_TYPES: MemoryAutoType[] = [
-  'user',
-  'feedback',
-  'project',
-  'reference',
-]
+const MEMORY_TYPES: MemoryAutoType[] = ['user', 'feedback', 'project', 'reference']
 
 export interface MemoryEditWizardProps {
   projectId: string
-  /** 'edit' 模式必傳 entry；'create' 模式不傳 */
   entry: WebMemoryEntry | null
-  /** create 模式預選 kind */
   createKind?: 'auto-memory' | 'local-config'
-  /** body 預載（edit 模式 caller 先呼 api.memory.body 抓回來） */
   initialBody?: string
   open: boolean
   onClose: () => void
-  /** 存檔成功後 caller 通常 close + refresh（broadcast 也會推 refresh） */
   onSaved?: () => void
 }
 
@@ -66,18 +59,11 @@ export function MemoryEditWizard({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // reset when modal opens
   useEffect(() => {
     if (!open) return
-    setError(null)
-    setOverride(false)
-    setBusy(false)
+    setError(null); setOverride(false); setBusy(false)
     if (isCreate) {
-      setFilename('')
-      setName('')
-      setDescription('')
-      setType('user')
-      setBody('')
+      setFilename(''); setName(''); setDescription(''); setType('user'); setBody('')
     } else if (entry) {
       setFilename(entry.filename ?? '')
       setName(entry.displayName ?? '')
@@ -91,194 +77,129 @@ export function MemoryEditWizard({
 
   async function save() {
     setError(null)
-    if (!body.trim()) {
-      setError('body 不可為空')
-      return
-    }
-    if (isCreate && !filename.trim()) {
-      setError('filename 必填')
-      return
-    }
+    if (!body.trim()) { setError('body 不可為空'); return }
+    if (isCreate && !filename.trim()) { setError('filename 必填'); return }
     if (isAuto && (!name.trim() || !description.trim())) {
-      setError('auto-memory 需填 name + description')
-      return
+      setError('auto-memory 需填 name + description'); return
     }
     if (secretHit && !override) {
-      setError('偵測到可能的 secret — 請勾「我已確認可寫入」再存檔')
-      return
+      setError('偵測到可能的 secret — 請勾「我已確認可寫入」再存檔'); return
     }
     setBusy(true)
     try {
       if (isCreate) {
         if (kind === 'auto-memory') {
           await api.memory.create(projectId, {
-            kind: 'auto-memory',
-            filename,
-            body,
+            kind: 'auto-memory', filename, body,
             frontmatter: { name, description, type },
             override: secretHit ? true : undefined,
           })
         } else {
           await api.memory.create(projectId, {
-            kind: 'local-config',
-            filename,
-            body,
+            kind: 'local-config', filename, body,
             override: secretHit ? true : undefined,
           })
         }
       } else if (entry) {
         if (entry.kind === 'auto-memory') {
           await api.memory.update(projectId, {
-            kind: 'auto-memory',
-            filename: entry.filename ?? '',
-            body,
+            kind: 'auto-memory', filename: entry.filename ?? '', body,
             frontmatter: { name, description, type },
             override: secretHit ? true : undefined,
           })
-        } else if (
-          entry.kind === 'user-profile' ||
-          entry.kind === 'project-memory' ||
-          entry.kind === 'local-config'
-        ) {
+        } else if (entry.kind === 'user-profile' || entry.kind === 'project-memory' || entry.kind === 'local-config') {
           await api.memory.update(projectId, {
-            kind: entry.kind,
-            absolutePath: entry.absolutePath,
-            body,
+            kind: entry.kind, absolutePath: entry.absolutePath, body,
             override: secretHit ? true : undefined,
           })
         } else {
           throw new Error(`kind=${entry.kind} 不可編輯`)
         }
       }
-      onSaved?.()
-      onClose()
+      onSaved?.(); onClose()
     } catch (e) {
-      const msg =
-        e instanceof ApiError
-          ? `${e.code}: ${e.message}`
-          : e instanceof Error
-            ? e.message
-            : String(e)
-      setError(msg)
-    } finally {
-      setBusy(false)
-    }
+      setError(
+        e instanceof ApiError ? `${e.code}: ${e.message}`
+          : e instanceof Error ? e.message : String(e),
+      )
+    } finally { setBusy(false) }
   }
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={isCreate ? `New ${kind}` : `Edit ${entry?.displayName ?? ''}`}
-    >
-      <div className="flex flex-col gap-3 text-sm min-w-[480px]">
-        {isCreate && (
-          <Field label="filename">
-            <input
-              type="text"
-              value={filename}
-              onChange={e => setFilename(e.target.value)}
-              placeholder={
-                kind === 'auto-memory'
-                  ? 'feedback_my_rule.md'
-                  : 'CLAUDE.local.md'
-              }
-              className="w-full bg-bg-floating px-2 py-1 rounded border border-divider focus:border-brand outline-none font-mono text-xs"
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{isCreate ? `New ${kind}` : `Edit ${entry?.displayName ?? ''}`}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3 text-sm">
+          {isCreate && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="mem-filename">filename</Label>
+              <Input
+                id="mem-filename"
+                value={filename}
+                onChange={e => setFilename(e.target.value)}
+                placeholder={kind === 'auto-memory' ? 'feedback_my_rule.md' : 'CLAUDE.local.md'}
+                className="font-mono text-xs"
+              />
+            </div>
+          )}
+          {isAuto && (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="mem-name">name</Label>
+                <Input id="mem-name" value={name} onChange={e => setName(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="mem-desc">description</Label>
+                <Input id="mem-desc" value={description} onChange={e => setDescription(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>type</Label>
+                <Select value={type} onValueChange={v => setType(v as MemoryAutoType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MEMORY_TYPES.map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="mem-body">body</Label>
+            <Textarea
+              id="mem-body"
+              value={body}
+              onChange={e => setBody(e.target.value)}
+              rows={14}
+              className="font-mono text-xs"
             />
-          </Field>
-        )}
-        {isAuto && (
-          <>
-            <Field label="name">
-              <input
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                className="w-full bg-bg-floating px-2 py-1 rounded border border-divider focus:border-brand outline-none text-xs"
-              />
-            </Field>
-            <Field label="description">
-              <input
-                type="text"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                className="w-full bg-bg-floating px-2 py-1 rounded border border-divider focus:border-brand outline-none text-xs"
-              />
-            </Field>
-            <Field label="type">
-              <select
-                value={type}
-                onChange={e => setType(e.target.value as MemoryAutoType)}
-                className="bg-bg-floating px-2 py-1 rounded border border-divider focus:border-brand outline-none text-xs"
-              >
-                {MEMORY_TYPES.map(t => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </>
-        )}
-        <Field label="body">
-          <textarea
-            value={body}
-            onChange={e => setBody(e.target.value)}
-            rows={14}
-            className="w-full bg-bg-floating px-2 py-1 rounded border border-divider focus:border-brand outline-none font-mono text-xs"
-          />
-        </Field>
-        {secretHit && (
-          <div className="flex flex-col gap-1 p-2 bg-status-dnd/20 border border-status-dnd/50 rounded text-xs">
-            <span className="text-status-dnd font-semibold">
-              ⚠ 偵測到可能的 secret 樣式（API key / token / 連線字串等）
-            </span>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={override}
-                onChange={e => setOverride(e.target.checked)}
-                className="accent-brand"
-              />
-              <span>我已確認可寫入</span>
-            </label>
           </div>
-        )}
-        {error && <div className="text-status-dnd text-xs">⚠ {error}</div>}
-        <div className="flex justify-end gap-2 mt-2">
-          <button
-            onClick={onClose}
-            disabled={busy}
-            className="px-3 py-1 rounded bg-bg-accent hover:bg-bg-floating text-text-secondary text-xs disabled:opacity-50"
-          >
-            取消
-          </button>
-          <button
-            onClick={() => void save()}
-            disabled={busy}
-            className="px-3 py-1 rounded bg-brand hover:bg-brand-hover text-white text-xs disabled:opacity-50"
-          >
-            {busy ? '存檔中…' : '存檔'}
-          </button>
+          {secretHit && (
+            <div className="flex flex-col gap-1 p-2 bg-destructive/15 border border-destructive/40 rounded text-xs">
+              <span className="text-destructive font-semibold">⚠ 偵測到可能的 secret 樣式（API key / token / 連線字串等）</span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={override}
+                  onChange={e => setOverride(e.target.checked)}
+                  className="accent-primary"
+                />
+                <span>我已確認可寫入</span>
+              </label>
+            </div>
+          )}
+          {error && <div className="text-destructive text-xs">⚠ {error}</div>}
         </div>
-      </div>
-    </Modal>
-  )
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-text-muted text-[10px] uppercase tracking-wide">
-        {label}
-      </label>
-      {children}
-    </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>取消</Button>
+          <Button onClick={() => void save()} disabled={busy}>
+            {busy ? '存檔中…' : '存檔'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -3,6 +3,7 @@ import { useSessionStore } from '../../store/sessionStore'
 import { useProjectStore } from '../../store/projectStore'
 import { formatTimeAgo } from '../../utils/timeAgo'
 import type { WebSessionInfo } from '../../api/types'
+import { cn } from '@/lib/utils'
 
 export interface SessionTreeProps {
   projectId: string
@@ -20,23 +21,16 @@ function shortLabel(s: WebSessionInfo): string {
 
 export function SessionTree({ projectId }: SessionTreeProps) {
   const sessions = useSessionStore(s => s.byProject[projectId] ?? [])
-  const selectedSessionId = useSessionStore(
-    s => s.selectedSessionByProject[projectId],
-  )
-  const activeSessionId = useSessionStore(
-    s => s.activeSessionByProject[projectId],
-  )
+  const selectedSessionId = useSessionStore(s => s.selectedSessionByProject[projectId])
+  const activeSessionId = useSessionStore(s => s.activeSessionByProject[projectId])
   const selectSession = useSessionStore(s => s.selectSession)
   const selectProject = useProjectStore(s => s.selectProject)
   const [showAll, setShowAll] = useState(false)
 
   if (sessions.length === 0) {
-    return (
-      <div className="pl-6 py-1 text-xs text-text-muted">（無 session）</div>
-    )
+    return <div className="pl-6 py-1 text-xs text-muted-foreground">（無 session）</div>
   }
 
-  // active 永遠優先；其餘照原 server-side 順序（startedAt DESC）
   const sorted = [
     ...sessions.filter(s => s.sessionId === activeSessionId),
     ...sessions.filter(s => s.sessionId !== activeSessionId),
@@ -45,7 +39,7 @@ export function SessionTree({ projectId }: SessionTreeProps) {
   const hidden = sorted.length - visible.length
 
   return (
-    <ul className="ml-2 border-l border-divider/50">
+    <ul className="ml-3 border-l border-border/50">
       {visible.map(s => {
         const isSelected = s.sessionId === selectedSessionId
         const isActive = s.sessionId === activeSessionId
@@ -57,30 +51,25 @@ export function SessionTree({ projectId }: SessionTreeProps) {
               selectProject(projectId)
               selectSession(projectId, s.sessionId)
             }}
-            className={[
-              'px-2 py-1.5 cursor-pointer rounded mx-1 my-0.5 flex flex-col gap-0.5',
+            className={cn(
+              'px-2 py-1.5 cursor-pointer rounded-md mx-1 my-0.5 flex flex-col gap-0.5',
               isSelected
-                ? 'bg-bg-accent text-text-primary'
-                : 'text-text-secondary hover:bg-bg-accent/60 hover:text-text-primary',
-            ].join(' ')}
+                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                : 'hover:bg-sidebar-accent/60',
+            )}
             title={`${s.sessionId}\n${label}`}
           >
             <div className="flex items-center gap-1.5 text-sm">
-              {isActive ? (
-                <span
-                  title="active session"
-                  className="text-status-online text-[10px] flex-shrink-0"
-                >
-                  ●
-                </span>
-              ) : (
-                <span className="text-text-muted text-[10px] flex-shrink-0">
-                  ○
-                </span>
-              )}
+              <span
+                className={cn(
+                  'h-1.5 w-1.5 rounded-full flex-shrink-0',
+                  isActive ? 'bg-[hsl(var(--chart-3))]' : 'bg-muted-foreground/40',
+                )}
+                title={isActive ? 'active' : 'inactive'}
+              />
               <span className="truncate flex-1">{label}</span>
             </div>
-            <div className="flex items-center gap-2 text-[10px] text-text-muted font-mono pl-3.5">
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono pl-3">
               <span>{s.sessionId.slice(0, 8)}</span>
               <span>·</span>
               <span>{formatTimeAgo(s.startedAt)}</span>
@@ -97,7 +86,7 @@ export function SessionTree({ projectId }: SessionTreeProps) {
       {hidden > 0 && (
         <li
           onClick={() => setShowAll(true)}
-          className="px-2 py-1 mx-1 text-xs text-brand cursor-pointer hover:underline"
+          className="px-2 py-1 mx-1 text-xs text-primary cursor-pointer hover:underline"
         >
           + 顯示更多 ({hidden})
         </li>
@@ -105,7 +94,7 @@ export function SessionTree({ projectId }: SessionTreeProps) {
       {showAll && sorted.length > DEFAULT_VISIBLE && (
         <li
           onClick={() => setShowAll(false)}
-          className="px-2 py-1 mx-1 text-xs text-text-muted cursor-pointer hover:underline"
+          className="px-2 py-1 mx-1 text-xs text-muted-foreground cursor-pointer hover:underline"
         >
           收合
         </li>

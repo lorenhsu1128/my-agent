@@ -239,6 +239,73 @@ export CLAUDE_CONFIG_DIR=~/.claude
 
 ---
 
+### 2026-04-26 — M-WEB-SHADCN：Web UI 換成 shadcn/ui + tweakcn Light Green 主題（big-bang）
+
+**範圍**：把 `web/`（Phase 1-4 後的 Discord 風 daemon Web UI，~30 個元件）一次全部換成 [shadcn/ui](https://github.com/shadcn-ui/ui)（Radix + Tailwind + cva）+ [tweakcn Light Green](https://tweakcn.com/themes/cmlhfpjhw000004l4f4ax3m7z)。light/dark 雙主題 + ThemeToggle。`/api`、`/ws` schema、6 個 zustand store、daemon TS 端零修改。完整計畫：`~/.claude/plans/web-ui-https-github-com-shadcn-ui-ui-cosmic-platypus.md`。
+
+**決策**（與使用者對齊 2 輪）：
+- Q1 = big-bang rewrite（單一 commit 全換完）
+- Q2 = light + dark 雙模式 + ThemeToggle（lucide Sun/Moon DropdownMenu，localStorage `my-agent-web-theme`）
+
+**Foundation**：
+- 預先 `components.json` + `src/lib/utils.ts`（cn helper）+ shell `globals.css` + 重寫 `tailwind.config.ts`（`darkMode: 'class'` + semantic tokens 全走 `var(--xxx)`）
+- `npx shadcn@latest add` 一次裝 22 個 primitives（button input textarea label dialog alert-dialog tabs scroll-area dropdown-menu tooltip badge card separator sonner alert form select switch slider collapsible table command resizable）
+- 套主題：`npx shadcn@latest add https://tweakcn.com/r/themes/cmlhfpjhw000004l4f4ax3m7z` 把 OKLCH 變數寫進 `globals.css`（`:root` light + `.dark` 雙區塊）
+- 自動裝的 deps：Radix 14 個、cmdk、sonner、react-hook-form、zod、`@hookform/resolvers`、cva、clsx、tailwind-merge、tailwindcss-animate、lucide-react、react-resizable-panels
+
+**改造既有 30 個元件**（全 big-bang 換）：
+- pages: `Layout.tsx`（ResizablePanelGroup 三欄 20/55/25 + autoSaveId persist + header with `<ThemeToggle />` + Toaster）
+- common: `DisconnectedBanner.tsx` → `Alert variant="destructive"`；**刪 `Modal.tsx`**（被 shadcn `Dialog` 取代）；**刪 `styles/index.css`**（被 `globals.css` 取代）
+- chat 8 個：`ChatPlaceholder/ThinkingBlock(Collapsible)/ToolCallCard(Collapsible+Card)/MessageItem(Card+Badge)/MessageList(ScrollArea)/PermissionModal(AlertDialog+Badge risk variant)/InputBar(Textarea+Command palette)/ChatView(Card+ScrollArea+Button)`
+- leftPanel 3 個：`AddProjectDialog(Dialog+Input+Label+Button)/ProjectList(ScrollArea+Button ghost+DropdownMenu+AlertDialog)/SessionTree(rounded-md hover bg)`
+- rightPanel 8 個：`ContextPanelPlaceholder/ContextPanel(shadcn Tabs)/PermissionsTab(Card+Badge+Label)/CronTab(Card+Badge+AlertDialog+Button)/MemoryTab(Card+Dialog viewer+AlertDialog delete+ScrollArea)/MemoryEditWizard(Dialog+Form+Input+Textarea+Select)/LlamacppTab(Card+Switch+Input number+Badge slot states)/DiscordTab(Card+Alert+Badge+AlertDialog restart confirm+Switch)`
+- 新增 4 檔：`components.json`、`src/lib/utils.ts`、`src/components/theme-provider.tsx`、`src/components/theme-toggle.tsx`、`src/styles/globals.css`、`src/components/ui/*` 22 個 shadcn primitives
+
+**改 build 設定**：
+- `web/tailwind.config.ts` 完全重寫
+- `web/vite.config.ts` 加 `resolve.alias` `'@'` → `./src`（不加會 build 失敗 — Vite 不認 tsconfig paths）
+- `web/src/main.tsx` 包 `<ThemeProvider>` + import `globals.css`
+- `web/package.json` 自動加 31 個新 deps（含 14 個 Radix）
+
+**踩坑 / 教訓**：
+1. **`react-resizable-panels` v4 API 改變**：shadcn 的 `resizable.tsx` 用 v2 名稱（`PanelGroup`/`PanelResizeHandle`），但 `bun add react-resizable-panels` 拿到 v4（已改名 `Group`/`Separator`）。修：`bun add react-resizable-panels@^2`（鎖到 2.1.9）。
+2. **lucide-react 1.x 是新 major**：原本以為 `latest` 會給 0.469.x，實際 npm 上是 1.11.0（lucide 換了 major schema）。能用沒問題，注意別誤判。
+3. **Vite `@/` alias 必須在 `vite.config.ts` 顯式設**：tsconfig.json 的 paths 只給 TS resolver 用，Vite/Rollup 不吃。Build 階段 `Failed to resolve import "@/components/ui/resizable"` 是徵兆。
+4. **tweakcn 主題用 OKLCH 不是 HSL**：原本以 shadcn 預設 `hsl(var(--xxx))` 寫 tailwind.config.ts；套 tweakcn 後 vars 變 `oklch(...)`，要改成直接 `var(--xxx)` 不包 hsl()。
+5. **shadcn CLI `init` 是互動式**：跳過互動的方法是先手寫 `components.json` + `globals.css` + `tailwind.config.ts`，直接跑 `npx shadcn@latest add ...`，CLI 會吃既有 components.json 不問問題。
+6. **tweakcn registry endpoint server-side fetch 500**：`https://tweakcn.com/r/themes/<id>.json` curl 直接 500，但 shadcn CLI 透過自己的 fetcher（帶不同 header）能拿到。CLI fail fallback 是手貼 CSS（本次 CLI 一次過）。
+7. **舊 className grep 確認 0 hit**：`grep 'bg-bg-\|text-text-\|bg-brand\|border-divider\|bg-status-' web/src/` 應 0；殘留會 silently 失效（tailwind 沒這些 class 會 strip 掉）。
+
+**驗證**：
+- `bun run typecheck:web` 綠（web/ 子專案）
+- `bun run build:web` 綠（1901 modules / 470 KB JS / 37.66 KB CSS / 78 modules → 1901 是因為加了 Radix 等大量 deps）
+- `bun test tests/integration/web/` = 220 pass / 1 fail，唯一 fail 是 `vision-locate.test.ts` 的 `getDefaultVisionClient` provider check，git stash 對照確認**為 pre-existing**（與 UI 改動完全無關，是先前 anthropic→llamacpp 預設切換留下的測試 drift）
+- `./cli -p "say only the word OK"` 冒煙通過（main cli 完全不受 web 改動影響）
+- 0 個檔案含舊 Discord palette className（grep 已確認）
+
+**手動 UI 驗收（待使用者實機）**：
+- 開 `http://localhost:9090` 應看到 Light Green 淺綠主題（`--primary` 是綠色 OKLCH）
+- 右上 ThemeToggle ☀/🌙 切 light/dark/system，整頁變更、reload 保留
+- 三欄 ResizablePanelGroup 可拖、refresh 後位置保留（`autoSaveId="my-agent-web-layout"` localStorage persist）
+- 左欄 ProjectList DropdownMenu remove → AlertDialog 確認
+- 中欄 InputBar `/` 觸發 autocomplete dropdown
+- PermissionModal AlertDialog risk badge 變色（destructive=紅 / write=outline / read=secondary）
+- 右欄 6 個 shadcn Tabs（Overview/Cron/Memory/Llamacpp/Discord/Perms）
+- LlamacppTab Switch 拖完真的寫進 daemon
+- DisconnectedBanner（拔網路）顯 destructive Alert
+
+**未做（→ 後續 milestone）**：
+- `M-WEB-MOBILE`：響應式 / 三欄折疊
+- `M-WEB-AUTH`：bearer token / 登入
+- `M-WEB-NOTIF`：browser native notification
+- `M-WEB-SLASH-FULL`：剩 80+ slash command 的 React-DOM port
+- `vision-locate.test.ts` 預期值更新（pre-existing fail，獨立修）
+
+**新 npm deps**（自動由 shadcn 引入）：
+class-variance-authority / clsx / tailwind-merge / tailwindcss-animate / lucide-react / @radix-ui/{14 個} / cmdk / sonner / react-hook-form / @hookform/resolvers / zod / react-resizable-panels（^2 鎖定）/ next-themes（shadcn 內部用）
+
+---
+
 ### 2026-04-26 — M-WEB：Discord 風格 Web UI 嵌入 daemon（Phase 1-4 全完）
 
 **範圍**：在 daemon 內嵌第三個前端（TUI / Discord 之外），瀏覽器透過 LAN IP 連入即可使用 Discord 風三欄式 UI。TUI / Discord / Web 三端對同一 ProjectRuntime 雙向同步（送訊息、permission 批准、cron / memory / llamacpp 設定任一端均同步）。完整計畫：`docs/plans/M-WEB.md`、使用者指南：`docs/web-mode.md`。

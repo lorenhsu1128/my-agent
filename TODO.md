@@ -1350,6 +1350,43 @@
 
 ---
 
+## 當前里程碑：M-WEB-SHADCN — Web UI 換成 shadcn/ui + tweakcn Light Green 主題（2026-04-26 啟動）
+
+**目標**：把 `web/` 從「Tailwind v3 + 自訂 Discord 暗色 palette + 全部 inline className」換成 [shadcn/ui](https://github.com/shadcn-ui/ui)（Radix + Tailwind + cva），並套用 [tweakcn Light Green 主題](https://tweakcn.com/themes/cmlhfpjhw000004l4f4ax3m7z)；補 light/dark 切換能力。詳見 `~/.claude/plans/web-ui-https-github-com-shadcn-ui-ui-cosmic-platypus.md`。
+
+**決策**：big-bang rewrite（單一 milestone 全換完）；light + dark 雙模式 + ThemeToggle；範圍只在 `web/`，daemon TS / WS protocol / REST schema / zustand store 全不動；既有 ~210 個 web 測試不動（純 protocol 層）。
+
+### 任務
+- [ ] M-WEB-SHADCN-1 Foundation：`npx shadcn@latest init`（new-york / neutral）+ 一次裝齊 22 個 primitives（button input textarea label dialog alert-dialog tabs scroll-area dropdown-menu tooltip badge card separator sonner alert form select switch slider collapsible table command resizable）
+- [ ] M-WEB-SHADCN-2 套主題：`npx shadcn@latest add https://tweakcn.com/r/themes/cmlhfpjhw000004l4f4ax3m7z`；CLI 失敗則手貼 tweakcn CSS 到 `globals.css`
+- [ ] M-WEB-SHADCN-3 `tailwind.config.ts` 重寫：`darkMode: 'class'` + shadcn semantic tokens (`hsl(var(--xxx))`) + `tailwindcss-animate` plugin；刪除舊 Discord palette
+- [ ] M-WEB-SHADCN-4 ThemeProvider + ThemeToggle：context + localStorage（`my-agent-web-theme`）+ lucide Sun/Moon DropdownMenu 三選一；`main.tsx` 包進去
+- [ ] M-WEB-SHADCN-5 Layout shell：`ResizablePanelGroup` 三欄（20/55/25）+ header bar with ThemeToggle
+- [ ] M-WEB-SHADCN-6 chat 元件 rewrite：ChatPlaceholder → ThinkingBlock → ToolCallCard → MessageItem → MessageList → PermissionModal → InputBar (Command palette) → ChatView
+- [ ] M-WEB-SHADCN-7 leftPanel 元件 rewrite：AddProjectDialog → ProjectList → SessionTree
+- [ ] M-WEB-SHADCN-8 rightPanel 元件 rewrite：ContextPanelPlaceholder → PermissionsTab → MemoryTab → MemoryEditWizard → CronTab → LlamacppTab → DiscordTab → ContextPanel
+- [ ] M-WEB-SHADCN-9 common 收尾：DisconnectedBanner 換 Alert variant=destructive；刪 `Modal.tsx` + `styles/index.css`
+- [ ] M-WEB-SHADCN-10 驗證：`bun run typecheck:web` + `bun run build:web` 雙綠；`bun test tests/integration/web/` 全綠（~210）；手動驗收清單（首屏 Light Green / theme toggle / 三欄 resize / 6 個 Tabs / AlertDialog risk badge / Disconnected Banner）
+- [ ] M-WEB-SHADCN-11 收尾：CLAUDE.md 開發日誌 + ADR-017（big-bang + 雙主題決策）+ commit（`feat(web): M-WEB-SHADCN — shadcn/ui + tweakcn Light Green 主題大改造`，繁中訊息）
+
+### 完成標準
+- [ ] `web/components/ui/` 22 個 shadcn primitives 就位
+- [ ] `globals.css` 含完整 light + dark token 區塊（tweakcn Light Green）
+- [ ] 30 個既有 UI 元件全部不再含舊 Discord 色 className（`grep 'bg-bg-\|text-text-\|bg-brand' web/src/` 應 0 hit，排除 `components/ui/`）
+- [ ] `tailwind.config.ts` 不含舊 Discord palette
+- [ ] `bun run typecheck:web` + `bun run build:web` 雙綠
+- [ ] 既有 ~210 個 web tests 全綠
+- [ ] 手動驗收清單全勾
+- [ ] commit 前 `./cli -p hello` 冒煙通過
+
+### 不在範圍（→ 後續 milestone）
+- `M-WEB-MOBILE`：響應式 / 三欄折疊
+- `M-WEB-AUTH`：bearer token / 登入
+- `M-WEB-NOTIF`：browser native notification
+- 把 shadcn theming 反向套到 TUI / Discord embed（不適用，這兩端不是 web）
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2427,3 +2464,7 @@
 - 2026-04-26 18:54: Session 結束 | 進度：613/663 任務 | 1014c96 feat(web): M-WEB-22 — Session 切換 backfill + 清單 UX 修補（Phase 5）
 
 - 2026-04-26 19:08: Session 結束 | 進度：616/686 任務 | 048aebd feat(web): M-WEB-CLOSEOUT-1/2/3 — Llamacpp slot inspector REST + SlotsPanel
+
+- 2026-04-26 19:59: Session 結束 | 進度：631/685 任務 | 288b5e4 test(web): M-WEB-CLOSEOUT-13..17 — 跨端 broadcast E2E + Section M + 收尾
+
+- 2026-04-26 20:02: Session 結束 | 進度：631/685 任務 | 288b5e4 test(web): M-WEB-CLOSEOUT-13..17 — 跨端 broadcast E2E + Section M + 收尾

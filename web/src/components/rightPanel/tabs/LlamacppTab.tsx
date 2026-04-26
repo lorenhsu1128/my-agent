@@ -6,6 +6,13 @@ import {
   type WebSlotInfo,
 } from '../../../api/client'
 import { useWsClient } from '../../../hooks/useWsClient'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { RotateCw } from 'lucide-react'
 
 export function LlamacppTab() {
   const [cfg, setCfg] = useState<WebWatchdogConfig | null>(null)
@@ -15,106 +22,72 @@ export function LlamacppTab() {
   const ws = useWsClient()
 
   async function refresh() {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
       const { config } = await api.llamacpp.getWatchdog()
       setCfg(config)
     } catch (e) {
       setError(
-        e instanceof ApiError
-          ? `${e.code}: ${e.message}`
-          : e instanceof Error
-            ? e.message
-            : String(e),
+        e instanceof ApiError ? `${e.code}: ${e.message}`
+          : e instanceof Error ? e.message : String(e),
       )
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
-  useEffect(() => {
-    void refresh()
-  }, [])
+  useEffect(() => { void refresh() }, [])
 
   useEffect(() => {
     if (!ws) return
     return ws.on('frame', f => {
-      if (f.type === 'llamacpp.configChanged') {
-        void refresh()
-      }
+      if (f.type === 'llamacpp.configChanged') void refresh()
     })
   }, [ws])
 
   async function update(next: WebWatchdogConfig) {
-    setBusy(true)
-    setError(null)
+    setBusy(true); setError(null)
     try {
       await api.llamacpp.setWatchdog(next)
       setCfg(next)
     } catch (e) {
       setError(
-        e instanceof ApiError
-          ? `${e.code}: ${e.message}`
-          : e instanceof Error
-            ? e.message
-            : String(e),
+        e instanceof ApiError ? `${e.code}: ${e.message}`
+          : e instanceof Error ? e.message : String(e),
       )
-    } finally {
-      setBusy(false)
-    }
+    } finally { setBusy(false) }
   }
 
-  if (loading && !cfg) {
-    return <div className="text-text-muted text-xs">載入中…</div>
-  }
-  if (!cfg) {
-    return (
-      <div className="text-status-dnd text-xs">⚠ {error ?? 'unknown error'}</div>
-    )
-  }
+  if (loading && !cfg) return <div className="text-muted-foreground text-xs">載入中…</div>
+  if (!cfg) return <div className="text-destructive text-xs">⚠ {error ?? 'unknown error'}</div>
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className="text-text-muted text-xs uppercase tracking-wide">
-          Llamacpp Watchdog
-        </span>
-        <button
-          onClick={() => void refresh()}
-          className="text-text-muted hover:text-text-primary text-xs"
-        >
-          ⟳
-        </button>
+        <span className="text-muted-foreground text-xs uppercase tracking-wide">Llamacpp Watchdog</span>
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => void refresh()}>
+          <RotateCw className="h-3 w-3" />
+        </Button>
       </div>
-      {error && <div className="text-status-dnd text-xs">⚠ {error}</div>}
+      {error && <div className="text-destructive text-xs">⚠ {error}</div>}
 
-      <Toggle
+      <ToggleRow
         label="Master enable"
         checked={cfg.enabled}
         disabled={busy}
         onChange={v => void update({ ...cfg, enabled: v })}
-        hint="主開關；關掉則所有 layer 都不生效（即使 layer.enabled=true）"
+        hint="主開關；關掉則所有 layer 都不生效"
       />
       <NestedToggle
         title="A. Inter-chunk"
         layerEnabled={cfg.interChunk.enabled}
         masterEnabled={cfg.enabled}
         disabled={busy}
-        onLayerChange={v =>
-          void update({ ...cfg, interChunk: { ...cfg.interChunk, enabled: v } })
-        }
+        onLayerChange={v => void update({ ...cfg, interChunk: { ...cfg.interChunk, enabled: v } })}
       >
         <NumberField
           label="gapMs"
           value={cfg.interChunk.gapMs}
           disabled={busy}
-          onChange={v =>
-            void update({
-              ...cfg,
-              interChunk: { ...cfg.interChunk, gapMs: v },
-            })
-          }
+          onChange={v => void update({ ...cfg, interChunk: { ...cfg.interChunk, gapMs: v } })}
         />
       </NestedToggle>
       <NestedToggle
@@ -122,20 +95,13 @@ export function LlamacppTab() {
         layerEnabled={cfg.reasoning.enabled}
         masterEnabled={cfg.enabled}
         disabled={busy}
-        onLayerChange={v =>
-          void update({ ...cfg, reasoning: { ...cfg.reasoning, enabled: v } })
-        }
+        onLayerChange={v => void update({ ...cfg, reasoning: { ...cfg.reasoning, enabled: v } })}
       >
         <NumberField
           label="blockMs"
           value={cfg.reasoning.blockMs}
           disabled={busy}
-          onChange={v =>
-            void update({
-              ...cfg,
-              reasoning: { ...cfg.reasoning, blockMs: v },
-            })
-          }
+          onChange={v => void update({ ...cfg, reasoning: { ...cfg.reasoning, blockMs: v } })}
         />
       </NestedToggle>
       <NestedToggle
@@ -143,25 +109,19 @@ export function LlamacppTab() {
         layerEnabled={cfg.tokenCap.enabled}
         masterEnabled={cfg.enabled}
         disabled={busy}
-        onLayerChange={v =>
-          void update({ ...cfg, tokenCap: { ...cfg.tokenCap, enabled: v } })
-        }
+        onLayerChange={v => void update({ ...cfg, tokenCap: { ...cfg.tokenCap, enabled: v } })}
       >
         <NumberField
           label="default"
           value={cfg.tokenCap.default}
           disabled={busy}
-          onChange={v =>
-            void update({ ...cfg, tokenCap: { ...cfg.tokenCap, default: v } })
-          }
+          onChange={v => void update({ ...cfg, tokenCap: { ...cfg.tokenCap, default: v } })}
         />
         <NumberField
           label="background"
           value={cfg.tokenCap.background}
           disabled={busy}
-          onChange={v =>
-            void update({ ...cfg, tokenCap: { ...cfg.tokenCap, background: v } })
-          }
+          onChange={v => void update({ ...cfg, tokenCap: { ...cfg.tokenCap, background: v } })}
         />
       </NestedToggle>
 
@@ -180,17 +140,12 @@ function SlotsPanel() {
   async function refresh() {
     try {
       const r = await api.llamacpp.getSlots()
-      setAvailable(r.available)
-      setSlots(r.slots)
-      setReason(r.reason ?? null)
+      setAvailable(r.available); setSlots(r.slots); setReason(r.reason ?? null)
     } catch (e) {
       setAvailable(false)
       setReason(
-        e instanceof ApiError
-          ? `${e.code}: ${e.message}`
-          : e instanceof Error
-            ? e.message
-            : String(e),
+        e instanceof ApiError ? `${e.code}: ${e.message}`
+          : e instanceof Error ? e.message : String(e),
       )
     }
   }
@@ -208,14 +163,11 @@ function SlotsPanel() {
       setFlash({ text: `已送 erase slot ${id}`, tone: 'info' })
       void refresh()
     } catch (e) {
-      const msg =
-        e instanceof ApiError
-          ? e.code === 'SLOT_ERASE_UNSUPPORTED'
-            ? 'server 未啟用 slot cancel — 請以 --slot-save-path 重啟 llama-server'
-            : `${e.code}: ${e.message}`
-          : e instanceof Error
-            ? e.message
-            : String(e)
+      const msg = e instanceof ApiError
+        ? e.code === 'SLOT_ERASE_UNSUPPORTED'
+          ? 'server 未啟用 slot cancel — 請以 --slot-save-path 重啟 llama-server'
+          : `${e.code}: ${e.message}`
+        : e instanceof Error ? e.message : String(e)
       setFlash({ text: msg, tone: 'error' })
     } finally {
       setBusyId(null)
@@ -224,81 +176,62 @@ function SlotsPanel() {
   }
 
   return (
-    <div className="bg-bg-tertiary border border-divider/50 rounded p-2 flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <span className="text-text-muted text-xs uppercase tracking-wide">
-          Slot inspector
-        </span>
-        <button
-          onClick={() => void refresh()}
-          className="text-text-muted hover:text-text-primary text-xs"
-          title="refresh"
-        >
-          ⟳
-        </button>
-      </div>
-
-      {available === null && (
-        <div className="text-text-muted text-xs">載入中…</div>
-      )}
-      {available === false && (
-        <div className="text-text-muted text-xs">
-          slot inspector unavailable
-          {reason && <span className="block mt-1">原因：{reason}</span>}
+    <Card>
+      <CardContent className="p-2 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground text-xs uppercase tracking-wide">Slot inspector</span>
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => void refresh()}>
+            <RotateCw className="h-3 w-3" />
+          </Button>
         </div>
-      )}
-      {available && slots.length === 0 && (
-        <div className="text-text-muted text-xs">(無 slot 資料)</div>
-      )}
-      {available && slots.length > 0 && (
-        <div className="flex flex-col gap-1">
-          {slots.map(s => {
-            const stateColor = s.isProcessing ? 'text-status-idle' : 'text-status-online'
-            const stateLabel = s.isProcessing ? 'processing' : 'idle'
-            const reasoningHint = s.isProcessing && s.nDecoded > 20000
-            return (
-              <div
-                key={s.id}
-                className="flex items-center gap-2 text-xs font-mono"
-              >
-                <span className="text-text-muted w-12">slot {s.id}</span>
-                <span className={`${stateColor} w-20`}>{stateLabel}</span>
-                <span className="text-text-muted">decoded</span>
-                <span className="w-16 text-right">{s.nDecoded}</span>
-                <span className="text-text-muted">remain</span>
-                <span className="w-16 text-right">{s.nRemain}</span>
-                {reasoningHint && (
-                  <span className="text-status-dnd">← reasoning loop?</span>
-                )}
-                <button
-                  onClick={() => void handleErase(s.id)}
-                  disabled={busyId === s.id}
-                  className="ml-auto px-2 py-0.5 rounded border border-divider hover:border-status-dnd hover:text-status-dnd disabled:opacity-50"
-                  title="erase slot（需 server 帶 --slot-save-path）"
-                >
-                  erase
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
-      {flash && (
-        <div
-          className={
-            flash.tone === 'error'
-              ? 'text-status-dnd text-xs'
-              : 'text-status-online text-xs'
-          }
-        >
-          {flash.text}
-        </div>
-      )}
-    </div>
+        {available === null && <div className="text-muted-foreground text-xs">載入中…</div>}
+        {available === false && (
+          <div className="text-muted-foreground text-xs">
+            slot inspector unavailable
+            {reason && <span className="block mt-1">原因：{reason}</span>}
+          </div>
+        )}
+        {available && slots.length === 0 && <div className="text-muted-foreground text-xs">(無 slot 資料)</div>}
+        {available && slots.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {slots.map(s => {
+              const reasoningHint = s.isProcessing && s.nDecoded > 20000
+              return (
+                <div key={s.id} className="flex items-center gap-2 text-xs font-mono">
+                  <span className="text-muted-foreground w-12">slot {s.id}</span>
+                  <Badge variant={s.isProcessing ? 'outline' : 'secondary'} className="w-20 justify-center">
+                    {s.isProcessing ? 'processing' : 'idle'}
+                  </Badge>
+                  <span className="text-muted-foreground">decoded</span>
+                  <span className="w-16 text-right">{s.nDecoded}</span>
+                  <span className="text-muted-foreground">remain</span>
+                  <span className="w-16 text-right">{s.nRemain}</span>
+                  {reasoningHint && <span className="text-destructive">← reasoning loop?</span>}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto h-6 px-2"
+                    onClick={() => void handleErase(s.id)}
+                    disabled={busyId === s.id}
+                  >
+                    erase
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {flash && (
+          <div className={flash.tone === 'error' ? 'text-destructive text-xs' : 'text-[hsl(var(--chart-3))] text-xs'}>
+            {flash.text}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
-function Toggle({
+function ToggleRow({
   label,
   checked,
   disabled,
@@ -313,17 +246,11 @@ function Toggle({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled={disabled}
-          onChange={e => onChange(e.target.checked)}
-          className="accent-brand"
-        />
-        <span className="text-sm">{label}</span>
-      </label>
-      {hint && <span className="text-text-muted text-xs">{hint}</span>}
+      <div className="flex items-center gap-2">
+        <Switch checked={checked} disabled={disabled} onCheckedChange={onChange} />
+        <Label className="text-sm">{label}</Label>
+      </div>
+      {hint && <span className="text-muted-foreground text-xs">{hint}</span>}
     </div>
   )
 }
@@ -345,22 +272,16 @@ function NestedToggle({
 }) {
   const effective = masterEnabled && layerEnabled
   return (
-    <div className="bg-bg-tertiary border border-divider/50 rounded p-2 flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={layerEnabled}
-          disabled={disabled}
-          onChange={e => onLayerChange(e.target.checked)}
-          className="accent-brand"
-        />
-        <span className="text-sm font-semibold">{title}</span>
-        {effective && (
-          <span className="text-status-online text-[10px]">effective</span>
-        )}
-      </div>
-      <div className="ml-5 flex flex-col gap-1">{children}</div>
-    </div>
+    <Card>
+      <CardContent className="p-2 flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <Switch checked={layerEnabled} disabled={disabled} onCheckedChange={onLayerChange} />
+          <Label className="text-sm font-semibold">{title}</Label>
+          {effective && <Badge variant="secondary" className="text-[10px]">effective</Badge>}
+        </div>
+        <div className="ml-9 flex flex-col gap-1">{children}</div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -376,13 +297,11 @@ function NumberField({
   onChange: (v: number) => void
 }) {
   const [draft, setDraft] = useState(String(value))
-  useEffect(() => {
-    setDraft(String(value))
-  }, [value])
+  useEffect(() => { setDraft(String(value)) }, [value])
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="text-text-muted w-20">{label}</span>
-      <input
+      <Label className="text-muted-foreground w-20">{label}</Label>
+      <Input
         type="number"
         value={draft}
         disabled={disabled}
@@ -391,7 +310,7 @@ function NumberField({
           const n = Number(draft)
           if (Number.isFinite(n) && n !== value) onChange(n)
         }}
-        className="bg-bg-floating text-text-primary px-2 py-0.5 rounded border border-divider focus:border-brand outline-none w-24 font-mono"
+        className="h-7 w-24 font-mono text-xs"
       />
     </div>
   )

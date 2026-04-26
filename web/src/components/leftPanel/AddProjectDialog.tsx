@@ -1,7 +1,16 @@
 import { useState } from 'react'
-import { Modal } from '../common/Modal'
 import { api, ApiError } from '../../api/client'
 import { useProjectStore } from '../../store/projectStore'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 export interface AddProjectDialogProps {
   open: boolean
@@ -37,41 +46,34 @@ export function AddProjectDialog({ open, onClose }: AddProjectDialogProps) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="加入 Project">
-      <div className="flex flex-col gap-3">
-        <label className="text-sm text-text-secondary">
-          Project 絕對路徑（cwd）
-        </label>
-        <input
-          type="text"
-          autoFocus
-          value={cwd}
-          onChange={e => setCwd(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') void submit()
-            if (e.key === 'Escape') onClose()
-          }}
-          placeholder="/Users/me/projects/foo  或  C:\\Users\\me\\foo"
-          className="bg-bg-tertiary text-text-primary px-3 py-2 rounded border border-divider focus:border-brand outline-none"
-        />
-        {err && <div className="text-sm text-status-dnd">⚠ {err}</div>}
-        <div className="flex justify-end gap-2 mt-2">
-          <button
-            onClick={onClose}
-            disabled={busy}
-            className="px-4 py-2 rounded text-text-primary hover:bg-bg-accent disabled:opacity-50"
-          >
-            取消
-          </button>
-          <button
-            onClick={submit}
-            disabled={busy || !cwd.trim()}
-            className="px-4 py-2 rounded bg-brand hover:bg-brand-hover text-white disabled:opacity-50"
-          >
-            {busy ? '載入中…' : '加入'}
-          </button>
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>加入 Project</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <Label htmlFor="cwd-input">Project 絕對路徑（cwd）</Label>
+          <Input
+            id="cwd-input"
+            autoFocus
+            value={cwd}
+            onChange={e => setCwd(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') void submit()
+              if (e.key === 'Escape') onClose()
+            }}
+            placeholder="/Users/me/projects/foo  或  C:\Users\me\foo"
+            className="font-mono text-sm"
+          />
+          {err && <div className="text-sm text-destructive">⚠ {err}</div>}
         </div>
-      </div>
-    </Modal>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>取消</Button>
+          <Button onClick={submit} disabled={busy || !cwd.trim()}>
+            {busy ? '載入中…' : '加入'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

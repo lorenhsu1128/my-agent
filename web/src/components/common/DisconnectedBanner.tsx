@@ -1,13 +1,17 @@
 import { useWsStore } from '../../store/wsStore'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertCircle, RotateCw } from 'lucide-react'
 
 export function DisconnectedBanner() {
   const status = useWsStore(s => s.status)
   if (status === 'open' || status === 'connecting') return null
-  const text =
-    status === 'reconnecting' ? '⟳ 重新連線中…' : '⚠ 連線中斷'
+  const reconnecting = status === 'reconnecting'
   return (
-    <div className="bg-status-dnd/20 text-status-dnd text-center text-sm py-1 border-b border-status-dnd/40">
-      {text}
-    </div>
+    <Alert variant="destructive" className="rounded-none border-x-0 border-t-0 py-2">
+      {reconnecting ? <RotateCw className="h-4 w-4 animate-spin" /> : <AlertCircle className="h-4 w-4" />}
+      <AlertDescription>
+        {reconnecting ? '重新連線中…' : '連線中斷'}
+      </AlertDescription>
+    </Alert>
   )
 }
