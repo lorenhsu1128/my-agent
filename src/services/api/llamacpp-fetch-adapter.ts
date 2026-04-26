@@ -337,7 +337,17 @@ function translateToolsToOpenAI(
 export function translateRequestToOpenAI(
   anthropic: AnthropicRequestBody,
   defaultModel: string,
-  options: { vision?: boolean } = {},
+  options: {
+    vision?: boolean
+    /**
+     * M-LLAMACPP-WATCHDOG Phase 2：依 call-site clamp `max_tokens` 到設定上限。
+     * 預設 `'turn'`（主對話）；背景呼叫應傳對應 callSite 走更嚴格 ceiling。
+     * 只有 `tokenCap` watchdog 啟用時才生效；關閉時 `getTokenCap()` 回 Infinity 不影響。
+     */
+    callSite?: import('../../llamacppConfig/schema.js').LlamaCppCallSite
+    /** 同上，可直接傳已 resolve 的 watchdog 設定（避免重讀 snapshot；測試友善） */
+    watchdogCfg?: import('../../llamacppConfig/schema.js').LlamaCppWatchdogConfig
+  } = {},
 ): OpenAIRequestBody {
   const systemPrompt = flattenSystemPrompt(anthropic.system)
   // 當 request 帶 tools 定義時，在 system prompt 尾端追加一句 tool-usage policy。
@@ -358,10 +368,24 @@ export function translateRequestToOpenAI(
     }),
   )
 
+  // M-LLAMACPP-WATCHDOG Phase 2：max_tokens ceiling — caller_value 與
+  // tokenCap[callSite] 取小值。watchdog 關閉時 cap=Infinity 等於不變。
+  const callerMaxTokens = anthropic.max_tokens ?? 4096
+  const callSite = options.callSite ?? 'turn'
+  // lazy-load 以避免 vendored SDK 在 require 時撞 paths 解析（同檔頂層已 dynamic import 過 watchdog 模組）
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const watchdogModule: typeof import('./llamacppWatchdog.js') = require('./llamacppWatchdog.js')
+  const cfg =
+    options.watchdogCfg ??
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('../../llamacppConfig/loader.js') as typeof import('../../llamacppConfig/loader.js')).getEffectiveWatchdogConfig()
+  const cap = watchdogModule.getTokenCap(cfg, callSite)
+  const cappedMaxTokens = Math.min(callerMaxTokens, cap)
+
   const body: OpenAIRequestBody = {
     model: anthropic.model || defaultModel,
     messages,
-    max_tokens: anthropic.max_tokens ?? 4096,
+    max_tokens: cappedMaxTokens,
     stream: anthropic.stream === true,
   }
   if (typeof anthropic.temperature === 'number') body.temperature = anthropic.temperature

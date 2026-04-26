@@ -1184,9 +1184,9 @@
 - [x] M-LLAMACPP-WATCHDOG-1-5 typecheck baseline 不退步；`timeout -k 5s 60s ./cli -p "say hi"` 冒煙 EXIT=0；commit
 
 #### Phase 2 — Per-call-site max_tokens ceiling
-- [ ] M-LLAMACPP-WATCHDOG-2-1 `translateRequestToOpenAI()` 加 `callSite` 參數，clamp `max_tokens = min(caller, ceiling[callSite])`
-- [ ] M-LLAMACPP-WATCHDOG-2-2 `llamacppSideQuery.ts` / `findRelevantMemories.ts selectViaLlamaCpp()` / `extractMemories` 走 llamacpp path 各標 `callSite`
-- [ ] M-LLAMACPP-WATCHDOG-2-3 unit + 修改既有測試 expectation；commit
+- [x] M-LLAMACPP-WATCHDOG-2-1 `translateRequestToOpenAI()` 加 `callSite` + `watchdogCfg` options（後者測試友善）；clamp `max_tokens = min(caller, getTokenCap(cfg, callSite))`；watchdog 關閉時 cap=Infinity 等於不變
+- [x] M-LLAMACPP-WATCHDOG-2-2 主 turn 走 createLlamaCppFetch 預設 callSite='turn'；sideQuery / findRelevantMemories / extractMemories 走直接 fetch（不經 translateRequestToOpenAI），既有 hardcoded max_tokens（1024 / 256）已等於 ceiling 預設值，**無需改 caller**。未來若要強制 clamp 可在那幾條 caller 自行加 `Math.min(my_max, getTokenCap(cfg, 'sideQuery'))`，留 polish
+- [x] M-LLAMACPP-WATCHDOG-2-3 新 `tests/integration/llamacpp/translate-clamp.test.ts` 7 cases（watchdog off 不變 / clamp turn / caller 較小不 inflate / per call-site memoryPrefetch+background / 預設 callSite='turn' / caller 沒給 max_tokens 用 4096 再 clamp）；smoke 通過；commit
 
 #### Phase 3 — `/llamacpp` master TUI + Hybrid args + broadcast
 - [ ] M-LLAMACPP-WATCHDOG-3-1 新 `src/commands/llamacpp/{index.ts, llamacpp.tsx, LlamacppManager.tsx, llamacppManagerLogic.ts}` master TUI（mirror MemoryManager pattern；2 tabs：Watchdog / Slots）
