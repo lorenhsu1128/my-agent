@@ -1302,6 +1302,55 @@
 
 ---
 
+## 當前里程碑：M-WEB-CLOSEOUT — Phase b 尾巴 + 主線 E2E 收尾（2026-04-26 規劃）
+
+**目標**：補上 M-WEB Phase 3 主動延後的三條 b 尾巴（15b/16b/17b），完成 M-WEB 主線兩個未勾項（手動 E2E 八項自動化 + Section M），把 M-WEB 整個 milestone 正式關掉。
+
+**範圍決策**（與使用者對齊）：
+- Q1=c：17b 開到全範圍（list/view + bind/unbind + reload config / restart gateway），LAN 內個人使用無認證模型沿用
+- Q2 開工順序：16b（最小、純讀）→ 15b（mutation）→ 17b（admin）→ E2E + Section M
+- 跨平台：puppeteer-core E2E 在 Windows / macOS 都跑得起來（已沿用既有依賴）；Section M 走 bash（Windows 走 Git Bash）
+
+### Phase A — M-WEB-16b Llamacpp slot inspector ✅ 2026-04-26
+- [x] M-WEB-CLOSEOUT-1：REST `GET /api/llamacpp/slots`（reuse `fetchSlots`，graceful fail 回 `{ available: false, reason }`）+ `POST /api/llamacpp/slots/:id/erase`（reuse `killSlot`，501 → SLOT_ERASE_UNSUPPORTED）+ 6 unit tests
+- [x] M-WEB-CLOSEOUT-2：LlamacppTab 加 SlotsPanel 子組件（5s polling、active slots 列表 + decoded/remain、reasoning loop hint、erase 按鈕、unavailable fallback、flash toast）
+- [x] M-WEB-CLOSEOUT-3：typecheck/build:web/build:dev 綠 + ./cli -p hello 冒煙過 + 6 unit tests + 24 REST routes 全綠
+
+### Phase B — M-WEB-15b Memory edit wizard + injection 掃描
+- [ ] M-WEB-CLOSEOUT-4：REST `PUT /api/memory`（write body + frontmatter，path traversal 防護同 GET）+ `POST /api/memory`（new file，含 wizard 全欄位）+ 單元測試
+- [ ] M-WEB-CLOSEOUT-5：MemoryEditWizard React 組件（複刻 TUI 5 tab 行為矩陣 — USER 不可刪/重命名、daily-log 唯讀、project MY-AGENT.md 不可新建/重命名、local-config 全功能無 frontmatter）
+- [ ] M-WEB-CLOSEOUT-6：inline `secretScan.ts` 掃描（reuse `src/utils/web/secretScan.ts`），存檔前提示
+- [ ] M-WEB-CLOSEOUT-7：訂閱既有 `memory.itemsChanged` broadcast 自動刷 UI；commit + smoke
+
+### Phase C — M-WEB-17b Discord admin RPC 接 web（Q1=c 全範圍）
+- [ ] M-WEB-CLOSEOUT-8：列出 admin 操作清單並對齊（先列再實作）：list bindings / bind channel / unbind channel / reload config / restart gateway。如有疑問再問
+- [ ] M-WEB-CLOSEOUT-9：daemon 端新增對應 WS RPC frame（`discord.admin.*`） + handler；reuse 既有 `discordBindRpc.ts` 的 bind/unbind 路徑
+- [ ] M-WEB-CLOSEOUT-10：REST `/api/discord/*` 對應端點 + path validation
+- [ ] M-WEB-CLOSEOUT-11：DiscordTab 從 read-only 升級成可操作（reload/restart 加二次確認 modal、LAN 內無認證警告 banner）
+- [ ] M-WEB-CLOSEOUT-12：commit + smoke
+
+### Phase D — 主線 E2E 自動化 + Section M
+- [ ] M-WEB-CLOSEOUT-13：`tests/e2e/web-e2e.sh` 收八項 case：(1) 三端同步 (2) Permission first-wins (3) Cron CRUD 三端同步 (4) Memory edit 同步 (5) Session 切換 backfill (6) 斷線重連 (7) Q2 project add/remove (8) 跨平台抽樣（macOS path 模擬）
+- [ ] M-WEB-CLOSEOUT-14：純 daemon WS + REST 部分用 bun test 寫成 integration test（不需 browser，CI 可跑）
+- [ ] M-WEB-CLOSEOUT-15：browser 互動部分用 puppeteer-core 寫 headless 腳本（bun script，Windows + macOS 雙跑）
+- [ ] M-WEB-CLOSEOUT-16：`tests/e2e/decouple-comprehensive.sh` 加 Section M / alias `web` / `web-closeout`，呼叫 web-e2e.sh 子集（純 WS/REST 那幾項，PTY 互動部分先最小覆蓋）
+- [ ] M-WEB-CLOSEOUT-17：勾掉 M-WEB 完成標準兩項；CLAUDE.md 加 dev log 段；TODO.md 收尾
+
+### 完成標準
+- [ ] `bun run typecheck` 綠（TS5101 baseline 不變）
+- [ ] `bun run build:web` 綠；`bun run build:dev` 綠
+- [ ] daemon + web 既有測試全綠 + 新增測試全綠
+- [ ] M-WEB 主線「完成標準」兩個未勾項全勾
+- [ ] 跨平台 self-check：Windows 主跑 + macOS 行為描述（puppeteer headless / bash 腳本）
+- [ ] commit 前每個 phase `./cli -p hello` 冒煙
+
+### 不在範圍（後續 milestone）
+- `M-WEB-AUTH`：17b 開了 admin 操作後 LAN 外暴露才需要，獨立處理
+- `M-MEMTUI-USER-SECT`：USER.md 段落級結構化編輯
+- `M-WEB-MOBILE` / `M-WEB-NOTIF` / `M-WEB-ATTACHMENT` / `M-WEB-MULTI-USER` / `M-WEB-SLASH-FULL` / `M-WEB-AGENT-VIEW` / `M-WEB-DIFF-RICH`（M-WEB 原計畫已列）
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2367,3 +2416,13 @@
 - 2026-04-26 17:23: Session 結束 | 進度：593/661 任務 | 2bd250a feat(daemon): M-DAEMON-STREAM — daemon 模式 thinking / text 即時 streaming
 
 - 2026-04-26 17:43: Session 結束 | 進度：600/662 任務 | 82da68e feat(web): M-WEB Phase 2 — chat 核心 + 三欄 UI + permission first-wins
+
+- 2026-04-26 18:22: Session 結束 | 進度：613/663 任務 | 92c9d0d docs(todo): 勾選 M-WEB Phase 4 + 完成標準（補 9b2cac4 漏掉的 TODO 更新）
+
+- 2026-04-26 18:30: Session 結束 | 進度：613/663 任務 | 03e148a fix(web): assistant turn UI 完全空 — 修 RunnerEvent wrapper 解析 + 加 stream delta 支援
+
+- 2026-04-26 18:36: Session 結束 | 進度：613/663 任務 | 03e148a fix(web): assistant turn UI 完全空 — 修 RunnerEvent wrapper 解析 + 加 stream delta 支援
+
+- 2026-04-26 18:43: Session 結束 | 進度：613/663 任務 | 03e148a fix(web): assistant turn UI 完全空 — 修 RunnerEvent wrapper 解析 + 加 stream delta 支援
+
+- 2026-04-26 18:54: Session 結束 | 進度：613/663 任務 | 1014c96 feat(web): M-WEB-22 — Session 切換 backfill + 清單 UX 修補（Phase 5）

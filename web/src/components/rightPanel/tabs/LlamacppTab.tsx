@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { api, ApiError, type WebWatchdogConfig } from '../../../api/client'
+import {
+  api,
+  ApiError,
+  type WebWatchdogConfig,
+  type WebSlotInfo,
+} from '../../../api/client'
 import { useWsClient } from '../../../hooks/useWsClient'
 
 export function LlamacppTab() {
@@ -159,6 +164,136 @@ export function LlamacppTab() {
           }
         />
       </NestedToggle>
+
+      <SlotsPanel />
+    </div>
+  )
+}
+
+function SlotsPanel() {
+  const [available, setAvailable] = useState<boolean | null>(null)
+  const [slots, setSlots] = useState<WebSlotInfo[]>([])
+  const [reason, setReason] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<number | null>(null)
+  const [flash, setFlash] = useState<{ text: string; tone: 'info' | 'error' } | null>(null)
+
+  async function refresh() {
+    try {
+      const r = await api.llamacpp.getSlots()
+      setAvailable(r.available)
+      setSlots(r.slots)
+      setReason(r.reason ?? null)
+    } catch (e) {
+      setAvailable(false)
+      setReason(
+        e instanceof ApiError
+          ? `${e.code}: ${e.message}`
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      )
+    }
+  }
+
+  useEffect(() => {
+    void refresh()
+    const t = setInterval(refresh, 5000)
+    return () => clearInterval(t)
+  }, [])
+
+  async function handleErase(id: number) {
+    setBusyId(id)
+    try {
+      await api.llamacpp.eraseSlot(id)
+      setFlash({ text: `已送 erase slot ${id}`, tone: 'info' })
+      void refresh()
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? e.code === 'SLOT_ERASE_UNSUPPORTED'
+            ? 'server 未啟用 slot cancel — 請以 --slot-save-path 重啟 llama-server'
+            : `${e.code}: ${e.message}`
+          : e instanceof Error
+            ? e.message
+            : String(e)
+      setFlash({ text: msg, tone: 'error' })
+    } finally {
+      setBusyId(null)
+      setTimeout(() => setFlash(null), 4000)
+    }
+  }
+
+  return (
+    <div className="bg-bg-tertiary border border-divider/50 rounded p-2 flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="text-text-muted text-xs uppercase tracking-wide">
+          Slot inspector
+        </span>
+        <button
+          onClick={() => void refresh()}
+          className="text-text-muted hover:text-text-primary text-xs"
+          title="refresh"
+        >
+          ⟳
+        </button>
+      </div>
+
+      {available === null && (
+        <div className="text-text-muted text-xs">載入中…</div>
+      )}
+      {available === false && (
+        <div className="text-text-muted text-xs">
+          slot inspector unavailable
+          {reason && <span className="block mt-1">原因：{reason}</span>}
+        </div>
+      )}
+      {available && slots.length === 0 && (
+        <div className="text-text-muted text-xs">(無 slot 資料)</div>
+      )}
+      {available && slots.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {slots.map(s => {
+            const stateColor = s.isProcessing ? 'text-status-idle' : 'text-status-online'
+            const stateLabel = s.isProcessing ? 'processing' : 'idle'
+            const reasoningHint = s.isProcessing && s.nDecoded > 20000
+            return (
+              <div
+                key={s.id}
+                className="flex items-center gap-2 text-xs font-mono"
+              >
+                <span className="text-text-muted w-12">slot {s.id}</span>
+                <span className={`${stateColor} w-20`}>{stateLabel}</span>
+                <span className="text-text-muted">decoded</span>
+                <span className="w-16 text-right">{s.nDecoded}</span>
+                <span className="text-text-muted">remain</span>
+                <span className="w-16 text-right">{s.nRemain}</span>
+                {reasoningHint && (
+                  <span className="text-status-dnd">← reasoning loop?</span>
+                )}
+                <button
+                  onClick={() => void handleErase(s.id)}
+                  disabled={busyId === s.id}
+                  className="ml-auto px-2 py-0.5 rounded border border-divider hover:border-status-dnd hover:text-status-dnd disabled:opacity-50"
+                  title="erase slot（需 server 帶 --slot-save-path）"
+                >
+                  erase
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {flash && (
+        <div
+          className={
+            flash.tone === 'error'
+              ? 'text-status-dnd text-xs'
+              : 'text-status-online text-xs'
+          }
+        >
+          {flash.text}
+        </div>
+      )}
     </div>
   )
 }

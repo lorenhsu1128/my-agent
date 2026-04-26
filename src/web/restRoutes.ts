@@ -27,7 +27,11 @@ import {
   type MemoryMutationRequest,
 } from '../daemon/memoryMutationRpc.js'
 import { getEffectiveWatchdogConfig } from '../llamacppConfig/loader.js'
-import { writeWatchdogConfig } from '../commands/llamacpp/llamacppMutations.js'
+import {
+  writeWatchdogConfig,
+  fetchSlots,
+  killSlot,
+} from '../commands/llamacpp/llamacppMutations.js'
 import { existsSync } from 'fs'
 import { resolve as resolvePath } from 'path'
 import {
@@ -638,6 +642,33 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
           e instanceof Error ? e.message : String(e),
           500,
         )
+      }
+    }
+
+    // ----- M-WEB-CLOSEOUT-1：Llamacpp slots inspector（read-only + erase action）-----
+    if (url.pathname === '/api/llamacpp/slots' && method === 'GET') {
+      const r = await fetchSlots()
+      if (r.ok) {
+        return jsonResponse({ available: true, slots: r.slots })
+      }
+      return jsonResponse({ available: false, reason: r.error, slots: [] })
+    }
+    {
+      const m = url.pathname.match(/^\/api\/llamacpp\/slots\/(\d+)\/erase$/)
+      if (m && method === 'POST') {
+        const slotId = Number(m[1])
+        const r = await killSlot(slotId)
+        if (r.ok) {
+          return jsonResponse({ ok: true })
+        }
+        if (r.status === 501) {
+          return errorResponse(
+            'SLOT_ERASE_UNSUPPORTED',
+            'server 未啟用 slot cancel — 請以 --slot-save-path 重啟 llama-server',
+            501,
+          )
+        }
+        return errorResponse('SLOT_ERASE_FAILED', r.error, r.status ?? 500)
       }
     }
 

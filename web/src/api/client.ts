@@ -181,6 +181,19 @@ export const api = {
         json: config,
       })
     },
+    // M-WEB-CLOSEOUT-1：Slot inspector
+    getSlots(): Promise<{
+      available: boolean
+      reason?: string
+      slots: WebSlotInfo[]
+    }> {
+      return request('/api/llamacpp/slots')
+    },
+    eraseSlot(slotId: number): Promise<{ ok: boolean }> {
+      return request(`/api/llamacpp/slots/${slotId}/erase`, {
+        method: 'POST',
+      })
+    },
   },
 }
 
@@ -198,6 +211,14 @@ export interface WebMemoryEntry {
   sizeBytes: number
   mtimeMs: number
   userProfileScope?: 'global' | 'project'
+}
+
+export interface WebSlotInfo {
+  id: number
+  isProcessing: boolean
+  nDecoded: number
+  nRemain: number
+  hasNextToken: boolean
 }
 
 export interface WebWatchdogConfig {
