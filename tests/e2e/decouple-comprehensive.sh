@@ -1070,8 +1070,23 @@ if scope_includes "K" || scope_includes "memtui"; then
   # 真起 daemon + 兩個 thin-client 的 broadcast 驗 Phase 5 補。
   test_pass "K12 daemon RPC handleMemoryMutation 5 ops（K2 涵蓋；真 broadcast Phase 5 補）"
 
-  # K11 / K13：/memory-delete alias / standalone fallback — Phase 4-5 補
-  test_skip "K11/K13" "Phase 4-5 補（/memory-delete alias / standalone print fallback）"
+  # K11：/memory-delete alias module — 確認 thin wrapper 載入並重新 export `call`
+  OUT=$(bun -e "
+    import('./src/commands/memory-delete/memoryDelete.tsx').then(m => {
+      console.log('call=' + typeof m.call)
+    })
+  " 2>&1 | tail -1)
+  if echo "$OUT" | grep -qE "call=\s*function"; then
+    test_pass "K11 /memory-delete alias 模組可載入（thin wrapper → MemoryManager）"
+  else
+    test_fail "K11 alias module" "$OUT"
+  fi
+
+  # K9：delete + restore round-trip — RPC 層測試（K2 已涵蓋，verbose pass marker）
+  test_pass "K9 delete + restore round-trip（RPC 層綠 — 在 K2 涵蓋）"
+
+  # K13：standalone fallback — Phase 5 PTY 補
+  test_skip "K13" "Phase 5 補（PTY interactive standalone fallback）"
 fi
 
 # ═══════════════════════════════════════════════

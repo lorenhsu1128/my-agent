@@ -51,6 +51,7 @@ import {
 } from '../commands/memory/memoryMutations.js'
 import type { MemoryEntry, MemoryEntryKind } from '../utils/memoryList.js'
 import type { MemoryType } from '../memdir/memoryTypes.js'
+import { restoreFromTrash } from '../utils/trash/index.js'
 
 export interface MemoryMutationContext {
   projectRoot: string
@@ -217,8 +218,16 @@ export async function handleMemoryMutation(
       }
       r = deleteEntry(ctx.projectRoot, stub)
     } else {
-      // restore — Phase 4 補（trash panel 接通後啟用）
-      r = { ok: false, error: 'restore op 尚未實作（Phase 4）' }
+      // restore op
+      try {
+        const meta = restoreFromTrash(ctx.projectRoot, req.payload.trashId)
+        r = { ok: true, message: `已還原 ${meta.label}` }
+      } catch (err) {
+        r = {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        }
+      }
     }
 
     if (r.ok) {

@@ -1124,11 +1124,11 @@
 - [x] M-MEMTUI-3-5 E2E K2 含 RPC 9 cases；K12 daemon RPC handleMemoryMutation 5 ops PASS（真 broadcast 留 Phase 5）；smoke + typecheck 通過
 
 #### Phase 4 — 輔助畫面 + alias
-- [ ] M-MEMTUI-4-1 新 `src/components/memory/SessionIndexPanel.tsx` — db stats + rebuild 動作（呼叫 `indexWriter`）
-- [ ] M-MEMTUI-4-2 新 `src/components/memory/TrashPanel.tsx` — 列 `.trash/<id>/meta.json` + restore
-- [ ] M-MEMTUI-4-3 `MemoryManager` 加 `s` 鍵進輔助子畫面 selector
-- [ ] M-MEMTUI-4-4 改寫 `src/commands/memory-delete/memoryDelete.tsx` 為 thin wrapper：渲染 `MemoryManager` 並傳 `initialMode='multi-delete'`
-- [ ] M-MEMTUI-4-5 刪除流程接通 delete + restore E2E case K9（檔搬到 `.trash/` + Trash panel restore）+ K11（alias 直進多選）+ commit
+- [x] M-MEMTUI-4-1 新 `src/components/memory/SessionIndexPanel.tsx` — `getSessionIndexPath` + `openSessionIndex` 讀 sessions 與 messages_fts 計數；R 鍵 `reconcileProjectIndex` rebuild 顯 ReconcileStats
+- [x] M-MEMTUI-4-2 新 `src/components/memory/TrashPanel.tsx` — `listTrash` 列項目 + R 鍵 `restoreFromTrash`；purge/empty 不在 TUI（由 `/trash` 命令）
+- [x] M-MEMTUI-4-3 `MemoryManager.tsx` 加 `s` 鍵進 `aux-select` mode（1/2 子選單）；wizard / aux 子畫面有自己 useInput，主層 bail；新 `multi-delete` / `multi-delete-confirm` mode（space toggle / a all / N none / / filter / Enter confirm / y 確認）；renderMultiDelete helper
+- [x] M-MEMTUI-4-4 改寫 `src/commands/memory-delete/memoryDelete.tsx` 為 thin wrapper：渲染 `MemoryManager` 傳 `initialMode='multi-delete'`
+- [x] M-MEMTUI-4-5 daemon RPC restore op 完成接通 `restoreFromTrash`；E2E K9（delete+restore round-trip）/ K11（alias module load）PASS；K13 PTY 標 Phase 5；smoke + typecheck 通過
 
 #### Phase 5 — Section K 收尾 + docs
 - [ ] M-MEMTUI-5-1 新 helper `tests/e2e/_memoryTuiInteractive.ts`（PTY 互動，npx tsx + node-pty，mirror `_replInteractive.ts`）

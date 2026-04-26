@@ -36,6 +36,8 @@ import {
   type MutationResult,
 } from './memoryMutations.js'
 import { parseMemoryType } from '../../memdir/memoryTypes.js'
+import { SessionIndexPanel } from '../../components/memory/SessionIndexPanel.js'
+import { TrashPanel } from '../../components/memory/TrashPanel.js'
 import {
   TABS,
   type TabId,
@@ -51,9 +53,7 @@ import {
 } from './memoryManagerLogic.js'
 import { getTab, tabIdOfEntry } from './memoryManagerLogic.js'
 
-export type Props = {
-  onExit: (summary: string) => void
-}
+// (Props 在下方擴充：加入 initialMode 給 /memory-delete alias)
 
 type Mode =
   | 'list'
@@ -65,15 +65,33 @@ type Mode =
   | 'rename'
   | 'confirmDelete'
   | 'injectionWarn'
+  | 'aux-select'
+  | 'aux-sessionIndex'
+  | 'aux-trash'
+  | 'multi-delete'
+  | 'multi-delete-confirm'
+
+export type Props = Props_Manager
+type Props_Manager = {
+  onExit: (summary: string) => void
+  /** 起始模式 — `/memory-delete` alias 直接傳 'multi-delete' 進多選模式。 */
+  initialMode?: 'list' | 'multi-delete'
+}
 
 type Flash = { text: string; tone: 'info' | 'error' }
 
 const PREVIEW_LINES = 30
 const VIEWER_PAGE_SIZE = 20
 
-export function MemoryManager({ onExit }: Props): React.ReactNode {
+export function MemoryManager({
+  onExit,
+  initialMode,
+}: Props): React.ReactNode {
   const cwd = getOriginalCwd()
-  const [mode, setMode] = useState<Mode>('list')
+  const [mode, setMode] = useState<Mode>(
+    initialMode === 'multi-delete' ? 'multi-delete' : 'list',
+  )
+  const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set())
   const [tab, setTab] = useState<TabId>('auto-memory')
   const [cursor, setCursor] = useState(0)
   const [keyword, setKeyword] = useState('')
@@ -501,6 +519,126 @@ export function MemoryManager({ onExit }: Props): React.ReactNode {
   }
 
   useInput((input, key) => {
+    // Wizard / aux 子畫面有自己的 useInput；這層全部 bail，避免雙重處理
+    if (
+      mode === 'wizard-create' ||
+      mode === 'wizard-edit' ||
+      mode === 'aux-sessionIndex' ||
+      mode === 'aux-trash'
+    ) {
+      return
+    }
+
+    // aux-select：上下選 + Enter 進子畫面
+    if (mode === 'aux-select') {
+      if (key.escape || input === 'q' || key.leftArrow) {
+        setMode('list')
+        return
+      }
+      if (input === '1') {
+        setMode('aux-sessionIndex')
+        return
+      }
+      if (input === '2') {
+        setMode('aux-trash')
+        return
+      }
+      return
+    }
+
+    // multi-delete confirm
+    if (mode === 'multi-delete-confirm') {
+      if (key.escape || input === 'n' || input === 'N') {
+        setMode('multi-delete')
+        return
+      }
+      if (input === 'y' || input === 'Y') {
+        const ids = Array.from(multiSelected)
+        const map = new Map(allEntries.map(e => [e.absolutePath, e]))
+        let ok = 0
+        const errs: string[] = []
+        for (const p of ids) {
+          const e = map.get(p)
+          if (!e) {
+            errs.push(`${p}: not found`)
+            continue
+          }
+          const r = deleteEntry(cwd, e)
+          if (r.ok) ok++
+          else errs.push(`${e.displayName}: ${r.error}`)
+        }
+        const summary =
+          errs.length === 0
+            ? `軟刪 ${ok} 個項目到 .trash/`
+            : `軟刪 ${ok}/${ids.length}（${errs.length} 失敗）`
+        setMultiSelected(new Set())
+        setMode('multi-delete')
+        setFlash({
+          text: summary,
+          tone: errs.length > 0 ? 'error' : 'info',
+        })
+        reload()
+        return
+      }
+      return
+    }
+
+    // multi-delete picker
+    if (mode === 'multi-delete') {
+      if (key.escape || input === 'q') {
+        onExit('Memory delete cancelled (no changes)')
+        return
+      }
+      if (key.leftArrow) {
+        setTab(prevTab(tab))
+        setCursor(0)
+        return
+      }
+      if (key.rightArrow) {
+        setTab(nextTab(tab))
+        setCursor(0)
+        return
+      }
+      if (key.upArrow) {
+        setCursor(c => Math.max(0, c - 1))
+        return
+      }
+      if (key.downArrow) {
+        setCursor(c => Math.min(tabRows.length - 1, c + 1))
+        return
+      }
+      if (input === '/') {
+        setMode('filtering')
+        return
+      }
+      if (input === ' ') {
+        const row = tabRows[safeCursor]
+        if (!row) return
+        const next = new Set(multiSelected)
+        if (next.has(row.absolutePath)) next.delete(row.absolutePath)
+        else next.add(row.absolutePath)
+        setMultiSelected(next)
+        return
+      }
+      if (input === 'a') {
+        setMultiSelected(new Set(tabRows.map(r => r.absolutePath)))
+        return
+      }
+      if (input === 'N') {
+        setMultiSelected(new Set())
+        return
+      }
+      if (key.return) {
+        if (multiSelected.size === 0) {
+          setFlash({ text: '無選取項目', tone: 'info' })
+          return
+        }
+        setMode('multi-delete-confirm')
+        return
+      }
+      return
+    }
+
     // Filtering mode: text input first
     if (mode === 'filtering') {
       if (key.escape || key.return) {
@@ -704,13 +842,52 @@ export function MemoryManager({ onExit }: Props): React.ReactNode {
       return
     }
     if (input === 's') {
-      // Phase 4 補
-      setFlash({ text: '(Phase 4 待實作：s 輔助畫面)', tone: 'info' })
+      setMode('aux-select')
       return
     }
   })
 
+  // ---- multi-delete mode handler（用 useInput 的另一個 hook） ----
+  // 為簡化，直接掛在主 useInput 內以 mode 分支。multi-delete 邏輯只在 mode 對時 run。
+
+  // 注意：上方主 useInput 已經根據 mode 分支了；'multi-delete' / 'multi-delete-confirm'
+  // 我會直接在 render 端檢查 mode，但 useInput 也要分支 — 改在 main handler 裡再加。
+
   // ---------- Render branches ----------
+
+  if (mode === 'aux-sessionIndex') {
+    return <SessionIndexPanel cwd={cwd} onExit={() => setMode('aux-select')} />
+  }
+
+  if (mode === 'aux-trash') {
+    return <TrashPanel cwd={cwd} onExit={() => setMode('aux-select')} />
+  }
+
+  if (mode === 'aux-select') {
+    return (
+      <Box flexDirection="column">
+        <Text bold color="cyan">輔助子畫面</Text>
+        <Box flexDirection="column" marginTop={1}>
+          <Text>1) Session-index — 觀測 + rebuild</Text>
+          <Text>2) Trash — 列出與還原軟刪項目</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>1/2 進入 · ←/q/Esc 退回</Text>
+        </Box>
+      </Box>
+    )
+  }
+
+  if (mode === 'multi-delete' || mode === 'multi-delete-confirm') {
+    return renderMultiDelete({
+      mode,
+      tab,
+      tabRows,
+      cursor: safeCursor,
+      multiSelected,
+      flash,
+    })
+  }
 
   if (mode === 'wizard-create' || mode === 'wizard-edit') {
     if (!wizardDraft) {
@@ -824,6 +1001,80 @@ export function MemoryManager({ onExit }: Props): React.ReactNode {
             {flash.text}
           </Text>
         </Box>
+      )}
+    </Box>
+  )
+}
+
+function renderMultiDelete({
+  mode,
+  tab,
+  tabRows,
+  cursor,
+  multiSelected,
+  flash,
+}: {
+  mode: 'multi-delete' | 'multi-delete-confirm'
+  tab: TabId
+  tabRows: MemoryEntry[]
+  cursor: number
+  multiSelected: Set<string>
+  flash: Flash | null
+}): React.ReactNode {
+  if (mode === 'multi-delete-confirm') {
+    return (
+      <Box flexDirection="column">
+        <Text bold color="yellow">
+          軟刪 {multiSelected.size} 個項目到 .trash/？
+        </Text>
+        <Text dimColor>auto-memory 會同步移除 MEMORY.md 索引行</Text>
+        <Text>
+          按 <Text bold>y</Text> 確認 · 任意鍵取消
+        </Text>
+      </Box>
+    )
+  }
+  return (
+    <Box flexDirection="column">
+      {renderTabHeader(tab)}
+      <Box>
+        <Text dimColor>Memory Delete · </Text>
+        <Text>
+          {tabRows.length} shown · {multiSelected.size} selected
+        </Text>
+      </Box>
+      <Box flexDirection="column">
+        {tabRows.length === 0 ? (
+          <Text dimColor>(no entries in this tab)</Text>
+        ) : (
+          tabRows.slice(0, 30).map((row, i) => {
+            const isSel = multiSelected.has(row.absolutePath)
+            const isCur = i === cursor
+            const mark = isSel ? '[✓]' : '[ ]'
+            return (
+              <Box key={row.absolutePath}>
+                <Text color={isCur ? 'cyan' : undefined}>
+                  {isCur ? figures.pointer : ' '}
+                </Text>
+                <Text color={isSel ? 'yellow' : undefined}> {mark} </Text>
+                <Text>{row.displayName}</Text>
+                <Text dimColor>
+                  {row.description ? ` — ${row.description}` : ''}
+                </Text>
+              </Box>
+            )
+          })
+        )}
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>
+          ↑/↓ · ←/→ tab · space toggle · a all · N none · / filter · Enter 確認 · Esc/q 取消
+        </Text>
+      </Box>
+      {flash && (
+        <Text color={flash.tone === 'error' ? 'red' : 'yellow'}>
+          {flash.text}
+        </Text>
       )}
     </Box>
   )

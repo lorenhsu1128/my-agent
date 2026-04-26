@@ -218,7 +218,7 @@ describe('handleMemoryMutation', () => {
     expect(existsSync(join(tmpMemDir, 'del.md'))).toBe(false)
   })
 
-  test('restore op → 仍未實作（reply ok=false）', async () => {
+  test('restore 不存在 trashId → 拒絕', async () => {
     const rpc = await loadRpc()
     const res = await rpc.handleMemoryMutation(
       {
@@ -230,6 +230,63 @@ describe('handleMemoryMutation', () => {
       ctx(),
     )
     expect(res.ok).toBe(false)
-    expect(res.error).toContain('Phase 4')
+    // 既有 restore 模組對未知 id 直接 throw "entry not found"
+    expect(res.error).toContain('not found')
+  })
+
+  test('K9：delete + restore 走完整 round-trip', async () => {
+    const rpc = await loadRpc()
+    // 1) create
+    await rpc.handleMemoryMutation(
+      {
+        type: 'memory.mutation',
+        requestId: 'k9-c',
+        op: 'create',
+        payload: {
+          kind: 'auto-memory',
+          filename: 'k9.md',
+          name: 'K9',
+          description: 'k9 test',
+          type: 'feedback',
+          body: 'body',
+        },
+      },
+      ctx(),
+    )
+    // 2) delete → 抓 trashId
+    const delRes = await rpc.handleMemoryMutation(
+      {
+        type: 'memory.mutation',
+        requestId: 'k9-d',
+        op: 'delete',
+        payload: {
+          kind: 'auto-memory',
+          absolutePath: join(tmpMemDir, 'k9.md'),
+          filename: 'k9.md',
+          displayName: '[feedback] K9',
+          description: 'k9 test',
+        },
+      },
+      ctx(),
+    )
+    expect(delRes.ok).toBe(true)
+    expect(existsSync(join(tmpMemDir, 'k9.md'))).toBe(false)
+    // 取 trashId — 從 .trash/ 目錄列舉
+    const trash = await import('../../../src/utils/trash/index.js')
+    const list = trash.listTrash(tmpCwd)
+    expect(list.length).toBeGreaterThan(0)
+    const trashId = list[0]!.id
+    // 3) restore
+    const rsRes = await rpc.handleMemoryMutation(
+      {
+        type: 'memory.mutation',
+        requestId: 'k9-r',
+        op: 'restore',
+        payload: { trashId },
+      },
+      ctx(),
+    )
+    expect(rsRes.ok).toBe(true)
+    expect(existsSync(join(tmpMemDir, 'k9.md'))).toBe(true)
   })
 })
