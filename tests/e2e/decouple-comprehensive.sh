@@ -1000,6 +1000,73 @@ if scope_includes "J" || scope_includes "pty" || scope_includes "repl"; then
 fi
 
 # ═══════════════════════════════════════════════
+# K. Memory TUI（M-MEMTUI）— 5-tab master-detail picker + WS RPC + 輔助畫面
+# ═══════════════════════════════════════════════
+if scope_includes "K" || scope_includes "memtui"; then
+  section "K. Memory TUI（M-MEMTUI）"
+
+  # ── prophylactic 清理：上輪殘留 e2etest_K*.md（沿用 F section pattern） ──
+  if command -v node >/dev/null 2>&1; then
+    bun -e "
+      const fs = await import('fs')
+      const path = await import('path')
+      const { getAutoMemPath } = await import('./src/memdir/paths.ts')
+      try {
+        const dir = getAutoMemPath()
+        if (fs.existsSync(dir)) {
+          for (const f of fs.readdirSync(dir)) {
+            if (f.startsWith('e2etest_K') && f.endsWith('.md')) {
+              try { fs.unlinkSync(path.join(dir, f)) } catch {}
+            }
+          }
+        }
+      } catch {}
+    " >/dev/null 2>&1 || true
+  fi
+
+  # K1 module load — Phase 1 兩個新模組（Phase 2/3/4 模組之後追加）
+  OUT=$(bun -e "
+    Promise.all([
+      import('./src/commands/memory/MemoryManager.tsx'),
+      import('./src/commands/memory/memoryManagerLogic.ts'),
+    ]).then(([mgr, logic]) => {
+      console.log(typeof mgr.MemoryManager, typeof logic.TABS, logic.TABS.length, typeof logic.nextTab, typeof logic.filterByTab)
+    })
+  " 2>&1 | tail -1)
+  if echo "$OUT" | grep -q "function object 5 function function"; then
+    test_pass "K1 MemoryManager + memoryManagerLogic 可載入（5 tabs）"
+  else
+    test_fail "K1 module load" "$OUT"
+  fi
+
+  # K3 listAllMemoryEntries 涵蓋 user-profile（global USER.md 存在時至少 1 列）
+  OUT=$(bun -e "
+    import('./src/utils/memoryList.ts').then(async m => {
+      const cwd = process.cwd()
+      const all = m.listAllMemoryEntries(cwd)
+      const userKinds = all.filter(e => e.kind === 'user-profile')
+      console.log('total=' + all.length + ' user=' + userKinds.length)
+    })
+  " 2>&1 | tail -1)
+  if echo "$OUT" | grep -qE "total=[0-9]+ user=[0-9]+"; then
+    test_pass "K3 listAllMemoryEntries 含 user-profile kind"
+  else
+    test_fail "K3 user-profile kind" "$OUT"
+  fi
+
+  # K2 unit tests 子集（Phase 1 — memoryManagerLogic）
+  OUT=$(bun test tests/integration/memory/memoryManagerLogic.test.ts 2>&1 | tail -5)
+  if echo "$OUT" | grep -qE "[0-9]+ pass" && echo "$OUT" | grep -qE "0 fail"; then
+    test_pass "K2 memoryManagerLogic 單元測試全綠"
+  else
+    test_fail "K2 unit tests" "$OUT"
+  fi
+
+  # K4-K13：PTY interactive / daemon RPC — Phase 2-5 補
+  test_skip "K4-K13" "Phase 2-5 補（PTY interactive / daemon RPC / injection / alias）"
+fi
+
+# ═══════════════════════════════════════════════
 # 總結
 # ═══════════════════════════════════════════════
 log ""

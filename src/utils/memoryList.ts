@@ -1,11 +1,13 @@
 /**
  * M-DELETE-5：列舉 memory 條目供 /memory-delete picker 顯示。
+ * M-MEMTUI-1-1：加入 user-profile kind（global + project USER.md）。
  *
- * 四類：
- * 1. auto-memory 條目 — 位於 getAutoMemPath() 的 .md 檔（排除 MEMORY.md）
- * 2. project-memory  — 專案根目錄的 MY-AGENT.md（**非** CLAUDE.md，見 ADR-MD-02）
- * 3. local-config    — 專案根目錄下 `.my-agent/*.md`
- * 4. daily-log       — auto-memory 下 `logs/YYYY/MM/*.md`
+ * 五類：
+ * 1. auto-memory  — getAutoMemPath() 的 .md 檔（排除 MEMORY.md）
+ * 2. user-profile — ~/.my-agent/USER.md (global) + <slug>/USER.md (project)
+ * 3. project-memory — 專案根目錄的 MY-AGENT.md（**非** CLAUDE.md，見 ADR-MD-02）
+ * 4. local-config — 專案根目錄下 `.my-agent/*.md`
+ * 5. daily-log    — auto-memory 下 `logs/YYYY/MM/*.md`
  *
  * 每個 entry 帶有：類別、顯示名、描述、絕對路徑、mtime。
  * picker 根據 kind 決定 delete / edit 分支。
@@ -13,13 +15,21 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { basename, join } from 'path'
 import { getAutoMemPath } from '../memdir/paths.js'
+import {
+  getUserModelGlobalPath,
+  getUserModelProjectPath,
+} from '../userModel/paths.js'
 import { MEMORY_INDEX_FILENAME } from './memoryDelete.js'
 
 export type MemoryEntryKind =
   | 'auto-memory'
+  | 'user-profile'
   | 'project-memory'
   | 'local-config'
   | 'daily-log'
+
+/** user-profile 的 sub-scope，picker 顯示用 */
+export type UserProfileScope = 'global' | 'project'
 
 export type MemoryEntry = {
   kind: MemoryEntryKind
@@ -35,6 +45,8 @@ export type MemoryEntry = {
   sizeBytes: number
   /** mtime epoch ms */
   mtimeMs: number
+  /** user-profile sub-scope（只 user-profile kind 有） */
+  userProfileScope?: UserProfileScope
 }
 
 /** 簡單抽 YAML frontmatter（第一個 `---` 區塊）— 不 import 大型解析器。 */
@@ -100,6 +112,40 @@ function listAutoMemoryEntries(): MemoryEntry[] {
     })
   }
   return results
+}
+
+function listUserProfiles(): MemoryEntry[] {
+  const out: MemoryEntry[] = []
+  const candidates: Array<{ scope: UserProfileScope; path: string }> = []
+  try {
+    candidates.push({ scope: 'global', path: getUserModelGlobalPath() })
+  } catch {
+    // 解析失敗 → 略過
+  }
+  try {
+    candidates.push({ scope: 'project', path: getUserModelProjectPath() })
+  } catch {
+    // 同上
+  }
+  for (const { scope, path } of candidates) {
+    const st = tryStat(path)
+    if (!st) continue
+    try {
+      if (!statSync(path).isFile()) continue
+    } catch {
+      continue
+    }
+    out.push({
+      kind: 'user-profile',
+      displayName: `[user:${scope}] USER.md`,
+      description: scope === 'global' ? '全域使用者建模' : '專案層使用者建模',
+      absolutePath: path,
+      sizeBytes: st.sizeBytes,
+      mtimeMs: st.mtimeMs,
+      userProfileScope: scope,
+    })
+  }
+  return out
 }
 
 function listProjectMemory(cwd: string): MemoryEntry[] {
@@ -220,6 +266,7 @@ function listDailyLogs(): MemoryEntry[] {
 export function listAllMemoryEntries(cwd: string): MemoryEntry[] {
   const all = [
     ...listAutoMemoryEntries(),
+    ...listUserProfiles(),
     ...listProjectMemory(cwd),
     ...listLocalConfigs(cwd),
     ...listDailyLogs(),

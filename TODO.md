@@ -1083,6 +1083,78 @@
 
 ---
 
+## 當前里程碑：M-MEMTUI — `/memory` TUI 全面升級（2026-04-26 啟動）
+
+**目標**：把 `/memory` 從「Dialog + spawn $EDITOR」升級成 cron 風格的 master-detail TUI（5-tab：auto-memory / USER / project / local-config / daily-log），吸收 `/memory-delete` 為 alias，補齊新建 / 重命名 / inline frontmatter 編輯 / body 預覽 / daemon WS 同步 / 注入掃描 / Session-index + Trash 維運入口。詳見 `~/.claude/plans/tui-memory-cron-validated-abelson.md`。
+
+**核心決策**（與使用者對齊）：
+- Q1 整合：取代 `/memory`、`/memory-delete` 收為 alias 進多選刪除模式
+- Q2 Scope：5-tab 各一頁；daily-log 唯讀、USER 不可刪
+- Q3 Body 編輯：預設 inline 多行、Shift+E spawn `$EDITOR`
+- Q4 Frontmatter：inline wizard（mirror `CronCreateWizard`）；type 走 4 選 selector
+- Q5 Daemon RPC：做 — 新 frame `memory.mutation` / `memory.mutationResult` / `memory.itemsChanged`
+- Q6 注入掃描：做 — `scanForInjection()`，命中顯警告但**可手動 override**（TUI 是人類介面）
+- Q7 重命名：做 — atomic rename + `updateMemoryIndex()` 重跑同步 MEMORY.md
+- Q8 輔助畫面：Session-index stats + rebuild、Trash 列表 + restore
+- Tab 切換鍵：`←`/`→`（master 模式）；detail 模式 `←` 退回（mode-aware）
+
+**架構原則**：5-tab 共用同一 `MemoryManager.tsx`、純函式 `memoryManagerLogic.ts` 抽 testable layer；mutation **本機 / daemon RPC** 雙路徑（mirror cron W4-B1 pattern）；重用既有 `scanMemoryFiles` / `listAllMemoryEntries` / `validateMemoryFilename` / `atomicWrite` / `acquireMemdirLock` / `scanForInjection` / `updateMemoryIndex` / `softDeleteMemoryEntry` / `indexWriter`，**不重寫**。
+
+### 任務
+
+#### Phase 1 — 基礎 list / detail（無 mutation）
+- [ ] M-MEMTUI-1-1 `src/utils/memoryList.ts` 補 `kind: 'user-profile'`（global `~/.my-agent/USER.md` + project `<slug>/USER.md`）
+- [ ] M-MEMTUI-1-2 新 `src/commands/memory/memoryManagerLogic.ts` — enrich / sortEntries / tabFilter / labels 純函式 + 單元測試
+- [ ] M-MEMTUI-1-3 新 `src/commands/memory/MemoryManager.tsx` — 5-tab master view + ←/→ 切 tab + Enter 進 detail + body 預覽前 30 行 + 5s poll + V 全螢幕 viewer（`MemoryBodyViewer.tsx`）
+- [ ] M-MEMTUI-1-4 改寫 `src/commands/memory/memory.tsx` 入口渲染 `MemoryManager`（保留 `LocalJSXCommandCall` 介面）
+- [ ] M-MEMTUI-1-5 E2E case K1 + K3 + K4 + K5（module load / USER kind / 5-tab 顯示 / ←→ 切換）+ commit
+
+#### Phase 2 — 本機 mutation
+- [ ] M-MEMTUI-2-1 新 `src/components/memory/MemoryEditWizard.tsx` — frontmatter + filename inline wizard（mirror `CronCreateWizard.tsx` 5 modes）；type 4 選 selector
+- [ ] M-MEMTUI-2-2 `MemoryManager` 接 create / update / rename / delete（純本機路徑：直呼 `atomicWrite` + `acquireMemdirLock` + `updateMemoryIndex` + `softDeleteMemoryEntry`）
+- [ ] M-MEMTUI-2-3 注入掃描接線：create/update body 寫入前跑 `scanForInjection()`，命中顯 ⚠️ flash + y/N override
+- [ ] M-MEMTUI-2-4 body Shift+E spawn `$EDITOR`（沿用 `editFileInEditor()` helper）
+- [ ] M-MEMTUI-2-5 E2E case K6 + K7 + K8 + K10（create / edit / rename / injection-override）+ commit
+
+#### Phase 3 — Daemon WS RPC
+- [ ] M-MEMTUI-3-1 新 `src/daemon/memoryMutationRpc.ts` — frame protocol（5 ops：create / update / rename / delete / restore）+ handler
+- [ ] M-MEMTUI-3-2 `src/daemon/daemonCli.ts` dispatch `memory.mutation` + broadcast `memory.itemsChanged`
+- [ ] M-MEMTUI-3-3 `src/repl/thinClient/fallbackManager.ts` 加 `sendMemoryMutation()`（mirror `sendCronMutation`）+ `src/hooks/useDaemonMode.ts` 加 callback
+- [ ] M-MEMTUI-3-4 `MemoryManager` mutation 路徑改為 daemon-aware（attached → WS / standalone → 本機）；訂閱 `memory.itemsChanged` broadcast 立即 reload
+- [ ] M-MEMTUI-3-5 E2E case K12 + K13（daemon RPC sync / standalone fallback）+ commit
+
+#### Phase 4 — 輔助畫面 + alias
+- [ ] M-MEMTUI-4-1 新 `src/components/memory/SessionIndexPanel.tsx` — db stats + rebuild 動作（呼叫 `indexWriter`）
+- [ ] M-MEMTUI-4-2 新 `src/components/memory/TrashPanel.tsx` — 列 `.trash/<id>/meta.json` + restore
+- [ ] M-MEMTUI-4-3 `MemoryManager` 加 `s` 鍵進輔助子畫面 selector
+- [ ] M-MEMTUI-4-4 改寫 `src/commands/memory-delete/memoryDelete.tsx` 為 thin wrapper：渲染 `MemoryManager` 並傳 `initialMode='multi-delete'`
+- [ ] M-MEMTUI-4-5 刪除流程接通 delete + restore E2E case K9（檔搬到 `.trash/` + Trash panel restore）+ K11（alias 直進多選）+ commit
+
+#### Phase 5 — Section K 收尾 + docs
+- [ ] M-MEMTUI-5-1 新 helper `tests/e2e/_memoryTuiInteractive.ts`（PTY 互動，npx tsx + node-pty，mirror `_replInteractive.ts`）
+- [ ] M-MEMTUI-5-2 新 helper `tests/e2e/_memoryMutationRpcClient.ts`（直打 daemon WS，mirror `_thinClientPing.ts`）
+- [ ] M-MEMTUI-5-3 Section K 13 cases 全跑綠（K1–K13）；prophylactic 清理 `e2etest_K*.md` + 末尾 `.trash/` 清理
+- [ ] M-MEMTUI-5-4 `docs/e2e-test-suite.md` 加 K section 章節 + scope alias `memory`
+- [ ] M-MEMTUI-5-5 CLAUDE.md 開發日誌 + LESSONS.md（如有踩坑） + commit
+
+### 完成標準
+- [ ] `bun run typecheck` 全綠（每階段提交前）
+- [ ] `./cli -p "hello"` 冒煙（每階段提交前）
+- [ ] `tests/integration/memory/` 5 組單元測試全綠（manager-logic / mutation-rpc / injection-warn / rename / list-userprofile）
+- [ ] `bash tests/e2e/decouple-comprehensive.sh K` 13/13 PASS
+- [ ] `bash tests/e2e/decouple-comprehensive.sh` 全套件（A–K）不退步
+- [ ] `/memory` 開啟 → 5 tab 切換 → 各 tab 列出對應 entries（待使用者實機驗證）
+- [ ] 兩個 REPL attach 同 project：A 改 → B 在 200ms 內 reload（待使用者實機驗證）
+- [ ] 跨平台：Windows + macOS 各跑一次完整 E2E（macOS 待持有硬體者補）
+
+### 不在範圍（→ 後續 milestone）
+- USER.md 段落級結構化編輯（先當整檔編，未來 M-MEMTUI-USER-SECT）
+- Daily-log 內容新建 / 編輯（保持唯讀，由 `/dream` 產生）
+- 全文搜尋 memory body（目前只 filter filename + description）
+- Memory diff / version history（git log 替代）
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2072,3 +2144,19 @@
 - 2026-04-25 22:46: Session 結束 | 進度：520/566 任務 | e357e78 test(e2e): J section PTY 互動 REPL E2E + BIN 三層 cascade（M-DECOUPLE-3-6）
 
 - 2026-04-25 23:07: Session 結束 | 進度：520/566 任務 | e357e78 test(e2e): J section PTY 互動 REPL E2E + BIN 三層 cascade（M-DECOUPLE-3-6）
+
+- 2026-04-26 07:47: Session 結束 | 進度：522/566 任務 | 8413724 docs(todo): M-SIDEQUERY-PROVIDER + M-EXTRACT-LOCAL 標記完成
+
+- 2026-04-26 07:50: Session 結束 | 進度：522/566 任務 | 8413724 docs(todo): M-SIDEQUERY-PROVIDER + M-EXTRACT-LOCAL 標記完成
+
+- 2026-04-26 07:54: Session 結束 | 進度：522/566 任務 | 8413724 docs(todo): M-SIDEQUERY-PROVIDER + M-EXTRACT-LOCAL 標記完成
+
+- 2026-04-26 07:58: Session 結束 | 進度：522/566 任務 | 8413724 docs(todo): M-SIDEQUERY-PROVIDER + M-EXTRACT-LOCAL 標記完成
+
+- 2026-04-26 08:02: Session 結束 | 進度：522/566 任務 | 8413724 docs(todo): M-SIDEQUERY-PROVIDER + M-EXTRACT-LOCAL 標記完成
+
+- 2026-04-26 08:06: Session 結束 | 進度：522/566 任務 | 8413724 docs(todo): M-SIDEQUERY-PROVIDER + M-EXTRACT-LOCAL 標記完成
+
+- 2026-04-26 08:08: Session 結束 | 進度：522/566 任務 | 8413724 docs(todo): M-SIDEQUERY-PROVIDER + M-EXTRACT-LOCAL 標記完成
+
+- 2026-04-26 08:12: Session 結束 | 進度：522/566 任務 | 8413724 docs(todo): M-SIDEQUERY-PROVIDER + M-EXTRACT-LOCAL 標記完成
