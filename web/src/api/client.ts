@@ -214,6 +214,59 @@ export const api = {
       })
     },
   },
+  // M-WEB-CLOSEOUT-10：Discord admin（daemon 全域；不需 projectId）
+  discord: {
+    status(): Promise<WebDiscordStatus> {
+      return request('/api/discord/status')
+    },
+    bindings(): Promise<{ bindings: WebDiscordBinding[] }> {
+      return request('/api/discord/bindings')
+    },
+    bind(
+      cwd: string,
+      projectName?: string,
+    ): Promise<{
+      ok: boolean
+      channelId?: string
+      channelName?: string
+      url?: string
+      alreadyBound?: boolean
+    }> {
+      return request('/api/discord/bind', {
+        method: 'POST',
+        json: { cwd, projectName },
+      })
+    },
+    unbind(cwd: string): Promise<{ ok: boolean }> {
+      return request('/api/discord/unbind', {
+        method: 'POST',
+        json: { cwd },
+      })
+    },
+    reload(): Promise<{ ok: boolean }> {
+      return request('/api/discord/reload', { method: 'POST' })
+    },
+    restart(): Promise<{ ok: boolean }> {
+      return request('/api/discord/restart', { method: 'POST' })
+    },
+  },
+}
+
+export interface WebDiscordStatus {
+  enabled: boolean
+  running: boolean
+  guildId?: string
+  homeChannelId?: string
+  archiveCategoryId?: string
+  whitelistUserCount: number
+  projectCount: number
+  bindingCount: number
+  botTag?: string
+}
+
+export interface WebDiscordBinding {
+  channelId: string
+  cwd: string
 }
 
 export interface WebMemoryEntry {

@@ -46,6 +46,14 @@ export interface RestRoutesOptions {
   broadcastAll?: (payload: unknown) => void
   /** Per-project broadcast — 用於 cron / memory 等 per-project 事件。 */
   broadcastToProject?: (projectId: string, payload: unknown) => void
+  /**
+   * M-WEB-CLOSEOUT-10：Discord admin 操作（每次 request 取 live ref；未注入或返回
+   * null 則所有 /api/discord/* 回 503）。Getter 形式避免 daemon 啟動 race（web
+   * 起來時 supervisor 可能還沒準備好）。
+   */
+  getDiscordController?: () =>
+    | import('../discord/discordController.js').DiscordController
+    | null
 }
 
 export interface RestHandler {
@@ -859,6 +867,82 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
           500,
         )
       }
+    }
+
+    // ----- M-WEB-CLOSEOUT-10：Discord admin（status / bindings / bind / unbind / reload / restart）-----
+    if (url.pathname.startsWith('/api/discord/')) {
+      const ctl = opts.getDiscordController?.() ?? null
+      if (!ctl) {
+        return errorResponse(
+          'DISCORD_NOT_AVAILABLE',
+          'discord controller not wired into web server (daemon should expose it)',
+          503,
+        )
+      }
+      if (url.pathname === '/api/discord/status' && method === 'GET') {
+        return jsonResponse(ctl.getStatus())
+      }
+      if (url.pathname === '/api/discord/bindings' && method === 'GET') {
+        return jsonResponse({ bindings: ctl.listBindings() })
+      }
+      const broadcastChange = () => {
+        opts.broadcastAll?.({ type: 'discord.statusChanged' })
+      }
+      if (url.pathname === '/api/discord/bind' && method === 'POST') {
+        let body: Record<string, unknown>
+        try {
+          body = (await req.json()) as Record<string, unknown>
+        } catch {
+          return errorResponse('BAD_JSON', 'invalid JSON body', 400)
+        }
+        if (typeof body.cwd !== 'string') {
+          return errorResponse('BAD_FIELDS', 'cwd required', 400)
+        }
+        const r = await ctl.bind(
+          body.cwd,
+          typeof body.projectName === 'string' ? body.projectName : undefined,
+        )
+        if (!r.ok) {
+          return errorResponse('DISCORD_BIND_FAILED', r.error ?? 'unknown', 400)
+        }
+        broadcastChange()
+        return jsonResponse(r)
+      }
+      if (url.pathname === '/api/discord/unbind' && method === 'POST') {
+        let body: Record<string, unknown>
+        try {
+          body = (await req.json()) as Record<string, unknown>
+        } catch {
+          return errorResponse('BAD_JSON', 'invalid JSON body', 400)
+        }
+        if (typeof body.cwd !== 'string') {
+          return errorResponse('BAD_FIELDS', 'cwd required', 400)
+        }
+        const r = await ctl.unbind(body.cwd)
+        if (!r.ok) {
+          return errorResponse('DISCORD_UNBIND_FAILED', r.error ?? 'unknown', 400)
+        }
+        broadcastChange()
+        return jsonResponse(r)
+      }
+      if (url.pathname === '/api/discord/reload' && method === 'POST') {
+        const r = await ctl.reload()
+        if (!r.ok) {
+          return errorResponse('DISCORD_RELOAD_FAILED', r.error ?? 'unknown', 400)
+        }
+        broadcastChange()
+        return jsonResponse(r)
+      }
+      if (url.pathname === '/api/discord/restart' && method === 'POST') {
+        const r = await ctl.restart()
+        if (!r.ok) {
+          return errorResponse('DISCORD_RESTART_FAILED', r.error ?? 'unknown', 400)
+        }
+        broadcastChange()
+        return jsonResponse(r)
+      }
+      // discord 路徑沒命中 — 回 404
+      return errorResponse('NOT_FOUND', `discord endpoint ${url.pathname} not recognized`, 404)
     }
 
     // ----- M-WEB-CLOSEOUT-1：Llamacpp slots inspector（read-only + erase action）-----

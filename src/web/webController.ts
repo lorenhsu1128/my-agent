@@ -38,6 +38,10 @@ export interface WebServerControllerOptions {
   startHttpServerImpl?: typeof startHttpServer
   /** Logger。 */
   log?: (msg: string) => void
+  /** M-WEB-CLOSEOUT-10：Discord admin controller（未提供則 /api/discord/* 回 503）。 */
+  getDiscordController?: () =>
+    | import('../discord/discordController.js').DiscordController
+    | null
 }
 
 export interface WebServerController {
@@ -92,6 +96,7 @@ export function createWebServerController(
         broadcastAll: payload => {
           ws.registry.broadcastAll(JSON.stringify(payload))
         },
+        getDiscordController: opts.getDiscordController,
       })
       const http = await startImpl({
         host: cfg.bindHost,

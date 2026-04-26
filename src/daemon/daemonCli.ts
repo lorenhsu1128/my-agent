@@ -191,7 +191,7 @@ export async function runDaemonStart(
           const req = m
           void (async () => {
             const res = await handleBindRequest(req, {
-              getClient: () => discordClientRef,
+              getClient: () => discordSupervisor.getClient(),
               getConfig: () => getDiscordConfigSnapshot(),
             })
             handle.server!.send(c.id, res)
@@ -202,7 +202,7 @@ export async function runDaemonStart(
           const req = m
           void (async () => {
             const res = await handleUnbindRequest(req, {
-              getClient: () => discordClientRef,
+              getClient: () => discordSupervisor.getClient(),
               getConfig: () => getDiscordConfigSnapshot(),
             })
             handle.server!.send(c.id, res)
@@ -214,7 +214,7 @@ export async function runDaemonStart(
           const req = m
           void (async () => {
             const res = await handleAdminRequest(req, {
-              getClient: () => discordClientRef,
+              getClient: () => discordSupervisor.getClient(),
               getConfig: () => getDiscordConfigSnapshot(),
             })
             handle.server!.send(c.id, res)
@@ -461,75 +461,60 @@ export async function runDaemonStart(
         }
       }
 
-      // M-DISCORD-3c：Discord gateway 在 registry 就位後啟動（enabled=true + token set）。
-      let disposeDiscord: (() => Promise<void>) | null = null
-      // Daemon-wide discord active flag — /daemon detach 的 shutdown 判定會讀它。
+      // M-DISCORD-3c / M-WEB-CLOSEOUT-9：Discord lifecycle 由 supervisor 管理。
+      // Supervisor 一律建（無論 enabled），讓 web admin 端能 reload / restart。
       let discordActive = false
-      // M-DISCORD-AUTOBIND：/discord-bind RPC 要用的 Discord Client 參考（gateway 啟動後填入）
-      let discordClientRef: import('discord.js').Client | null = null
+      const { createDiscordSupervisor } = await import(
+        '../discord/discordSupervisor.js'
+      )
+      const { createDiscordController } = await import(
+        '../discord/discordController.js'
+      )
+      const discordSupervisor = createDiscordSupervisor({
+        registry,
+        visionEnabled: () => isVisionEnabled(),
+        log: msg => void handle.logger.info(`[discord] ${msg}`),
+        broadcasts: {
+          broadcastPermissionMode: (projectId, mode) => {
+            if (!handle.server) return
+            handle.server.broadcast(
+              { type: 'permissionModeChanged', projectId, mode },
+              c => c.projectId === projectId,
+            )
+          },
+          broadcastDiscordInbound: (projectId, payload) => {
+            if (!handle.server) return
+            handle.server.broadcast(
+              { type: 'discordInboundMessage', projectId, ...payload },
+              c => c.projectId === projectId,
+            )
+          },
+          broadcastDiscordTurn: (projectId, payload) => {
+            if (!handle.server) return
+            handle.server.broadcast(
+              { type: 'discordTurnEvent', projectId, ...payload },
+              c => c.projectId === projectId,
+            )
+          },
+        },
+      })
+      const discordController = createDiscordController(discordSupervisor)
       try {
         await seedDiscordConfigIfMissing()
-        const discordCfg = await loadDiscordConfigSnapshot()
-        const discordToken = getDiscordBotToken() // env > config.botToken
-        if (discordCfg.enabled && discordToken) {
-          const { startDiscordGateway } = await import('../discord/gateway.js')
-          const dg = await startDiscordGateway({
-            config: discordCfg,
-            token: discordToken,
-            registry,
-            visionEnabled: isVisionEnabled(),
-            log: handle.logger,
-            // M-DISCORD-4：Discord /mode → broadcast permissionModeChanged 到
-            // 同 project 所有 attached REPL client（REPL 會 apply 本機 mode）。
-            broadcastPermissionMode: (projectId, mode) => {
-              if (!handle.server) return
-              handle.server.broadcast(
-                {
-                  type: 'permissionModeChanged',
-                  projectId,
-                  mode,
-                },
-                c => c.projectId === projectId,
-              )
-            },
-            broadcastDiscordInbound: (projectId, payload) => {
-              if (!handle.server) return
-              handle.server.broadcast(
-                {
-                  type: 'discordInboundMessage',
-                  projectId,
-                  ...payload,
-                },
-                c => c.projectId === projectId,
-              )
-            },
-            broadcastDiscordTurn: (projectId, payload) => {
-              if (!handle.server) return
-              handle.server.broadcast(
-                {
-                  type: 'discordTurnEvent',
-                  projectId,
-                  ...payload,
-                },
-                c => c.projectId === projectId,
-              )
-            },
-          })
-          disposeDiscord = dg.dispose
-          discordClientRef = dg.client.raw
+        const startRes = await discordSupervisor.start()
+        if (startRes.ok) {
           discordActive = true
-          const tokenSrc = process.env.DISCORD_BOT_TOKEN ? 'env' : 'config'
-          out(`  discord:     enabled (bot connected, token from ${tokenSrc})\n`)
-        } else if (discordCfg.enabled && !discordToken) {
-          void handle.logger.warn(
-            'discord enabled in config but no token (neither DISCORD_BOT_TOKEN env nor discord.json botToken); skipping',
-          )
           out(
-            `  discord:     config enabled but no token — set DISCORD_BOT_TOKEN or discord.json "botToken"\n`,
+            `  discord:     enabled (bot connected, token from ${startRes.tokenSource})\n`,
           )
+        } else if (startRes.reason === 'discord disabled in config') {
+          // Silent — already-default state
+        } else {
+          void handle.logger.warn(`discord supervisor: ${startRes.reason}`)
+          out(`  discord:     ${startRes.reason}\n`)
         }
       } catch (e) {
-        void handle.logger.error('failed to start discord gateway', {
+        void handle.logger.error('failed to start discord supervisor', {
           err: e instanceof Error ? e.message : String(e),
         })
         out(
@@ -549,6 +534,7 @@ export async function runDaemonStart(
             return webCfg
           },
           log: msg => void handle.logger.info(`[web] ${msg}`),
+          getDiscordController: () => discordController,
         })
         if (webCfg.enabled && webCfg.autoStart) {
           try {
@@ -593,12 +579,10 @@ export async function runDaemonStart(
             // ignore
           }
         }
-        if (disposeDiscord) {
-          try {
-            await disposeDiscord()
-          } catch {
-            // ignore
-          }
+        try {
+          await discordSupervisor.stop()
+        } catch {
+          // ignore
         }
         await registry.dispose()
       }

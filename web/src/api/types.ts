@@ -80,6 +80,7 @@ export type ServerEvent =
   | MemoryItemsChangedEvent
   | LlamacppConfigChangedEvent
   | WebStatusChangedEvent
+  | DiscordStatusChangedEvent
   | MutationResultEvent
 
 export interface HelloEvent {
@@ -191,6 +192,9 @@ export interface WebStatusChangedEvent {
   running: boolean
   port?: number
   bindHost?: string
+}
+export interface DiscordStatusChangedEvent {
+  type: 'discord.statusChanged'
 }
 export interface MutationResultEvent {
   type: 'mutation.result'

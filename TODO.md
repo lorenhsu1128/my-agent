@@ -1322,12 +1322,12 @@
 - [x] M-WEB-CLOSEOUT-6：`web/src/utils/secretScan.ts`（複刻 server `containsSecret` 30+ token 前綴 + private key regex）；wizard 內 inline 警告 + 「我已確認可寫入」checkbox；server 422 雙重保護
 - [x] M-WEB-CLOSEOUT-7：MemoryTab 訂閱既有 `memory.itemsChanged` broadcast 自動 refresh（沿用 M-WEB-15）；typecheck/build:web/build:dev 綠 + ./cli -p smoke 過 + 34 REST tests 全綠
 
-### Phase C — M-WEB-17b Discord admin RPC 接 web（Q1=c 全範圍）
-- [ ] M-WEB-CLOSEOUT-8：列出 admin 操作清單並對齊（先列再實作）：list bindings / bind channel / unbind channel / reload config / restart gateway。如有疑問再問
-- [ ] M-WEB-CLOSEOUT-9：daemon 端新增對應 WS RPC frame（`discord.admin.*`） + handler；reuse 既有 `discordBindRpc.ts` 的 bind/unbind 路徑
-- [ ] M-WEB-CLOSEOUT-10：REST `/api/discord/*` 對應端點 + path validation
-- [ ] M-WEB-CLOSEOUT-11：DiscordTab 從 read-only 升級成可操作（reload/restart 加二次確認 modal、LAN 內無認證警告 banner）
-- [ ] M-WEB-CLOSEOUT-12：commit + smoke
+### Phase C — M-WEB-17b Discord admin RPC 接 web（Q1=c 全範圍）✅ 2026-04-26
+- [x] M-WEB-CLOSEOUT-8：admin 操作清單對齊：getStatus / listBindings / bind / unbind / reload / restart（Q1=c 全範圍納入）
+- [x] M-WEB-CLOSEOUT-9：`src/discord/discordSupervisor.ts` 抽出 lifecycle（start/stop/restart/reload + getClient/getConfig）；`src/discord/discordController.ts` 把 supervisor 包成 6-method facade；reuse 既有 `discordBindRpc` 的 handleBindRequest/handleUnbindRequest；daemonCli 從 inline state 改用 supervisor，既有 3 處 `discordClientRef` 改 `supervisor.getClient()`
+- [x] M-WEB-CLOSEOUT-10：REST `/api/discord/{status,bindings,bind,unbind,reload,restart}` + getter pattern（避免 web 起來時 supervisor 還沒準備好的 race）+ 503 fallback + 廣播 `discord.statusChanged` + 10 unit tests
+- [x] M-WEB-CLOSEOUT-11：DiscordTab 升級成可操作（status panel + bindings 列表+unbind 按鈕 + bind 表單 + reload/restart 雙按鈕；restart 有 confirm dialog；LAN 無認證警告 banner；訂閱 `discord.statusChanged` 自動 refresh；503 → unavailable hint UI）
+- [x] M-WEB-CLOSEOUT-12：typecheck/build:web/build:dev 綠 + ./cli -p smoke 過 + 44 REST tests + 155 discord integration tests 全綠
 
 ### Phase D — 主線 E2E 自動化 + Section M
 - [ ] M-WEB-CLOSEOUT-13：`tests/e2e/web-e2e.sh` 收八項 case：(1) 三端同步 (2) Permission first-wins (3) Cron CRUD 三端同步 (4) Memory edit 同步 (5) Session 切換 backfill (6) 斷線重連 (7) Q2 project add/remove (8) 跨平台抽樣（macOS path 模擬）
