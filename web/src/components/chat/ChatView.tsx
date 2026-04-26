@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useUiStore, type ContextTabId } from '../../store/uiStore'
+import { useSlashCommandStore } from '../../store/slashCommandStore'
+import { useCommandDispatcherStore } from '../../store/commandDispatcherStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useSessionStore } from '../../store/sessionStore'
 import { useMessageStore } from '../../store/messageStore'
@@ -92,13 +94,15 @@ export function ChatView() {
     useMessageStore.getState().clearSession(sessionId)
   }
 
-  // M-WEB-SLASH-B1/B2：runnable slash command 走 WS execute；result 來時 toast
-  const pendingSlashRef = useRef(new Map<string, string>())
+  // M-WEB-SLASH-B1/B2/C1/D1：runnable / web-redirect / jsx-handoff 統一走 WS execute
+  const pendingSlashRef = useRef(new Map<string, { name: string; args: string }>())
   useEffect(() => {
     if (!ws) return
     const off = ws.on('frame', f => {
       if (f.type !== 'slashCommand.executeResult') return
-      const cmdName = pendingSlashRef.current.get(f.requestId) ?? '?'
+      const pending = pendingSlashRef.current.get(f.requestId)
+      const cmdName = pending?.name ?? '?'
+      const cmdArgs = pending?.args ?? ''
       pendingSlashRef.current.delete(f.requestId)
       if (!f.ok) {
         toast.error(`/${cmdName} 執行失敗`, { description: f.error })
@@ -124,9 +128,20 @@ export function ChatView() {
           description: '已切到右欄對應頁籤',
         })
       } else if (f.result?.kind === 'jsx-handoff') {
-        toast.info(`/${cmdName} (互動 UI)`, {
-          description: 'M-WEB-SLASH-D 將提供對應的 React 互動元件',
-        })
+        // M-WEB-SLASH-D1：開 CommandDispatcher Modal；查 store 取完整 metadata
+        const handoffName = f.result.name
+        const meta = useSlashCommandStore
+          .getState()
+          .commands.find(
+            c => c.userFacingName === handoffName || c.name === handoffName,
+          )
+        if (meta) {
+          useCommandDispatcherStore.getState().open(meta, cmdArgs)
+        } else {
+          toast.error(`/${cmdName} 找不到 metadata`, {
+            description: 'store 已重新整理過嗎？',
+          })
+        }
       }
     })
     return off
@@ -135,7 +150,7 @@ export function ChatView() {
   function executeSlash(name: string, args: string) {
     if (!ws || !selectedId) return false
     const requestId = 'slash-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
-    pendingSlashRef.current.set(requestId, name)
+    pendingSlashRef.current.set(requestId, { name, args })
     ws.send({
       type: 'slashCommand.execute',
       requestId,

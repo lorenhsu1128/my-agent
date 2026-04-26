@@ -4,6 +4,7 @@ import { ChatView } from '../components/chat/ChatView'
 import { ContextPanel } from '../components/rightPanel/ContextPanel'
 import { DisconnectedBanner } from '../components/common/DisconnectedBanner'
 import { PermissionModal } from '../components/chat/PermissionModal'
+import { CommandDispatcher } from '../components/slash/CommandDispatcher'
 import { ThemeToggle } from '../components/theme-toggle'
 import {
   ResizableHandle,
@@ -37,6 +38,7 @@ export function Layout() {
         </ResizablePanelGroup>
       </div>
       <PermissionModal />
+      <CommandDispatcher />
       <Toaster />
     </div>
   )
