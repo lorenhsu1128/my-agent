@@ -7,7 +7,11 @@ import * as React from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Box, Text, useInput } from '../../ink.js'
 import { getOriginalCwd } from '../../bootstrap/state.js'
-import { getCurrentDaemonManager } from '../../hooks/useDaemonMode.js'
+import {
+  getCurrentDaemonManager,
+  sendMemoryMutationToDaemon,
+} from '../../hooks/useDaemonMode.js'
+import type { MemoryMutationPayload } from '../../repl/thinClient/fallbackManager.js'
 import {
   listAllMemoryEntries,
   type MemoryEntry,
@@ -301,6 +305,19 @@ export function MemoryManager({ onExit }: Props): React.ReactNode {
     }
   }
 
+  /**
+   * 嘗試走 daemon RPC；attached 時返 daemon 結果，否則 'not-attached' 讓
+   * caller 走本機 fallback。
+   */
+  async function tryDaemon(
+    payload: MemoryMutationPayload,
+  ): Promise<MutationResult | 'not-attached'> {
+    const res = await sendMemoryMutationToDaemon(payload, 10_000)
+    if (res === null) return 'not-attached'
+    if (res.ok) return { ok: true, message: res.message ?? 'daemon ok' }
+    return { ok: false, error: res.error }
+  }
+
   async function performMutation(
     draft: WizardDraft,
     skipInjectionScan: boolean,
@@ -308,7 +325,6 @@ export function MemoryManager({ onExit }: Props): React.ReactNode {
     if (!skipInjectionScan) {
       const hit = scanForInjection(draft.body)
       if (hit) {
-        // 警告，等使用者 y/N
         setPendingInjection({
           description: hit,
           onConfirm: async () => {
@@ -319,38 +335,93 @@ export function MemoryManager({ onExit }: Props): React.ReactNode {
         return
       }
     }
-    let r: MutationResult
-    if (draft.isCreate) {
+    // 1) 嘗試 daemon RPC
+    const op = draft.isCreate ? 'create' : 'update'
+    let payload: MemoryMutationPayload
+    if (op === 'create') {
       if (draft.kind === 'auto-memory') {
-        r = await createAutoMemory({
-          filename: draft.filename,
-          name: draft.name,
-          description: draft.description,
-          type: draft.type,
-          body: draft.body,
-        })
+        payload = {
+          op: 'create',
+          payload: {
+            kind: 'auto-memory',
+            filename: draft.filename,
+            name: draft.name,
+            description: draft.description,
+            type: draft.type,
+            body: draft.body,
+          },
+        }
       } else {
-        r = await createLocalConfig({
-          cwd,
-          filename: draft.filename,
-          body: draft.body,
-        })
+        payload = {
+          op: 'create',
+          payload: {
+            kind: 'local-config',
+            filename: draft.filename,
+            body: draft.body,
+          },
+        }
       }
     } else {
       if (draft.kind === 'auto-memory') {
-        r = await updateAutoMemory({
-          filename: draft.filename,
-          name: draft.name,
-          description: draft.description,
-          type: draft.type,
-          body: draft.body,
-        })
+        payload = {
+          op: 'update',
+          payload: {
+            kind: 'auto-memory',
+            filename: draft.filename,
+            name: draft.name,
+            description: draft.description,
+            type: draft.type,
+            body: draft.body,
+          },
+        }
       } else {
-        r = await writeRawBody(
-          selected?.absolutePath ?? '',
-          draft.body,
-        )
+        payload = {
+          op: 'update',
+          payload: {
+            kind: selected?.kind === 'auto-memory'
+              ? 'local-config'
+              : (selected?.kind ?? 'local-config'),
+            absolutePath: selected?.absolutePath ?? '',
+            body: draft.body,
+          },
+        }
       }
+    }
+    const dRes = await tryDaemon(payload)
+    let r: MutationResult
+    if (dRes === 'not-attached') {
+      // 2) 本機 fallback
+      if (op === 'create') {
+        if (draft.kind === 'auto-memory') {
+          r = await createAutoMemory({
+            filename: draft.filename,
+            name: draft.name,
+            description: draft.description,
+            type: draft.type,
+            body: draft.body,
+          })
+        } else {
+          r = await createLocalConfig({
+            cwd,
+            filename: draft.filename,
+            body: draft.body,
+          })
+        }
+      } else {
+        if (draft.kind === 'auto-memory') {
+          r = await updateAutoMemory({
+            filename: draft.filename,
+            name: draft.name,
+            description: draft.description,
+            type: draft.type,
+            body: draft.body,
+          })
+        } else {
+          r = await writeRawBody(selected?.absolutePath ?? '', draft.body)
+        }
+      }
+    } else {
+      r = dRes
     }
     setWizardDraft(null)
     setPendingInjection(null)
@@ -367,20 +438,38 @@ export function MemoryManager({ onExit }: Props): React.ReactNode {
       return
     }
     void (async () => {
+      const kind = tab === 'auto-memory' ? 'auto-memory'
+        : tab === 'local-config' ? 'local-config'
+        : null
+      if (!kind) {
+        setMode('list')
+        flashResult({ ok: false, error: 'tab 不支援重命名' })
+        return
+      }
+      const dRes = await tryDaemon({
+        op: 'rename',
+        payload: {
+          kind,
+          oldFilename: selected.filename!,
+          newFilename: newName,
+        },
+      })
       let r: MutationResult
-      if (tab === 'auto-memory') {
-        r = await renameAutoMemory({
-          oldFilename: selected.filename!,
-          newFilename: newName,
-        })
-      } else if (tab === 'local-config') {
-        r = await renameLocalConfig({
-          cwd,
-          oldFilename: selected.filename!,
-          newFilename: newName,
-        })
+      if (dRes === 'not-attached') {
+        if (kind === 'auto-memory') {
+          r = await renameAutoMemory({
+            oldFilename: selected.filename!,
+            newFilename: newName,
+          })
+        } else {
+          r = await renameLocalConfig({
+            cwd,
+            oldFilename: selected.filename!,
+            newFilename: newName,
+          })
+        }
       } else {
-        r = { ok: false, error: 'tab 不支援重命名' }
+        r = dRes
       }
       setMode('list')
       flashResult(r)
@@ -389,9 +478,26 @@ export function MemoryManager({ onExit }: Props): React.ReactNode {
 
   function commitDelete(): void {
     if (!selected) return
-    const r = deleteEntry(cwd, selected)
-    setMode('list')
-    flashResult(r)
+    void (async () => {
+      const dRes = await tryDaemon({
+        op: 'delete',
+        payload: {
+          kind: selected.kind,
+          absolutePath: selected.absolutePath,
+          filename: selected.filename,
+          displayName: selected.displayName,
+          description: selected.description,
+        },
+      })
+      let r: MutationResult
+      if (dRes === 'not-attached') {
+        r = deleteEntry(cwd, selected)
+      } else {
+        r = dRes
+      }
+      setMode('list')
+      flashResult(r)
+    })()
   }
 
   useInput((input, key) => {

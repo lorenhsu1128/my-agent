@@ -194,6 +194,23 @@ export async function sendCronMutationToDaemon(
 }
 
 /**
+ * M-MEMTUI Phase 3：發 memory mutation 到 daemon。attached 時走 WS，否則
+ * 回 null 讓 caller fallback 本機寫入。
+ */
+export async function sendMemoryMutationToDaemon(
+  req: import('../repl/thinClient/fallbackManager.js').MemoryMutationPayload,
+  timeoutMs?: number,
+): Promise<
+  | { ok: true; message?: string }
+  | { ok: false; error: string }
+  | null
+> {
+  const mgr = currentManager
+  if (!mgr || mgr.state.mode !== 'attached') return null
+  return mgr.sendMemoryMutation(req, timeoutMs)
+}
+
+/**
  * M-CRON-W3-8b：回 cron wizard 決定。attached 才真送；回 true 表送出。
  */
 export function respondToCronWizard(

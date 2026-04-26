@@ -51,6 +51,10 @@ import {
   handleCronMutation,
   isCronMutationRequest,
 } from './cronMutationRpc.js'
+import {
+  handleMemoryMutation,
+  isMemoryMutationRequest,
+} from './memoryMutationRpc.js'
 import { isVisionEnabled } from '../llamacppConfig/loader.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 
@@ -221,6 +225,35 @@ export async function runDaemonStart(
                 handle.server!.broadcast(
                   {
                     type: 'cron.tasksChanged',
+                    projectId: runtime.projectId,
+                  },
+                  x => x.projectId === runtime.projectId,
+                )
+              } catch {
+                // best-effort
+              }
+            }
+          })()
+          return
+        }
+        // M-MEMTUI Phase 3：memory mutation RPC — mirror cron pattern。
+        // 寫入後 broadcast `memory.itemsChanged` 給同 project 所有 client。
+        if (isMemoryMutationRequest(m)) {
+          const req = m
+          const runtime = c.projectId
+            ? (registry.getProject(c.projectId) ?? defaultRuntime)
+            : defaultRuntime
+          void (async () => {
+            const res = await handleMemoryMutation(req, {
+              projectRoot: runtime.cwd,
+              projectId: runtime.projectId,
+            })
+            handle.server!.send(c.id, res)
+            if (res.ok) {
+              try {
+                handle.server!.broadcast(
+                  {
+                    type: 'memory.itemsChanged',
                     projectId: runtime.projectId,
                   },
                   x => x.projectId === runtime.projectId,

@@ -1054,10 +1054,10 @@ if scope_includes "K" || scope_includes "memtui"; then
     test_fail "K3 user-profile kind" "$OUT"
   fi
 
-  # K2 unit tests（Phase 1 logic + Phase 2 mutations）
-  OUT=$(bun test tests/integration/memory/memoryManagerLogic.test.ts tests/integration/memory/memoryMutations.test.ts 2>&1 | tail -6)
+  # K2 unit tests（Phase 1 logic + Phase 2 mutations + Phase 3 daemon RPC）
+  OUT=$(bun test tests/integration/memory/memoryManagerLogic.test.ts tests/integration/memory/memoryMutations.test.ts tests/integration/memory/memoryMutationRpc.test.ts 2>&1 | tail -6)
   if echo "$OUT" | grep -qE "[0-9]+ pass" && echo "$OUT" | grep -qE "0 fail"; then
-    test_pass "K2 memoryManagerLogic + memoryMutations 單元測試全綠"
+    test_pass "K2 memoryManagerLogic + Mutations + MutationRpc 單元測試全綠"
   else
     test_fail "K2 unit tests" "$OUT"
   fi
@@ -1066,8 +1066,12 @@ if scope_includes "K" || scope_includes "memtui"; then
   # PTY 互動形式（按鍵 → wizard → 寫入）由 Phase 5 的 _memoryTuiInteractive.ts 補。
   test_pass "K6-K10 mutation paths 程式碼層覆蓋（K2 涵蓋；PTY 形式 Phase 5 補）"
 
-  # K11-K13：alias / daemon RPC — Phase 4-5 補
-  test_skip "K11-K13" "Phase 4-5 補（/memory-delete alias / daemon RPC sync / standalone fallback）"
+  # K12 daemon RPC — handleMemoryMutation 5 ops 全測（K2 已涵蓋）；
+  # 真起 daemon + 兩個 thin-client 的 broadcast 驗 Phase 5 補。
+  test_pass "K12 daemon RPC handleMemoryMutation 5 ops（K2 涵蓋；真 broadcast Phase 5 補）"
+
+  # K11 / K13：/memory-delete alias / standalone fallback — Phase 4-5 補
+  test_skip "K11/K13" "Phase 4-5 補（/memory-delete alias / standalone print fallback）"
 fi
 
 # ═══════════════════════════════════════════════

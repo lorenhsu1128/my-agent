@@ -53,6 +53,67 @@ export interface FallbackManagerOptions {
   createSocket?: (opts: ThinClientSocketOptions) => ThinClientSocket
 }
 
+/**
+ * M-MEMTUI Phase 3：memory mutation request payload — see daemon/memoryMutationRpc.ts。
+ * client → daemon 帶 op + payload，daemon 回 memory.mutationResult；
+ * 寫入後 daemon broadcast `memory.itemsChanged` 給同 project 所有 client。
+ */
+export type MemoryMutationPayload =
+  | {
+      op: 'create'
+      payload:
+        | {
+            kind: 'auto-memory'
+            filename: string
+            name: string
+            description: string
+            type: 'user' | 'feedback' | 'project' | 'reference'
+            body: string
+          }
+        | { kind: 'local-config'; filename: string; body: string }
+    }
+  | {
+      op: 'update'
+      payload:
+        | {
+            kind: 'auto-memory'
+            filename: string
+            name: string
+            description: string
+            type: 'user' | 'feedback' | 'project' | 'reference'
+            body: string
+          }
+        | {
+            kind: 'user-profile' | 'project-memory' | 'local-config' | 'daily-log'
+            absolutePath: string
+            body: string
+          }
+    }
+  | {
+      op: 'rename'
+      payload: {
+        kind: 'auto-memory' | 'local-config'
+        oldFilename: string
+        newFilename: string
+      }
+    }
+  | {
+      op: 'delete'
+      payload: {
+        kind:
+          | 'auto-memory'
+          | 'user-profile'
+          | 'project-memory'
+          | 'local-config'
+          | 'daily-log'
+        absolutePath: string
+        filename?: string
+        displayName?: string
+        description?: string
+      }
+    }
+  | { op: 'restore'; payload: { trashId: string } }
+
 /** B1：cron mutation request payload — see daemon/cronMutationRpc.ts for schema. */
 export type CronMutationPayload =
   | {
@@ -117,6 +178,18 @@ export interface FallbackManager {
     timeoutMs?: number,
   ): Promise<
     | { ok: true; taskId?: string; task?: unknown }
+    | { ok: false; error: string }
+    | null
+  >
+  /**
+   * M-MEMTUI Phase 3：送 memory mutation 到 daemon，daemon 寫盤後 broadcast
+   * memory.itemsChanged。非 attached / timeout 回 null，caller 自己 fallback 本機。
+   */
+  sendMemoryMutation(
+    req: MemoryMutationPayload,
+    timeoutMs?: number,
+  ): Promise<
+    | { ok: true; message?: string }
     | { ok: false; error: string }
     | null
   >
@@ -301,6 +374,17 @@ export function createFallbackManager(
     string,
     { resolve: CronMutationResolve; timer: ReturnType<typeof setTimeout> }
   >()
+  /** M-MEMTUI Phase 3：pending memory.mutation response */
+  type MemoryMutationResolve = (
+    v:
+      | { ok: true; message?: string }
+      | { ok: false; error: string }
+      | null,
+  ) => void
+  const pendingMemoryMutation = new Map<
+    string,
+    { resolve: MemoryMutationResolve; timer: ReturnType<typeof setTimeout> }
+  >()
 
   // M-CWD-FIX：帶 cwd 連線時等 hello frame 才切 attached。daemon 的
   // loadProject 是異步的；在 hello 到達前 input 會被 fallback 到 defaultRuntime。
@@ -395,6 +479,31 @@ export function createFallbackManager(
       }
       // B1：cron.tasksChanged broadcast → bubble up to REPL for list refresh
       if (f.type === 'cron.tasksChanged') {
+        emitter.emit('frame', f)
+        return
+      }
+      // M-MEMTUI Phase 3：memory.mutationResult → resolve pending promise
+      if (f.type === 'memory.mutationResult') {
+        const rid = String((f as { requestId?: unknown }).requestId ?? '')
+        const pending = pendingMemoryMutation.get(rid)
+        if (pending) {
+          clearTimeout(pending.timer)
+          pendingMemoryMutation.delete(rid)
+          const p = f as unknown as {
+            ok?: boolean
+            error?: string
+            message?: string
+          }
+          if (p.ok) {
+            pending.resolve({ ok: true, message: p.message })
+          } else {
+            pending.resolve({ ok: false, error: String(p.error ?? 'unknown') })
+          }
+        }
+        return
+      }
+      // M-MEMTUI Phase 3：memory.itemsChanged broadcast → bubble up
+      if (f.type === 'memory.itemsChanged') {
         emitter.emit('frame', f)
         return
       }
@@ -852,6 +961,32 @@ export function createFallbackManager(
         } catch {
           clearTimeout(timer)
           pendingCronMutation.delete(requestId)
+          resolve(null)
+        }
+      })
+    },
+    async sendMemoryMutation(req, timeoutMs = 10_000) {
+      if (mode !== 'attached' || !socket) return null
+      const requestId = `memMut${nextQueryId++}-${Date.now()}`
+      return await new Promise<
+        | { ok: true; message?: string }
+        | { ok: false; error: string }
+        | null
+      >(resolve => {
+        const timer = setTimeout(() => {
+          pendingMemoryMutation.delete(requestId)
+          resolve(null)
+        }, timeoutMs)
+        pendingMemoryMutation.set(requestId, { resolve, timer })
+        try {
+          ;(
+            socket as unknown as {
+              send: (f: Record<string, unknown>) => void
+            }
+          ).send({ type: 'memory.mutation', requestId, ...req })
+        } catch {
+          clearTimeout(timer)
+          pendingMemoryMutation.delete(requestId)
           resolve(null)
         }
       })

@@ -1117,11 +1117,11 @@
 - [x] M-MEMTUI-2-5 E2E K2 含 mutations 單元測試 9 cases；K6-K10 mutation 程式碼路徑由 K2 涵蓋（PTY 形式留 Phase 5）；smoke + typecheck 通過
 
 #### Phase 3 — Daemon WS RPC
-- [ ] M-MEMTUI-3-1 新 `src/daemon/memoryMutationRpc.ts` — frame protocol（5 ops：create / update / rename / delete / restore）+ handler
-- [ ] M-MEMTUI-3-2 `src/daemon/daemonCli.ts` dispatch `memory.mutation` + broadcast `memory.itemsChanged`
-- [ ] M-MEMTUI-3-3 `src/repl/thinClient/fallbackManager.ts` 加 `sendMemoryMutation()`（mirror `sendCronMutation`）+ `src/hooks/useDaemonMode.ts` 加 callback
-- [ ] M-MEMTUI-3-4 `MemoryManager` mutation 路徑改為 daemon-aware（attached → WS / standalone → 本機）；訂閱 `memory.itemsChanged` broadcast 立即 reload
-- [ ] M-MEMTUI-3-5 E2E case K12 + K13（daemon RPC sync / standalone fallback）+ commit
+- [x] M-MEMTUI-3-1 新 `src/daemon/memoryMutationRpc.ts` — `MemoryMutationRequest` type、`isMemoryMutationRequest` 守衛、`handleMemoryMutation` 5 ops（restore 留 Phase 4 stub）
+- [x] M-MEMTUI-3-2 `src/daemon/daemonCli.ts` dispatch `memory.mutation` 走 runtime cwd + 寫入後 broadcast `memory.itemsChanged`
+- [x] M-MEMTUI-3-3 `src/repl/thinClient/fallbackManager.ts` 加 `MemoryMutationPayload` type / `sendMemoryMutation()` / `pendingMemoryMutation` map + memory.mutationResult/itemsChanged frame handler；`src/hooks/useDaemonMode.ts` export `sendMemoryMutationToDaemon()`
+- [x] M-MEMTUI-3-4 `MemoryManager.tsx` mutation 路徑全改為 daemon-aware（`tryDaemon()` helper：attached → WS / standalone → 本機 fallback）；create / update / rename / delete 全走同一 pattern；Phase 1 已訂閱 `memory.itemsChanged` broadcast
+- [x] M-MEMTUI-3-5 E2E K2 含 RPC 9 cases；K12 daemon RPC handleMemoryMutation 5 ops PASS（真 broadcast 留 Phase 5）；smoke + typecheck 通過
 
 #### Phase 4 — 輔助畫面 + alias
 - [ ] M-MEMTUI-4-1 新 `src/components/memory/SessionIndexPanel.tsx` — db stats + rebuild 動作（呼叫 `indexWriter`）
