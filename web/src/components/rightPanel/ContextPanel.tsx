@@ -1,4 +1,5 @@
 import { useProjectStore } from '../../store/projectStore'
+import { useUiStore, type ContextTabId } from '../../store/uiStore'
 import { CronTab } from './tabs/CronTab'
 import { MemoryTab } from './tabs/MemoryTab'
 import { LlamacppTab } from './tabs/LlamacppTab'
@@ -10,9 +11,15 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 export function ContextPanel() {
   const selectedId = useProjectStore(s => s.selectedProjectId)
   const project = useProjectStore(s => (selectedId ? s.projects[selectedId] : null))
+  const rightTab = useUiStore(s => s.rightTab)
+  const setRightTab = useUiStore(s => s.setRightTab)
   return (
     <aside className="h-full bg-sidebar text-sidebar-foreground border-l flex flex-col flex-shrink-0">
-      <Tabs defaultValue="overview" className="flex flex-col h-full">
+      <Tabs
+        value={rightTab}
+        onValueChange={v => setRightTab(v as ContextTabId)}
+        className="flex flex-col h-full"
+      >
         <TabsList className="rounded-none w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="cron">Cron</TabsTrigger>

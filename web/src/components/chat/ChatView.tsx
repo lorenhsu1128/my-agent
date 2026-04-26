@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { useUiStore, type ContextTabId } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useSessionStore } from '../../store/sessionStore'
 import { useMessageStore } from '../../store/messageStore'
@@ -116,6 +117,16 @@ export function ChatView() {
         })
       } else if (f.result?.kind === 'skip') {
         toast.info(`/${cmdName} 跳過`)
+      } else if (f.result?.kind === 'web-redirect') {
+        // M-WEB-SLASH-C1：4 個被 web tab 取代的 local-jsx 命令直接跳對應 tab
+        useUiStore.getState().setRightTab(f.result.tabId as ContextTabId)
+        toast.info(`/${cmdName} → ${f.result.tabId} tab`, {
+          description: '已切到右欄對應頁籤',
+        })
+      } else if (f.result?.kind === 'jsx-handoff') {
+        toast.info(`/${cmdName} (互動 UI)`, {
+          description: 'M-WEB-SLASH-D 將提供對應的 React 互動元件',
+        })
       }
     })
     return off

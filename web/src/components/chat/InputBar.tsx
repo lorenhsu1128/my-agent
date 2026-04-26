@@ -122,21 +122,14 @@ export function InputBar({
         })
         return
       }
-      if (meta.webKind === 'runnable') {
-        if (onSlashExecute && onSlashExecute(meta.userFacingName, rest)) {
-          setText('')
-          return
-        }
-        toast.error(`/${cmd} 無法執行（WS 未連線）`)
-      } else if (meta.webKind === 'web-redirect') {
-        toast.info(`/${cmd} → ${meta.handoffKey} tab`, {
-          description: 'M-WEB-SLASH-C1 將自動跳到對應 tab',
-        })
-      } else if (meta.webKind === 'jsx-handoff') {
-        toast.info(`/${cmd} (互動 UI)`, {
-          description: 'M-WEB-SLASH-D 將提供對應的 React 互動元件',
-        })
+      // 所有非 LOCAL_ACTION 命令統一走 WS slashCommand.execute；result kind
+      // 決定後續行為（runnable→toast、web-redirect→跳 tab、jsx-handoff→展開
+      // React 元件）。處理在 ChatView.executeSlash 的 frame handler。
+      if (onSlashExecute && onSlashExecute(meta.userFacingName, rest)) {
+        setText('')
+        return
       }
+      toast.error(`/${cmd} 無法執行（WS 未連線）`)
       setText('')
       return
     }
