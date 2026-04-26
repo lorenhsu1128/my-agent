@@ -482,3 +482,39 @@
 - **日期**：2026-04-25
 
 ---
+
+## TUI 開發（M-MEMTUI）
+
+### TUI 改完要 rebuild binary 才 PTY E2E 看得到
+
+- **發生什麼事**：M-MEMTUI Phase 5 跑 PTY interactive helper（`_memoryTuiInteractive.ts`）→ stdout 顯示**舊版** `/memory` Dialog（"1. Project memory / 2. User memory / ..."），不是新的 5-tab MemoryManager。所有 src 都改了、typecheck 過了、bun unit test 全綠。
+- **根本原因**：cli-dev.exe / cli-dev 是 `bun run build:dev` 編出的 bundled binary，PTY 走的是磁碟上的舊 binary，不是即時跑 src TS。原本以為 typecheck + unit 綠就能 PTY 驗，漏了 build。
+- **正確做法**：TUI 任何 src 改動 + 想跑 PTY E2E（J / K section）= 必跑 `bun run build:dev` 重 build cli-dev[.exe]。或在 Section K 開頭加 build 預檢（檢查 binary mtime > src mtime）。
+- **連帶教訓**：build 過程也會撞到 typecheck 抓不到的 dangling import（M-DECOUPLE 漏網之魚 — `src/cli/print.ts` 內 4 個已刪檔的 import）。typecheck 走 TS resolver 不會抓 `.js` 路徑不存在；bun build 才 fail。
+- **相關檔案**：`tests/e2e/_memoryTuiInteractive.ts`、`src/cli/print.ts`（4 個 inline stub）
+- **日期**：2026-04-26
+
+### `mock.module()` 替換 `paths.js` 必須 spread 原始 export
+
+- **發生什麼事**：`tests/integration/memory/memoryMutations.test.ts` 用 `mock.module('../../../src/memdir/paths.js', () => ({ getAutoMemPath: () => tmpDir, ... }))` 隔離 tmpdir，跑起來下游 caller 報 `Export 'getAutoMemEntrypoint' not found in module 'src/memdir/paths.ts'`。
+- **根本原因**：bun:test 的 `mock.module` 會**整個取代** target module 的 export object — 沒列在 mock 裡的 export 會消失。`paths.js` 還有 `getAutoMemEntrypoint` / `getAutoMemPathForCwd` 等被別處用，全沒了。
+- **正確做法**：`const real = await import(target); mock.module(target, () => ({ ...real, getAutoMemPath: tmp }))`。先 import 原模組保留所有 export，再 spread 後覆蓋我們關心的。
+- **相關檔案**：`tests/integration/memory/{memoryMutations,memoryMutationRpc}.test.ts`
+- **日期**：2026-04-26
+
+### Wizard / aux 子畫面的 useInput 與主層 useInput 雙重觸發
+
+- **發生什麼事**：MemoryManager 主層用 `useInput` 處理 list/detail/wizard 各 mode；同時 `MemoryEditWizard` / `SessionIndexPanel` / `TrashPanel` 子組件**也**自己掛 `useInput`。當這些子組件渲染時，**兩個 hook 都會收到鍵盤事件** — 例如 wizard 的 Esc 觸發 cancel，但主層的 Esc 也觸發「離開 detail」，造成雙重狀態變化。
+- **正確做法**：主層 useInput 開頭偵測 `mode === 'wizard-create' || 'wizard-edit' || 'aux-sessionIndex' || 'aux-trash'` 直接 `return`，把 input 完全交給子層。Ink useInput 沒有「只讓最深層處理」的內建機制，得手動分層。
+- **相關檔案**：`src/commands/memory/MemoryManager.tsx`
+- **日期**：2026-04-26
+
+### PTY raw vs stripAnsi 長度 drift — 不要用 `raw.length` 切 stripAnsi
+
+- **發生什麼事**：PTY E2E phase2 想驗「按 → 後新出現的 marker」— 用 `const baseLen = raw.length` snapshot，後面 `stripAnsi(raw).slice(baseLen - 200).includes(marker)`。Phase 1 OK、phase 2 找不到 marker 但 dump 整個 stripped output 明明有。
+- **根本原因**：`raw` 含 ANSI escape（ConPTY 在 Windows 特別多，OSC + DEC private mode），長度遠大於 stripAnsi 後的長度。`baseLen` 是 raw 上的位置，拿來 slice stripped 結果完全錯位。
+- **正確做法**：要不一致就一致 — 要嘛兩邊都 raw、要嘛兩邊都 stripped。最簡單：直接 `stripAnsi(raw).includes(marker)` 不切片，反正 marker 是新出現才匹配（除非 marker 文字會在 baseline 出現，那才得切）。Phase 1 因為要找的 marker 整篇只該出現一次（`auto-memory ›` active marker），不切也對。
+- **相關檔案**：`tests/e2e/_memoryTuiInteractive.ts`
+- **日期**：2026-04-26
+
+---

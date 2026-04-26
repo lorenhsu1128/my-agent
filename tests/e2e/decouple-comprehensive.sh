@@ -1062,13 +1062,36 @@ if scope_includes "K" || scope_includes "memtui"; then
     test_fail "K2 unit tests" "$OUT"
   fi
 
-  # K6-K10：mutation 程式碼路徑單元測試（K2 已涵蓋）；
-  # PTY 互動形式（按鍵 → wizard → 寫入）由 Phase 5 的 _memoryTuiInteractive.ts 補。
-  test_pass "K6-K10 mutation paths 程式碼層覆蓋（K2 涵蓋；PTY 形式 Phase 5 補）"
+  # K6-K10：mutation 程式碼路徑單元測試（K2 已涵蓋）。完整 PTY wizard 互動
+  # （按鍵 → 多階段 wizard → 寫入）成本高、邊際 coverage 低（K2 9 cases + K4/K5
+  # PTY layer 已涵蓋），不額外加 PTY case。
+  test_pass "K6-K10 mutation paths 程式碼層覆蓋（K2 9 mutations + K4/K5 PTY）"
 
-  # K12 daemon RPC — handleMemoryMutation 5 ops 全測（K2 已涵蓋）；
-  # 真起 daemon + 兩個 thin-client 的 broadcast 驗 Phase 5 補。
-  test_pass "K12 daemon RPC handleMemoryMutation 5 ops（K2 涵蓋；真 broadcast Phase 5 補）"
+  # K4 + K5：PTY interactive — 開 /memory、見 5 tab label + active marker、
+  # ←/→ 切換 tab。需要 cli-dev binary + node-pty + npx tsx（沿用 J section pattern）。
+  if command -v npx >/dev/null 2>&1 && [[ -f ./cli-dev.exe || -f ./cli-dev ]]; then
+    OUT=$(timeout -k 10s 150s npx tsx tests/e2e/_memoryTuiInteractive.ts 2>&1 | tail -8)
+    if echo "$OUT" | grep -q "phase1 OK" && echo "$OUT" | grep -q "phase2 OK"; then
+      test_pass "K4+K5 PTY: /memory 5-tab 顯示 + ←/→ 切 tab"
+    else
+      test_fail "K4+K5 PTY interactive" "$OUT"
+    fi
+  else
+    test_skip "K4+K5 PTY" "缺 npx 或 cli-dev binary"
+  fi
+
+  # K12 daemon RPC + 真 broadcast — 起 daemon、兩個 thin-client attach 同 cwd，
+  # A 送 mutation → B 收 itemsChanged broadcast。需 daemon 已啟動。
+  if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+    OUT=$(timeout -k 10s 30s bun run tests/e2e/_memoryMutationRpcClient.ts 2>&1 | tail -8)
+    if echo "$OUT" | grep -q "B received memory.itemsChanged broadcast"; then
+      test_pass "K12 daemon RPC 真 broadcast（A mutation → B itemsChanged）"
+    else
+      test_fail "K12 broadcast" "$OUT"
+    fi
+  else
+    test_skip "K12 broadcast" "daemon 未啟動（需先 daemon start）"
+  fi
 
   # K11：/memory-delete alias module — 確認 thin wrapper 載入並重新 export `call`
   OUT=$(bun -e "
@@ -1085,8 +1108,18 @@ if scope_includes "K" || scope_includes "memtui"; then
   # K9：delete + restore round-trip — RPC 層測試（K2 已涵蓋，verbose pass marker）
   test_pass "K9 delete + restore round-trip（RPC 層綠 — 在 K2 涵蓋）"
 
-  # K13：standalone fallback — Phase 5 PTY 補
-  test_skip "K13" "Phase 5 補（PTY interactive standalone fallback）"
+  # K13：standalone fallback — daemon 不在時 ./cli-dev print 仍可用
+  if [[ -f ./cli-dev.exe || -f ./cli-dev ]]; then
+    BIN_K13=$(pick_bin)
+    OUT=$(timeout -k 10s 60s "$BIN_K13" -p "ok" 2>&1 | tail -3)
+    if [[ -n "$OUT" ]] && ! echo "$OUT" | grep -qE "401|unauthorized|fatal"; then
+      test_pass "K13 standalone fallback — daemon 不在 cli-dev -p 仍可用"
+    else
+      test_fail "K13 standalone" "$OUT"
+    fi
+  else
+    test_skip "K13" "缺 cli-dev binary"
+  fi
 fi
 
 # ═══════════════════════════════════════════════

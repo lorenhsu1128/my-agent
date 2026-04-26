@@ -239,6 +239,68 @@ export CLAUDE_CONFIG_DIR=~/.claude
 
 ---
 
+### 2026-04-26 — M-MEMTUI：`/memory` 全面升級為 5-tab master TUI
+
+**範圍**：把 `/memory` 從「Dialog + spawn $EDITOR」升級成 cron 風格 master-detail TUI（5-tab：auto-memory / USER / project (MY-AGENT.md) / local-config (.my-agent/*.md) / daily-log）。吸收 `/memory-delete` 為 alias（直接進 multi-delete 模式）；補新建（含 frontmatter wizard）+ inline 編 frontmatter + Shift+E spawn `$EDITOR` + 重命名 + 注入掃描 + body 預覽 + 全螢幕 viewer + daemon WS RPC 同步 + 輔助畫面（Session-index rebuild + Trash 還原）。完整計畫：`~/.claude/plans/tui-memory-cron-validated-abelson.md`。
+
+**5 階段 commit 序列**：
+1. `b405dfc` Phase 1 — 5-tab master view + ←/→ 切 tab + Enter detail + body 預覽 + V 全螢幕 viewer + 5s poll + daemon broadcast 訂閱（read-only）
+2. `94de33d` Phase 2 — 抽 `src/memdir/memdirOps.ts` 共用 helpers（MemoryTool refactor）+ create/update/rename/delete + 注入掃描 + Shift+E spawn `$EDITOR`
+3. `c12a038` Phase 3 — daemon WS RPC（5 ops + broadcast）+ MemoryManager mutation 全 daemon-aware
+4. `2913f32` Phase 4 — Session-index + Trash 輔助子畫面 + multi-delete mode + `/memory-delete` thin wrapper
+5. （本 commit）Phase 5 — Section K E2E（PTY + 真 broadcast）+ docs
+
+**新模組**：
+- `src/memdir/memdirOps.ts` — 共用 mutation helpers（MemoryTool 與 TUI 共用）
+- `src/commands/memory/{MemoryManager.tsx, memoryManagerLogic.ts, memoryMutations.ts}` — 主 picker + 純函式 + 本機 mutation
+- `src/components/memory/{MemoryEditWizard.tsx, SessionIndexPanel.tsx, TrashPanel.tsx}` — frontmatter wizard + 兩個輔助子畫面
+- `src/daemon/memoryMutationRpc.ts` — daemon WS frame handler（5 ops）
+
+**改造既有**：
+- `src/commands/memory/memory.tsx` — 入口改渲染 `MemoryManager`（取代 Dialog + MemoryFileSelector）
+- `src/commands/memory-delete/memoryDelete.tsx` — thin wrapper 傳 `initialMode='multi-delete'`
+- `src/utils/memoryList.ts` — 加 `kind: 'user-profile'`（global + project USER.md）
+- `src/tools/MemoryTool/MemoryTool.ts` — 改用共用 memdirOps（扣 ~150 行重複）
+- `src/daemon/daemonCli.ts` — dispatch memory.mutation + broadcast memory.itemsChanged
+- `src/repl/thinClient/fallbackManager.ts` — 加 `MemoryMutationPayload` + `sendMemoryMutation()`
+- `src/hooks/useDaemonMode.ts` — export `sendMemoryMutationToDaemon()`
+- `src/cli/print.ts` — 順手修 4 個 dangling import（growthbook / policyLimits / settingsSync / remoteManagedSettings — M-DECOUPLE 漏網之魚）改 inline stub 讓 build 過
+
+**關鍵決策**（與使用者對齊 4 輪）：
+- Q1 整合：取代 `/memory`、`/memory-delete` 收為 alias 進多選刪除模式
+- Q2 Scope：5-tab 各一頁，切 tab 用 ←/→
+- Q3 Body 編輯：預設 inline 多行、Shift+E spawn `$EDITOR`
+- Q4 進階全納入 v1：daemon RPC + 注入掃描 + 重命名 + Session-index/Trash 輔助畫面
+- 5-tab 能力矩陣：USER 不可刪/重命名、daily-log 唯讀（不可改 body）、project (MY-AGENT.md) 不可新建/重命名、local-config 全功能但無 frontmatter
+
+**測試**：unit 46 cases（`memoryManagerLogic` 27 + `memoryMutations` 9 + `memoryMutationRpc` 10）+ Section K 8 PASS + 1 skip（K12 broadcast，daemon 在跑時實機驗過 `B received memory.itemsChanged broadcast — OK`）。每 phase commit 前跑 `bun run typecheck` + `./cli -p hello` 冒煙。
+
+**踩坑 / 教訓**：
+1. **`/memory` 看到舊 dialog**：cli-dev binary 是 build 前的；`bun run build:dev` 重 build 才看到新 TUI；提醒「TUI 改動要 rebuild binary 才 PTY E2E 看得到」
+2. **build 撞 4 個 dangling import**：`growthbook.js` / `policyLimits/index.js` / `settingsSync/index.js` / `remoteManagedSettings/index.js` 都已被 M-DECOUPLE 刪檔，但 `src/cli/print.ts` 的 import 沒 stub 過。typecheck 不會抓（TS resolver 鬆），bun build 才 fail。改 inline stub
+3. **PTY phase2 pos 計算 drift**：`raw.length` 是含 ANSI 的長度；`stripAnsi(raw).slice(baseLen - 200)` 取錯位置。修：直接 `stripAnsi(raw).includes(marker)` 不切片
+4. **bun test mock.module 替換 paths.js**：直接 `() => ({ getAutoMemPath: ... })` 會把其他 export 砍掉導致下游 test 報 `Export 'getAutoMemEntrypoint' not found`。先 import 原模組再 spread 才安全
+5. **bun test 第一輪 cold-start 5s timeout**：模組樹 import 慢；第一次跑可能 flake，第二次穩定。沒解、接受 retry
+6. **Wizard / aux 子畫面 useInput 衝突**：MemoryManager 主 useInput 與 SessionIndexPanel / TrashPanel / MemoryEditWizard 的 useInput 同時掛起時雙重觸發；解法：主層偵測 `mode === 'wizard-*' || 'aux-*'` 直接 bail
+7. **daemon-aware mutation 路徑**：本機 fallback 必須在 daemon 不 attached 時才走，attached 時的 daemon 失敗（如 lock 取不到）要回錯不 fallback。`tryDaemon()` 回 `'not-attached' | MutationResult` 三態語意清楚
+
+**E2E Section K 跑法**：
+```bash
+bash tests/e2e/decouple-comprehensive.sh K        # 8 PASS + 1 skip
+bash tests/e2e/decouple-comprehensive.sh memtui   # alias
+
+# K12 真 broadcast 驗證：
+./cli-dev daemon start && bash tests/e2e/decouple-comprehensive.sh K && ./cli-dev daemon stop
+```
+
+**未做（後續 milestone）**：
+- USER.md 段落級結構化編輯（先當整檔編，未來 M-MEMTUI-USER-SECT）
+- Daily-log 內容新建/編輯（保持唯讀，由 `/dream` 產生）
+- 全文搜尋 memory body（目前只 filter filename + description）
+- Memory diff / version history（git log 替代）
+
+---
+
 ### 2026-04-24 — M-MEMRECALL-LOCAL：純 llamacpp 環境 memory recall 修復
 
 **範圍**：M2 query-driven memory prefetch 在 llama.cpp 用戶（無 `ANTHROPIC_API_KEY`）silent 失效。診斷+修復同 session 完成。

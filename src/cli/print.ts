@@ -2,11 +2,13 @@
 import { feature } from 'bun:bundle'
 import { readFile, stat } from 'fs/promises'
 import { dirname } from 'path'
-import {
-  downloadUserSettings,
-  redownloadUserSettings,
-} from 'src/services/settingsSync/index.js'
-import { waitForRemoteManagedSettingsToLoad } from 'src/services/remoteManagedSettings/index.js'
+// M-DECOUPLE-1：settingsSync 已移除；inline stubs（cloud sync 不再做）。
+const downloadUserSettings = async (): Promise<void> => {}
+const redownloadUserSettings = async (): Promise<{ applied: boolean }> => ({
+  applied: false,
+})
+// M-DECOUPLE-1：remoteManagedSettings 已移除；stub no-op。
+const waitForRemoteManagedSettingsToLoad = async (): Promise<void> => {}
 import { StructuredIO } from 'src/cli/structuredIO.js'
 import { RemoteIO } from 'src/cli/remoteIO.js'
 import {
@@ -132,7 +134,8 @@ import { cwd } from 'process'
 import { getCwd } from 'src/utils/cwd.js'
 import omit from 'lodash-es/omit.js'
 import reject from 'lodash-es/reject.js'
-import { isPolicyAllowed } from 'src/services/policyLimits/index.js'
+// M-DECOUPLE-1：policyLimits 已移除；inline stub 永遠 allow。
+const isPolicyAllowed = (..._args: unknown[]): boolean => true
 import type { ReplBridgeHandle } from 'src/bridge/replBridge.js'
 import { getRemoteSessionUrl } from 'src/constants/product.js'
 import { buildBridgeConnectUrl } from 'src/bridge/bridgeStatusUtil.js'
@@ -349,7 +352,8 @@ import { getRunningTasks } from '../utils/task/framework.js'
 import { isBackgroundTask } from '../tasks/types.js'
 import { stopTask } from '../tasks/stopTask.js'
 import { drainSdkEvents } from '../utils/sdkEventQueue.js'
-import { initializeGrowthBook } from '../services/analytics/growthbook.js'
+// M-DECOUPLE-1：GrowthBook 已移除（ADR-013）；保留 stub 不再 boot。
+const initializeGrowthBook = (): void => {}
 import { errorMessage, toError } from '../utils/errors.js'
 import { sleep } from '../utils/sleep.js'
 import { isExtractModeActive } from '../memdir/paths.js'
