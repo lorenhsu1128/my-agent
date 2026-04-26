@@ -181,7 +181,7 @@ export function createQueryEngineRunner(
           agents: [...context.agents],
           // 把 ac cast 成 ask() 期待的型別（Node AbortController 與 DOM 同形）。
           abortController: ac as unknown as import('../utils/AbortController.js').AbortController,
-          includePartialMessages: false,
+          includePartialMessages: true,
         })) {
           const msg = sdkMessage as SDKMessage
           if (signal.aborted) {

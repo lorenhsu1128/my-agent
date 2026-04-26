@@ -4201,15 +4201,29 @@ export function REPL({
       if (!evt || evt.type !== 'output') return;
       const sdk = evt.payload as { type?: string; message?: { content?: unknown[] } };
       if (!sdk) return;
+      // M-DAEMON-STREAM：stream_event 走 standalone 同一條 handler，
+      // 拆 thinking_delta / text_delta / input_json_delta 更新 spinner
+      // counter + streamingThinking + streamingText UI state。
+      if (sdk.type === 'stream_event' || sdk.type === 'stream_request_start') {
+        onQueryEvent(sdk as unknown as Parameters<typeof handleMessageFromStream>[0]);
+        return;
+      }
       if (sdk.type === 'assistant') {
         const content = sdk.message?.content;
         if (!Array.isArray(content)) return;
+        // M-DAEMON-STREAM：final assistant 也餵給 onQueryEvent，
+        // 讓 streamingThinking.isStreaming 被正確設成 false（messages.ts:2947-2957）。
+        // 但本 path 仍負責 push canonical Message — handleMessageFromStream 對 SDK
+        // shape 的 assistant 不認識（它預期 internal Message），所以 onMessage
+        // callback 不會被觸發成功 push，故仍需既有 createAssistantMessage 分支。
         setMessages(prev => [
           ...prev,
           createAssistantMessage({
             content: content as BetaContentBlock[]
           })
         ]);
+        // 重置 streamingThinking 狀態（spinner 顯示 thinking 結束）
+        setStreamingThinking(prev => prev ? { ...prev, isStreaming: false, streamingEndedAt: Date.now() } : prev);
       }
       // 其他 SDK message types（user tool_result / system / result）先忽略；
       // tool_use 已在 assistant content 內由既有 renderer 處理。

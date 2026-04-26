@@ -521,6 +521,19 @@ if scope_includes "E" || scope_includes "daemon"; then
       test_fail "E5 thin-client turn" "rc=$TURN_RC out=$OUT"
     fi
 
+    # E5b (M-DAEMON-STREAM) thin-client streaming — 驗 daemon 廣播 stream_event
+    # 給 thin client（thinking_delta / text_delta 可見），讓 REPL spinner 計數
+    # 與 thinking 內容能即時更新。Regression：includePartialMessages: false 或
+    # broker 漏 forward 都會在這裡失敗。
+    OUT=$(timeout -k 10s 240 bun run "$ROOT/tests/e2e/_thinClientStreamEvent.ts" 2>&1)
+    SE_RC=$?
+    if [[ $SE_RC -eq 0 ]] && echo "$OUT" | grep -q "stream-event: OK"; then
+      SE_COUNT=$(echo "$OUT" | grep "stream_event total" | grep -oE '[0-9]+' | tail -1)
+      test_pass "E5b thin-client stream_event（收到 ${SE_COUNT:-?} 個 partial frame）"
+    else
+      test_fail "E5b thin-client stream_event" "rc=$SE_RC out=$OUT"
+    fi
+
     # E3 daemon stop（subshell + bg + redirect）
     ( $BIN daemon stop > "$ROOT/tests/e2e/daemon-stop.log" 2>&1 & )
     for i in $(seq 1 12); do
