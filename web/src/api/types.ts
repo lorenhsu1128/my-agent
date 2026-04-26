@@ -82,6 +82,7 @@ export type ServerEvent =
   | WebStatusChangedEvent
   | DiscordStatusChangedEvent
   | MutationResultEvent
+  | SlashCommandExecuteResultEvent
 
 export interface HelloEvent {
   type: 'hello'
@@ -216,6 +217,30 @@ export type ClientFrame =
   | PermissionRespondFrame
   | PermissionModeFrame
   | MutationFrame
+  | SlashCommandExecuteFrame
+
+export interface SlashCommandExecuteFrame {
+  type: 'slashCommand.execute'
+  requestId: string
+  projectId?: string
+  name: string
+  args: string
+}
+
+export type SlashCommandExecutionResultPayload =
+  | { kind: 'text'; value: string }
+  | { kind: 'prompt-injected'; inputId: string }
+  | { kind: 'jsx-handoff'; name: string }
+  | { kind: 'web-redirect'; tabId: string }
+  | { kind: 'skip' }
+
+export interface SlashCommandExecuteResultEvent {
+  type: 'slashCommand.executeResult'
+  requestId: string
+  ok: boolean
+  error?: string
+  result?: SlashCommandExecutionResultPayload
+}
 
 export interface SubscribeFrame {
   type: 'subscribe'

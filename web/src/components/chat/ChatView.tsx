@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useProjectStore } from '../../store/projectStore'
 import { useSessionStore } from '../../store/sessionStore'
 import { useMessageStore } from '../../store/messageStore'
@@ -90,6 +91,52 @@ export function ChatView() {
     useMessageStore.getState().clearSession(sessionId)
   }
 
+  // M-WEB-SLASH-B1/B2：runnable slash command 走 WS execute；result 來時 toast
+  const pendingSlashRef = useRef(new Map<string, string>())
+  useEffect(() => {
+    if (!ws) return
+    const off = ws.on('frame', f => {
+      if (f.type !== 'slashCommand.executeResult') return
+      const cmdName = pendingSlashRef.current.get(f.requestId) ?? '?'
+      pendingSlashRef.current.delete(f.requestId)
+      if (!f.ok) {
+        toast.error(`/${cmdName} 執行失敗`, { description: f.error })
+        return
+      }
+      if (f.result?.kind === 'text') {
+        toast.success(`/${cmdName}`, {
+          description:
+            f.result.value.length > 200
+              ? f.result.value.slice(0, 200) + '…'
+              : f.result.value,
+        })
+      } else if (f.result?.kind === 'prompt-injected') {
+        toast.success(`/${cmdName} 已注入`, {
+          description: 'turn 已開始（看 chat 串流）',
+        })
+      } else if (f.result?.kind === 'skip') {
+        toast.info(`/${cmdName} 跳過`)
+      }
+    })
+    return off
+  }, [ws])
+
+  function executeSlash(name: string, args: string) {
+    if (!ws || !selectedId) return false
+    const requestId = 'slash-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
+    pendingSlashRef.current.set(requestId, name)
+    ws.send({
+      type: 'slashCommand.execute',
+      requestId,
+      projectId: selectedId,
+      name,
+      args,
+    })
+    // 5min 後自動清；避免 leak
+    setTimeout(() => pendingSlashRef.current.delete(requestId), 5 * 60 * 1000)
+    return true
+  }
+
   const stateLabel =
     turnState === 'RUNNING' ? '⟳ 執行中…' : turnState === 'INTERRUPTING' ? '⏸ 中斷中…' : '· idle'
 
@@ -127,6 +174,8 @@ export function ChatView() {
         onSetMode={setMode}
         onPermissionResponse={permissionResponse}
         onClear={clear}
+        onSlashExecute={executeSlash}
+        projectId={selectedId ?? undefined}
         disabled={isHistoricalSession}
         hint={
           isHistoricalSession

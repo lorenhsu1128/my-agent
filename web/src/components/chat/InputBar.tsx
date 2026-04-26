@@ -42,6 +42,12 @@ export interface InputBarProps {
   disabled?: boolean
   /** 當前 project — 給 store ensureLoaded 用，可選 */
   projectId?: string
+  /**
+   * M-WEB-SLASH-B1/B2：對非 LOCAL_ACTION_COMMANDS 的 runnable command 走 WS
+   * slashCommand.execute；ChatView 監聽 result event 顯示 toast。
+   * 回 true 表示已 dispatch。
+   */
+  onSlashExecute?: (name: string, args: string) => boolean
 }
 
 export function InputBar({
@@ -53,6 +59,7 @@ export function InputBar({
   hint,
   disabled,
   projectId,
+  onSlashExecute,
 }: InputBarProps) {
   const [text, setText] = useState('')
   const [composing, setComposing] = useState(false)
@@ -115,14 +122,12 @@ export function InputBar({
         })
         return
       }
-      if (meta.webKind === 'runnable' && meta.type === 'prompt') {
-        toast.info(`/${cmd} (prompt) 尚未接通`, {
-          description: 'M-WEB-SLASH-B1 將在 web 端執行 prompt 注入',
-        })
-      } else if (meta.webKind === 'runnable' && meta.type === 'local') {
-        toast.info(`/${cmd} (local) 尚未接通`, {
-          description: 'M-WEB-SLASH-B2 將在 web 端執行 local 命令',
-        })
+      if (meta.webKind === 'runnable') {
+        if (onSlashExecute && onSlashExecute(meta.userFacingName, rest)) {
+          setText('')
+          return
+        }
+        toast.error(`/${cmd} 無法執行（WS 未連線）`)
       } else if (meta.webKind === 'web-redirect') {
         toast.info(`/${cmd} → ${meta.handoffKey} tab`, {
           description: 'M-WEB-SLASH-C1 將自動跳到對應 tab',
@@ -132,6 +137,7 @@ export function InputBar({
           description: 'M-WEB-SLASH-D 將提供對應的 React 互動元件',
         })
       }
+      setText('')
       return
     }
     onSubmit(v)

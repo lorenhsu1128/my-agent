@@ -42,6 +42,33 @@ import type { ContentBlockParam } from 'my-agent-ai/sdk/resources/index'
 import type { SessionBroker } from './sessionBroker.js'
 
 /**
+ * 給 local 命令用的 minimal stub context。多數簡單 local 命令（cost / help /
+ * version / clear 顯示文字）不會碰到深層欄位；碰到的會在 handler 裡 catch 回
+ * ok=false。
+ *
+ * setMessages / canUseTool / onChangeAPIKey 等 web 場景不適用的 callback 全成
+ * no-op。getAppState / setAppState 透過 src/bootstrap/state.js 讀全域 STATE，
+ * 在 daemon 內已 bootstrap 完成所以可用。
+ */
+function makeStubLocalContext(): Parameters<
+  Awaited<ReturnType<Extract<Command, { type: 'local' }>['load']>>['call']
+>[1] {
+  const noop = (): void => {}
+  const ac = new AbortController()
+  return {
+    abortController: ac,
+    options: { isNonInteractiveSession: false },
+    readFileTimestamps: {},
+    setMessages: noop,
+    onChangeAPIKey: noop,
+    setToolJSX: noop,
+    setForkConvoWithMessagesOnTheNextRender: noop,
+  } as unknown as Parameters<
+    Awaited<ReturnType<Extract<Command, { type: 'local' }>['load']>>['call']
+  >[1]
+}
+
+/**
  * 把 prompt 命令展開後的 ContentBlockParam[] 攤平成單一 text 字串，
  * 給 broker.queue.submit 用（queue payload 是 string）。非 text block 退化成
  * 描述文字（image/document 在 prompt slash 場景幾乎不會出現，僅做 defensive）。
@@ -267,12 +294,42 @@ export async function handleSlashCommandExecute(
     }
 
     if (cmd.type === 'local') {
-      // B2 實作 call()；A2 stub 走 jsx-handoff 路徑讓 web 端有東西可顯示
-      return {
-        type: 'slashCommand.executeResult',
-        requestId: req.requestId,
-        ok: true,
-        result: { kind: 'text', value: `[A2 stub] /${cmd.name} ${req.args}`.trim() },
+      const stubContext = makeStubLocalContext()
+      try {
+        const mod = await cmd.load()
+        const result = await mod.call(req.args, stubContext)
+        if (result.type === 'text') {
+          return {
+            type: 'slashCommand.executeResult',
+            requestId: req.requestId,
+            ok: true,
+            result: { kind: 'text', value: result.value },
+          }
+        }
+        if (result.type === 'skip') {
+          return {
+            type: 'slashCommand.executeResult',
+            requestId: req.requestId,
+            ok: true,
+            result: { kind: 'skip' },
+          }
+        }
+        // 'compact' — 大型副作用，B2 階段不在 web 端跑
+        return {
+          type: 'slashCommand.executeResult',
+          requestId: req.requestId,
+          ok: false,
+          error: `local command type "${result.type}" not supported via web RPC`,
+        }
+      } catch (err) {
+        return {
+          type: 'slashCommand.executeResult',
+          requestId: req.requestId,
+          ok: false,
+          error: `local command failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        }
       }
     }
 

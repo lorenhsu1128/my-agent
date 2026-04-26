@@ -188,7 +188,7 @@ describe('handleSlashCommandExecute', () => {
     ).toContain('[image]')
   })
 
-  test('local 命令回 A2 stub text', async () => {
+  test('local 命令真執行 cmd.load().call() 回 text', async () => {
     const res = await handleSlashCommandExecute('/cwd', {
       type: 'slashCommand.execute',
       requestId: 'r4',
@@ -198,8 +198,58 @@ describe('handleSlashCommandExecute', () => {
     expect(res.ok).toBe(true)
     expect(res.result?.kind).toBe('text')
     if (res.result?.kind === 'text') {
-      expect(res.result.value).toContain('/help')
-      expect(res.result.value).toContain('foo')
+      // fake "help" command returns 'h'
+      expect(res.result.value).toBe('h')
+    }
+  })
+
+  test('local 命令 throw 時回 ok=false', async () => {
+    const broken: Command = {
+      name: 'broken',
+      description: 'broken',
+      type: 'local',
+      supportsNonInteractive: true,
+      load: async () => ({
+        call: async () => {
+          throw new Error('boom')
+        },
+      }),
+    } as Command
+    fakeCommands.push(broken)
+    try {
+      const res = await handleSlashCommandExecute('/cwd', {
+        type: 'slashCommand.execute',
+        requestId: 'r4b',
+        name: 'broken',
+        args: '',
+      })
+      expect(res.ok).toBe(false)
+      expect(res.error).toContain('boom')
+    } finally {
+      fakeCommands.pop()
+    }
+  })
+
+  test('local skip type 回 kind=skip', async () => {
+    const skipper: Command = {
+      name: 'skipper',
+      description: 'skip',
+      type: 'local',
+      supportsNonInteractive: true,
+      load: async () => ({ call: async () => ({ type: 'skip' }) }),
+    } as Command
+    fakeCommands.push(skipper)
+    try {
+      const res = await handleSlashCommandExecute('/cwd', {
+        type: 'slashCommand.execute',
+        requestId: 'r4c',
+        name: 'skipper',
+        args: '',
+      })
+      expect(res.ok).toBe(true)
+      expect(res.result?.kind).toBe('skip')
+    } finally {
+      fakeCommands.pop()
     }
   })
 
