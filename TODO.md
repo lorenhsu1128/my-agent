@@ -1387,6 +1387,76 @@
 
 ---
 
+## 當前里程碑：M-WEB-SLASH-FULL — Web UI 全 87 個 slash command 支援（2026-04-26 規劃）
+
+**目標**：Web 端目前只認 5 個核心 slash command；本 milestone 補上通用 RPC + 自動拉 metadata + 全部 87 個 command（8 prompt + 27 local + 48 local-jsx + 4 web-redirect）皆可從 web 觸發。完整 plan：`~/.claude/plans/m-web-zesty-rabin.md`。
+
+**決策**：
+- 通用 `slashCommand.execute` WS RPC，避免每 command 各自 RPC frame
+- local-jsx 全 port 為 React 元件（48 個），由 daemon 回 `jsx-handoff` frame，web 查表 render
+- 4 個已被 web tab 取代的 local-jsx → 自動 redirect 到對應 tab
+
+### Phase A — Infra
+- [ ] M-WEB-SLASH-A1：`src/daemon/slashCommandRegistry.ts` 抽出 metadata snapshot（name/description/argumentHint/aliases/type/jsxHandoffName）+ 單元測試覆蓋全 87 個 command + 4 個 web-redirect 標記
+- [ ] M-WEB-SLASH-A2：`src/daemon/slashCommandRpc.ts`（list/execute/cancel）+ daemonCli dispatch + WS frame schema 加 `slashCommand.{list,execute,result,jsxHandoff}` + translator.ts op
+- [ ] M-WEB-SLASH-A3：`GET /api/slash-commands` REST + `web/src/stores/slashCommandStore.ts` zustand + 5min cache
+- [ ] M-WEB-SLASH-A4：`InputBar.tsx` autocomplete 改吃 store + `/` 觸發 dropdown 顯示三色 badge（已實作 / TUI only / Web 替代）
+
+### Phase B — Prompt + Local 自動可跑
+- [ ] M-WEB-SLASH-B1：Prompt 類（8 個）daemon execute → expand → 注入下個 user turn；E2E `/init` `/security-review` `/review`
+- [ ] M-WEB-SLASH-B2：Local 類（27 個）daemon execute → `command.call()` → 字串回顯為系統訊息泡泡；E2E `/clear` `/help` `/login`
+
+### Phase C — Local-JSX 4 個 redirect
+- [ ] M-WEB-SLASH-C1：`CommandDispatcher.tsx` 內建 redirect rule（cron/memory/llamacpp/discord-bind → 跳右欄對應 tab + flash toast）
+
+### Phase D — Local-JSX 48 個 React port
+- [ ] M-WEB-SLASH-D1：Config 類（8 個）`/config` `/model` `/permission` `/permissions` `/output-style` `/hooks` `/rate-limit-options` `/plugin`
+- [ ] M-WEB-SLASH-D2：Session 類（8 個）`/sessions` `/resume` `/branch` `/fork` `/compact` `/save` `/export` `/import`
+- [ ] M-WEB-SLASH-D3：Project 類（8 個）`/init` `/agents` `/skills` `/mcp` `/upgrade` `/release-notes` `/version` `/cost`
+- [ ] M-WEB-SLASH-D4：Memory 類（8 個）`/memory-debug` `/dream` `/memory-search` `/memory-stats` `/memory-export` `/memory-import` `/recall` `/forget`
+- [ ] M-WEB-SLASH-D5：Agent / Tool 類（8 個）`/plan` `/tasks` `/agent` `/tool` `/think` `/no-think` `/long-context` `/context-stats`
+- [ ] M-WEB-SLASH-D6：Misc / 雜項收尾（剩餘 ~13 個，確切清單由 A1 registry diff 產出）
+
+### Phase E — 收尾
+- [ ] M-WEB-SLASH-E1：Section M6 E2E + CLAUDE.md 開發日誌段 + ADR-018（jsx-handoff RPC）+ LESSONS.md 條目
+
+### 完成標準
+- [ ] `bun run typecheck:web` + `bun run build:web` + `bun run build:dev` 全綠
+- [ ] daemon + web 既有測試全綠 + 新增 ~60 unit + 整合測試全綠
+- [ ] `./cli -p hello` 冒煙過
+- [ ] tests/e2e/decouple-comprehensive.sh Section M6 PASS
+- [ ] 87 個 command 在 web autocomplete 出現；prompt/local 直接可跑；4 個 redirect 跳 tab；48 個 jsx-handoff render
+
+### 不在範圍（→ 後續 milestone）
+- TUI 端反向「該命令請去 web 用」提示
+- Slash command chord 快捷鍵（`Cmd+/` 等，獨立 keybinding milestone）
+- Skills / MCP dynamic commands hot-reload
+
+---
+
+## 後續里程碑：M-WEB-AGENT-VIEW — ChatView 內 inline agent 階層樹（規劃中，待 SLASH-FULL 完成）
+
+**目標**：把 sub-agent / Task tool 的階層在 web ChatView 用 inline collapsible tree 呈現，附完整 metadata（duration / tokens / tool count / error）。完整 plan：`~/.claude/plans/m-web-zesty-rabin.md` Milestone 2 段。
+
+- [ ] M-WEB-AGENT-A：daemon WS frame 擴充 `TurnStartEvent` agentId/parentAgentId/agentType/agentDescription、`TurnEndEvent` metadata
+- [ ] M-WEB-AGENT-B：messageStore 加 agentId + agentTreeIndex；新建 AgentBranchHeader.tsx + MessageList 群組折疊
+- [ ] M-WEB-AGENT-C：metadata pane 點擊展開 + 串流中 spinner + Section M7 E2E
+
+---
+
+## 後續里程碑：M-WEB-DIFF-RICH — File edit diff GitHub 風 side-by-side（規劃中，待 AGENT-VIEW 完成）
+
+**目標**：Edit / Write / MultiEdit 的 diff 從 `<pre>` 簡單渲染升級為 `react-diff-viewer-continued` side-by-side + light/dark theme。daemon 已輸出 `structuredPatch`，純前端 milestone。
+
+- [ ] M-WEB-DIFF-D1：`bun add react-diff-viewer-continued` + 新建 `web/src/components/chat/DiffViewer.tsx`
+- [ ] M-WEB-DIFF-D2：`ToolCallCard.tsx` 加 result type detection 條件渲染
+- [ ] M-WEB-DIFF-D3：MultiEdit file 子分組 header / Write `+++ 新檔` 標頭
+- [ ] M-WEB-DIFF-D4：Section M8 E2E + CLAUDE.md + 抽樣 light/dark 切換驗證
+
+**不在範圍**：`M-WEB-DIFF-NOTEBOOK`（NotebookEdit 結構化 diff）
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2468,3 +2538,13 @@
 - 2026-04-26 19:59: Session 結束 | 進度：631/685 任務 | 288b5e4 test(web): M-WEB-CLOSEOUT-13..17 — 跨端 broadcast E2E + Section M + 收尾
 
 - 2026-04-26 20:02: Session 結束 | 進度：631/685 任務 | 288b5e4 test(web): M-WEB-CLOSEOUT-13..17 — 跨端 broadcast E2E + Section M + 收尾
+
+- 2026-04-26 20:28: Session 結束 | 進度：631/704 任務 | c8d6167 feat(web): M-WEB-SHADCN — shadcn/ui + tweakcn Light Green 主題大改造
+
+- 2026-04-26 20:33: Session 結束 | 進度：631/704 任務 | c8d6167 feat(web): M-WEB-SHADCN — shadcn/ui + tweakcn Light Green 主題大改造
+
+- 2026-04-26 20:41: Session 結束 | 進度：631/704 任務 | c8d6167 feat(web): M-WEB-SHADCN — shadcn/ui + tweakcn Light Green 主題大改造
+
+- 2026-04-26 20:47: Session 結束 | 進度：631/704 任務 | c8d6167 feat(web): M-WEB-SHADCN — shadcn/ui + tweakcn Light Green 主題大改造
+
+- 2026-04-26 20:49: Session 結束 | 進度：631/704 任務 | c8d6167 feat(web): M-WEB-SHADCN — shadcn/ui + tweakcn Light Green 主題大改造
