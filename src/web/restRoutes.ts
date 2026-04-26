@@ -39,6 +39,7 @@ import {
   listSessionsForProject,
   searchProject,
 } from '../services/sessionIndex/index.js'
+import { getSlashCommandMetadataSnapshot } from '../daemon/slashCommandRegistry.js'
 
 export interface RestRoutesOptions {
   registry: ProjectRegistry
@@ -114,6 +115,31 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
           'unknown',
         api: 'm-web/1',
       })
+    }
+
+    // GET /api/slash-commands?cwd=...
+    // 拉 daemon 端 87 個 command 的 metadata snapshot 給 web autocomplete。
+    // cwd 可選 — 沒給就用 default project；給了就走 registry 找對應 runtime
+    // 的 cwd（讓 plugin / skill 命令吃到 per-project 設定）。
+    if (url.pathname === '/api/slash-commands' && method === 'GET') {
+      const projectId = url.searchParams.get('projectId')
+      let cwd: string
+      if (projectId && isProjectIdSafe(projectId)) {
+        const runtime = registry.getProject(projectId)
+        cwd = runtime?.cwd ?? process.cwd()
+      } else {
+        cwd = process.cwd()
+      }
+      try {
+        const commands = await getSlashCommandMetadataSnapshot(cwd)
+        return jsonResponse({ commands })
+      } catch (err) {
+        return errorResponse(
+          'SLASH_LIST_FAILED',
+          err instanceof Error ? err.message : String(err),
+          500,
+        )
+      }
     }
 
     // GET /api/projects

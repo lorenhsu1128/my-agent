@@ -250,6 +250,32 @@ export const api = {
       return request('/api/discord/restart', { method: 'POST' })
     },
   },
+  // M-WEB-SLASH-A3：拉 daemon 全 87 個 slash command 的 metadata snapshot
+  slashCommands: {
+    list(projectId?: string): Promise<{ commands: WebSlashCommandMetadata[] }> {
+      const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+      return request(`/api/slash-commands${qs}`)
+    },
+  },
+}
+
+// M-WEB-SLASH-A3：與 src/daemon/slashCommandRegistry.ts SlashCommandMetadata
+// 對齊（K2 bridge — 維持 daemon 端 type rename 時要同步改這裡）。
+export type WebSlashCommandKind = 'runnable' | 'jsx-handoff' | 'web-redirect'
+export interface WebSlashCommandMetadata {
+  name: string
+  userFacingName: string
+  description: string
+  argumentHint?: string
+  aliases?: string[]
+  type: 'prompt' | 'local' | 'local-jsx'
+  webKind: WebSlashCommandKind
+  handoffKey?: string
+  source?: string
+  argNames?: string[]
+  isHidden?: boolean
+  kind?: 'workflow'
+  disableModelInvocation?: boolean
 }
 
 export interface WebDiscordStatus {
