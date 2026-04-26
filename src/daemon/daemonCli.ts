@@ -60,6 +60,12 @@ import {
   isLlamacppConfigMutationRequest,
 } from './llamacppConfigRpc.js'
 import { handleWebControl, isWebControlRequest } from './webRpc.js'
+import {
+  handleSlashCommandExecute,
+  handleSlashCommandList,
+  isSlashCommandExecuteRequest,
+  isSlashCommandListRequest,
+} from './slashCommandRpc.js'
 import { isVisionEnabled } from '../llamacppConfig/loader.js'
 import {
   loadWebConfigSnapshot,
@@ -280,6 +286,32 @@ export async function runDaemonStart(
                 // best-effort
               }
             }
+          })()
+          return
+        }
+        // M-WEB-SLASH-A2：slash command list / execute RPC — list 拉 daemon 完整
+        // command snapshot 給 web autocomplete；execute 在 A2 為 stub 級（jsx-handoff
+        // / web-redirect / prompt-injected stub / local A2 stub text），B1 / B2
+        // 接 prompt 注入與 local call()。
+        if (isSlashCommandListRequest(m)) {
+          const req = m
+          const runtime = c.projectId
+            ? (registry.getProject(c.projectId) ?? defaultRuntime)
+            : defaultRuntime
+          void (async () => {
+            const res = await handleSlashCommandList(runtime.cwd, req)
+            handle.server!.send(c.id, res)
+          })()
+          return
+        }
+        if (isSlashCommandExecuteRequest(m)) {
+          const req = m
+          const runtime = c.projectId
+            ? (registry.getProject(c.projectId) ?? defaultRuntime)
+            : defaultRuntime
+          void (async () => {
+            const res = await handleSlashCommandExecute(runtime.cwd, req)
+            handle.server!.send(c.id, res)
           })()
           return
         }
