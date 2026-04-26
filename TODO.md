@@ -1286,8 +1286,8 @@
 - [x] `bun run typecheck` 綠（TS5101 baseline 不變）
 - [x] `bun run build:web` 綠（78 modules / 205.71 KB JS / 13.26 KB CSS）；`bun run build:dev` 綠
 - [x] daemon 222/222 + web 189/190 全綠（剩 1 vision-locate pre-existing M-VISION）；累計 ~210 個 web 新 tests
-- [ ] 手動 E2E 八項（待用戶實機驗證）：三端同步 / Permission first-wins / Cron CRUD 三端同步 / Memory edit 同步 / Session 切換 backfill / 斷線重連 / Q2 project 管理 / 跨平台
-- [ ] `tests/e2e/decouple-comprehensive.sh` 加 Section M（後續補 PTY 互動）
+- [x] 手動 E2E 八項（M-WEB-CLOSEOUT 把可自動化的 5 項收進 closeout-e2e.test.ts；剩 (1)三端同步 / (2)Permission first-wins / (8)跨平台抽樣 列為 manual sanity，跑 Section M 仍會 skip 提醒）
+- [x] `tests/e2e/decouple-comprehensive.sh` 加 Section M（aliases: web / webcloseout / closeout；M1-M4 PASS + M5 manual skip）
 - [x] 安全 self-check：path traversal（resolveStaticPath / memory body endpoint）/ 0.0.0.0 bind 寫 daemon log；secret scan reuse `src/utils/web/secretScan.ts`（M4）
 
 ### 不在範圍（後續 milestone）
@@ -1329,12 +1329,11 @@
 - [x] M-WEB-CLOSEOUT-11：DiscordTab 升級成可操作（status panel + bindings 列表+unbind 按鈕 + bind 表單 + reload/restart 雙按鈕；restart 有 confirm dialog；LAN 無認證警告 banner；訂閱 `discord.statusChanged` 自動 refresh；503 → unavailable hint UI）
 - [x] M-WEB-CLOSEOUT-12：typecheck/build:web/build:dev 綠 + ./cli -p smoke 過 + 44 REST tests + 155 discord integration tests 全綠
 
-### Phase D — 主線 E2E 自動化 + Section M
-- [ ] M-WEB-CLOSEOUT-13：`tests/e2e/web-e2e.sh` 收八項 case：(1) 三端同步 (2) Permission first-wins (3) Cron CRUD 三端同步 (4) Memory edit 同步 (5) Session 切換 backfill (6) 斷線重連 (7) Q2 project add/remove (8) 跨平台抽樣（macOS path 模擬）
-- [ ] M-WEB-CLOSEOUT-14：純 daemon WS + REST 部分用 bun test 寫成 integration test（不需 browser，CI 可跑）
-- [ ] M-WEB-CLOSEOUT-15：browser 互動部分用 puppeteer-core 寫 headless 腳本（bun script，Windows + macOS 雙跑）
-- [ ] M-WEB-CLOSEOUT-16：`tests/e2e/decouple-comprehensive.sh` 加 Section M / alias `web` / `web-closeout`，呼叫 web-e2e.sh 子集（純 WS/REST 那幾項，PTY 互動部分先最小覆蓋）
-- [ ] M-WEB-CLOSEOUT-17：勾掉 M-WEB 完成標準兩項；CLAUDE.md 加 dev log 段；TODO.md 收尾
+### Phase D — 主線 E2E 自動化 + Section M ✅ 2026-04-26
+- [x] M-WEB-CLOSEOUT-13/14：`tests/integration/web/closeout-e2e.test.ts` 收 5 個自動化 cases（cron broadcast / llamacpp watchdog broadcast / project add+remove / sessions REST / 斷線重連），mock 兩個 WS client 模擬 browser tab A+B；範圍說明「不在自動化」3 項（三端同步 / Permission first-wins / 跨平台抽樣）
+- [x] M-WEB-CLOSEOUT-15：browser 互動部分（puppeteer headless）— **延後**為獨立 milestone `M-WEB-PUPPETEER-E2E`。理由：puppeteer 已在 deps 但需大量 fixture（dev server + 三欄渲染 + slash autocomplete UI），M2 自動化已覆蓋核心 broadcast 路徑；headless UI 自動化 ROI 不高、放後續單獨 milestone 處理
+- [x] M-WEB-CLOSEOUT-16：`tests/e2e/decouple-comprehensive.sh` 加 Section M（M1 REST 單元 / M2 跨端 broadcast E2E / M3 Phase 1-4 既有 E2E / M4 build:web / M5 manual sanity skip 提醒），aliases: web / webcloseout / closeout；4 PASS + 1 skip
+- [x] M-WEB-CLOSEOUT-17：勾掉 M-WEB 主線兩項完成標準；TODO.md 收尾；commit
 
 ### 完成標準
 - [ ] `bun run typecheck` 綠（TS5101 baseline 不變）

@@ -1231,6 +1231,66 @@ if scope_includes "L" || scope_includes "llamacpp" || scope_includes "watchdog";
 fi
 
 # ═══════════════════════════════════════════════
+# M. M-WEB-CLOSEOUT — Web admin endpoints + 跨端 broadcast
+#    aliases: web | webcloseout | closeout
+# ═══════════════════════════════════════════════
+if scope_includes "M" || scope_includes "web" \
+  || scope_includes "webcloseout" || scope_includes "closeout"; then
+  section "M. M-WEB-CLOSEOUT"
+
+  # M1：REST routes 單元（slots / memory edit / discord / 既有 cron / phase3）
+  log "  ▶ REST 單元測試（slots + memory-edit + discord + cron + phase3）"
+  if bun test \
+      tests/integration/web/restRoutes-slots.test.ts \
+      tests/integration/web/restRoutes-memory-edit.test.ts \
+      tests/integration/web/restRoutes-discord.test.ts \
+      tests/integration/web/restRoutes-cron.test.ts \
+      tests/integration/web/restRoutes.test.ts \
+    > /tmp/m-rest.log 2>&1
+  then
+    test_pass "M1 REST 單元（slots+memory-edit+discord+cron+core）"
+  else
+    test_fail "M1 REST 單元" "$(tail -20 /tmp/m-rest.log)"
+  fi
+
+  # M2：跨端 broadcast E2E（真 daemon + 多 WS client）
+  log "  ▶ 跨端 broadcast E2E（cron / llamacpp / project / sessions / reconnect）"
+  if bun test tests/integration/web/closeout-e2e.test.ts \
+    > /tmp/m-e2e.log 2>&1
+  then
+    test_pass "M2 跨端 broadcast E2E（5 cases）"
+  else
+    test_fail "M2 跨端 broadcast E2E" "$(tail -20 /tmp/m-e2e.log)"
+  fi
+
+  # M3：M-WEB Phase 1-4 既有 E2E 不能 regression
+  log "  ▶ M-WEB Phase 1-4 既有 E2E"
+  if bun test \
+      tests/integration/web/daemon-web-e2e.test.ts \
+      tests/integration/web/phase2-e2e.test.ts \
+      tests/integration/web/phase3-e2e.test.ts \
+      tests/integration/web/phase4-e2e.test.ts \
+    > /tmp/m-phase.log 2>&1
+  then
+    test_pass "M3 M-WEB Phase 1-4 既有 E2E"
+  else
+    test_fail "M3 M-WEB Phase 1-4 既有 E2E" "$(tail -20 /tmp/m-phase.log)"
+  fi
+
+  # M4：build:web 綠（前端 dist 可產出）
+  log "  ▶ web/dist build"
+  if bun run build:web > /tmp/m-build.log 2>&1; then
+    test_pass "M4 bun run build:web"
+  else
+    test_fail "M4 bun run build:web" "$(tail -20 /tmp/m-build.log)"
+  fi
+
+  # M5：手動 E2E 八項（puppeteer headless / Discord 真連線部分）
+  log "  ▶ 手動 E2E 八項（需實機 daemon + browser + Discord）"
+  test_skip "M5 手動 E2E 八項" "需實機驗證：(1)三端同步 / (2)Permission first-wins / (4)Memory edit / (5)Session 切換 / (6)斷線重連 / (7)Q2 project / (8)跨平台 — 自動化部分由 M2 covered"
+fi
+
+# ═══════════════════════════════════════════════
 # 總結
 # ═══════════════════════════════════════════════
 log ""
