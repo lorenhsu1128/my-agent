@@ -1228,6 +1228,78 @@
 
 ---
 
+## 當前里程碑：M-WEB — Discord 風格 Web UI 嵌入 daemon（2026-04-26 規劃）
+
+**目標**：在 daemon 內嵌第三個前端（TUI / Discord 之外），瀏覽器透過 LAN IP 連入即可使用 Discord 風三欄式 UI（左 project list / 中 message stream / 右 settings panel）。TUI / Discord / Web 三端對同一 ProjectRuntime 雙向同步（送訊息、permission 批准、cron/memory/llamacpp CRUD 任一端均同步）。
+
+**完整計畫**：`docs/plans/M-WEB.md`
+
+**範圍決策**（與使用者 12 輪對齊鎖定）：
+- A 雙向訊息同步 + B 無認證 IP-only（W2 預設綁 0.0.0.0）+ C Discord 三欄式
+- D Vite + React 獨立 `web/` 專案 + E `/web` master TUI（start/stop/status/open/qr/config）
+- F3 嵌在 daemon 內額外開 port（同一 process、共用 broker reference）
+- G1 完全 React 重寫（TUI 全 parity，含右欄 R3 cron/memory/llamacpp 全 CRUD）
+- H3 跨 session 切換（左欄兩層樹 M1，FTS5 搜尋）
+- J2 Phase A 含 chat + permission + 5 個核心 slash（/clear /interrupt /allow /deny /mode）
+- K2 web 內部 protocol bridge（browser 看到乾淨 REST + WS）
+- L2 右欄 Discord context-panel 風（跟著左欄 selected project 切）
+- P2 master TUI（/cron /memory /llamacpp）導向右欄
+- Q2 web 可 add/remove project + S3 雙向 session 建立同步
+- T1 一刀切（單一大 milestone，內含 ~21 個 sub-task commit）
+- V3 `~/.my-agent/web.json` 控制 port（預設 9090）+ autoStart
+
+**預估工期**：8–12 週（單人）
+
+### Phase 1 — Infra & 骨架（2 週）✅ 2026-04-26 完成
+- [x] M-WEB-1：`web/` Vite 專案 scaffold（React 18 + TS + Tailwind + zustand + react-router）+ `bun run build:web` / `bun run dev:web` script — build 5.76s 159 KB JS / 5.68 KB CSS
+- [x] M-WEB-2：`src/webConfig/` 6 檔（schema/paths/loader/seed/bundledTemplate/index）+ `~/.my-agent/web.README.md` seed — 19 unit tests
+- [x] M-WEB-3：`src/web/httpServer.ts` + `staticServer.ts` 第二個 Bun.serve listener，serve `web/dist` + SPA fallback + path traversal 防護 + port probing + dev proxy — 32 unit/integration tests
+- [x] M-WEB-4：`src/web/wsServer.ts` + `browserSession.ts` WS 連線管理（heartbeat / subscribe filter / 真 WebSocket client 整合測試）— 10 tests
+- [x] M-WEB-5：`src/web/webGateway.ts` 訂閱 `registry.onLoad/onUnload` + per-runtime broker / permissionRouter / cron.events listener；mirror DiscordGateway pattern — 15 tests
+- [x] M-WEB-6：`src/web/translator.ts` + `webTypes.ts` daemon frame ↔ web JSON 雙向轉譯（含 mutation op mapping）— 32 unit tests
+- [x] M-WEB-7：`/web` 指令（args + 簡易 TUI）+ `src/daemon/webRpc.ts` + `src/web/webController.ts`（lifecycle 管理）+ daemonCli 整合（autoStart）+ fallbackManager.sendWebControl + commands.ts 註冊 + `web.statusChanged` 廣播 — 9 controller/RPC tests
+- [x] Phase 1 E2E：`tests/integration/web/daemon-web-e2e.test.ts` 4/4 — 真 daemon auto-start web → `/api/health` 200 → `/api/foo` 404 → WS hello/subscribe/ping/pong → thin-client `web.control` op=status/stop + `web.statusChanged` broadcast。新 ClientSource='web' / `defaultIntentForSource='interactive'`
+
+### Phase 2 — Chat 核心（3 週）
+- [ ] M-WEB-8：`/api/projects` + `/api/sessions` REST（GET/POST/DELETE；S3 廣播 `session.created`）
+- [ ] M-WEB-9：三欄 layout 骨架 + 左欄 ProjectList + SessionTree（M1 兩層樹）+ Q2 add/remove project dialog
+- [ ] M-WEB-10：中欄 MessageList + MessageItem + ToolCallCard + ThinkingBlock + CodeBlock（shiki）+ DiffViewer；對齊 `messages.ts` `StreamingToolUse / StreamingThinking`
+- [ ] M-WEB-11：WS `turn.start/event/end` 串流接收 + 增量 render；`messageBackfill.ts` 讀 sessionIndex 最近 100 條
+- [ ] M-WEB-12：InputBar 雙向送訊息（multi-line + 5 個核心 slash autocomplete）+ turn 進行中其他 client disabled lock
+- [ ] M-WEB-13：PermissionPrompt modal + first-wins race + `permission.resolved` 清 modal；permission mode toggle（status bar）
+
+### Phase 3 — 右欄 R3 全 CRUD（3-4 週）
+- [ ] M-WEB-14：`/api/cron` REST + CronTab + CronCreateForm + CronScheduleEditor（reuse `cronPickerLogic`）
+- [ ] M-WEB-15：`/api/memory` REST + MemoryTab 5-tab（reuse `memoryManagerLogic`）+ MemoryEditWizard + injection 警告
+- [ ] M-WEB-16：`/api/llamacpp/config` REST + LlamacppTab（reuse `llamacppManagerLogic.WATCHDOG_FIELDS`）+ slot inspector 即時 polling
+- [ ] M-WEB-17：DiscordTab（bind/unbind/whitelist via discordBindRpc/discordAdminRpc）+ PermissionsTab（mode + recent requests log）
+
+### Phase 4 — H3 搜尋 + 收尾（1-2 週）
+- [ ] M-WEB-18：`src/services/sessionIndex/` 加 `getMessagesBySession` / `searchProject` read API；上滑 lazy load + FTS 搜尋框
+- [ ] M-WEB-19：DisconnectedBanner + 自動重連（5/10/30s backoff）+ daemon offline 降級 read-only
+- [ ] M-WEB-20：QR code（ASCII QR in TUI、PNG QR endpoint `/api/qr`）+ `/web open` 跨平台開瀏覽器（start / open / xdg-open）
+- [ ] M-WEB-21：跨平台 build verify（Windows + macOS）+ `docs/web-mode.md` 使用者指南 + ADR-016 + CLAUDE.md 開發日誌 + LESSONS.md
+
+### 完成標準
+- [ ] `bun run typecheck` 綠（TS5101 baseline 不變）
+- [ ] `bun run build` + `bun run build:web` 雙 build 綠
+- [ ] daemon 測試 + web 整合 + frontend vitest 全套全綠（預估新增 ~150-200 unit + 40 daemon-side integration + 60 frontend）
+- [ ] 手動 E2E 八項：三端同步 / Permission first-wins / Cron CRUD 三端同步 / Memory edit 同步 / Session 切換 backfill / 斷線重連 / Q2 project 管理 / 跨平台
+- [ ] `tests/e2e/decouple-comprehensive.sh` 加 Section M（M-WEB E2E）
+- [ ] 安全 self-check：path traversal / secret scan / 0.0.0.0 bind 寫 daemon log
+
+### 不在範圍（後續 milestone）
+- `M-WEB-MOBILE`：手機 responsive（漢堡選單折三欄）
+- `M-WEB-AUTH`：bearer token / 帳號登入（如需 LAN 外暴露）
+- `M-WEB-NOTIF`：browser native notification（permission ask、turnEnd 提醒）
+- `M-WEB-ATTACHMENT`：圖片 / 檔案上傳 drag-drop 對 web input
+- `M-WEB-MULTI-USER`：多 browser tab 同 turn 並發送訊息
+- `M-WEB-SLASH-FULL`：剩下 ~80 個 slash command 的 React-DOM port
+- `M-WEB-AGENT-VIEW`：Agent 工具呼叫的 sub-agent 樹狀視覺化
+- `M-WEB-DIFF-RICH`：side-by-side diff、syntax highlight 對齊 GitHub
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2261,3 +2333,33 @@
 - 2026-04-26 10:39: Session 結束 | 進度：560/633 任務 | 5aa1ee8 feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 2 — per-call-site max_tokens ceiling
 
 - 2026-04-26 10:59: Session 結束 | 進度：569/633 任務 | 4bb64fb feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 3 — /llamacpp master TUI + Hybrid args + daemon broadcast
+
+- 2026-04-26 11:12: Session 結束 | 進度：585/633 任務 | c1c2164 feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 4+5 — Section L E2E + docs + ADR-015
+
+- 2026-04-26 11:24: Session 結束 | 進度：585/633 任務 | c1c2164 feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 4+5 — Section L E2E + docs + ADR-015
+
+- 2026-04-26 11:46: Session 結束 | 進度：585/633 任務 | c1c2164 feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 4+5 — Section L E2E + docs + ADR-015
+
+- 2026-04-26 12:53: Session 結束 | 進度：585/633 任務 | c1c2164 feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 4+5 — Section L E2E + docs + ADR-015
+
+- 2026-04-26 12:56: Session 結束 | 進度：585/633 任務 | c1c2164 feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 4+5 — Section L E2E + docs + ADR-015
+
+- 2026-04-26 13:12: Session 結束 | 進度：585/633 任務 | c1c2164 feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 4+5 — Section L E2E + docs + ADR-015
+
+- 2026-04-26 13:16: Session 結束 | 進度：585/633 任務 | c1c2164 feat(llamacpp): M-LLAMACPP-WATCHDOG Phase 4+5 — Section L E2E + docs + ADR-015
+
+- 2026-04-26 13:34: Session 結束 | 進度：585/633 任務 | 2bd250a feat(daemon): M-DAEMON-STREAM — daemon 模式 thinking / text 即時 streaming
+
+- 2026-04-26 15:11: Session 結束 | 進度：585/633 任務 | 2bd250a feat(daemon): M-DAEMON-STREAM — daemon 模式 thinking / text 即時 streaming
+
+- 2026-04-26 15:38: Session 結束 | 進度：585/633 任務 | 2bd250a feat(daemon): M-DAEMON-STREAM — daemon 模式 thinking / text 即時 streaming
+
+- 2026-04-26 15:47: Session 結束 | 進度：585/633 任務 | 2bd250a feat(daemon): M-DAEMON-STREAM — daemon 模式 thinking / text 即時 streaming
+
+- 2026-04-26 15:54: Session 結束 | 進度：585/633 任務 | 2bd250a feat(daemon): M-DAEMON-STREAM — daemon 模式 thinking / text 即時 streaming
+
+- 2026-04-26 16:25: Session 結束 | 進度：585/633 任務 | 2bd250a feat(daemon): M-DAEMON-STREAM — daemon 模式 thinking / text 即時 streaming
+
+- 2026-04-26 16:33: Session 結束 | 進度：585/633 任務 | 2bd250a feat(daemon): M-DAEMON-STREAM — daemon 模式 thinking / text 即時 streaming
+
+- 2026-04-26 17:23: Session 結束 | 進度：593/661 任務 | 2bd250a feat(daemon): M-DAEMON-STREAM — daemon 模式 thinking / text 即時 streaming

@@ -59,7 +59,13 @@ import {
   handleLlamacppConfigMutation,
   isLlamacppConfigMutationRequest,
 } from './llamacppConfigRpc.js'
+import { handleWebControl, isWebControlRequest } from './webRpc.js'
 import { isVisionEnabled } from '../llamacppConfig/loader.js'
+import {
+  loadWebConfigSnapshot,
+  seedWebConfigIfMissing,
+} from '../webConfig/index.js'
+import { createWebServerController } from '../web/webController.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 
 export const DEFAULT_STOP_GRACEFUL_MS = 5_000
@@ -133,6 +139,11 @@ export async function runDaemonStart(
     // 未來（M-DISCORD-2）REPL thin-client handshake 帶 cwd 時由 registry 動態
     // load；Discord gateway（M-DISCORD-3）也會呼 registry.loadProject。
     let disposeRegistry: (() => Promise<void>) | null = null
+    // M-WEB-7：webController（嵌在 daemon 內的 web HTTP/WS server lifecycle）。
+    // 由 enableQueryEngine 區塊內初始化（需要 registry）；onMessage 透過 closure
+    // 取得，已啟動才會處理 web.control RPC。
+    let webController: import('../web/webController.js').WebServerController | null = null
+    let disposeWeb: (() => Promise<void>) | null = null
     if (opts.enableQueryEngine && handle.server) {
       const cwd = opts.cwd ?? process.cwd()
       const baseCwd = process.cwd()
@@ -233,6 +244,38 @@ export async function runDaemonStart(
                   },
                   x => x.projectId === runtime.projectId,
                 )
+              } catch {
+                // best-effort
+              }
+            }
+          })()
+          return
+        }
+        // M-WEB-7：web HTTP server start/stop/status — daemon 全域狀態，
+        // broadcast `web.statusChanged` 給所有 attached client（不帶 projectId）。
+        if (isWebControlRequest(m)) {
+          const req = m
+          void (async () => {
+            if (!webController) {
+              handle.server!.send(c.id, {
+                type: 'web.controlResult',
+                requestId: req.requestId,
+                ok: false,
+                error: 'webController not initialized',
+                status: { running: false },
+              })
+              return
+            }
+            const res = await handleWebControl(webController, req)
+            handle.server!.send(c.id, res)
+            if (res.ok && (req.op === 'start' || req.op === 'stop')) {
+              try {
+                handle.server!.broadcast({
+                  type: 'web.statusChanged',
+                  running: res.status.running,
+                  port: res.status.port,
+                  bindHost: res.status.bindHost,
+                })
               } catch {
                 // best-effort
               }
@@ -494,7 +537,62 @@ export async function runDaemonStart(
         )
       }
 
+      // M-WEB-7：起 web HTTP server（如果 web.jsonc enabled + autoStart）。
+      try {
+        await seedWebConfigIfMissing()
+        const webCfg = await loadWebConfigSnapshot()
+        webController = createWebServerController({
+          registry,
+          config: webCfg,
+          reloadConfig: () => {
+            // 每次 start/restart 重讀 config 取最新值
+            return webCfg
+          },
+          log: msg => void handle.logger.info(`[web] ${msg}`),
+        })
+        if (webCfg.enabled && webCfg.autoStart) {
+          try {
+            const status = await webController.start()
+            const urlList = (status.urls ?? []).slice(0, 3).join(', ')
+            out(
+              `  web:         enabled at ${status.bindHost}:${status.port}` +
+                (urlList ? ` (${urlList})` : '') +
+                `\n`,
+            )
+          } catch (e) {
+            out(
+              `  web:         start failed (${e instanceof Error ? e.message : String(e)})\n`,
+            )
+          }
+        } else if (webCfg.enabled) {
+          out(`  web:         enabled in config, autoStart=false (use /web start)\n`)
+        } else {
+          out(`  web:         disabled (set enabled:true in ~/.my-agent/web.jsonc)\n`)
+        }
+        disposeWeb = async () => {
+          try {
+            if (webController) await webController.dispose()
+          } catch {
+            // ignore
+          }
+        }
+      } catch (e) {
+        void handle.logger.error('failed to init web controller', {
+          err: e instanceof Error ? e.message : String(e),
+        })
+        out(
+          `  web:         init failed (${e instanceof Error ? e.message : String(e)})\n`,
+        )
+      }
+
       disposeRegistry = async (): Promise<void> => {
+        if (disposeWeb) {
+          try {
+            await disposeWeb()
+          } catch {
+            // ignore
+          }
+        }
         if (disposeDiscord) {
           try {
             await disposeDiscord()

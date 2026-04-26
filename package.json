@@ -18,7 +18,10 @@
     "compile": "bun run ./scripts/build.ts --compile",
     "dev": "bun run ./scripts/dev.ts",
     "dev:raw": "bun run ./src/entrypoints/cli.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:web": "cd web && bun install && bun run build",
+    "dev:web": "cd web && bun install && bun run dev",
+    "typecheck:web": "cd web && bun run typecheck"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",

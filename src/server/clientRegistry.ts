@@ -13,7 +13,13 @@
  */
 import { logForDebugging } from '../utils/debug.js'
 
-export type ClientSource = 'repl' | 'discord' | 'cron' | 'slash' | 'unknown'
+export type ClientSource =
+  | 'repl'
+  | 'discord'
+  | 'web'
+  | 'cron'
+  | 'slash'
+  | 'unknown'
 
 export interface ClientSocket {
   send(data: string): void

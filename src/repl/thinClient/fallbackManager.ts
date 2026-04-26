@@ -54,6 +54,21 @@ export interface FallbackManagerOptions {
 }
 
 /**
+ * M-WEB-7：web controller status（鏡像 src/web/webController.WebServerStatus）。
+ * 定義在這裡是讓 fallbackManager 不必相依 src/web/*；REPL 顯示 status 用同一份。
+ */
+export interface WebControlStatus {
+  running: boolean
+  port?: number
+  bindHost?: string
+  urls?: string[]
+  startedAt?: number
+  inDevProxyMode?: boolean
+  connectedClients?: number
+  lastError?: string
+}
+
+/**
  * M-LLAMACPP-WATCHDOG Phase 3-7：llamacpp config mutation payload。
  * 寫入後 daemon broadcast `llamacpp.configChanged`。
  */
@@ -213,6 +228,18 @@ export interface FallbackManager {
   ): Promise<
     | { ok: true; message?: string }
     | { ok: false; error: string }
+    | null
+  >
+  /**
+   * M-WEB-7：送 `/web start | stop | status` 到 daemon。daemon 對 start/stop
+   * 成功後 broadcast `web.statusChanged`。非 attached / timeout 回 null。
+   */
+  sendWebControl(
+    op: 'start' | 'stop' | 'status',
+    timeoutMs?: number,
+  ): Promise<
+    | { ok: true; status: WebControlStatus }
+    | { ok: false; error: string; status?: WebControlStatus }
     | null
   >
   /**
@@ -416,6 +443,16 @@ export function createFallbackManager(
       timer: ReturnType<typeof setTimeout>
     }
   >()
+  /** M-WEB-7：pending web.control response */
+  type WebControlResolveValue =
+    | { ok: true; status: WebControlStatus }
+    | { ok: false; error: string; status?: WebControlStatus }
+    | null
+  type WebControlResolve = (v: WebControlResolveValue) => void
+  const pendingWebControl = new Map<
+    string,
+    { resolve: WebControlResolve; timer: ReturnType<typeof setTimeout> }
+  >()
 
   // M-CWD-FIX：帶 cwd 連線時等 hello frame 才切 attached。daemon 的
   // loadProject 是異步的；在 hello 到達前 input 會被 fallback 到 defaultRuntime。
@@ -557,6 +594,34 @@ export function createFallbackManager(
         return
       }
       if (f.type === 'llamacpp.configChanged') {
+        emitter.emit('frame', f)
+        return
+      }
+      // M-WEB-7：web.controlResult / web.statusChanged
+      if (f.type === 'web.controlResult') {
+        const rid = String((f as { requestId?: unknown }).requestId ?? '')
+        const pending = pendingWebControl.get(rid)
+        if (pending) {
+          clearTimeout(pending.timer)
+          pendingWebControl.delete(rid)
+          const p = f as unknown as {
+            ok?: boolean
+            error?: string
+            status?: WebControlStatus
+          }
+          if (p.ok) {
+            pending.resolve({ ok: true, status: p.status ?? { running: false } })
+          } else {
+            pending.resolve({
+              ok: false,
+              error: String(p.error ?? 'unknown'),
+              status: p.status,
+            })
+          }
+        }
+        return
+      }
+      if (f.type === 'web.statusChanged') {
         emitter.emit('frame', f)
         return
       }
@@ -1040,6 +1105,32 @@ export function createFallbackManager(
         } catch {
           clearTimeout(timer)
           pendingMemoryMutation.delete(requestId)
+          resolve(null)
+        }
+      })
+    },
+    async sendWebControl(op, timeoutMs = 10_000) {
+      if (mode !== 'attached' || !socket) return null
+      const requestId = `webCtl${nextQueryId++}-${Date.now()}`
+      return await new Promise<
+        | { ok: true; status: WebControlStatus }
+        | { ok: false; error: string; status?: WebControlStatus }
+        | null
+      >(resolve => {
+        const timer = setTimeout(() => {
+          pendingWebControl.delete(requestId)
+          resolve(null)
+        }, timeoutMs)
+        pendingWebControl.set(requestId, { resolve, timer })
+        try {
+          ;(
+            socket as unknown as {
+              send: (f: Record<string, unknown>) => void
+            }
+          ).send({ type: 'web.control', requestId, op })
+        } catch {
+          clearTimeout(timer)
+          pendingWebControl.delete(requestId)
           resolve(null)
         }
       })

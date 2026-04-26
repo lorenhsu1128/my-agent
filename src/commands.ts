@@ -173,6 +173,7 @@ import model from './commands/model/index.js'
 import toolsCommand from './commands/tools/index.js'
 import cronCommand from './commands/cron/index.js'
 import llamacppCommand from './commands/llamacpp/index.js'
+import webCommand from './commands/web/index.js'
 import sessionDeleteCommand from './commands/session-delete/index.js'
 import memoryDeleteCommand from './commands/memory-delete/index.js'
 import trashCommand from './commands/trash/index.js'
@@ -286,6 +287,7 @@ const COMMANDS = memoize((): Command[] => [
   toolsCommand,
   cronCommand,
   llamacppCommand,
+  webCommand,
   sessionDeleteCommand,
   memoryDeleteCommand,
   trashCommand,

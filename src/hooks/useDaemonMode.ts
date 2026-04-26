@@ -229,6 +229,30 @@ export async function sendLlamacppConfigMutationToDaemon(
 }
 
 /**
+ * M-WEB-7：發 `/web start | stop | status` 到 daemon。
+ * attached 才走；非 attached / timeout 回 null。
+ */
+export async function sendWebControlToDaemon(
+  op: 'start' | 'stop' | 'status',
+  timeoutMs?: number,
+): Promise<
+  | {
+      ok: true
+      status: import('../repl/thinClient/fallbackManager.js').WebControlStatus
+    }
+  | {
+      ok: false
+      error: string
+      status?: import('../repl/thinClient/fallbackManager.js').WebControlStatus
+    }
+  | null
+> {
+  const mgr = currentManager
+  if (!mgr || mgr.state.mode !== 'attached') return null
+  return mgr.sendWebControl(op, timeoutMs)
+}
+
+/**
  * M-CRON-W3-8b：回 cron wizard 決定。attached 才真送；回 true 表送出。
  */
 export function respondToCronWizard(
