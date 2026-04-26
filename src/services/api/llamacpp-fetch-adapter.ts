@@ -535,6 +535,7 @@ async function* translateOpenAIStreamToAnthropic(
   upstream: ReadableStream<Uint8Array>,
   model: string,
   msgId: string,
+  callSite: import('../../llamacppConfig/schema.js').LlamaCppCallSite = 'turn',
 ): AsyncGenerator<string> {
   let msgStarted = false
   let nextBlockIndex = 0
@@ -604,7 +605,30 @@ async function* translateOpenAIStreamToAnthropic(
     })
   }
 
-  for await (const payload of iterOpenAISSELines(upstream)) {
+  // M-LLAMACPP-WATCHDOG：把 SSE 流包進 watchdog 監控。disabled / master off 時
+  // watchSseStream 直接 passthrough，零 overhead。觸發時 throw WatchdogAbortError
+  // → 我們 catch 後 yield message_delta + message_stop 收尾，讓 SDK 端拿到正常
+  // stream 結束（非 fatal error）。watchdog 觸發的 console.warn 由 watchSseStream
+  // 內部處理。
+  const { getEffectiveWatchdogConfig } = await import(
+    '../../llamacppConfig/loader.js'
+  )
+  const { watchSseStream, WatchdogAbortError } = await import(
+    './llamacppWatchdog.js'
+  )
+  const watchdogCfg = getEffectiveWatchdogConfig()
+  const watchdogCtrl = new AbortController()
+  const watchedSse = watchSseStream(
+    iterOpenAISSELines(upstream),
+    watchdogCfg,
+    callSite,
+    watchdogCtrl,
+  )
+
+  let watchdogAborted: InstanceType<typeof WatchdogAbortError> | null = null
+
+  try {
+  for await (const payload of watchedSse) {
     let chunk: OpenAIStreamChunk
     try {
       chunk = JSON.parse(payload) as OpenAIStreamChunk
@@ -760,6 +784,27 @@ async function* translateOpenAIStreamToAnthropic(
     )
   }
 
+  } catch (err) {
+    if (err instanceof WatchdogAbortError) {
+      watchdogAborted = err
+      // biome-ignore lint/suspicious/noConsole: user-visible diagnostic
+      console.warn(
+        `[llamacpp-watchdog] aborted layer=${err.layer} callSite=${err.stats.callSite} tokens=${err.stats.tokens} elapsedMs=${err.stats.elapsedMs} reason=${err.message}`,
+      )
+      // 補關掉任何開著的 content block，避免下游 SDK 看到不完整 stream
+      if (textIndex >= 0) {
+        yield stopBlock(textIndex)
+        textIndex = -1
+      }
+      for (const idx of openToolBlocks.values()) {
+        yield stopBlock(idx)
+      }
+      openToolBlocks.clear()
+    } else {
+      throw err
+    }
+  }
+
   // Stream 結束摘要：供診斷「模型承諾用工具但沒 emit」的症狀。若 finish=stop
   // + emittedText + !emittedToolCall 可判斷為模型 sampling 決定不呼叫工具
   // （不是 adapter bug）。只在 LLAMA_DEBUG 或 MY_AGENT_DEBUG 開啟時印。
@@ -772,7 +817,11 @@ async function* translateOpenAIStreamToAnthropic(
   yield formatSSE('message_delta', {
     type: 'message_delta',
     delta: {
-      stop_reason: FINISH_TO_STOP[finalFinishReason ?? ''] ?? 'end_turn',
+      stop_reason: watchdogAborted
+        ? watchdogAborted.layer === 'tokenCap'
+          ? 'max_tokens'
+          : 'end_turn'
+        : (FINISH_TO_STOP[finalFinishReason ?? ''] ?? 'end_turn'),
       stop_sequence: null,
     },
     // M-TOKEN: 除了 output_tokens 外，一併送回 input_tokens / cache_read_input_tokens

@@ -1177,11 +1177,11 @@
 ### 任務
 
 #### Phase 1 — Config schema + adapter watchdog 三層
-- [ ] M-LLAMACPP-WATCHDOG-1-1 `src/llamacppConfig/schema.ts` 加 `LlamaCppWatchdogSchema`（master + 三層各自 enabled + 數值），loader 解析、snapshot 加 watchdog field；env override `LLAMACPP_WATCHDOG_ENABLE/DISABLE`
-- [ ] M-LLAMACPP-WATCHDOG-1-2 新 `src/services/api/llamacppWatchdog.ts` 純函式：`createWatchdogStream(stream, config, signal)` 包 SSE iterator + inter-chunk timer + reasoning timer + token counter；abort 帶 reason 字串
-- [ ] M-LLAMACPP-WATCHDOG-1-3 `createLlamaCppFetch` 串入 watchdog（fetch 前 wrap signal、stream 後接 watchdog iterator、error path 識別 watchdog abort 包成 Anthropic-shape error）
-- [ ] M-LLAMACPP-WATCHDOG-1-4 unit tests `tests/integration/llamacpp/watchdog.test.ts`（mock SSE → 三層各觸發 + 不誤判 + disabled 跳過 + master off 跳過）
-- [ ] M-LLAMACPP-WATCHDOG-1-5 typecheck + smoke + commit
+- [x] M-LLAMACPP-WATCHDOG-1-1 `src/llamacppConfig/schema.ts` 加 `LlamaCppWatchdogSchema` + 子 schema interChunk/reasoning/tokenCap（master + 三層各自 enabled + 數值），全部預設 false；`LlamaCppCallSite` type export；`getEffectiveWatchdogConfig()` 含 env override `LLAMACPP_WATCHDOG_DISABLE`（強制關，最高優先）+ `LLAMACPP_WATCHDOG_ENABLE`（一鍵全開）
+- [x] M-LLAMACPP-WATCHDOG-1-2 新 `src/services/api/llamacppWatchdog.ts` 純函式：`WatchdogAbortError` class + `tickChunk()` state machine + `watchSseStream()` async generator wrapper（含 5s 低頻 timer 模型 silent 時也觸發）
+- [x] M-LLAMACPP-WATCHDOG-1-3 `translateOpenAIStreamToAnthropic` 加 `callSite` 參數；fetch 後把 `iterOpenAISSELines` 用 `watchSseStream` 包；catch `WatchdogAbortError` 後關所有 open content blocks + 改 `stop_reason`（tokenCap → `max_tokens` / 其他 → `end_turn`）+ console.warn 記錄層次/tokens/elapsed
+- [x] M-LLAMACPP-WATCHDOG-1-4 unit tests `tests/integration/llamacpp/watchdog.test.ts` — 23/23 pass：layerActive 邊界 / getTokenCap per call-site / chunk inspection helpers / tickChunk 三層分別 + state mutation / watchSseStream 正常 passthrough + tokenCap throw + reasoning throw + 各層 disabled
+- [x] M-LLAMACPP-WATCHDOG-1-5 typecheck baseline 不退步；`timeout -k 5s 60s ./cli -p "say hi"` 冒煙 EXIT=0；commit
 
 #### Phase 2 — Per-call-site max_tokens ceiling
 - [ ] M-LLAMACPP-WATCHDOG-2-1 `translateRequestToOpenAI()` 加 `callSite` 參數，clamp `max_tokens = min(caller, ceiling[callSite])`

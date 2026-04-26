@@ -46,6 +46,53 @@ export const LlamaCppServerSchema = z.object({
   vision: LlamaCppServerVisionSchema.default({}),
 })
 
+/**
+ * M-LLAMACPP-WATCHDOG：三層 watchdog 設定。
+ *
+ * 設計原則：
+ * - master `enabled` + 三層各自 `enabled` 雙層 AND 才生效（任一 off = 該層不存在）
+ * - **全部預設 false**，安裝後不影響既有行為；使用者透過 `/llamacpp` opt-in
+ * - env override：LLAMACPP_WATCHDOG_ENABLE=1 一鍵開全部；LLAMACPP_WATCHDOG_DISABLE=1
+ *   強制關（無視 config）— 後者優先於前者
+ *
+ * 三層的責任：
+ * - A. interChunk：SSE 連續無 token N ms → 連線真的 hung
+ * - B. reasoning：進 `<think>` 後 N ms 仍未見 `</think>` → CoT 失控迴圈
+ * - C. tokenCap：累積 token 超 ceiling[callSite] → 防失控總量；per call-site 分流
+ */
+
+export const LlamaCppWatchdogInterChunkSchema = z.object({
+  enabled: z.boolean().default(false),
+  /** 兩個 SSE chunk 之間最大允許間隔（毫秒） */
+  gapMs: z.number().int().positive().default(30_000),
+})
+
+export const LlamaCppWatchdogReasoningSchema = z.object({
+  enabled: z.boolean().default(false),
+  /** 進 `<think>` 後最大允許滯留時間（毫秒）— 沒見 `</think>` 就 abort */
+  blockMs: z.number().int().positive().default(120_000),
+})
+
+export const LlamaCppWatchdogTokenCapSchema = z.object({
+  enabled: z.boolean().default(false),
+  /** 主 turn ceiling — caller 可送更小但不能超此值 */
+  default: z.number().int().positive().default(16_000),
+  /** Memory prefetch（findRelevantMemories selector）ceiling */
+  memoryPrefetch: z.number().int().positive().default(256),
+  /** sideQuery ceiling */
+  sideQuery: z.number().int().positive().default(1_024),
+  /** 背景呼叫（cron / extractMemories / NL parser）ceiling */
+  background: z.number().int().positive().default(4_000),
+})
+
+export const LlamaCppWatchdogSchema = z.object({
+  /** Master toggle — false 時三層全不啟動，無視各層自己的 enabled */
+  enabled: z.boolean().default(false),
+  interChunk: LlamaCppWatchdogInterChunkSchema.default({}),
+  reasoning: LlamaCppWatchdogReasoningSchema.default({}),
+  tokenCap: LlamaCppWatchdogTokenCapSchema.default({}),
+})
+
 export const LlamaCppVisionSchema = z.object({
   /**
    * 是否啟用 vision 翻譯（M-VISION）。
@@ -87,12 +134,26 @@ export const LlamaCppConfigSchema = z.object({
    * 詳見 M_VISION_PLAN.md。
    */
   vision: LlamaCppVisionSchema.default({}),
+  /**
+   * Watchdog 設定（M-LLAMACPP-WATCHDOG）。三層 client-side 守門防 llama.cpp
+   * 失控生成（reasoning loop 等）。預設全關不影響既有行為。
+   */
+  watchdog: LlamaCppWatchdogSchema.default({}),
 })
 
 export type LlamaCppConfig = z.infer<typeof LlamaCppConfigSchema>
 export type LlamaCppServerConfig = z.infer<typeof LlamaCppServerSchema>
 export type LlamaCppServerVisionConfig = z.infer<typeof LlamaCppServerVisionSchema>
 export type LlamaCppVisionConfig = z.infer<typeof LlamaCppVisionSchema>
+export type LlamaCppWatchdogConfig = z.infer<typeof LlamaCppWatchdogSchema>
+export type LlamaCppWatchdogTokenCapConfig = z.infer<
+  typeof LlamaCppWatchdogTokenCapSchema
+>
+export type LlamaCppCallSite =
+  | 'turn'
+  | 'memoryPrefetch'
+  | 'sideQuery'
+  | 'background'
 
 /** 完整預設值（所有欄位）。供 seed 寫檔 + fallback 使用。 */
 export const DEFAULT_LLAMACPP_CONFIG: LlamaCppConfig =
