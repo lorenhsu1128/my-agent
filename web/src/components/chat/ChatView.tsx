@@ -37,6 +37,60 @@ export function ChatView() {
   useTurnEvents(ws, sessionId ?? null, selectedId)
   useSessionBackfill(selectedId, sessionId ?? null)
 
+  // M-WEB-SLASH-B1/B2/C1/D1：runnable / web-redirect / jsx-handoff 統一走 WS execute
+  // 注意：必須放在 early return 之前，否則違反 Rules of Hooks（react error #310）
+  const pendingSlashRef = useRef(new Map<string, { name: string; args: string }>())
+  useEffect(() => {
+    if (!ws) return
+    const off = ws.on('frame', f => {
+      if (f.type !== 'slashCommand.executeResult') return
+      const pending = pendingSlashRef.current.get(f.requestId)
+      const cmdName = pending?.name ?? '?'
+      const cmdArgs = pending?.args ?? ''
+      pendingSlashRef.current.delete(f.requestId)
+      if (!f.ok) {
+        toast.error(`/${cmdName} 執行失敗`, { description: f.error })
+        return
+      }
+      if (f.result?.kind === 'text') {
+        toast.success(`/${cmdName}`, {
+          description:
+            f.result.value.length > 200
+              ? f.result.value.slice(0, 200) + '…'
+              : f.result.value,
+        })
+      } else if (f.result?.kind === 'prompt-injected') {
+        toast.success(`/${cmdName} 已注入`, {
+          description: 'turn 已開始（看 chat 串流）',
+        })
+      } else if (f.result?.kind === 'skip') {
+        toast.info(`/${cmdName} 跳過`)
+      } else if (f.result?.kind === 'web-redirect') {
+        // M-WEB-SLASH-C1：4 個被 web tab 取代的 local-jsx 命令直接跳對應 tab
+        useUiStore.getState().setRightTab(f.result.tabId as ContextTabId)
+        toast.info(`/${cmdName} → ${f.result.tabId} tab`, {
+          description: '已切到右欄對應頁籤',
+        })
+      } else if (f.result?.kind === 'jsx-handoff') {
+        // M-WEB-SLASH-D1：開 CommandDispatcher Modal；查 store 取完整 metadata
+        const handoffName = f.result.name
+        const meta = useSlashCommandStore
+          .getState()
+          .commands.find(
+            c => c.userFacingName === handoffName || c.name === handoffName,
+          )
+        if (meta) {
+          useCommandDispatcherStore.getState().open(meta, cmdArgs)
+        } else {
+          toast.error(`/${cmdName} 找不到 metadata`, {
+            description: 'store 已重新整理過嗎？',
+          })
+        }
+      }
+    })
+    return off
+  }, [ws])
+
   const isHistoricalSession = !!sessionId && !!activeSessionId && sessionId !== activeSessionId
 
   if (!project) {
@@ -93,59 +147,6 @@ export function ChatView() {
     if (!sessionId) return
     useMessageStore.getState().clearSession(sessionId)
   }
-
-  // M-WEB-SLASH-B1/B2/C1/D1：runnable / web-redirect / jsx-handoff 統一走 WS execute
-  const pendingSlashRef = useRef(new Map<string, { name: string; args: string }>())
-  useEffect(() => {
-    if (!ws) return
-    const off = ws.on('frame', f => {
-      if (f.type !== 'slashCommand.executeResult') return
-      const pending = pendingSlashRef.current.get(f.requestId)
-      const cmdName = pending?.name ?? '?'
-      const cmdArgs = pending?.args ?? ''
-      pendingSlashRef.current.delete(f.requestId)
-      if (!f.ok) {
-        toast.error(`/${cmdName} 執行失敗`, { description: f.error })
-        return
-      }
-      if (f.result?.kind === 'text') {
-        toast.success(`/${cmdName}`, {
-          description:
-            f.result.value.length > 200
-              ? f.result.value.slice(0, 200) + '…'
-              : f.result.value,
-        })
-      } else if (f.result?.kind === 'prompt-injected') {
-        toast.success(`/${cmdName} 已注入`, {
-          description: 'turn 已開始（看 chat 串流）',
-        })
-      } else if (f.result?.kind === 'skip') {
-        toast.info(`/${cmdName} 跳過`)
-      } else if (f.result?.kind === 'web-redirect') {
-        // M-WEB-SLASH-C1：4 個被 web tab 取代的 local-jsx 命令直接跳對應 tab
-        useUiStore.getState().setRightTab(f.result.tabId as ContextTabId)
-        toast.info(`/${cmdName} → ${f.result.tabId} tab`, {
-          description: '已切到右欄對應頁籤',
-        })
-      } else if (f.result?.kind === 'jsx-handoff') {
-        // M-WEB-SLASH-D1：開 CommandDispatcher Modal；查 store 取完整 metadata
-        const handoffName = f.result.name
-        const meta = useSlashCommandStore
-          .getState()
-          .commands.find(
-            c => c.userFacingName === handoffName || c.name === handoffName,
-          )
-        if (meta) {
-          useCommandDispatcherStore.getState().open(meta, cmdArgs)
-        } else {
-          toast.error(`/${cmdName} 找不到 metadata`, {
-            description: 'store 已重新整理過嗎？',
-          })
-        }
-      }
-    })
-    return off
-  }, [ws])
 
   function executeSlash(name: string, args: string) {
     if (!ws || !selectedId) return false
