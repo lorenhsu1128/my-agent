@@ -14,12 +14,15 @@ export type ContextTabId =
   | 'discord'
   | 'permissions'
 
+/** Accordion 展開值：`''` 代表全收合（Radix single-mode 無展開項時的值）。 */
+export type ContextSection = ContextTabId | ''
+
 interface UiState {
-  rightTab: ContextTabId
-  setRightTab(tab: ContextTabId): void
+  rightTab: ContextSection
+  setRightTab(tab: ContextSection): void
 }
 
 export const useUiStore = create<UiState>(set => ({
-  rightTab: 'overview',
+  rightTab: '',
   setRightTab: tab => set({ rightTab: tab }),
 }))
