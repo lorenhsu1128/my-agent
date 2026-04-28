@@ -213,6 +213,50 @@ export const api = {
         method: 'POST',
       })
     },
+    // M-LLAMACPP-REMOTE：endpoints + routing
+    getEndpoints(): Promise<{
+      local: { baseUrl: string; model: string; contextSize: number }
+      remote: {
+        enabled: boolean
+        baseUrl: string
+        model: string
+        apiKey?: string
+        contextSize: number
+      }
+      routing: Record<
+        'turn' | 'sideQuery' | 'memoryPrefetch' | 'background' | 'vision',
+        'local' | 'remote'
+      >
+    }> {
+      return request('/api/llamacpp/endpoints')
+    },
+    setRemote(remote: {
+      enabled: boolean
+      baseUrl: string
+      model: string
+      apiKey?: string
+      contextSize: number
+    }): Promise<{ ok: boolean; message?: string }> {
+      return request('/api/llamacpp/endpoints/remote', {
+        method: 'PUT',
+        json: remote,
+      })
+    },
+    setRouting(routing: Record<string, 'local' | 'remote'>): Promise<{
+      ok: boolean
+      message?: string
+    }> {
+      return request('/api/llamacpp/routing', { method: 'PUT', json: routing })
+    },
+    testRemote(args: {
+      baseUrl: string
+      apiKey?: string
+    }): Promise<{ ok: true; models: string[] } | { ok: false; error: string; status?: number }> {
+      return request('/api/llamacpp/endpoints/remote/test', {
+        method: 'POST',
+        json: args,
+      })
+    },
   },
   // M-WEB-CLOSEOUT-10：Discord admin（daemon 全域；不需 projectId）
   discord: {

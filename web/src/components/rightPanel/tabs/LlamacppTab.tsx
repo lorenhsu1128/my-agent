@@ -12,6 +12,13 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { RotateCw } from 'lucide-react'
 
 export function LlamacppTab() {
@@ -125,8 +132,340 @@ export function LlamacppTab() {
         />
       </NestedToggle>
 
+      <EndpointsPanel />
+      <RoutingPanel />
       <SlotsPanel />
     </div>
+  )
+}
+
+// M-LLAMACPP-REMOTE：Endpoints card — local read-only + remote 編輯 + 連線測試
+function EndpointsPanel() {
+  const [data, setData] = useState<Awaited<
+    ReturnType<typeof api.llamacpp.getEndpoints>
+  > | null>(null)
+  const [draft, setDraft] = useState<{
+    enabled: boolean
+    baseUrl: string
+    model: string
+    apiKeyInput: string
+    contextSize: number
+  } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [flash, setFlash] = useState<
+    { text: string; tone: 'info' | 'error' } | null
+  >(null)
+  const ws = useWsClient()
+
+  async function refresh() {
+    try {
+      const r = await api.llamacpp.getEndpoints()
+      setData(r)
+      setDraft({
+        enabled: r.remote.enabled,
+        baseUrl: r.remote.baseUrl,
+        model: r.remote.model,
+        apiKeyInput: '', // 永遠空白；保留現有用戶可空白送 / 改新值
+        contextSize: r.remote.contextSize,
+      })
+    } catch (e) {
+      setFlash({
+        text: e instanceof Error ? e.message : String(e),
+        tone: 'error',
+      })
+    }
+  }
+  useEffect(() => {
+    void refresh()
+  }, [])
+  useEffect(() => {
+    if (!ws) return
+    return ws.on('frame', f => {
+      if (
+        f.type === 'llamacpp.configChanged' &&
+        (f.changedSection === 'remote' ||
+          f.changedSection === undefined)
+      )
+        void refresh()
+    })
+  }, [ws])
+
+  if (!data || !draft) return null
+
+  const apiKeyMasked = data.remote.apiKey ?? ''
+  const isDirty =
+    draft.enabled !== data.remote.enabled ||
+    draft.baseUrl !== data.remote.baseUrl ||
+    draft.model !== data.remote.model ||
+    draft.contextSize !== data.remote.contextSize ||
+    draft.apiKeyInput.length > 0
+
+  async function save() {
+    setBusy(true)
+    try {
+      await api.llamacpp.setRemote({
+        enabled: draft!.enabled,
+        baseUrl: draft!.baseUrl,
+        model: draft!.model,
+        apiKey:
+          draft!.apiKeyInput.length > 0 ? draft!.apiKeyInput : undefined,
+        contextSize: draft!.contextSize,
+      })
+      setFlash({ text: '已寫入 remote 區塊', tone: 'info' })
+      await refresh()
+    } catch (e) {
+      setFlash({
+        text: e instanceof Error ? e.message : String(e),
+        tone: 'error',
+      })
+    } finally {
+      setBusy(false)
+      setTimeout(() => setFlash(null), 4000)
+    }
+  }
+
+  async function testConn() {
+    setBusy(true)
+    try {
+      const r = await api.llamacpp.testRemote({
+        baseUrl: draft!.baseUrl,
+        apiKey:
+          draft!.apiKeyInput.length > 0 ? draft!.apiKeyInput : undefined,
+      })
+      if (r.ok) {
+        setFlash({
+          text: `OK · ${r.models.length} models${r.models.length > 0 ? `: ${r.models.slice(0, 3).join(', ')}${r.models.length > 3 ? '…' : ''}` : ''}`,
+          tone: 'info',
+        })
+      } else {
+        setFlash({
+          text: `失敗：${(r as { error: string }).error}`,
+          tone: 'error',
+        })
+      }
+    } catch (e) {
+      setFlash({
+        text: e instanceof Error ? e.message : String(e),
+        tone: 'error',
+      })
+    } finally {
+      setBusy(false)
+      setTimeout(() => setFlash(null), 6000)
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-2 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground text-xs uppercase tracking-wide">
+            Endpoints
+          </span>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
+            onClick={() => void refresh()}
+          >
+            <RotateCw className="h-3 w-3" />
+          </Button>
+        </div>
+        <div className="text-xs text-muted-foreground font-mono">
+          local · {data.local.baseUrl} · {data.local.model}
+        </div>
+        <div className="border-t my-1" />
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">remote enabled</Label>
+          <Switch
+            checked={draft.enabled}
+            disabled={busy}
+            onCheckedChange={v => setDraft(d => (d ? { ...d, enabled: v } : d))}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">baseUrl</Label>
+          <Input
+            value={draft.baseUrl}
+            disabled={busy}
+            onChange={e =>
+              setDraft(d => (d ? { ...d, baseUrl: e.target.value } : d))
+            }
+            placeholder="http://192.168.1.10:8080/v1"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">model</Label>
+          <Input
+            value={draft.model}
+            disabled={busy}
+            onChange={e =>
+              setDraft(d => (d ? { ...d, model: e.target.value } : d))
+            }
+            placeholder="qwen3.5-32b"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">
+            apiKey {apiKeyMasked && <span className="text-muted-foreground">(目前：{apiKeyMasked}；留空 = 不變更)</span>}
+          </Label>
+          <Input
+            type="password"
+            value={draft.apiKeyInput}
+            disabled={busy}
+            onChange={e =>
+              setDraft(d =>
+                d ? { ...d, apiKeyInput: e.target.value } : d,
+              )
+            }
+            placeholder={apiKeyMasked ? '輸入新 key 才會覆蓋' : 'sk-...（選填）'}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">contextSize</Label>
+          <Input
+            type="number"
+            value={draft.contextSize}
+            disabled={busy}
+            onChange={e =>
+              setDraft(d =>
+                d ? { ...d, contextSize: Number(e.target.value) || 0 } : d,
+              )
+            }
+          />
+        </div>
+        <div className="flex gap-2 mt-1">
+          <Button
+            size="sm"
+            disabled={busy || !isDirty}
+            onClick={() => void save()}
+          >
+            Save
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || !draft.baseUrl}
+            onClick={() => void testConn()}
+          >
+            Test
+          </Button>
+        </div>
+        {flash && (
+          <div
+            className={
+              flash.tone === 'error'
+                ? 'text-destructive text-xs'
+                : 'text-xs text-muted-foreground'
+            }
+          >
+            {flash.text}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// M-LLAMACPP-REMOTE：Routing card — 5 callsite × local|remote select
+function RoutingPanel() {
+  const CALLSITES: ReadonlyArray<
+    'turn' | 'sideQuery' | 'memoryPrefetch' | 'background' | 'vision'
+  > = ['turn', 'sideQuery', 'memoryPrefetch', 'background', 'vision']
+  const [routing, setRouting] = useState<Record<string, 'local' | 'remote'> | null>(
+    null,
+  )
+  const [busy, setBusy] = useState(false)
+  const [flash, setFlash] = useState<
+    { text: string; tone: 'info' | 'error' } | null
+  >(null)
+  const ws = useWsClient()
+
+  async function refresh() {
+    try {
+      const r = await api.llamacpp.getEndpoints()
+      setRouting(r.routing)
+    } catch (e) {
+      setFlash({
+        text: e instanceof Error ? e.message : String(e),
+        tone: 'error',
+      })
+    }
+  }
+  useEffect(() => {
+    void refresh()
+  }, [])
+  useEffect(() => {
+    if (!ws) return
+    return ws.on('frame', f => {
+      if (
+        f.type === 'llamacpp.configChanged' &&
+        (f.changedSection === 'routing' ||
+          f.changedSection === undefined)
+      )
+        void refresh()
+    })
+  }, [ws])
+
+  async function update(callsite: string, value: 'local' | 'remote') {
+    if (!routing) return
+    const next = { ...routing, [callsite]: value }
+    setBusy(true)
+    try {
+      await api.llamacpp.setRouting(next)
+      setRouting(next)
+      setFlash({ text: `已更新 routing.${callsite}=${value}`, tone: 'info' })
+    } catch (e) {
+      setFlash({
+        text: e instanceof Error ? e.message : String(e),
+        tone: 'error',
+      })
+    } finally {
+      setBusy(false)
+      setTimeout(() => setFlash(null), 4000)
+    }
+  }
+
+  if (!routing) return null
+
+  return (
+    <Card>
+      <CardContent className="p-2 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground text-xs uppercase tracking-wide">
+            Routing
+          </span>
+        </div>
+        {CALLSITES.map(cs => (
+          <div key={cs} className="flex items-center justify-between gap-2">
+            <Label className="text-xs font-mono">{cs}</Label>
+            <Select
+              value={routing[cs] ?? 'local'}
+              disabled={busy}
+              onValueChange={v => void update(cs, v as 'local' | 'remote')}
+            >
+              <SelectTrigger className="h-7 w-32 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="local">→ local</SelectItem>
+                <SelectItem value="remote">→ remote</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        ))}
+        {flash && (
+          <div
+            className={
+              flash.tone === 'error'
+                ? 'text-destructive text-xs'
+                : 'text-xs text-muted-foreground'
+            }
+          >
+            {flash.text}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

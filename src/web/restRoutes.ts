@@ -26,9 +26,15 @@ import {
   handleMemoryMutation,
   type MemoryMutationRequest,
 } from '../daemon/memoryMutationRpc.js'
-import { getEffectiveWatchdogConfig } from '../llamacppConfig/loader.js'
+import {
+  getEffectiveWatchdogConfig,
+  getLlamaCppConfigSnapshot,
+} from '../llamacppConfig/loader.js'
 import {
   writeWatchdogConfig,
+  writeRemoteConfig,
+  writeRoutingConfig,
+  testRemoteEndpoint,
   fetchSlots,
   killSlot,
 } from '../commands/llamacpp/llamacppMutations.js'
@@ -893,6 +899,115 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
           500,
         )
       }
+    }
+
+    // ----- M-LLAMACPP-REMOTE：Endpoints (local + remote) + Routing -----
+    if (url.pathname === '/api/llamacpp/endpoints' && method === 'GET') {
+      try {
+        const cfg = getLlamaCppConfigSnapshot()
+        const remote = cfg.remote
+        // apiKey masked — UI 不需要看到完整 key
+        const maskedRemote = {
+          ...remote,
+          apiKey:
+            remote.apiKey && remote.apiKey.length > 0
+              ? remote.apiKey.length <= 6
+                ? '***'
+                : `${remote.apiKey.slice(0, 3)}***${remote.apiKey.slice(-3)}`
+              : undefined,
+        }
+        return jsonResponse({
+          local: {
+            baseUrl: cfg.baseUrl,
+            model: cfg.model,
+            contextSize: cfg.contextSize,
+          },
+          remote: maskedRemote,
+          routing: cfg.routing,
+        })
+      } catch (e) {
+        return errorResponse(
+          'LLAMACPP_READ_FAILED',
+          e instanceof Error ? e.message : String(e),
+          500,
+        )
+      }
+    }
+    if (url.pathname === '/api/llamacpp/endpoints/remote' && method === 'PUT') {
+      let body: unknown
+      try {
+        body = await req.json()
+      } catch {
+        return errorResponse('BAD_JSON', 'invalid JSON body', 400)
+      }
+      try {
+        const r = await writeRemoteConfig(
+          body as Parameters<typeof writeRemoteConfig>[0],
+        )
+        if (!r.ok) {
+          return errorResponse('LLAMACPP_WRITE_FAILED', r.error, 400)
+        }
+        opts.broadcastAll?.({
+          type: 'llamacpp.configChanged',
+          changedSection: 'remote',
+        })
+        return jsonResponse({ ok: true, message: r.message })
+      } catch (e) {
+        return errorResponse(
+          'LLAMACPP_WRITE_FAILED',
+          e instanceof Error ? e.message : String(e),
+          500,
+        )
+      }
+    }
+    if (url.pathname === '/api/llamacpp/routing' && method === 'PUT') {
+      let body: unknown
+      try {
+        body = await req.json()
+      } catch {
+        return errorResponse('BAD_JSON', 'invalid JSON body', 400)
+      }
+      try {
+        const r = await writeRoutingConfig(
+          body as Parameters<typeof writeRoutingConfig>[0],
+        )
+        if (!r.ok) {
+          return errorResponse('LLAMACPP_WRITE_FAILED', r.error, 400)
+        }
+        opts.broadcastAll?.({
+          type: 'llamacpp.configChanged',
+          changedSection: 'routing',
+        })
+        return jsonResponse({ ok: true, message: r.message })
+      } catch (e) {
+        return errorResponse(
+          'LLAMACPP_WRITE_FAILED',
+          e instanceof Error ? e.message : String(e),
+          500,
+        )
+      }
+    }
+    if (
+      url.pathname === '/api/llamacpp/endpoints/remote/test' &&
+      method === 'POST'
+    ) {
+      let body: { baseUrl?: string; apiKey?: string; timeoutMs?: number }
+      try {
+        body = (await req.json()) as typeof body
+      } catch {
+        return errorResponse('BAD_JSON', 'invalid JSON body', 400)
+      }
+      if (typeof body.baseUrl !== 'string' || body.baseUrl.length === 0) {
+        return errorResponse('BAD_FIELDS', 'baseUrl required', 400)
+      }
+      const r = await testRemoteEndpoint({
+        baseUrl: body.baseUrl,
+        apiKey: typeof body.apiKey === 'string' ? body.apiKey : undefined,
+        timeoutMs:
+          typeof body.timeoutMs === 'number' ? body.timeoutMs : undefined,
+      })
+      if (r.ok) return jsonResponse({ ok: true, models: r.models })
+      return jsonResponse({ ok: false, error: r.error, status: r.status }, 200)
     }
 
     // ----- M-WEB-CLOSEOUT-10：Discord admin（status / bindings / bind / unbind / reload / restart）-----
