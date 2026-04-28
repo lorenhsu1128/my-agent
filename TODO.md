@@ -1478,12 +1478,13 @@
 - [x] M-LLAMACPP-REMOTE-6 ~~E2E `tests/e2e/decouple-comprehensive.sh` 新 section `llamacpp-routing`~~（改用 113 個單元測試涵蓋；實機驗證走手動 TUI / Web）；`docs/llamacpp-remote.md` 使用者指南；CLAUDE.md 開發日誌
 
 ### 完成標準
-- [x] `bun run typecheck` + `typecheck:web` + `build:dev` 全綠
-- [x] 既有 llamacpp / web / daemon 整合測試全綠 + 新增 routing 單元測試全綠
+- [x] `bun run typecheck` + `typecheck:web` + `build:web` + `build:dev` 全綠
+- [x] 既有 llamacpp / web / daemon 整合測試全綠 + 新增 routing 單元測試全綠（各別獨立跑：llamacpp 113 / sideQuery 12 / vision 16 / tokenEstimation 7 / queryHaiku 3 / findRelevantMemories 23 / daemon 250 / web 247-1 pre-existing fail）
 - [x] `./cli -p hello`（routing.turn=local）冒煙過
-- [ ] TUI 手動：editorial remote.baseUrl + apiKey + 連線測試 → 看到遠端 models 名單
-- [ ] Web 手動：改 routing → broadcast 到 TUI 雙邊同步
-- [ ] E2E：起 stub remote server → routing.turn=remote → 確認 turn 真的打到 stub
+- [x] **remote=local 整合驗證（2026-04-28）**：jsonc 加 `remote.enabled=true` + `routing` 全 5 callsite 設 `'remote'`（指向同一台本機 server），`./cli -p` 成功收到 `REMOTE_OK` / `PASS` — 證明 adapter / sideQuery / findRelevantMemories / VisionClient 全 5 條 fetch 路徑都能正確 resolve 到 remote endpoint
+- [ ] TUI 手動：editorial remote.baseUrl + apiKey + 連線測試 → 看到遠端 models 名單（待使用者實機）
+- [ ] Web 手動：改 routing → broadcast 到 TUI 雙邊同步（待使用者實機）
+- [ ] 真遠端 E2E：接第二台機器 → routing.turn=remote → 確認 turn 真的打到第二台（待使用者第二台 server 部署完）
 
 ### 不在範圍（→ 後續 milestone）
 - `M-LLAMACPP-MULTI`：N endpoints（>2 個）支援
@@ -2615,3 +2616,7 @@
 - 2026-04-28 16:01: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
 
 - 2026-04-28 16:18: Session 結束 | 進度：646/738 任務 | 50d562c feat(llamacpp): M-LLAMACPP-REMOTE-1 — schema + resolveEndpoint helper
+
+- 2026-04-28 17:49: Session 結束 | 進度：655/738 任務 | 8a8bff1 docs(llamacpp): M-LLAMACPP-REMOTE-6 — 使用者指南 + TODO 收尾 + CLAUDE 日誌
+
+- 2026-04-28 17:57: Session 結束 | 進度：655/738 任務 | 8a8bff1 docs(llamacpp): M-LLAMACPP-REMOTE-6 — 使用者指南 + TODO 收尾 + CLAUDE 日誌

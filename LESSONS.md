@@ -602,6 +602,16 @@
 - **相關檔案**：`tests/e2e/_llamacppManagerInteractive.ts`
 - **日期**：2026-04-26
 
+### bun:test mock.module 跨 file 污染 — 已 closure 的 import 引用無法 retroactively rebind
+
+- **發生什麼事**：M-LLAMACPP-REMOTE-2 寫 `resolveEndpoint.test.ts` 時，獨立跑 12/12 綠；但跟 `tests/integration/claude/queryHaiku-llamacpp.test.ts` 合套跑時 5 個 fail（Received `'test-haiku-model'` 而非預期）。同樣 `tool-usage-nudge.test.ts` 跟 queryHaiku 合套跑時 7 fail（`cfg.enabled` undefined）。
+- **根本原因**：bun:test 同 process 內 `mock.module(path, factory)` 是 process-wide last-wins。但**已 evaluate 過的 module 內部對 mocked module 的 import 引用是 closure-frozen** — 例如 `loader.ts` 第一次被 evaluate 時若 `paths.js` 已被 mock，loader 內部 `getLlamaCppConfigPath` 引用就 frozen 在 mock 上；後續其他 test 再 mock `paths.js` 也無法 retroactively rebind。alphabetical 順序下：configMutationRpc.test → claude/queryHaiku → llamacpp/resolveEndpoint，前面 mock 的污染會影響後面的 test。
+- **正確做法**：(a) 寫 mock factory 一律 spread 真實 export — `const real = await import(target); mock.module(target, () => ({ ...real, override }))`；(b) 接受「test 必須單獨能跑」的契約，`bun test <file.test.ts>` 為 ground truth；(c) 合套 fail 但獨立全綠時，**檢查 stash 對比 baseline** 確認是否 pre-existing flake（M-LLAMACPP-REMOTE-2 確認過：commit 1 baseline tokenEstimation/queryHaiku 也獨立 fail，spread 修法順手把它們修好了）；(d) 不要為了合套通過去改 src 的 import 路徑（會造成更多副作用）。
+- **相關檔案**：`tests/integration/llamacpp/resolveEndpoint.test.ts`（用 LLAMACPP_CONFIG_PATH env 而非 mock paths）、`tests/integration/{claude,sideQuery,vision,tokenEstimation,memory}/*-llamacpp.test.ts`（5 個都改用 spread realIndex pattern）
+- **日期**：2026-04-28
+
+---
+
 ### llama.cpp 沒有 native slot cancel API（除非 `--slot-save-path`）
 
 - **發生什麼事**：診斷上面 reasoning loop 時想 cancel 跑歪的 slot，curl `POST /slots/1?action=erase` 回 `501 not_supported_error: This server does not support slots action. Start it with --slot-save-path`。
