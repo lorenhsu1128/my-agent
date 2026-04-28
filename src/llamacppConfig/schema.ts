@@ -93,6 +93,41 @@ export const LlamaCppWatchdogSchema = z.object({
   tokenCap: LlamaCppWatchdogTokenCapSchema.default({}),
 })
 
+/**
+ * M-LLAMACPP-REMOTE：遠端 llama.cpp endpoint 設定。
+ *
+ * 與頂層 baseUrl/model 同層；當 routing 表把任一 callsite 指向 'remote' 時生效。
+ * 預設 enabled=false → 整個 remote 區塊靜默；routing 仍可全 'local'。
+ * 安全提醒：apiKey 寫 jsonc 即為單一來源；建議 chmod 600 該檔（家目錄通常已隔離）。
+ */
+export const LlamaCppRemoteSchema = z.object({
+  /** 啟用 remote endpoint；false 時 routing 指 'remote' 會 throw 顯式錯誤 */
+  enabled: z.boolean().default(false),
+  /** OpenAI 相容 endpoint（含 /v1） */
+  baseUrl: z.string().url().default('http://127.0.0.1:8080/v1'),
+  /** 送給 server 的 model 名稱 */
+  model: z.string().default('qwen3.5-9b-neo'),
+  /** Bearer token（optional）；有值時 fetch 加 Authorization header */
+  apiKey: z.string().optional(),
+  /** 估算用 context 長度（tokens）；用於 watchdog token-cap 判斷 */
+  contextSize: z.number().int().positive().default(131072),
+})
+
+/**
+ * M-LLAMACPP-REMOTE：per-callsite routing 表。
+ *
+ * 每個 callsite 指向 'local' 或 'remote'；缺欄位視為 'local'。
+ * `vision` 是 M-LLAMACPP-REMOTE 新加的 callsite（VisionClient 用）。
+ */
+export const RoutingTargetEnum = z.enum(['local', 'remote'])
+export const LlamaCppRoutingSchema = z.object({
+  turn: RoutingTargetEnum.default('local'),
+  sideQuery: RoutingTargetEnum.default('local'),
+  memoryPrefetch: RoutingTargetEnum.default('local'),
+  background: RoutingTargetEnum.default('local'),
+  vision: RoutingTargetEnum.default('local'),
+})
+
 export const LlamaCppVisionSchema = z.object({
   /**
    * 是否啟用 vision 翻譯（M-VISION）。
@@ -139,6 +174,16 @@ export const LlamaCppConfigSchema = z.object({
    * 失控生成（reasoning loop 等）。預設全關不影響既有行為。
    */
   watchdog: LlamaCppWatchdogSchema.default({}),
+  /**
+   * Remote endpoint（M-LLAMACPP-REMOTE）。預設 enabled=false 不影響既有行為。
+   * 啟用後配合 routing 表把指定 callsite 指向遠端機器。
+   */
+  remote: LlamaCppRemoteSchema.default({}),
+  /**
+   * Per-callsite routing（M-LLAMACPP-REMOTE）。缺欄位 = 'local'。
+   * 改了下個 turn 立刻生效（沿用 mtime hot-reload）。
+   */
+  routing: LlamaCppRoutingSchema.default({}),
 })
 
 export type LlamaCppConfig = z.infer<typeof LlamaCppConfigSchema>
@@ -154,6 +199,11 @@ export type LlamaCppCallSite =
   | 'memoryPrefetch'
   | 'sideQuery'
   | 'background'
+  | 'vision'
+
+export type LlamaCppRemoteConfig = z.infer<typeof LlamaCppRemoteSchema>
+export type LlamaCppRoutingConfig = z.infer<typeof LlamaCppRoutingSchema>
+export type LlamaCppRoutingTargetEnum = z.infer<typeof RoutingTargetEnum>
 
 /** 完整預設值（所有欄位）。供 seed 寫檔 + fallback 使用。 */
 export const DEFAULT_LLAMACPP_CONFIG: LlamaCppConfig =

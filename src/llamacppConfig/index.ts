@@ -10,7 +10,9 @@ export {
   loadLlamaCppConfigSnapshot,
   getLlamaCppConfigSnapshot,
   isVisionEnabled,
+  resolveEndpoint,
   _resetLlamaCppConfigForTests,
+  type ResolvedLlamaCppEndpoint,
 } from './loader.js'
 export {
   DEFAULT_LLAMACPP_CONFIG,
@@ -18,9 +20,16 @@ export {
   LlamaCppServerSchema,
   LlamaCppVisionSchema,
   LlamaCppServerVisionSchema,
+  LlamaCppRemoteSchema,
+  LlamaCppRoutingSchema,
+  RoutingTargetEnum,
   type LlamaCppConfig,
   type LlamaCppServerConfig,
   type LlamaCppVisionConfig,
   type LlamaCppServerVisionConfig,
+  type LlamaCppRemoteConfig,
+  type LlamaCppRoutingConfig,
+  type LlamaCppRoutingTarget,
+  type LlamaCppCallSite,
 } from './schema.js'
 export { getLlamaCppConfigPath, LLAMACPP_CONFIG_FILENAME } from './paths.js'

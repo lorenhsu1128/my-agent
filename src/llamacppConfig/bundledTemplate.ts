@@ -112,6 +112,42 @@ export const LLAMACPP_JSONC_TEMPLATE = `{
     // false → adapter 把 image 轉 [Image attachment] 文字佔位符
     //         純文字模型（Qwen3.5-9B-Neo 等）必須保持 false，否則 server 報錯
     "enabled": false
+  },
+
+  // ═══ Remote endpoint（M-LLAMACPP-REMOTE；可選）═══
+  //
+  // 若你有第二台機器跑更大的模型（例如 32B / 70B），這裡填遠端 server 連線資訊；
+  // 配合下面 routing 表把指定 callsite 指向 'remote'。
+  // 預設 enabled=false → 整個 remote 區塊靜默；routing 仍可全 'local' 安全執行。
+  // 安全提醒：apiKey 寫在這個檔即為唯一來源；建議家目錄已隔離且 chmod 600。
+  "remote": {
+    "enabled": false,
+    "baseUrl": "http://127.0.0.1:8080/v1",
+    "model": "qwen3.5-9b-neo",
+    // "apiKey": "sk-...",
+    "contextSize": 131072
+  },
+
+  // ═══ Per-callsite routing（M-LLAMACPP-REMOTE；可選）═══
+  //
+  // 把不同呼叫情境分流到 local / remote。缺欄位 = 'local'。
+  // 改了下個 turn 立刻生效（沿用 mtime hot-reload 機制）。
+  //
+  // callsite 對應：
+  //   - turn           主對話（chat）— 通常你的「主腦」
+  //   - sideQuery      旁路查詢（queryHaiku、cron NL parser 等小型 LLM 呼叫）
+  //   - memoryPrefetch findRelevantMemories selector（query-driven memory 召回）
+  //   - background    背景任務（extractMemories 等；目前未顯式傳遞）
+  //   - vision        圖像理解（VisionClient → llama.cpp 多模態模型）
+  //
+  // 若 routing 指 'remote' 但 remote.enabled=false → 該 callsite 觸發時會
+  // throw 顯式錯誤（不 silent fallback，避免 debug 時誤判）。
+  "routing": {
+    "turn": "local",
+    "sideQuery": "local",
+    "memoryPrefetch": "local",
+    "background": "local",
+    "vision": "local"
   }
 }
 `

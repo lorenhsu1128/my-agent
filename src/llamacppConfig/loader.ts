@@ -12,7 +12,9 @@ import { getLlamaCppConfigPath } from './paths.js'
 import {
   DEFAULT_LLAMACPP_CONFIG,
   LlamaCppConfigSchema,
+  type LlamaCppCallSite,
   type LlamaCppConfig,
+  type LlamaCppRoutingTarget,
 } from './schema.js'
 import { parseJsonc } from '../utils/jsoncStore.js'
 
@@ -154,6 +156,50 @@ export function getEffectiveWatchdogConfig(): import('./schema.js').LlamaCppWatc
     }
   }
   return cfg
+}
+
+/**
+ * M-LLAMACPP-REMOTE：根據 callsite 解析最終 endpoint。
+ *
+ * - routing 缺欄位 = 'local'（schema default）
+ * - 指 'remote' 但 remote.enabled=false → throw 顯式錯誤（hard-fail，避免 silent fallback）
+ * - 回傳的 contextSize 給 watchdog token-cap 與 auto-compact 用
+ *
+ * 每個 callsite 呼叫者 per-call 呼叫此 helper，下個 turn 立刻吃 routing 變更。
+ */
+export type ResolvedLlamaCppEndpoint = {
+  target: LlamaCppRoutingTarget
+  baseUrl: string
+  model: string
+  apiKey?: string
+  contextSize: number
+}
+
+export function resolveEndpoint(
+  callSite: LlamaCppCallSite,
+): ResolvedLlamaCppEndpoint {
+  const cfg = getLlamaCppConfigSnapshot()
+  const target: LlamaCppRoutingTarget = cfg.routing[callSite] ?? 'local'
+  if (target === 'remote') {
+    if (!cfg.remote.enabled) {
+      throw new Error(
+        `[llamacpp routing=${callSite}→remote] remote endpoint not enabled in llamacpp.jsonc; set remote.enabled=true or change routing.${callSite} to 'local'`,
+      )
+    }
+    return {
+      target: 'remote',
+      baseUrl: cfg.remote.baseUrl,
+      model: cfg.remote.model,
+      apiKey: cfg.remote.apiKey,
+      contextSize: cfg.remote.contextSize,
+    }
+  }
+  return {
+    target: 'local',
+    baseUrl: cfg.baseUrl,
+    model: cfg.model,
+    contextSize: cfg.contextSize,
+  }
 }
 
 export function _resetLlamaCppConfigForTests(): void {

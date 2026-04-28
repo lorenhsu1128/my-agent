@@ -1456,6 +1456,44 @@
 
 ---
 
+## 當前里程碑：M-LLAMACPP-REMOTE — 本地 + 遠端 llama.cpp 雙 endpoint 與 per-callsite routing（2026-04-28 啟動）
+
+**目標**：支援同時連兩台 llama.cpp（local + remote），按 callsite 分流。例如主 turn 走遠端 32B 大模型、sideQuery / memoryPrefetch / cron NL parser / vision 走本機 9B 小模型。完整 plan：`~/.claude/plans/llamacpp-server-llamacpp-llamacpp-shimmering-kahan.md`。
+
+**對齊決策**：
+- Schema = 雙固定槽（頂層 = local；新 `remote` 區塊；不做 N endpoints array）
+- Routing key = 5 個既有 callsite + vision = `turn` / `sideQuery` / `memoryPrefetch` / `background` / `vision`（vision 加進 `LlamaCppCallSite` enum）
+- 切換時機 = 下個 turn 立刻生效（adapter 與直 fetch 路徑 per-call resolve；沿用既有 mtime hot-reload）
+- 失敗策略 = 硬性失敗顯式報錯（不 auto-fallback，避免 M-MEMRECALL-LOCAL silent fail 教訓重演）
+- API key = 寫 jsonc（單一來源，schema `apiKey?: string`；不另設 env override）
+- Watchdog = 全域共用一份（remote 不另設 watchdog）
+- UI 範圍 = TUI + Web 同步加（broadcast `llamacpp.configChanged` 雙邊同步）
+
+### 任務
+- [ ] M-LLAMACPP-REMOTE-1 schema 擴充：`LlamaCppRemoteSchema` + `LlamaCppRoutingSchema`；`LlamaCppCallSite` enum 加 `'vision'`；`DEFAULT_LLAMACPP_CONFIG` 補 `remote: { enabled: false }` + `routing: { all 'local' }`；bundledTemplate 加註解區塊；`resolveEndpoint(callSite)` helper + 單元測試
+- [ ] M-LLAMACPP-REMOTE-2 7 處 fetch 點接 routing：`client.ts` / adapter / `llamacppSideQuery.ts` / `findRelevantMemories.ts` / `VisionClient.ts`（cronNlParser / queryHaiku / WebBrowserTool 自然繼承）；adapter callSite 全程貫通；watchdog token cap 加 `'vision'` 預設
+- [ ] M-LLAMACPP-REMOTE-3 daemon `llamacppConfigRpc.ts` 加 `setRemote` / `setRouting` / `testRemote` 3 個 op；broadcast `llamacpp.configChanged` 沿用；單元測試
+- [ ] M-LLAMACPP-REMOTE-4 TUI：`/llamacpp` 第 3 tab `Endpoints/Routing`；`EndpointsTab.tsx` remote 表單（masked apiKey）+ routing 6-row 表 + 連線測試 (T 鍵)
+- [ ] M-LLAMACPP-REMOTE-5 Web：`LlamacppTab` 加 Endpoints + Routing card；REST `GET/PUT /api/llamacpp/endpoints`、`PUT /api/llamacpp/routing`、`POST /api/llamacpp/endpoints/remote/test`；WS schema
+- [ ] M-LLAMACPP-REMOTE-6 E2E `tests/e2e/decouple-comprehensive.sh` 新 section `llamacpp-routing`；`docs/llamacpp-remote.md` 使用者指南；CLAUDE.md 開發日誌
+
+### 完成標準
+- [ ] `bun run typecheck` + `typecheck:web` + `build:dev` 全綠
+- [ ] 既有 llamacpp / web / daemon 整合測試全綠 + 新增 routing 單元測試全綠
+- [ ] `./cli -p hello`（routing.turn=local）冒煙過
+- [ ] TUI 手動：editorial remote.baseUrl + apiKey + 連線測試 → 看到遠端 models 名單
+- [ ] Web 手動：改 routing → broadcast 到 TUI 雙邊同步
+- [ ] E2E：起 stub remote server → routing.turn=remote → 確認 turn 真的打到 stub
+
+### 不在範圍（→ 後續 milestone）
+- `M-LLAMACPP-MULTI`：N endpoints（>2 個）支援
+- `M-LLAMACPP-PER-ENDPOINT-WD`：per-endpoint 獨立 watchdog config
+- `M-LLAMACPP-FALLBACK`：auto-fallback policy（remote 失敗自動降本機）
+- `M-LLAMACPP-FINE-ROUTING`：cronNL / extractMemories 與 sideQuery 分離 routing key；per-tool routing override
+- env var override remote 設定（暫不加，jsonc 為單一來源）
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2549,3 +2587,29 @@
 - 2026-04-26 20:49: Session 結束 | 進度：631/704 任務 | c8d6167 feat(web): M-WEB-SHADCN — shadcn/ui + tweakcn Light Green 主題大改造
 
 - 2026-04-26 21:39: Session 結束 | 進度：631/730 任務 | 57ddee5 feat(web): M-WEB-SLASH-C1 — web-redirect 命令自動跳右欄對應 tab
+
+- 2026-04-27 09:12: Session 結束 | 進度：646/726 任務 | 9bc9192 fix(llama): load-config.sh 改讀 .jsonc 並去除行註解
+
+- 2026-04-27 09:21: Session 結束 | 進度：646/726 任務 | 9bc9192 fix(llama): load-config.sh 改讀 .jsonc 並去除行註解
+
+- 2026-04-27 09:24: Session 結束 | 進度：646/726 任務 | 9bc9192 fix(llama): load-config.sh 改讀 .jsonc 並去除行註解
+
+- 2026-04-27 09:26: Session 結束 | 進度：646/726 任務 | 9bc9192 fix(llama): load-config.sh 改讀 .jsonc 並去除行註解
+
+- 2026-04-27 09:30: Session 結束 | 進度：646/726 任務 | 9bc9192 fix(llama): load-config.sh 改讀 .jsonc 並去除行註解
+
+- 2026-04-27 10:02: Session 結束 | 進度：646/726 任務 | fd34c48 fix(web): ChatView early return 後呼叫 hook 違反 Rules of Hooks
+
+- 2026-04-27 12:01: Session 結束 | 進度：646/726 任務 | fd34c48 fix(web): ChatView early return 後呼叫 hook 違反 Rules of Hooks
+
+- 2026-04-27 12:07: Session 結束 | 進度：646/726 任務 | fd34c48 fix(web): ChatView early return 後呼叫 hook 違反 Rules of Hooks
+
+- 2026-04-27 12:53: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
+
+- 2026-04-28 15:48: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
+
+- 2026-04-28 15:55: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
+
+- 2026-04-28 15:57: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
+
+- 2026-04-28 16:01: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
