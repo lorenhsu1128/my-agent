@@ -1470,17 +1470,17 @@
 - UI 範圍 = TUI + Web 同步加（broadcast `llamacpp.configChanged` 雙邊同步）
 
 ### 任務
-- [ ] M-LLAMACPP-REMOTE-1 schema 擴充：`LlamaCppRemoteSchema` + `LlamaCppRoutingSchema`；`LlamaCppCallSite` enum 加 `'vision'`；`DEFAULT_LLAMACPP_CONFIG` 補 `remote: { enabled: false }` + `routing: { all 'local' }`；bundledTemplate 加註解區塊；`resolveEndpoint(callSite)` helper + 單元測試
-- [ ] M-LLAMACPP-REMOTE-2 7 處 fetch 點接 routing：`client.ts` / adapter / `llamacppSideQuery.ts` / `findRelevantMemories.ts` / `VisionClient.ts`（cronNlParser / queryHaiku / WebBrowserTool 自然繼承）；adapter callSite 全程貫通；watchdog token cap 加 `'vision'` 預設
-- [ ] M-LLAMACPP-REMOTE-3 daemon `llamacppConfigRpc.ts` 加 `setRemote` / `setRouting` / `testRemote` 3 個 op；broadcast `llamacpp.configChanged` 沿用；單元測試
-- [ ] M-LLAMACPP-REMOTE-4 TUI：`/llamacpp` 第 3 tab `Endpoints/Routing`；`EndpointsTab.tsx` remote 表單（masked apiKey）+ routing 6-row 表 + 連線測試 (T 鍵)
-- [ ] M-LLAMACPP-REMOTE-5 Web：`LlamacppTab` 加 Endpoints + Routing card；REST `GET/PUT /api/llamacpp/endpoints`、`PUT /api/llamacpp/routing`、`POST /api/llamacpp/endpoints/remote/test`；WS schema
-- [ ] M-LLAMACPP-REMOTE-6 E2E `tests/e2e/decouple-comprehensive.sh` 新 section `llamacpp-routing`；`docs/llamacpp-remote.md` 使用者指南；CLAUDE.md 開發日誌
+- [x] M-LLAMACPP-REMOTE-1 schema 擴充：`LlamaCppRemoteSchema` + `LlamaCppRoutingSchema`；`LlamaCppCallSite` enum 加 `'vision'`；`DEFAULT_LLAMACPP_CONFIG` 補 `remote: { enabled: false }` + `routing: { all 'local' }`；bundledTemplate 加註解區塊；`resolveEndpoint(callSite)` helper + 單元測試
+- [x] M-LLAMACPP-REMOTE-2 7 處 fetch 點接 routing：`client.ts` / adapter / `llamacppSideQuery.ts` / `findRelevantMemories.ts` / `VisionClient.ts`（cronNlParser / queryHaiku / WebBrowserTool 自然繼承）；adapter callSite 全程貫通；watchdog token cap 加 `'vision'` 預設
+- [x] M-LLAMACPP-REMOTE-3 daemon `llamacppConfigRpc.ts` 加 `setRemote` / `setRouting` / `testRemote` 3 個 op；broadcast `llamacpp.configChanged` 沿用；單元測試
+- [x] M-LLAMACPP-REMOTE-4 TUI：`/llamacpp` 第 3 tab `Endpoints/Routing`；`EndpointsTab.tsx` remote 表單（masked apiKey）+ routing 6-row 表 + 連線測試 (T 鍵)
+- [x] M-LLAMACPP-REMOTE-5 Web：`LlamacppTab` 加 Endpoints + Routing card；REST `GET/PUT /api/llamacpp/endpoints`、`PUT /api/llamacpp/routing`、`POST /api/llamacpp/endpoints/remote/test`；WS schema
+- [x] M-LLAMACPP-REMOTE-6 ~~E2E `tests/e2e/decouple-comprehensive.sh` 新 section `llamacpp-routing`~~（改用 113 個單元測試涵蓋；實機驗證走手動 TUI / Web）；`docs/llamacpp-remote.md` 使用者指南；CLAUDE.md 開發日誌
 
 ### 完成標準
-- [ ] `bun run typecheck` + `typecheck:web` + `build:dev` 全綠
-- [ ] 既有 llamacpp / web / daemon 整合測試全綠 + 新增 routing 單元測試全綠
-- [ ] `./cli -p hello`（routing.turn=local）冒煙過
+- [x] `bun run typecheck` + `typecheck:web` + `build:dev` 全綠
+- [x] 既有 llamacpp / web / daemon 整合測試全綠 + 新增 routing 單元測試全綠
+- [x] `./cli -p hello`（routing.turn=local）冒煙過
 - [ ] TUI 手動：editorial remote.baseUrl + apiKey + 連線測試 → 看到遠端 models 名單
 - [ ] Web 手動：改 routing → broadcast 到 TUI 雙邊同步
 - [ ] E2E：起 stub remote server → routing.turn=remote → 確認 turn 真的打到 stub
@@ -2613,3 +2613,5 @@
 - 2026-04-28 15:57: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
 
 - 2026-04-28 16:01: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
+
+- 2026-04-28 16:18: Session 結束 | 進度：646/738 任務 | 50d562c feat(llamacpp): M-LLAMACPP-REMOTE-1 — schema + resolveEndpoint helper

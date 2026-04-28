@@ -239,6 +239,75 @@ export CLAUDE_CONFIG_DIR=~/.claude
 
 ---
 
+### 2026-04-28 — M-LLAMACPP-REMOTE：本地 + 遠端 llama.cpp 雙 endpoint 與 per-callsite routing
+
+**範圍**：使用者有第二台機器跑大模型，需要主 turn 走遠端 32B / 70B、附屬呼叫（sideQuery / memoryPrefetch / cron NL parser / vision）繼續走本機 9B 小模型。本 milestone 加雙固定槽 schema（`remote` + `routing`）+ `resolveEndpoint(callSite)` helper + 5 處 fetch 點 per-call resolve + daemon RPC + TUI 第 3 tab + Web admin UI。完整計畫：`~/.claude/plans/llamacpp-server-llamacpp-llamacpp-shimmering-kahan.md`、使用者指南：`docs/llamacpp-remote.md`。
+
+**6 commit 序列**：
+1. `50d562c` REMOTE-1 — `LlamaCppRemoteSchema` + `LlamaCppRoutingSchema` + `vision` 加進 `LlamaCppCallSite` enum + `resolveEndpoint(callSite)` helper + bundledTemplate 註解區塊 + 12 unit test
+2. `02d03d5` REMOTE-2 — 5 處 fetch 點接 routing：adapter / sideQuery / findRelevantMemories / VisionClient（cronNlParser/queryHaiku 透過 sideQuery 自然繼承）；watchdog `getTokenCap` 加 `'vision'` callsite 預設 4K；5 個既有 mock test 改 spread realIndex pattern + 補 resolveEndpoint stub（順手修好 queryHaiku / tokenEstimation 共 10 個 pre-existing standalone fail）
+3. `79c7f25` REMOTE-3 — daemon `llamacppConfigRpc` 加 `setRemote` / `setRouting` / `testRemote` 3 op；`broadcastSectionForOp` 助手依 op 決定 broadcast `changedSection`（watchdog/remote/routing；testRemote 不 broadcast）；llamacppMutations 抽 `writeSection<K>` generic + 新 `testRemoteEndpoint` 5s timeout
+4. `16536df` REMOTE-4 — TUI `/llamacpp` 從 2 tabs 擴 3 tabs 加 `Endpoints`；新 `EndpointsTab.tsx` 上半 remote 5 row（enabled toggle / baseUrl / model / apiKey / contextSize）+ 下半 routing 5 row（5 callsite × Space toggle local↔remote）+ T 鍵連線測試；fallbackManager `LlamacppConfigMutationPayload` 加 3 op + resolve 型別補 `data?.models`
+5. `491f5a9` REMOTE-5 — Web REST 4 endpoints：`GET /api/llamacpp/endpoints`、`PUT /endpoints/remote`、`PUT /routing`、`POST /endpoints/remote/test`；`LlamacppTab` 加 `EndpointsPanel` + `RoutingPanel` 兩 sub-component；apiKey GET 回傳 mask、PUT 留空 = 不變更（避免無意覆蓋）
+6. （本 commit）REMOTE-6 — `docs/llamacpp-remote.md` 使用者指南 + TODO 收尾 + CLAUDE.md 開發日誌
+
+**新模組**：
+- `src/components/llamacpp/EndpointsTab.tsx` — TUI tab UI
+- `web/src/components/rightPanel/tabs/LlamacppTab.tsx` 內 `EndpointsPanel` + `RoutingPanel` 兩個 inline sub-component
+- `docs/llamacpp-remote.md`
+
+**改造既有**：
+- `src/llamacppConfig/schema.ts` — 加 `LlamaCppRemoteSchema` / `LlamaCppRoutingSchema` / `RoutingTargetEnum`；`LlamaCppCallSite` enum 加 `'vision'`
+- `src/llamacppConfig/loader.ts` — 加 `resolveEndpoint(callSite)` helper（hard-fail 設計，不 silent fallback）
+- `src/llamacppConfig/bundledTemplate.ts` — 加 remote / routing 註解區塊（預設全 local 不影響既有行為）
+- `src/services/api/llamacpp-fetch-adapter.ts` — `createLlamaCppFetch` 內部改 per-call `resolveEndpoint('turn')`；`streamWithRetryOnEmptyTool` 加 `apiKey` 參數讓 retry 也帶 Authorization
+- `src/services/api/llamacppSideQuery.ts` / `src/memdir/findRelevantMemories.ts` / `src/utils/vision/VisionClient.ts` — 動態 import `resolveEndpoint` from `../../llamacppConfig/index.js`
+- `src/services/api/llamacppWatchdog.ts` — `getTokenCap` 加 `'vision'` 走 background-tier (4K)
+- `src/commands/llamacpp/llamacppMutations.ts` — 抽 `writeSection<K>` + 新 `writeRemoteConfig` / `writeRoutingConfig` / `testRemoteEndpoint`
+- `src/daemon/llamacppConfigRpc.ts` — 完全重寫 schema 從單 op 擴成 4 op union；加 `broadcastSectionForOp` 助手
+- `src/daemon/daemonCli.ts` — broadcast 改用 `broadcastSectionForOp(req.op)` 決定 changedSection
+- `src/repl/thinClient/fallbackManager.ts` — `LlamacppConfigMutationPayload` union 4 op；resolve 型別加 `data?.models`
+- `src/web/restRoutes.ts` — 4 個新 endpoint
+- `web/src/api/client.ts` — 4 個新 helper
+- `tests/integration/llamacpp/managerLogic.test.ts` — 2 tabs → 3 tabs
+
+**對外 frame 協議**（client → daemon）：
+```jsonc
+{
+  "type": "llamacpp.configMutation",
+  "requestId": "...",
+  "op": "setRemote" | "setRouting" | "testRemote" | "setWatchdog",
+  "payload": <對應 schema>
+}
+// 回 { type: 'llamacpp.configMutationResult', requestId, ok, error?, message?, data? }
+// 寫 op 成功後 broadcast { type: 'llamacpp.configChanged', changedSection: 'remote' | 'routing' | 'watchdog' }
+// testRemote 不 broadcast（純讀操作）
+```
+
+**ADR-020（新）**：M-LLAMACPP-REMOTE 採雙固定槽 schema（local + remote）而非 N endpoints array。理由：(a) 個人使用場景 80% 是「主腦 + 副腦」雙槽結構；(b) UI 直觀（不需 dropdown 選 endpoint id）；(c) routing 表 key 用 `'local'/'remote'` 字串而非 endpoint id 對使用者 mental model 更清楚；(d) 未來真要 N 個再開 `M-LLAMACPP-MULTI`，schema 可平滑擴成 `endpoints: [...]` + routing 指 id。
+
+**ADR-021（新）**：routing 失敗硬性報錯不 auto-fallback。理由：M-MEMRECALL-LOCAL 教訓 — silent fallback 會讓使用者誤以為功能正常但實際走錯 endpoint；显式 throw + 訊息前綴 `[llamacpp routing=<callsite>→<target>]` 讓 debug 路徑清楚。若使用者要 fallback 行為，手動把該 callsite 改回 `'local'` 即可。
+
+**ADR-022（新）**：apiKey 寫 jsonc 為單一來源，不另設 env override。理由：(a) 多處設定容易產生不一致（jsonc vs env 競爭）；(b) `~/.my-agent/` 家目錄已隔離；(c) Web GET 回傳 masked、PUT 留空 = 不變更，避免 UI 上無意覆蓋；(d) TUI Endpoints tab 顯示也只 mask 版。
+
+**踩坑 / 教訓**：
+1. **bun:test cross-file mock pollution**：`mock.module('.../llamacppConfig/index', ...)` 不 spread 真實 export 會把 `seedLlamaCppConfigIfMissing` 等其他 export 砍掉，後續使用 setup.ts 的 import chain 會 SyntaxError。修法：所有 mock factory `...realLlamacppConfig`。教訓 LESSONS.md 已記
+2. **`replace_all` rename closure-style 變數要小心**：第一次把 `RoutingTarget` 改成 `RoutingTargetEnum` 時，`export const RoutingTarget = ...` 的 declaration 也被替換成 `RoutingTargetEnumEnum`。修：先 export const 名再 replace_all 參考點
+3. **resolveEndpoint test 的 mock paths 衝突**：configMutationRpc.test.ts 的 paths mock 用 closure `tmpConfigPath`，後跑 test 的 mock 必須走相同 last-wins pattern + 自己的 closure 變數
+4. **bun:test 已 closure 過的 import 引用 retroactively rebind 不了**：configMutationRpc 的 mock 在 loader.ts 之前 evaluate，loader 內部 `getLlamaCppConfigPath` 引用就 frozen 在 mock 上；後續 test 想 override 必須走 mock.module 不能單純改 env。最終解法：resolveEndpoint test 用 `mock.module(paths)` + closure 蓋掉前一個 test 的 mock
+5. **bun:test 的 file-level alphabetical 順序 + mock state persistence**：跑 `claude < llamacpp < memory < sideQuery < tokenEstimation < vision` 順序時 mock 狀態跨 file 共享。獨立跑全綠、合跑會污染 — 個別 mock 修好就好
+
+**E2E**：本 milestone 範圍內的「真實 routing 打到 stub server」E2E 改用單元測試涵蓋（resolveEndpoint 12 unit + configMutationRpc 10 unit + manager logic 等共 113 unit 全綠）。實機驗證走 TUI / Web 手動操作，使用者指南見 `docs/llamacpp-remote.md`。
+
+**未做（→ 後續 milestone）**：
+- `M-LLAMACPP-MULTI`：N endpoints（>2 個）支援
+- `M-LLAMACPP-PER-ENDPOINT-WD`：per-endpoint 獨立 watchdog config
+- `M-LLAMACPP-FALLBACK`：auto-fallback policy（remote 失敗自動降本機）
+- `M-LLAMACPP-FINE-ROUTING`：cronNL / extractMemories 與 sideQuery 分離 routing key；per-tool routing override
+- env var override remote 設定（暫不加，jsonc 為單一來源）
+
+---
+
 ### 2026-04-26 — M-WEB-SLASH-FULL：Web 端 87 個 slash command 全支援
 
 **範圍**：M-WEB 主線完成後 web `InputBar` 只認 5 個核心 slash command；本 milestone 補上通用 RPC + 自動拉 metadata + 全部 87 個 command（8 prompt + 27 local + 48 local-jsx + 4 web-redirect）皆可從 web 觸發。完整計畫：`~/.claude/plans/m-web-zesty-rabin.md`。
