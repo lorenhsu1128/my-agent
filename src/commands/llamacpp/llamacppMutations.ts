@@ -13,6 +13,8 @@ import {
   LlamaCppConfigSchema,
   type LlamaCppWatchdogConfig,
   type LlamaCppConfig,
+  type LlamaCppRemoteConfig,
+  type LlamaCppRoutingConfig,
 } from '../../llamacppConfig/schema.js'
 import { writeJsoncPreservingComments } from '../../utils/jsoncStore.js'
 
@@ -87,6 +89,103 @@ export async function writeWatchdogConfig(
       ok: false,
       error: err instanceof Error ? err.message : String(err),
     }
+  }
+}
+
+/**
+ * M-LLAMACPP-REMOTE：把 remote endpoint 區塊寫回 llamacpp.jsonc。
+ */
+export async function writeRemoteConfig(
+  newRemote: LlamaCppRemoteConfig,
+): Promise<MutationResult> {
+  return writeSection('remote', newRemote)
+}
+
+/**
+ * M-LLAMACPP-REMOTE：把 routing 表寫回 llamacpp.jsonc。
+ */
+export async function writeRoutingConfig(
+  newRouting: LlamaCppRoutingConfig,
+): Promise<MutationResult> {
+  return writeSection('routing', newRouting)
+}
+
+async function writeSection<K extends keyof LlamaCppConfig>(
+  section: K,
+  value: LlamaCppConfig[K],
+): Promise<MutationResult> {
+  try {
+    const path = getLlamaCppConfigPath()
+    let originalText = ''
+    if (existsSync(path)) {
+      originalText = readFileSync(path, 'utf-8')
+    }
+    const parsedOld = originalText
+      ? LlamaCppConfigSchema.safeParse(safeParseJsonc(originalText))
+      : null
+    const oldCfg = parsedOld?.success ? parsedOld.data : readCurrentConfig()
+    const newCfg: LlamaCppConfig = { ...oldCfg, [section]: value }
+
+    if (!originalText) {
+      await mkdir(dirname(path), { recursive: true })
+      await writeFile(path, JSON.stringify(newCfg, null, 2) + '\n', 'utf-8')
+    } else {
+      await writeJsoncPreservingComments(path, originalText, newCfg)
+    }
+    _resetLlamaCppConfigForTests()
+    return { ok: true, message: `寫入 ${path} (${String(section)})` }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
+/**
+ * M-LLAMACPP-REMOTE：對 remote endpoint 打 GET /v1/models 連線測試，回 model 名單或錯誤。
+ */
+export async function testRemoteEndpoint(args: {
+  baseUrl: string
+  apiKey?: string
+  timeoutMs?: number
+}): Promise<
+  | { ok: true; models: string[] }
+  | { ok: false; error: string; status?: number }
+> {
+  const url = `${args.baseUrl.replace(/\/$/, '')}/models`
+  const controller = new AbortController()
+  const t = setTimeout(() => controller.abort(), args.timeoutMs ?? 5000)
+  try {
+    const headers: Record<string, string> = { Accept: 'application/json' }
+    if (args.apiKey) headers['Authorization'] = `Bearer ${args.apiKey}`
+    // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+    const res = await globalThis.fetch(url, { headers, signal: controller.signal })
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      return {
+        ok: false,
+        error: `${res.status}: ${txt.slice(0, 200)}`,
+        status: res.status,
+      }
+    }
+    const json = (await res.json()) as { data?: Array<{ id?: string }> }
+    const models = (json.data ?? [])
+      .map(m => m.id)
+      .filter((id): id is string => typeof id === 'string')
+    return { ok: true, models }
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? err.name === 'AbortError'
+            ? 'timeout'
+            : err.message
+          : String(err),
+    }
+  } finally {
+    clearTimeout(t)
   }
 }
 

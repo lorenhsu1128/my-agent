@@ -56,6 +56,7 @@ import {
   isMemoryMutationRequest,
 } from './memoryMutationRpc.js'
 import {
+  broadcastSectionForOp,
   handleLlamacppConfigMutation,
   isLlamacppConfigMutationRequest,
 } from './llamacppConfigRpc.js'
@@ -335,13 +336,16 @@ export async function runDaemonStart(
             const res = await handleLlamacppConfigMutation(req)
             handle.server!.send(c.id, res)
             if (res.ok) {
-              try {
-                handle.server!.broadcast({
-                  type: 'llamacpp.configChanged',
-                  changedSection: 'watchdog',
-                })
-              } catch {
-                // best-effort
+              const section = broadcastSectionForOp(req.op)
+              if (section !== null) {
+                try {
+                  handle.server!.broadcast({
+                    type: 'llamacpp.configChanged',
+                    changedSection: section,
+                  })
+                } catch {
+                  // best-effort
+                }
               }
             }
           })()

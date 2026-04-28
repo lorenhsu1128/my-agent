@@ -107,6 +107,100 @@ describe('handleLlamacppConfigMutation', () => {
     expect(written.watchdog.interChunk.gapMs).toBe(25000)
   })
 
+  // ─── M-LLAMACPP-REMOTE：setRemote / setRouting / testRemote ───────────────
+  test('setRemote 寫入 remote 區塊', async () => {
+    const rpc = await loadRpc()
+    const res = await rpc.handleLlamacppConfigMutation({
+      type: 'llamacpp.configMutation',
+      requestId: 'rm1',
+      op: 'setRemote',
+      payload: {
+        enabled: true,
+        baseUrl: 'https://big-rig.example/v1',
+        model: 'qwen3.5-32b',
+        apiKey: 'sk-test',
+        contextSize: 32768,
+      },
+    })
+    expect(res.ok).toBe(true)
+    const written = JSON.parse(readFileSync(tmpConfigPath, 'utf-8'))
+    expect(written.remote.enabled).toBe(true)
+    expect(written.remote.baseUrl).toBe('https://big-rig.example/v1')
+    expect(written.remote.apiKey).toBe('sk-test')
+  })
+
+  test('setRouting 寫入 routing 表', async () => {
+    const rpc = await loadRpc()
+    const res = await rpc.handleLlamacppConfigMutation({
+      type: 'llamacpp.configMutation',
+      requestId: 'rt1',
+      op: 'setRouting',
+      payload: {
+        turn: 'remote',
+        sideQuery: 'local',
+        memoryPrefetch: 'local',
+        background: 'local',
+        vision: 'remote',
+      },
+    })
+    expect(res.ok).toBe(true)
+    const written = JSON.parse(readFileSync(tmpConfigPath, 'utf-8'))
+    expect(written.routing.turn).toBe('remote')
+    expect(written.routing.vision).toBe('remote')
+    expect(written.routing.sideQuery).toBe('local')
+  })
+
+  test('testRemote 成功回 model 名單', async () => {
+    const rpc = await loadRpc()
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          data: [{ id: 'qwen3.5-32b' }, { id: 'gemma-3-27b' }],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )) as typeof fetch
+    try {
+      const res = await rpc.handleLlamacppConfigMutation({
+        type: 'llamacpp.configMutation',
+        requestId: 'tr1',
+        op: 'testRemote',
+        payload: { baseUrl: 'https://stub.example/v1' },
+      })
+      expect(res.ok).toBe(true)
+      expect(res.data?.models).toEqual(['qwen3.5-32b', 'gemma-3-27b'])
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  test('testRemote HTTP 401 → ok=false 帶 status', async () => {
+    const rpc = await loadRpc()
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () =>
+      new Response('unauthorized', { status: 401 })) as typeof fetch
+    try {
+      const res = await rpc.handleLlamacppConfigMutation({
+        type: 'llamacpp.configMutation',
+        requestId: 'tr2',
+        op: 'testRemote',
+        payload: { baseUrl: 'https://stub.example/v1', apiKey: 'bad' },
+      })
+      expect(res.ok).toBe(false)
+      expect(res.error).toContain('401')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  test('broadcastSectionForOp 對應正確', async () => {
+    const rpc = await loadRpc()
+    expect(rpc.broadcastSectionForOp('setWatchdog')).toBe('watchdog')
+    expect(rpc.broadcastSectionForOp('setRemote')).toBe('remote')
+    expect(rpc.broadcastSectionForOp('setRouting')).toBe('routing')
+    expect(rpc.broadcastSectionForOp('testRemote')).toBe(null)
+  })
+
   test('連續寫入兩次 — 第二次反映新值', async () => {
     const rpc = await loadRpc()
     const baseWd = {
