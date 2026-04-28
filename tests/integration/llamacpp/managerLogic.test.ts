@@ -22,13 +22,15 @@ import {
 } from '../../../src/commands/llamacpp/argsParser.js'
 
 describe('TABS / nextTab / prevTab', () => {
-  test('2 tabs', () => {
-    expect(TABS.map(t => t.id)).toEqual(['watchdog', 'slots'])
+  test('3 tabs (M-LLAMACPP-REMOTE 加 endpoints)', () => {
+    expect(TABS.map(t => t.id)).toEqual(['watchdog', 'slots', 'endpoints'])
   })
   test('cycle', () => {
     expect(nextTab('watchdog')).toBe('slots')
-    expect(nextTab('slots')).toBe('watchdog')
-    expect(prevTab('watchdog')).toBe('slots')
+    expect(nextTab('slots')).toBe('endpoints')
+    expect(nextTab('endpoints')).toBe('watchdog')
+    expect(prevTab('watchdog')).toBe('endpoints')
+    expect(prevTab('endpoints')).toBe('slots')
   })
 })
 

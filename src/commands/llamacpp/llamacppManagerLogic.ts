@@ -5,7 +5,7 @@ import type {
   LlamaCppWatchdogConfig,
 } from '../../llamacppConfig/schema.js'
 
-export type TabId = 'watchdog' | 'slots'
+export type TabId = 'watchdog' | 'slots' | 'endpoints'
 
 export type TabSpec = {
   id: TabId
@@ -15,6 +15,7 @@ export type TabSpec = {
 export const TABS: ReadonlyArray<TabSpec> = [
   { id: 'watchdog', label: 'Watchdog' },
   { id: 'slots', label: 'Slots' },
+  { id: 'endpoints', label: 'Endpoints' },
 ]
 
 export function nextTab(current: TabId): TabId {

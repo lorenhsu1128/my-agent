@@ -77,6 +77,18 @@ export type LlamacppConfigMutationPayload =
       op: 'setWatchdog'
       payload: import('../../llamacppConfig/schema.js').LlamaCppWatchdogConfig
     }
+  | {
+      op: 'setRemote'
+      payload: import('../../llamacppConfig/schema.js').LlamaCppRemoteConfig
+    }
+  | {
+      op: 'setRouting'
+      payload: import('../../llamacppConfig/schema.js').LlamaCppRoutingConfig
+    }
+  | {
+      op: 'testRemote'
+      payload: { baseUrl: string; apiKey?: string; timeoutMs?: number }
+    }
 
 /**
  * M-MEMTUI Phase 3：memory mutation request payload — see daemon/memoryMutationRpc.ts。
@@ -226,7 +238,7 @@ export interface FallbackManager {
     req: LlamacppConfigMutationPayload,
     timeoutMs?: number,
   ): Promise<
-    | { ok: true; message?: string }
+    | { ok: true; message?: string; data?: { models?: string[] } }
     | { ok: false; error: string }
     | null
   >
@@ -434,8 +446,13 @@ export function createFallbackManager(
     string,
     { resolve: MemoryMutationResolve; timer: ReturnType<typeof setTimeout> }
   >()
-  /** M-LLAMACPP-WATCHDOG Phase 3-8：pending llamacpp.configMutation response */
-  type LlamacppConfigMutationResolve = MemoryMutationResolve
+  /** M-LLAMACPP-WATCHDOG Phase 3-8 + M-LLAMACPP-REMOTE：pending llamacpp.configMutation response */
+  type LlamacppConfigMutationResolve = (
+    v:
+      | { ok: true; message?: string; data?: { models?: string[] } }
+      | { ok: false; error: string }
+      | null,
+  ) => void
   const pendingLlamacppConfigMutation = new Map<
     string,
     {
@@ -575,7 +592,7 @@ export function createFallbackManager(
         emitter.emit('frame', f)
         return
       }
-      // M-LLAMACPP-WATCHDOG Phase 3-8：llamacpp.configMutationResult / configChanged
+      // M-LLAMACPP-WATCHDOG Phase 3-8 + M-LLAMACPP-REMOTE：llamacpp.configMutationResult / configChanged
       if (f.type === 'llamacpp.configMutationResult') {
         const rid = String((f as { requestId?: unknown }).requestId ?? '')
         const pending = pendingLlamacppConfigMutation.get(rid)
@@ -586,8 +603,10 @@ export function createFallbackManager(
             ok?: boolean
             error?: string
             message?: string
+            data?: { models?: string[] }
           }
-          if (p.ok) pending.resolve({ ok: true, message: p.message })
+          if (p.ok)
+            pending.resolve({ ok: true, message: p.message, data: p.data })
           else
             pending.resolve({ ok: false, error: String(p.error ?? 'unknown') })
         }

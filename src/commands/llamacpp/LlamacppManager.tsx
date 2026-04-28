@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { Box, Text, useInput } from '../../ink.js'
 import { WatchdogTab } from '../../components/llamacpp/WatchdogTab.js'
 import { SlotsTab } from '../../components/llamacpp/SlotsTab.js'
+import { EndpointsTab } from '../../components/llamacpp/EndpointsTab.js'
 import {
   TABS,
   type TabId,
@@ -18,13 +19,20 @@ import {
 } from '../../llamacppConfig/loader.js'
 import {
   setSessionWatchdogOverride,
+  testRemoteEndpoint,
+  writeRemoteConfig,
+  writeRoutingConfig,
   writeWatchdogConfig,
 } from './llamacppMutations.js'
 import {
   getCurrentDaemonManager,
   sendLlamacppConfigMutationToDaemon,
 } from '../../hooks/useDaemonMode.js'
-import type { LlamaCppWatchdogConfig } from '../../llamacppConfig/schema.js'
+import type {
+  LlamaCppRemoteConfig,
+  LlamaCppRoutingConfig,
+  LlamaCppWatchdogConfig,
+} from '../../llamacppConfig/schema.js'
 
 type Flash = { text: string; tone: 'info' | 'error' }
 
@@ -40,6 +48,13 @@ export function LlamacppManager({ onExit, initialTab }: Props): React.ReactNode 
   const [cfg, setCfg] = useState<LlamaCppWatchdogConfig>(() =>
     getEffectiveWatchdogConfig(),
   )
+  // M-LLAMACPP-REMOTE：endpoints tab working draft — remote 區塊與 routing 表
+  const [remote, setRemote] = useState<LlamaCppRemoteConfig>(
+    () => getLlamaCppConfigSnapshot().remote,
+  )
+  const [routing, setRouting] = useState<LlamaCppRoutingConfig>(
+    () => getLlamaCppConfigSnapshot().routing,
+  )
   const [flash, setFlash] = useState<Flash | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -50,13 +65,22 @@ export function LlamacppManager({ onExit, initialTab }: Props): React.ReactNode 
     return () => clearTimeout(t)
   }, [flash])
 
-  // 訂閱 daemon llamacpp.configChanged 廣播 → 重讀 cfg
+  // 訂閱 daemon llamacpp.configChanged 廣播 → 重讀 cfg / remote / routing
   useEffect(() => {
     const mgr = getCurrentDaemonManager()
     if (!mgr) return
-    const handler = (f: { type: string }): void => {
+    const handler = (f: { type: string; changedSection?: string }): void => {
       if (f.type === 'llamacpp.configChanged') {
-        setCfg(getEffectiveWatchdogConfig())
+        const section = f.changedSection
+        if (section === 'watchdog' || section === undefined) {
+          setCfg(getEffectiveWatchdogConfig())
+        }
+        if (section === 'remote' || section === undefined) {
+          setRemote(getLlamaCppConfigSnapshot().remote)
+        }
+        if (section === 'routing' || section === undefined) {
+          setRouting(getLlamaCppConfigSnapshot().routing)
+        }
         setReloadKey(n => n + 1)
       }
     }
@@ -69,6 +93,69 @@ export function LlamacppManager({ onExit, initialTab }: Props): React.ReactNode 
     // 預設行為：寫檔 + session override 暫存（hot-reload 也立即生效）
     setSessionWatchdogOverride(newCfg)
     void persistChange(newCfg, false)
+  }
+
+  async function persistEndpoints(
+    nextRemote: LlamaCppRemoteConfig,
+    nextRouting: LlamaCppRoutingConfig,
+  ): Promise<void> {
+    // 兩個 mutation 各送一次（daemon attached 走 RPC、否則走本機 fallback）
+    const rRemote = await sendLlamacppConfigMutationToDaemon(
+      { op: 'setRemote', payload: nextRemote },
+      10_000,
+    )
+    if (rRemote === null) {
+      const local = await writeRemoteConfig(nextRemote)
+      if (!local.ok) {
+        setFlash({ text: `remote: ${local.error}`, tone: 'error' })
+        return
+      }
+    } else if (!rRemote.ok) {
+      setFlash({ text: `remote: ${rRemote.error}`, tone: 'error' })
+      return
+    }
+    const rRouting = await sendLlamacppConfigMutationToDaemon(
+      { op: 'setRouting', payload: nextRouting },
+      10_000,
+    )
+    if (rRouting === null) {
+      const local = await writeRoutingConfig(nextRouting)
+      if (!local.ok) {
+        setFlash({ text: `routing: ${local.error}`, tone: 'error' })
+        return
+      }
+    } else if (!rRouting.ok) {
+      setFlash({ text: `routing: ${rRouting.error}`, tone: 'error' })
+      return
+    }
+    setFlash({ text: '已寫入 remote + routing', tone: 'info' })
+  }
+
+  async function sendOrLocalTestRemote(
+    target: LlamaCppRemoteConfig,
+  ): Promise<{ ok: true; models: string[] } | { ok: false; error: string }> {
+    // daemon 路徑（attached）
+    const r = await sendLlamacppConfigMutationToDaemon(
+      {
+        op: 'testRemote',
+        payload: { baseUrl: target.baseUrl, apiKey: target.apiKey },
+      },
+      10_000,
+    )
+    if (r !== null) {
+      if (r.ok) {
+        return { ok: true, models: r.data?.models ?? [] }
+      }
+      return { ok: false, error: r.error ?? 'unknown' }
+    }
+    // standalone fallback
+    const local = await testRemoteEndpoint({
+      baseUrl: target.baseUrl,
+      apiKey: target.apiKey,
+    })
+    return local.ok
+      ? { ok: true, models: local.models }
+      : { ok: false, error: local.error }
   }
 
   async function persistChange(
@@ -147,8 +234,31 @@ export function LlamacppManager({ onExit, initialTab }: Props): React.ReactNode 
             }}
             flash={flash}
           />
-        ) : (
+        ) : tab === 'slots' ? (
           <SlotsTab flash={flash} setFlash={setFlash} />
+        ) : (
+          <EndpointsTab
+            remote={remote}
+            routing={routing}
+            onChangeRemote={setRemote}
+            onChangeRouting={setRouting}
+            onSave={() => {
+              void persistEndpoints(remote, routing)
+            }}
+            onTestConnection={async () => {
+              setFlash({ text: '測試連線中…', tone: 'info' })
+              const res = await sendOrLocalTestRemote(remote)
+              if (res.ok) {
+                setFlash({
+                  text: `OK · ${res.models.length} 個 model：${res.models.slice(0, 3).join(', ')}${res.models.length > 3 ? '…' : ''}`,
+                  tone: 'info',
+                })
+              } else {
+                setFlash({ text: `失敗：${res.error}`, tone: 'error' })
+              }
+            }}
+            flash={flash}
+          />
         )}
       </Box>
     </Box>
