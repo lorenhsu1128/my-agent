@@ -922,6 +922,7 @@ async function* streamWithRetryOnEmptyTool(
   endpoint: string,
   openaiBody: OpenAIRequestBody,
   reportedModel: string,
+  apiKey?: string,
 ): AsyncGenerator<string> {
   const state1 = {
     text: false,
@@ -972,13 +973,15 @@ async function* streamWithRetryOnEmptyTool(
 
   let retryRes: Response
   try {
+    const retryHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    }
+    if (apiKey) retryHeaders['Authorization'] = `Bearer ${apiKey}`
     // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
     retryRes = await globalThis.fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-      },
+      headers: retryHeaders,
       body: JSON.stringify(retryOpenaiBody),
     })
   } catch {
@@ -1053,6 +1056,17 @@ export function createLlamaCppFetch(
       return globalThis.fetch(input, init)
     }
 
+    // M-LLAMACPP-REMOTE: per-call resolve routing.turn endpoint。
+    // closure 裡的 config 只當 vision 旗標 + bootstrap fallback 用；baseUrl /
+    // model / apiKey 每次 fetch 重新解析，下個 turn 改 routing 立刻生效。
+    // resolveEndpoint 失敗（routing 指 remote 但 remote.enabled=false）→ 直接
+    // throw 讓 SDK 看到原始錯誤，不 silent fallback。
+    const { resolveEndpoint } = await import('../../llamacppConfig/index.js')
+    const ep = resolveEndpoint('turn')
+    const effectiveBaseUrl = ep.baseUrl
+    const effectiveModel = ep.model
+    const effectiveApiKey = ep.apiKey
+
     // 解析 Anthropic request body
     let anthropicBody: AnthropicRequestBody = {}
     try {
@@ -1068,11 +1082,11 @@ export function createLlamaCppFetch(
       anthropicBody = {}
     }
 
-    const openaiBody = translateRequestToOpenAI(anthropicBody, config.model, {
+    const openaiBody = translateRequestToOpenAI(anthropicBody, effectiveModel, {
       vision: config.vision === true,
     })
-    const endpoint = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`
-    const reportedModel = anthropicBody.model ?? config.model
+    const endpoint = `${effectiveBaseUrl.replace(/\/$/, '')}/chat/completions`
+    const reportedModel = anthropicBody.model ?? effectiveModel
 
     if (process.env.LLAMA_DEBUG) {
       // biome-ignore lint/suspicious/noConsole:: debug
@@ -1088,13 +1102,17 @@ export function createLlamaCppFetch(
 
     let openaiRes: Response
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: openaiBody.stream ? 'text/event-stream' : 'application/json',
+      }
+      if (effectiveApiKey) {
+        headers['Authorization'] = `Bearer ${effectiveApiKey}`
+      }
       // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
       openaiRes = await globalThis.fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: openaiBody.stream ? 'text/event-stream' : 'application/json',
-        },
+        headers,
         body: JSON.stringify(
           skipPromptCacheOnce
             ? (() => { skipPromptCacheOnce = false; return { ...openaiBody, cache_prompt: false } })()
@@ -1113,9 +1131,13 @@ export function createLlamaCppFetch(
         code === 'ECONNRESET' ||
         code === 'ENOTFOUND' ||
         /ECONNREFUSED|Unable to connect|fetch failed|ECONNRESET|ENOTFOUND/i.test(detail)
+      const targetLabel =
+        ep.target === 'remote' ? `routing=turn→remote (${effectiveBaseUrl})` : effectiveBaseUrl
       const hint = isConnErr
-        ? `llama.cpp server 未啟動於 ${config.baseUrl}。請在另一個終端執行：\n  bash scripts/llama/serve.sh\n或設定 LLAMA_BASE_URL 指向已啟動的 server。`
-        : `無法連接 llama.cpp server（${config.baseUrl}）：${detail}`
+        ? ep.target === 'remote'
+          ? `llama.cpp remote endpoint 連不上：${effectiveBaseUrl}。檢查網路 / remote.baseUrl / remote server 是否啟動，或將 routing.turn 改回 'local'。`
+          : `llama.cpp server 未啟動於 ${effectiveBaseUrl}。請在另一個終端執行：\n  bash scripts/llama/serve.sh\n或設定 LLAMA_BASE_URL 指向已啟動的 server。`
+        : `無法連接 llama.cpp server（${targetLabel}）：${detail}`
       // 用 400 而非 5xx：Anthropic SDK 對 5xx 會自動重試，但連線層失敗
       // 重試也沒意義（還是連不上），讓 SDK 立即把錯誤往上拋。
       return new Response(
@@ -1173,9 +1195,10 @@ export function createLlamaCppFetch(
       const sseGen = hasTools
         ? streamWithRetryOnEmptyTool(
             openaiRes.body,
-            `${config.baseUrl.replace(/\/$/, '')}/chat/completions`,
+            endpoint,
             openaiBody,
             reportedModel,
+            effectiveApiKey,
           )
         : translateOpenAIStreamToAnthropic(
             openaiRes.body,

@@ -14,7 +14,6 @@
  */
 import type Anthropic from 'my-agent-ai/sdk'
 import type { BetaToolUnion } from 'my-agent-ai/sdk/resources/beta/messages'
-import { getLlamaCppConfigSnapshot } from '../../llamacppConfig/index.js'
 import { logForDebugging } from '../../utils/debug.js'
 import type { SideQueryOptions } from '../../utils/sideQuery.js'
 
@@ -243,7 +242,9 @@ function mkMsgId(): string {
 export async function sideQueryViaLlamaCpp(
   opts: SideQueryOptions,
 ): Promise<BetaMessage> {
-  const cfg = getLlamaCppConfigSnapshot()
+  // M-LLAMACPP-REMOTE: 走 routing.sideQuery（缺欄位 = 'local'）
+  const { resolveEndpoint } = await import('../../llamacppConfig/index.js')
+  const ep = resolveEndpoint('sideQuery')
   const systemText = flattenSystem(opts.system)
   const openaiMessages: OpenAIMessage[] = []
   if (systemText) {
@@ -259,7 +260,7 @@ export async function sideQueryViaLlamaCpp(
   }
 
   const body: OpenAIRequestBody = {
-    model: cfg.model,
+    model: ep.model,
     messages: openaiMessages,
     max_tokens: opts.max_tokens ?? 1024,
     stream: false,
@@ -272,10 +273,15 @@ export async function sideQueryViaLlamaCpp(
   const toolChoice = translateToolChoice(opts.tool_choice)
   if (toolChoice) body.tool_choice = toolChoice
 
-  const endpoint = `${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`
+  const endpoint = `${ep.baseUrl.replace(/\/$/, '')}/chat/completions`
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  }
+  if (ep.apiKey) headers['Authorization'] = `Bearer ${ep.apiKey}`
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers,
     body: JSON.stringify(body),
     signal: opts.signal,
   })
@@ -327,7 +333,7 @@ export async function sideQueryViaLlamaCpp(
     id: json.id || mkMsgId(),
     type: 'message',
     role: 'assistant',
-    model: cfg.model,
+    model: ep.model,
     content,
     stop_reason: stopReason,
     stop_sequence: null,

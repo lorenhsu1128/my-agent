@@ -65,6 +65,10 @@ export function getTokenCap(
       return cfg.tokenCap.sideQuery
     case 'background':
       return cfg.tokenCap.background
+    case 'vision':
+      // M-LLAMACPP-REMOTE: vision 走 background-tier cap（與 cron / extractMemories 同級）；
+      // 真要更高請另設 watchdog.tokenCap.vision 並補 schema 欄位。
+      return cfg.tokenCap.background
     case 'turn':
     default:
       return cfg.tokenCap.default

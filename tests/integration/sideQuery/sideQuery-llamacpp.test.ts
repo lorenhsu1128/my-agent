@@ -33,12 +33,21 @@ mock.module('../../../src/utils/model/providers', () => ({
   queryLlamaCppContextSize: async () => undefined,
 }))
 
+// M-LLAMACPP-REMOTE: spread real index（LESSONS.md「mock.module 必須 spread」）
+const _realLlamacppConfig_sq = await import('../../../src/llamacppConfig/index')
 mock.module('../../../src/llamacppConfig/index', () => ({
+  ..._realLlamacppConfig_sq,
   getLlamaCppConfigSnapshot: () => ({
     baseUrl: 'http://127.0.0.1:8080/v1',
     model: 'test-model',
   }),
   isVisionEnabled: () => false,
+  resolveEndpoint: () => ({
+    target: 'local',
+    baseUrl: 'http://127.0.0.1:8080/v1',
+    model: 'test-model',
+    contextSize: 131072,
+  }),
 }))
 
 type FetchCall = {

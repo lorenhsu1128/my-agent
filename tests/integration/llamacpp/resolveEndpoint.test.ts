@@ -13,17 +13,24 @@ import { mkdirSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import * as realPaths from '../../../src/llamacppConfig/paths'
-import { _resetLlamaCppConfigForTests } from '../../../src/llamacppConfig/loader'
-import type { LlamaCppCallSite } from '../../../src/llamacppConfig/schema'
 
-// 因 configMutationRpc.test.ts 在更前面也 mock.module 了 paths，bun test process
-// 內 paths 已被 hijack；本 test 必須用同樣機制（spread real exports + 動態 closure
-// 指向當前 configPath）才能拿到我們寫的測試檔。教訓見 LESSONS.md。
-let _currentConfigPath = ''
+// 用 mock.module 蓋掉 configMutationRpc.test.ts 對 paths 的 mock；closure 指向
+// 本 test 的 _activeConfigPath。教訓見 LESSONS.md「mock.module 必須 spread」。
+let _activeConfigPath = ''
 mock.module('../../../src/llamacppConfig/paths.js', () => ({
   ...realPaths,
-  getLlamaCppConfigPath: () => _currentConfigPath,
+  getLlamaCppConfigPath: () => _activeConfigPath,
 }))
+mock.module('../../../src/llamacppConfig/paths', () => ({
+  ...realPaths,
+  getLlamaCppConfigPath: () => _activeConfigPath,
+}))
+
+import {
+  _resetLlamaCppConfigForTests,
+  resolveEndpoint,
+} from '../../../src/llamacppConfig/loader'
+import type { LlamaCppCallSite } from '../../../src/llamacppConfig/schema'
 
 const ALL_CALLSITES: LlamaCppCallSite[] = [
   'turn',
@@ -41,11 +48,12 @@ beforeEach(() => {
     `llamacpp-resolve-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   )
   mkdirSync(testDir, { recursive: true })
-  _currentConfigPath = join(testDir, 'llamacpp.jsonc')
+  _activeConfigPath = join(testDir, 'llamacpp.jsonc')
   _resetLlamaCppConfigForTests()
 })
 
 afterEach(() => {
+  _activeConfigPath = ''
   _resetLlamaCppConfigForTests()
   try {
     rmSync(testDir, { recursive: true, force: true })
@@ -55,7 +63,7 @@ afterEach(() => {
 })
 
 function writeConfig(content: string): void {
-  writeFileSync(_currentConfigPath, content, 'utf-8')
+  writeFileSync(_activeConfigPath, content, 'utf-8')
 }
 
 describe('resolveEndpoint — 全 local routing（預設）', () => {
@@ -67,9 +75,6 @@ describe('resolveEndpoint — 全 local routing（預設）', () => {
   "model": "qwen3.5-9b-neo",
   "contextSize": 131072
 }`)
-      const { resolveEndpoint } = await import(
-        '../../../src/llamacppConfig/loader'
-      )
       const ep = resolveEndpoint(callSite)
       expect(ep.target).toBe('local')
       expect(ep.baseUrl).toBe('http://127.0.0.1:8080/v1')
@@ -88,9 +93,6 @@ describe('resolveEndpoint — routing 指 remote 但 remote.enabled=false', () =
   "remote": { "enabled": false, "baseUrl": "https://far.example/v1", "model": "qwen-32b" },
   "routing": { "turn": "remote" }
 }`)
-    const { resolveEndpoint } = await import(
-      '../../../src/llamacppConfig/loader'
-    )
     expect(() => resolveEndpoint('turn')).toThrow(
       /llamacpp routing=turn→remote/,
     )
@@ -104,9 +106,6 @@ describe('resolveEndpoint — routing 指 remote 但 remote.enabled=false', () =
   "remote": { "enabled": false, "baseUrl": "https://far.example/v1", "model": "qwen-32b" },
   "routing": { "turn": "remote", "sideQuery": "local" }
 }`)
-    const { resolveEndpoint } = await import(
-      '../../../src/llamacppConfig/loader'
-    )
     const ep = resolveEndpoint('sideQuery')
     expect(ep.target).toBe('local')
     expect(ep.baseUrl).toBe('http://127.0.0.1:8080/v1')
@@ -127,9 +126,6 @@ describe('resolveEndpoint — routing 指 remote 且 remote.enabled=true', () =>
   },
   "routing": { "turn": "remote" }
 }`)
-    const { resolveEndpoint } = await import(
-      '../../../src/llamacppConfig/loader'
-    )
     const ep = resolveEndpoint('turn')
     expect(ep.target).toBe('remote')
     expect(ep.baseUrl).toBe('https://big-rig.example/v1')
@@ -149,9 +145,6 @@ describe('resolveEndpoint — routing 指 remote 且 remote.enabled=true', () =>
   },
   "routing": { "vision": "remote" }
 }`)
-    const { resolveEndpoint } = await import(
-      '../../../src/llamacppConfig/loader'
-    )
     const ep = resolveEndpoint('vision')
     expect(ep.target).toBe('remote')
     expect(ep.apiKey).toBeUndefined()
@@ -164,9 +157,6 @@ describe('resolveEndpoint — routing 缺欄位', () => {
   "baseUrl": "http://127.0.0.1:8080/v1",
   "model": "qwen3.5-9b-neo"
 }`)
-    const { resolveEndpoint } = await import(
-      '../../../src/llamacppConfig/loader'
-    )
     for (const cs of ALL_CALLSITES) {
       const ep = resolveEndpoint(cs)
       expect(ep.target).toBe('local')
@@ -180,9 +170,6 @@ describe('resolveEndpoint — routing 缺欄位', () => {
   "remote": { "enabled": true, "baseUrl": "https://far.example/v1", "model": "qwen-32b" },
   "routing": { "turn": "remote" }
 }`)
-    const { resolveEndpoint } = await import(
-      '../../../src/llamacppConfig/loader'
-    )
     expect(resolveEndpoint('turn').target).toBe('remote')
     expect(resolveEndpoint('sideQuery').target).toBe('local')
     expect(resolveEndpoint('memoryPrefetch').target).toBe('local')
@@ -199,9 +186,6 @@ describe('resolveEndpoint — error message 包前綴 [llamacpp routing=...]', (
   "remote": { "enabled": false, "baseUrl": "https://far.example/v1", "model": "x" },
   "routing": { "memoryPrefetch": "remote" }
 }`)
-    const { resolveEndpoint } = await import(
-      '../../../src/llamacppConfig/loader'
-    )
     let err: unknown
     try {
       resolveEndpoint('memoryPrefetch')

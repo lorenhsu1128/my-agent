@@ -32,12 +32,22 @@ mock.module('../../../src/utils/model/providers', () => ({
   getAPIProviderForStatsig: () => 'llamacpp',
 }))
 
+// M-LLAMACPP-REMOTE: spread real index 才不會把 seedLlamaCppConfigIfMissing 等其他
+// export 砍掉（教訓見 LESSONS.md「mock.module 替換 paths.js 必須 spread 原始 export」）
+const realLlamacppConfig = await import('../../../src/llamacppConfig/index')
 mock.module('../../../src/llamacppConfig/index', () => ({
+  ...realLlamacppConfig,
   getLlamaCppConfigSnapshot: () => ({
     baseUrl: 'http://127.0.0.1:8080/v1',
     model: 'test-model',
   }),
   isVisionEnabled: () => false,
+  resolveEndpoint: () => ({
+    target: 'local',
+    baseUrl: 'http://127.0.0.1:8080/v1',
+    model: 'test-model',
+    contextSize: 131072,
+  }),
 }))
 
 // withTokenCountVCR 在 NODE_ENV=test 下會從 fixtures/token-count-*.json 讀

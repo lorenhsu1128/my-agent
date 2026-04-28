@@ -24,12 +24,21 @@ mock.module('../../../src/utils/model/providers', () => ({
   getAPIProviderForStatsig: () => 'llamacpp',
 }))
 
+// M-LLAMACPP-REMOTE: spread real index（LESSONS.md「mock.module 必須 spread」）
+const _realLlamacppConfig_vf = await import('../../../src/llamacppConfig/index')
 mock.module('../../../src/llamacppConfig/index', () => ({
+  ..._realLlamacppConfig_vf,
   getLlamaCppConfigSnapshot: () => ({
     baseUrl: 'http://127.0.0.1:8080/v1',
     model: 'Gemopus-4-E4B-it-Preview',
   }),
   isVisionEnabled: () => true,
+  resolveEndpoint: () => ({
+    target: 'local',
+    baseUrl: 'http://127.0.0.1:8080/v1',
+    model: 'Gemopus-4-E4B-it-Preview',
+    contextSize: 131072,
+  }),
 }))
 
 const originalFetch = globalThis.fetch

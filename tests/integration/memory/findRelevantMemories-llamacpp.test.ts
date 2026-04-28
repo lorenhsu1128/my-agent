@@ -184,10 +184,19 @@ mock.module('../../../src/utils/model/providers', () => ({
   DEFAULT_LLAMACPP_MODEL: 'qwen3.5-9b-neo',
 }))
 
+// M-LLAMACPP-REMOTE: spread real index（LESSONS.md「mock.module 必須 spread」）
+const _realLlamacppConfig_fr = await import('../../../src/llamacppConfig')
 mock.module('../../../src/llamacppConfig', () => ({
+  ..._realLlamacppConfig_fr,
   getLlamaCppConfigSnapshot: () => ({
     baseUrl: 'http://localhost:8080/v1',
     model: 'qwen3.5-9b-neo',
+  }),
+  resolveEndpoint: () => ({
+    target: 'local',
+    baseUrl: 'http://localhost:8080/v1',
+    model: 'qwen3.5-9b-neo',
+    contextSize: 131072,
   }),
 }))
 

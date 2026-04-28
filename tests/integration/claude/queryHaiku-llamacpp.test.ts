@@ -31,12 +31,21 @@ mock.module('../../../src/utils/model/providers', () => ({
   getAPIProviderForStatsig: () => 'llamacpp',
 }))
 
+// M-LLAMACPP-REMOTE: spread real index（LESSONS.md「mock.module 必須 spread」）
+const _realLlamacppConfig_qh = await import('../../../src/llamacppConfig/index')
 mock.module('../../../src/llamacppConfig/index', () => ({
+  ..._realLlamacppConfig_qh,
   getLlamaCppConfigSnapshot: () => ({
     baseUrl: 'http://127.0.0.1:8080/v1',
     model: 'test-haiku-model',
   }),
   isVisionEnabled: () => false,
+  resolveEndpoint: () => ({
+    target: 'local',
+    baseUrl: 'http://127.0.0.1:8080/v1',
+    model: 'test-haiku-model',
+    contextSize: 131072,
+  }),
 }))
 
 type FetchCall = {

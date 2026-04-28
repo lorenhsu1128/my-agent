@@ -13,7 +13,6 @@
  * 都沒有 → disabled。
  */
 import Anthropic from 'my-agent-ai/sdk'
-import { getLlamaCppConfigSnapshot } from '../../llamacppConfig/index.js'
 import { isLlamaCppActive } from '../model/providers.js'
 
 /** Single target returned by `locate()`. Coordinates are CSS-pixel viewport
@@ -214,14 +213,18 @@ export class LlamaCppVisionClient implements VisionClient {
     text: string,
     signal?: AbortSignal,
   ): Promise<string> {
-    const cfg = getLlamaCppConfigSnapshot()
+    // M-LLAMACPP-REMOTE: 走 routing.vision（缺欄位 = 'local'）
+    const { resolveEndpoint } = await import('../../llamacppConfig/index.js')
+    const ep = resolveEndpoint('vision')
     const base64 = Buffer.from(pngBytes).toString('base64')
-    const endpoint = `${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`
+    const endpoint = `${ep.baseUrl.replace(/\/$/, '')}/chat/completions`
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (ep.apiKey) headers['Authorization'] = `Bearer ${ep.apiKey}`
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
-        model: cfg.model,
+        model: ep.model,
         max_tokens: 1024,
         messages: [
           {

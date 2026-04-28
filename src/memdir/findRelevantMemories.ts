@@ -1,7 +1,6 @@
 import { feature } from 'bun:bundle'
 import { logForDebugging } from '../utils/debug.js'
 import { errorMessage } from '../utils/errors.js'
-import { getLlamaCppConfigSnapshot } from '../llamacppConfig/index.js'
 import { jsonParse } from '../utils/slowOperations.js'
 import {
   formatMemoryManifest,
@@ -146,13 +145,17 @@ async function selectViaLlamaCpp(
   signal: AbortSignal,
 ): Promise<string[]> {
   try {
-    const cfg = getLlamaCppConfigSnapshot()
+    // M-LLAMACPP-REMOTE: 走 routing.memoryPrefetch（缺欄位 = 'local'）
+    const { resolveEndpoint } = await import('../llamacppConfig/index.js')
+    const ep = resolveEndpoint('memoryPrefetch')
     const userPrompt = `Query: ${query}\n\nAvailable memories:\n${manifest}${toolsSection}\n\nReply with ONLY a JSON array of filenames (e.g. ["foo.md","bar.md"]). No prose, no markdown fences, no keys. Empty array [] if none apply.`
-    const response = await fetch(`${cfg.baseUrl}/chat/completions`, {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (ep.apiKey) headers['Authorization'] = `Bearer ${ep.apiKey}`
+    const response = await fetch(`${ep.baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
-        model: cfg.model,
+        model: ep.model,
         max_tokens: 256,
         temperature: 0,
         messages: [
