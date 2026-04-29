@@ -434,12 +434,64 @@ export function appendSystemContext(
   systemPrompt: SystemPrompt,
   context: { [k: string]: string },
 ): string[] {
-  return [
+  const result = [
     ...systemPrompt,
     Object.entries(context)
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n'),
   ].filter(Boolean)
+  // M-PROMPT-CORRUPTION-HUNT detection at appendSystemContext stage
+  const fullText = result.join('\n')
+  if (fullText.includes('\x00')) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fs = require('fs')
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const p = require('path')
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const os = require('os')
+      const dir = p.join(os.homedir(), '.my-agent', 'corruption-evidence')
+      fs.mkdirSync(dir, { recursive: true })
+      const ts = Date.now()
+      // Find which element of result contains NULL
+      const culpritIdx = result.findIndex(s => s.includes('\x00'))
+      const culpritStr = result[culpritIdx] || ''
+      const nulInElem = culpritStr.indexOf('\x00')
+      // Check if the input systemPrompt array elements have it
+      const culpritInInput = systemPrompt.findIndex(s =>
+        typeof s === 'string' && s.includes('\x00'),
+      )
+      // Check if context has it
+      const culpritInContext = Object.entries(context).findIndex(([_, v]) =>
+        v.includes('\x00'),
+      )
+      fs.writeFileSync(
+        p.join(dir, `append-context-${ts}.json`),
+        JSON.stringify({
+          stage: 'appendSystemContext',
+          timestamp: new Date(ts).toISOString(),
+          totalElements: result.length,
+          totalLen: fullText.length,
+          totalBytes: Buffer.byteLength(fullText, 'utf-8'),
+          culpritResultIdx: culpritIdx,
+          culpritResultLen: culpritStr.length,
+          nulPositionInElem: nulInElem,
+          // Trace back: was NUL in input systemPrompt?
+          culpritInInputArrayIdx: culpritInInput,
+          // Or in context?
+          culpritInContextEntryIdx: culpritInContext,
+          contextKeys: Object.keys(context),
+          note:
+            culpritInInput >= 0
+              ? 'NUL was already in input systemPrompt[] from getSystemPrompt'
+              : culpritInContext >= 0
+                ? 'NUL was in context (gitStatus / userContext) — upstream of appendSystemContext'
+                : 'NUL appeared after concat — bug in this function or template literal',
+        }, null, 2),
+      )
+    } catch {/* ignore */}
+  }
+  return result
 }
 
 export function prependUserContext(

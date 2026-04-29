@@ -1122,6 +1122,47 @@ export function createLlamaCppFetch(
     } catch {
       anthropicBody = {}
     }
+    // M-PROMPT-CORRUPTION-HUNT: detect NULL byte in raw HTTP body (BEFORE adapter logic)
+    // 確認 corruption 是 SDK serialize 前就有，還是 adapter 處理過程引入
+    if (_rawBodyText.includes('\x00')) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fs = require('fs')
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const path = require('path')
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const os = require('os')
+        const evidenceDir = path.join(os.homedir(), '.my-agent', 'corruption-evidence')
+        fs.mkdirSync(evidenceDir, { recursive: true })
+        const ts = Date.now()
+        const idx = _rawBodyText.indexOf('\x00')
+        const ctxStart = Math.max(0, idx - 80)
+        const ctxEnd = Math.min(_rawBodyText.length, idx + 80)
+        fs.writeFileSync(
+          path.join(evidenceDir, `raw-body-with-NUL-${ts}.json`),
+          Buffer.from(_rawBodyText, 'utf-8'),
+        )
+        fs.writeFileSync(
+          path.join(evidenceDir, `raw-body-meta-${ts}.json`),
+          JSON.stringify({
+            timestamp: new Date(ts).toISOString(),
+            stage: 'raw-http-body',
+            note: 'NULL byte already present in HTTP body (BEFORE adapter parses). SDK or upstream introduced it.',
+            rawBodyLen: _rawBodyText.length,
+            firstNulCharIdx: idx,
+            firstNulByte: Buffer.byteLength(_rawBodyText.slice(0, idx), 'utf-8'),
+            contextBefore: _rawBodyText.slice(ctxStart, idx),
+            contextAfter: _rawBodyText.slice(idx + 1, ctxEnd),
+            contextHex: Buffer.from(_rawBodyText.slice(ctxStart, ctxEnd), 'utf-8').toString('hex'),
+          }, null, 2),
+        )
+        // biome-ignore lint/suspicious/noConsole:: investigation breadcrumb
+        console.error(
+          `[M-PROMPT-CORRUPTION] NULL byte in raw HTTP body (char ${idx}). ` +
+            `Evidence saved to ${evidenceDir}. Upstream of adapter.`,
+        )
+      } catch {/* ignore */}
+    }
     // M-PROMPT-CORRUPTION-HUNT: dump raw body text BEFORE translate
     if (process.env.LLAMA_DUMP_RAWBODY && _rawBodyText) {
       try {

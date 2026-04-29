@@ -93,7 +93,7 @@ export const getGitStatus = memoize(async (): Promise<string | null> => {
       truncated: status.length > MAX_STATUS_CHARS,
     })
 
-    return [
+    const result = [
       `This is the git status at the start of the conversation. Note that this status is a snapshot in time, and will not update during the conversation.`,
       `Current branch: ${branch}`,
       `Main branch (you will usually use this for PRs): ${mainBranch}`,
@@ -101,6 +101,38 @@ export const getGitStatus = memoize(async (): Promise<string | null> => {
       `Status:\n${truncatedStatus || '(clean)'}`,
       `Recent commits:\n${log}`,
     ].join('\n\n')
+    // M-PROMPT-CORRUPTION-HUNT detection at git-status stage
+    if (log.includes('\x00') || result.includes('\x00')) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fs = require('fs')
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const p = require('path')
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const os = require('os')
+        const dir = p.join(os.homedir(), '.my-agent', 'corruption-evidence')
+        fs.mkdirSync(dir, { recursive: true })
+        const ts = Date.now()
+        fs.writeFileSync(
+          p.join(dir, `git-status-stage-${ts}.json`),
+          JSON.stringify({
+            stage: 'getGitStatus',
+            timestamp: new Date(ts).toISOString(),
+            logHasNul: log.includes('\x00'),
+            resultHasNul: result.includes('\x00'),
+            logBytes: Buffer.byteLength(log, 'utf-8'),
+            resultBytes: Buffer.byteLength(result, 'utf-8'),
+            note: log.includes('\x00')
+              ? 'NUL already in raw `git log` stdout — corruption is in execa or earlier'
+              : 'NUL appeared after concat — corruption is in template literal / join',
+            firstNulInLog: log.indexOf('\x00'),
+            firstNulInResult: result.indexOf('\x00'),
+          }, null, 2),
+        )
+        fs.writeFileSync(p.join(dir, `git-status-result-${ts}.bin`), Buffer.from(result, 'utf-8'))
+      } catch {/* ignore */}
+    }
+    return result
   } catch (error) {
     logForDiagnosticsNoPII('error', 'git_status_failed', {
       duration_ms: Date.now() - startTime,
