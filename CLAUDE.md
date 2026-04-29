@@ -239,6 +239,31 @@ export CLAUDE_CONFIG_DIR=~/.claude
 
 ---
 
+### 2026-04-29 — M-LLAMACPP-REMOTE：首次實機遠端部署（10.3.1.42 / qwen3.5-27b-q4）
+
+**範圍**：M-LLAMACPP-REMOTE 落地驗證。第二台機器（10.3.1.42:8080）跑 `qwen3.5-27b-q4`（n_ctx_train 256K），把主 turn 切過去；本機 `qwopus3.5-9b-v3` 留給附屬呼叫。
+
+**設定變更**（`~/.my-agent/llamacpp.jsonc`）：
+- `remote.baseUrl` `127.0.0.1:8080` → `10.3.1.42:8080/v1`
+- `remote.model` → `qwen3.5-27b-q4`（從遠端 `/v1/models` 抓出來，原 config 寫 `qwopus3.5-9b-v3` 對不上會被拒）
+- `remote.contextSize` 131072 → 262144（配合遠端 `n_ctx_train`）
+- `routing`：`turn=remote`；`sideQuery / memoryPrefetch / background / vision = local`（split routing 模式：主腦遠端、副腦本機）
+
+**部署流程**（記錄供下次參考）：
+1. 先 `curl -m5 http://<remote>/v1/models` 確認可達 + 抓 `model.id` / `n_ctx_train`
+2. 編輯 `remote.{baseUrl,model,contextSize}` 三欄位
+3. `bash scripts/llama/serve.sh` 啟本機 server（背景），`curl 127.0.0.1:8080/v1/models` 等 ready
+4. 設定 `routing` split（個人偏好：主腦遠 / 附屬本）
+5. 開新 session 或重啟 daemon 才吃新 snapshot
+
+**踩坑**：
+- 原 config 的 `remote.model` 跟遠端實際 alias 不一致時，server 會直接拒請求（不是 silent fallback —— ADR-021 的「硬性報錯」設計這次救了一命，沒被 silent 走錯 endpoint）
+- 遠端 `n_ctx_train` 比本機大時要記得拉高 `remote.contextSize`，否則 auto-compact 會用保守值提前觸發
+
+**未做**：實機驗證（送一個 turn 到遠端跑通）— 待使用者下次 session 實際跑測試。
+
+---
+
 ### 2026-04-28 — M-LLAMACPP-REMOTE：本地 + 遠端 llama.cpp 雙 endpoint 與 per-callsite routing
 
 **範圍**：使用者有第二台機器跑大模型，需要主 turn 走遠端 32B / 70B、附屬呼叫（sideQuery / memoryPrefetch / cron NL parser / vision）繼續走本機 9B 小模型。本 milestone 加雙固定槽 schema（`remote` + `routing`）+ `resolveEndpoint(callSite)` helper + 5 處 fetch 點 per-call resolve + daemon RPC + TUI 第 3 tab + Web admin UI。完整計畫：`~/.claude/plans/llamacpp-server-llamacpp-llamacpp-shimmering-kahan.md`、使用者指南：`docs/llamacpp-remote.md`。

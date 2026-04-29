@@ -2620,3 +2620,11 @@
 - 2026-04-28 17:49: Session 結束 | 進度：655/738 任務 | 8a8bff1 docs(llamacpp): M-LLAMACPP-REMOTE-6 — 使用者指南 + TODO 收尾 + CLAUDE 日誌
 
 - 2026-04-28 17:57: Session 結束 | 進度：655/738 任務 | 8a8bff1 docs(llamacpp): M-LLAMACPP-REMOTE-6 — 使用者指南 + TODO 收尾 + CLAUDE 日誌
+
+- 2026-04-28 20:28: Session 結束 | 進度：656/739 任務 | a58dd04 docs(llamacpp): M-LLAMACPP-REMOTE — remote=local 整合驗證紀錄 + LESSONS
+
+- 2026-04-29 09:05: Session 結束 | 進度：656/739 任務 | a58dd04 docs(llamacpp): M-LLAMACPP-REMOTE — remote=local 整合驗證紀錄 + LESSONS
+
+- 2026-04-29 09:12: Session 結束 | 進度：656/739 任務 | a58dd04 docs(llamacpp): M-LLAMACPP-REMOTE — remote=local 整合驗證紀錄 + LESSONS
+
+- 2026-04-29: M-LLAMACPP-REMOTE 首次實機部署 — remote 指向 10.3.1.42 (qwen3.5-27b-q4 / 256K ctx)，split routing：turn=remote、sideQuery/memoryPrefetch/background/vision=local。本機 server 同時啟動。詳見 CLAUDE.md 同日 dev log。
