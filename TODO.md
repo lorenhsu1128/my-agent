@@ -1495,7 +1495,7 @@
 
 ---
 
-## 待挖：M-PROMPT-CORRUPTION-HUNT — cli-dev system prompt byte 31350 deterministic corruption（2026-04-29 開挖）
+## 待挖：M-PROMPT-CORRUPTION-HUNT — cli-dev system prompt byte 31350 deterministic corruption（2026-04-29 開挖；完整調查過程見 `docs/plans/M-PROMPT-CORRUPTION-HUNT.md`）
 
 **症狀**：cli-dev compile binary 的 system prompt 永遠在 byte offset **31350** corrupt 4 bytes（git log section "buun-llama-cpp" 的 `un-l`），被換成 8-9 bytes 高 unicode 字元 + 偶發 NULL byte。多次 dump 比對 offset 100% 一致；破壞的具體 bytes 在不同 run 之間略有變化。**配 image multimodal 觸發 llama.cpp `Failed to tokenize prompt` 400 error**。已在 adapter 加 `deepSanitizeStrings` bandaid（剝 C0 控制字元）擋住 user-facing crash，但 root cause 沒找到。
 
@@ -2711,3 +2711,5 @@
 - 2026-04-29 22:18: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
 
 - 2026-04-29 22:24: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
+
+- 2026-04-29 23:03: Session 結束 | 進度：660/748 任務 | d83d171 fix(llamacpp): sanitize 改用 key-skip + 加 LLAMA_DUMP_PRESANITIZE/RAWBODY 診斷 + 11 unit test
