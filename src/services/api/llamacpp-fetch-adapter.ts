@@ -193,17 +193,17 @@ function flattenSystemPrompt(
  * 觀察到 cli-dev compile binary 在 git log 拼接 system prompt 時偶發
  * 4-byte UTF-8 變 9-byte 含 NULL 的 corruption；root cause 待查，先 sanitize。
  */
-function sanitizeForTokenizer(s: string): string {
+export function sanitizeForTokenizer(s: string): string {
   // 保留 \t \n \r；剝其他 C0 + DEL；不動高 unicode（可能是合法的 CJK / emoji）
   return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
 }
 
 /**
  * Recursive sanitize：遍歷 body 任何 string 欄位，剝 C0 控制字元。
- * 跳過 image_url.url（data:URL base64 不該被改）。
+ * 跳過 url 欄位（image_url.url 的 data:URL base64 內可能有 0x7F 之類，不該動）。
+ * 跳過 data 欄位（base64 image source data 一樣不該動）。
  */
-function deepSanitizeStrings(obj: unknown, parentKey?: string): void {
-  if (parentKey === 'url') return // 不動 image_url.url
+export function deepSanitizeStrings(obj: unknown): void {
   if (Array.isArray(obj)) {
     for (let i = 0; i < obj.length; i++) {
       const v = obj[i]
@@ -215,9 +215,11 @@ function deepSanitizeStrings(obj: unknown, parentKey?: string): void {
   if (obj && typeof obj === 'object') {
     const o = obj as Record<string, unknown>
     for (const k of Object.keys(o)) {
+      // 跳過 base64 / URL 欄位 — 它們的 byte 值可能落在 C0 範圍但是合法資料
+      if (k === 'url' || k === 'data') continue
       const v = o[k]
       if (typeof v === 'string') o[k] = sanitizeForTokenizer(v)
-      else if (v && typeof v === 'object') deepSanitizeStrings(v, k)
+      else if (v && typeof v === 'object') deepSanitizeStrings(v)
     }
   }
 }
@@ -1106,6 +1108,7 @@ export function createLlamaCppFetch(
 
     // 解析 Anthropic request body
     let anthropicBody: AnthropicRequestBody = {}
+    let _rawBodyText = ''
     try {
       const bodyText =
         init?.body instanceof ReadableStream
@@ -1114,14 +1117,50 @@ export function createLlamaCppFetch(
           : typeof init?.body === 'string'
             ? init.body
             : '{}'
+      _rawBodyText = bodyText
       anthropicBody = JSON.parse(bodyText) as AnthropicRequestBody
     } catch {
       anthropicBody = {}
+    }
+    // M-PROMPT-CORRUPTION-HUNT: dump raw body text BEFORE translate
+    if (process.env.LLAMA_DUMP_RAWBODY && _rawBodyText) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fs = require('fs')
+        const ts = Date.now()
+        fs.writeFileSync(
+          `${process.env.LLAMA_DUMP_RAWBODY}/raw-${ts}.json`,
+          Buffer.from(_rawBodyText, 'utf-8'),
+        )
+        // Also dump just the system array element-by-element
+        const sys = (anthropicBody as any).system
+        if (sys) {
+          fs.writeFileSync(
+            `${process.env.LLAMA_DUMP_RAWBODY}/sys-array-${ts}.json`,
+            Buffer.from(JSON.stringify(sys, null, 2), 'utf-8'),
+          )
+        }
+      } catch {/* ignore */}
     }
 
     const openaiBody = translateRequestToOpenAI(anthropicBody, effectiveModel, {
       vision: config.vision === true,
     })
+    // M-PROMPT-CORRUPTION-HUNT debug: dump pre-sanitize body to find corruption source
+    if (process.env.LLAMA_DUMP_PRESANITIZE) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fs = require('fs')
+        const ts = Date.now()
+        const sysContent = (openaiBody.messages?.[0]?.content as string) || ''
+        if (typeof sysContent === 'string' && sysContent.length > 0) {
+          fs.writeFileSync(
+            `${process.env.LLAMA_DUMP_PRESANITIZE}/sysprompt-${ts}.bin`,
+            Buffer.from(sysContent, 'utf-8'),
+          )
+        }
+      } catch {/* ignore */}
+    }
     // Defense: 任何字串值含 \x00 或其他 C0 控制字元都會讓 llama.cpp tokenizer 失敗
     // （image multimodal 路徑特別敏感）。觀察到 cli-dev compile binary 偶發
     // git log 拼接時產生這種 corruption（4-byte un-l 變成 9-byte 含 NULL）。

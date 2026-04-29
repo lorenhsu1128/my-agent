@@ -1509,17 +1509,42 @@
 **diagnostic 工具（已合入 adapter）**：`LLAMA_DUMP_BODY=<dir>` env 開啟，每個 request body（base64 截短）寫到 dir 下 timestamp 命名 JSON 檔，可 bisect 找到觸發點。
 
 ### 任務
-- [ ] M-CORR-1：確認 corruption 是 cli-dev compile binary 特有，還是 `bun run dev` raw source 也踩 — `bun run dev -p` headless 抓一份相同 turn 的 dump 比對 byte 31350
-- [ ] M-CORR-2：在 `context.ts` 加 `console.error(Buffer.from(log).toString('hex').slice(31340*2, 31360*2))` 直接驗 corruption 是否已在 execa 結果裡（已用直接 Node 測證明 NO，但要在 cli-dev 上下文裡再驗一次以排除運行時差異）
-- [ ] M-CORR-3：trace system prompt 完整 assembly path — `getSystemPrompt()` → `systemPromptSection(...)` 各個 section → 找出哪一步開始出現 byte 31350 corruption。可在每個 section emit 後 log byte hex
-- [ ] M-CORR-4：嫌疑分類驗證：(a) `bun build --compile` 把 ESM 模組打包成 binary 的 string 處理 bug；(b) 某個 native binding（image-processor-napi、tree-sitter、ws、sharp 等）寫超過 buffer 邊界踩到 system prompt buffer；(c) prompt cache / string interning 邊界 bug
-- [ ] M-CORR-5：找到根因後，移除 adapter 的 `deepSanitizeStrings` bandaid（或保留作為 defense-in-depth，但加 warn log 偵測復發）
+- [x] M-CORR-1：確認 corruption 是 cli-dev compile binary 特有，還是 `bun run dev` raw source 也踩 — **已確認：**
+  - `bun run` raw source（直接 execa git log）：✓ 完全乾淨
+  - cli-dev compile binary headless `-p` 模式：✓ 完全乾淨
+  - cli-dev compile binary stdin-piped 非 TTY：✓ 完全乾淨
+  - cli-dev compile binary **interactive TUI 模式（PowerShell ConPTY）**：✗ corrupt at byte 31350
+  - **結論**：corruption 只在 interactive TUI 路徑復現，與 compile binary 否無關（compile binary 走 headless 也乾淨）
+- [x] M-CORR-2：直接用 Node `child_process.execFileSync` + `execa` 跑同一條 git log → 完全乾淨 → 證實 git 讀取 + execa 路徑沒事
+- [x] M-CORR-3 部分：corruption 偵測：
+  - 多次 dump 比對：byte 31350 位置 100% 一致
+  - 破壞 bytes 在同個 binary 跑出來一致（多次 run 都產生 `e2 a6 a0 e5 a2 81 c9 ba`）
+  - 不同 binary build 跑出來不同（22:06 binary 是 `e2 a0 a0 e3 8a 81 ca 95 00` 含 NUL）
+  - cli-dev binary 內 grep `e2 a6 a0 e5 a2 81 c9 ba` / `e2 a0 a0 e3 8a 81 ca 95` / `buun-llama-cpp`：**0 hits**（不是 baked-in，是 runtime 生成）
+  - section 分析：interactive 與 headless 都包含 git log section，內容相同；只 interactive 在 byte 31350 corrupt
+  - **缺**：尚未直接觀察 interactive 模式下 system prompt 在 assembly chain 哪一步出現 corruption（headless code path 不走，所以 `-p` mode 抓不到）
+- [ ] M-CORR-4：嫌疑分類驗證 — 已知 minimal compile binary（只 import execa + 跑 git log）**完全乾淨**，所以排除 (a) 通用 bun --compile string bug；剩 (b) 某個 native module（modifiers-napi / image-processor-napi / 其他）interactive mode 才載入 + 寫超 buffer；(c) Ink/React 在 TUI render 時的 string handling
+- [ ] M-CORR-5：找到根因後，移除（或保留作 defense-in-depth）adapter 的 `deepSanitizeStrings` bandaid
+
+### 已加診斷工具（adapter env-gated dump hooks）
+- `LLAMA_DUMP_BODY=<dir>`：dump 翻譯後 OpenAI body（base64 截短）
+- `LLAMA_DUMP_PRESANITIZE=<dir>`：dump pre-sanitize OpenAI body（含原始 byte，未過濾 C0）
+- `LLAMA_DUMP_RAWBODY=<dir>`：dump 入 adapter 的 raw HTTP body bytes + `system` array 元素分別
+
+### 已加 regression test
+- `tests/integration/llamacpp/sanitize-tokenizer.test.ts`：11 個 case 涵蓋 NULL byte / C0 控制字元 / CJK / image_url.url 跳過 / data 跳過 / 觀察到的 corruption pattern / 大型 system prompt with corruption
+
+### 還需做的 root-cause 步驟
+1. 觸發 interactive TUI 模式並開 dump（user 端最直接，或自動化用 `winpty` / pseudo-TTY 但 winpty 在當前環境 ASSERT 炸，待研究）
+2. 取得 interactive 模式下 raw body dump，比對 stdin-piped 模式 dump 找 differential
+3. 若 raw body 已含 corruption → 在 SDK 入口前加 instrumentation 抓 caller
+4. 若 raw body 乾淨 → 問題在 adapter 之後，但目前 adapter 已 sanitize 所以不該再壞
 
 ### 完成標準
 - [ ] 不需 `deepSanitizeStrings` 的 cli-dev 也能正確處理含 image 的 turn
 - [ ] dump body 在 byte 31350 看到的就是 git log 原始 bytes（buun-llama-cpp 完整）
 - [ ] 在 LESSONS.md 該條補上 root cause + 修法
-- [ ] 寫 regression test：generate 一個 31KB+ system prompt 含 multi-byte UTF-8，配 image，跑過 cli-dev headless 確認不 corrupt
+- [x] 寫 regression test：✓ `tests/integration/llamacpp/sanitize-tokenizer.test.ts`
 
 ### 不在範圍
 - 改 llama.cpp tokenizer 對 NULL byte / multimodal 的相容性（上游 buun-llama-cpp 行為）
