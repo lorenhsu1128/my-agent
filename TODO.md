@@ -1495,6 +1495,38 @@
 
 ---
 
+## 待挖：M-PROMPT-CORRUPTION-HUNT — cli-dev system prompt byte 31350 deterministic corruption（2026-04-29 開挖）
+
+**症狀**：cli-dev compile binary 的 system prompt 永遠在 byte offset **31350** corrupt 4 bytes（git log section "buun-llama-cpp" 的 `un-l`），被換成 8-9 bytes 高 unicode 字元 + 偶發 NULL byte。多次 dump 比對 offset 100% 一致；破壞的具體 bytes 在不同 run 之間略有變化。**配 image multimodal 觸發 llama.cpp `Failed to tokenize prompt` 400 error**。已在 adapter 加 `deepSanitizeStrings` bandaid（剝 C0 控制字元）擋住 user-facing crash，但 root cause 沒找到。
+
+**已知 facts**（短期 bandaid 之後挖出來的）：
+- 直接用 Node `child_process.execFileSync` 或 `execa` 跑 `git --no-optional-locks log --oneline -n 5` → stdout 完全乾淨無 corruption
+- corruption 不在 `context.ts:67` execa 結果回傳那一刻發生（執行程式碼層級已驗）
+- corruption 出現位置永遠固定在 byte offset 31350（不是字元位置 — 是 UTF-8 bytes）
+- 4 bytes ASCII `un-l` (`75 6e 2d 6c`) 變成 8-9 bytes 高 unicode（observed: `e2 a0 a0 e3 8a 81 ca 95 00` 或 `e2 a6 a0 e5 a2 81 c9 ba`）— 都是合法 UTF-8 sequence，不是純隨機 garbage
+- 純文字 prompt 不會 fail；image multimodal 才會 fail（NULL byte 跟 image marker counter 互打）
+
+**diagnostic 工具（已合入 adapter）**：`LLAMA_DUMP_BODY=<dir>` env 開啟，每個 request body（base64 截短）寫到 dir 下 timestamp 命名 JSON 檔，可 bisect 找到觸發點。
+
+### 任務
+- [ ] M-CORR-1：確認 corruption 是 cli-dev compile binary 特有，還是 `bun run dev` raw source 也踩 — `bun run dev -p` headless 抓一份相同 turn 的 dump 比對 byte 31350
+- [ ] M-CORR-2：在 `context.ts` 加 `console.error(Buffer.from(log).toString('hex').slice(31340*2, 31360*2))` 直接驗 corruption 是否已在 execa 結果裡（已用直接 Node 測證明 NO，但要在 cli-dev 上下文裡再驗一次以排除運行時差異）
+- [ ] M-CORR-3：trace system prompt 完整 assembly path — `getSystemPrompt()` → `systemPromptSection(...)` 各個 section → 找出哪一步開始出現 byte 31350 corruption。可在每個 section emit 後 log byte hex
+- [ ] M-CORR-4：嫌疑分類驗證：(a) `bun build --compile` 把 ESM 模組打包成 binary 的 string 處理 bug；(b) 某個 native binding（image-processor-napi、tree-sitter、ws、sharp 等）寫超過 buffer 邊界踩到 system prompt buffer；(c) prompt cache / string interning 邊界 bug
+- [ ] M-CORR-5：找到根因後，移除 adapter 的 `deepSanitizeStrings` bandaid（或保留作為 defense-in-depth，但加 warn log 偵測復發）
+
+### 完成標準
+- [ ] 不需 `deepSanitizeStrings` 的 cli-dev 也能正確處理含 image 的 turn
+- [ ] dump body 在 byte 31350 看到的就是 git log 原始 bytes（buun-llama-cpp 完整）
+- [ ] 在 LESSONS.md 該條補上 root cause + 修法
+- [ ] 寫 regression test：generate 一個 31KB+ system prompt 含 multi-byte UTF-8，配 image，跑過 cli-dev headless 確認不 corrupt
+
+### 不在範圍
+- 改 llama.cpp tokenizer 對 NULL byte / multimodal 的相容性（上游 buun-llama-cpp 行為）
+- 改 chat template 對 markers/bitmaps mismatch 的容忍度
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2607,6 +2639,10 @@
 
 - 2026-04-27 12:53: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
 
+- 2026-04-27 21:09: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
+
+- 2026-04-27 21:19: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
+
 - 2026-04-28 15:48: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
 
 - 2026-04-28 15:55: Session 結束 | 進度：646/726 任務 | 743478b feat(web): 右欄改為 accordion 單展開清單
@@ -2628,3 +2664,25 @@
 - 2026-04-29 09:12: Session 結束 | 進度：656/739 任務 | a58dd04 docs(llamacpp): M-LLAMACPP-REMOTE — remote=local 整合驗證紀錄 + LESSONS
 
 - 2026-04-29: M-LLAMACPP-REMOTE 首次實機部署 — remote 指向 10.3.1.42 (qwen3.5-27b-q4 / 256K ctx)，split routing：turn=remote、sideQuery/memoryPrefetch/background/vision=local。本機 server 同時啟動。詳見 CLAUDE.md 同日 dev log。
+
+- 2026-04-29 20:35: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
+
+- 2026-04-29 20:46: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
+
+- 2026-04-29 21:06: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
+
+- 2026-04-29 21:12: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
+
+- 2026-04-29 21:31: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
+
+- 2026-04-29 21:43: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
+
+- 2026-04-29 21:45: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
+
+- 2026-04-29 21:55: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
+
+- 2026-04-29 21:57: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
+
+- 2026-04-29 22:18: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
+
+- 2026-04-29 22:24: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule

@@ -141,6 +141,15 @@
 - **相關檔案**：`scripts/llama/serve.sh`
 - **日期**：2026-04-15
 
+### cli-dev compile binary 在 system prompt 固定 byte offset 31350 corrupt 4 bytes，配 image multimodal 觸發 llama.cpp tokenize fail
+- **發生什麼事**：cli-dev TUI drag image 問「這張圖什麼內容」→ server 400 `Failed to tokenize prompt`。bisect 後找到 system prompt 第 31350 byte（git log section "buun-llama-cpp" 的 `un-l` 4 個 ASCII bytes）被換成 8-9 bytes 高 unicode 字元 + NULL byte。直接用 Node `child_process.execFileSync` 或 `execa` 跑同一條 git log 命令完全乾淨；但 cli-dev 拿到的 system prompt 永遠在 byte offset **31350** 出現 corruption（多次 dump 比對 offset 完全一致，破壞的具體 bytes 不同，但都是「4 bytes 變 8-9 bytes 含 NULL」的 pattern）。NULL byte 單獨進 prompt server 不會 fail（純文字 turn 通過），但搭配 image_url 走 multimodal 路徑就觸發 `bitmaps (1) does not match number of markers (0)`。
+- **誤導點**：(1) 一開始以為是 vision flag 凍結 closure（先前真有同類 bug）；(2) 以為是 daemon path 特有 — 實際 `bun run dev` standalone 偶爾過是因為 system prompt 在那條 path 結構不同（沒踩到 31350 邊界）；(3) 以為是 git log encoding 問題 — 直接呼 execa 完全乾淨。
+- **正確做法（短期 bandaid，已實施）**：adapter 在 send request 前對整個 openai body 做 `deepSanitizeStrings` recursive sweep，剝 `[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]`（保留 \t \n \r），跳過 `image_url.url` 不動 base64。
+- **正確做法（長期，待挖）**：root cause 還沒找到。可能方向：(a) bun build --compile 對某種 string 拼接有 buffer overflow；(b) 某個 native module 寫超過 buffer 邊界；(c) prompt cache / interning 邊界 bug。立 TODO `M-PROMPT-CORRUPTION-HUNT` 後續處理。
+- **診斷工具（已加進 adapter）**：`LLAMA_DUMP_BODY=<dir>` env 開啟後，每次 request body（base64 截短）寫到 dir 下 timestamp 命名 JSON，可 bisect 系統 prompt 找到觸發位置。
+- **相關檔案**：`src/services/api/llamacpp-fetch-adapter.ts`（sanitizeForTokenizer / deepSanitizeStrings / LLAMA_DUMP_BODY 在此）、`src/context.ts:62-77`（git log 讀取點）、`src/constants/prompts.ts:561+`（system prompt section assembly）。
+- **日期**：2026-04-29
+
 ---
 
 ## 串流處理相關

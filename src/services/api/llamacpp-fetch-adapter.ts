@@ -181,8 +181,45 @@ function flattenSystemPrompt(
   system: AnthropicRequestBody['system'],
 ): string {
   if (!system) return ''
-  if (typeof system === 'string') return system
-  return system.map(b => b.text ?? '').filter(Boolean).join('\n')
+  if (typeof system === 'string') return sanitizeForTokenizer(system)
+  return sanitizeForTokenizer(
+    system.map(b => b.text ?? '').filter(Boolean).join('\n'),
+  )
+}
+
+/**
+ * 移除會讓 llama.cpp tokenizer 噴 "Failed to tokenize prompt" 的控制字元。
+ * 主要是 NULL byte (\x00)，外加其他常見 stream-corrupt 的非列印控制字元。
+ * 觀察到 cli-dev compile binary 在 git log 拼接 system prompt 時偶發
+ * 4-byte UTF-8 變 9-byte 含 NULL 的 corruption；root cause 待查，先 sanitize。
+ */
+function sanitizeForTokenizer(s: string): string {
+  // 保留 \t \n \r；剝其他 C0 + DEL；不動高 unicode（可能是合法的 CJK / emoji）
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+}
+
+/**
+ * Recursive sanitize：遍歷 body 任何 string 欄位，剝 C0 控制字元。
+ * 跳過 image_url.url（data:URL base64 不該被改）。
+ */
+function deepSanitizeStrings(obj: unknown, parentKey?: string): void {
+  if (parentKey === 'url') return // 不動 image_url.url
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      const v = obj[i]
+      if (typeof v === 'string') obj[i] = sanitizeForTokenizer(v)
+      else if (v && typeof v === 'object') deepSanitizeStrings(v)
+    }
+    return
+  }
+  if (obj && typeof obj === 'object') {
+    const o = obj as Record<string, unknown>
+    for (const k of Object.keys(o)) {
+      const v = o[k]
+      if (typeof v === 'string') o[k] = sanitizeForTokenizer(v)
+      else if (v && typeof v === 'object') deepSanitizeStrings(v, k)
+    }
+  }
 }
 
 // ── 請求翻譯：Anthropic → OpenAI ──────────────────────────────────────────
@@ -1085,6 +1122,10 @@ export function createLlamaCppFetch(
     const openaiBody = translateRequestToOpenAI(anthropicBody, effectiveModel, {
       vision: config.vision === true,
     })
+    // Defense: 任何字串值含 \x00 或其他 C0 控制字元都會讓 llama.cpp tokenizer 失敗
+    // （image multimodal 路徑特別敏感）。觀察到 cli-dev compile binary 偶發
+    // git log 拼接時產生這種 corruption（4-byte un-l 變成 9-byte 含 NULL）。
+    deepSanitizeStrings(openaiBody as unknown as Record<string, unknown>)
     const endpoint = `${effectiveBaseUrl.replace(/\/$/, '')}/chat/completions`
     const reportedModel = anthropicBody.model ?? effectiveModel
 
@@ -1098,6 +1139,28 @@ export function createLlamaCppFetch(
         'stream=',
         openaiBody.stream,
       )
+    }
+    // Temporary: dump full body to file for tokenize-error debugging.
+    if (process.env.LLAMA_DUMP_BODY) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fs = require('fs')
+        const ts = Date.now()
+        const path = `${process.env.LLAMA_DUMP_BODY}/req-${ts}.json`
+        // Truncate base64 image data so file isn't huge
+        const sanitized = JSON.parse(JSON.stringify(openaiBody, (k, v) => {
+          if (k === 'url' && typeof v === 'string' && v.startsWith('data:')) {
+            return `${v.slice(0, 64)}...[truncated ${v.length} chars]`
+          }
+          return v
+        }))
+        fs.writeFileSync(path, JSON.stringify(sanitized, null, 2))
+        // biome-ignore lint/suspicious/noConsole:: debug
+        console.error(`[LLAMA_DUMP_BODY] wrote ${path}`)
+      } catch (e) {
+        // biome-ignore lint/suspicious/noConsole:: debug
+        console.error(`[LLAMA_DUMP_BODY] dump failed:`, e)
+      }
     }
 
     let openaiRes: Response
