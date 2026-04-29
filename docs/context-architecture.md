@@ -357,3 +357,31 @@ prompts.ts / memoryTypes.ts / QueryEngine.ts
 ### 詳細使用方法
 
 參見 `docs/customizing-system-prompt.md`（使用者指南）與 `docs/archive/M_SP_PLAN.md`（完整計畫，已歸檔）。
+
+---
+
+## 關鍵原始碼檔案（需要先讀懂的入口）
+
+> 從 CLAUDE.md 拆出。修改任何核心邏輯前先讀這些以理解 my-agent 運作方式。
+
+- `src/tools.ts` — 工具註冊表。所有工具在此註冊。使用 `feature()` 做 flag 控制。
+- `src/Tool.ts` — 工具基礎介面。所有工具都實作此介面。
+- `src/QueryEngine.ts` — 核心 LLM 查詢引擎。處理查詢分發、工具呼叫迴圈、用量追蹤。**在 deny list — 修改前先問**。
+- `src/vendor/my-agent-ai/sdk/` — 內化的 Anthropic SDK 原始碼（tsconfig paths 映射 `@anthropic-ai/sdk` → 此處）。
+- `src/services/api/client.ts` — 當前 API 客戶端（Anthropic SDK 封裝）。
+- `src/services/api/claude.ts` — 串流處理和用量累計。
+- `src/services/api/llamacpp-fetch-adapter.ts` — llama.cpp fetch adapter（M1，OpenAI SSE → Anthropic stream_event 轉譯）。
+- `src/services/tools/StreamingToolExecutor.ts` — 串流工具執行。**在 deny list**。
+- `src/services/tools/toolExecution.ts` — 工具生命週期管理。
+- `src/utils/model/` — 模型設定、provider 偵測、驗證。
+- `src/bootstrap/state.ts` — 應用程式初始化狀態。
+- `src/daemon/` — daemon 模式（M-DAEMON / M-DISCORD / M-WEB 共用）。
+
+### Hermes Agent 參考檔案（實作 provider 功能時查）
+
+`reference/hermes-agent/` 為唯讀；對照閱讀：
+
+- `agent/auxiliary_client.py` — 多 provider 客戶端抽象
+- `hermes_cli/auth.py` — Provider 註冊表、ProviderConfig、憑證處理
+- `agent/model_metadata.py` — 上下文長度偵測鏈
+- `run_agent.py` — Hermes 如何路由到不同 provider

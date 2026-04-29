@@ -89,3 +89,29 @@ my-agent 每 turn 寫入 `lastCost` / `numStartups` 也不會被洗掉。
 - ADR-012：Daemon 模式 — 影響 `daemonAutoStart` 欄位
 - ADR-013：Discord gateway — 影響 `discord.json` 整組欄位
 - M-CONFIG-JSONC：本次 milestone（`~/.my-agent/` 四個設定檔全面 JSONC 化 + 繁中註解）
+
+---
+
+## Claude Code 整合（`.claude/settings.json`）
+
+> 從 CLAUDE.md 拆出。這是 Claude Code 自身的 hooks / 權限設定，不是 my-agent runtime config。
+
+### Hooks（自動執行）
+
+| Hook | 觸發時機 | 動作 |
+|------|---------|------|
+| `pre-tool-use-conda.sh` | 任何 Bash/Terminal 指令執行前 | 驗證 `conda activate aiagent` 已啟用，未啟用則阻擋。 |
+| `post-tool-use-typecheck.sh` | 任何 .ts/.tsx 檔案被編輯後 | 自動執行 `bun run typecheck`，報告通過/失敗。 |
+| `notification-session-end.sh` | Session 結束時 | 將摘要附加到 TODO.md，發送桌面通知。 |
+
+### 權限設定
+
+**已預先核准**（不彈確認）：
+- 任何檔案的讀取
+- 在 `tests/`、`TODO.md`、`LESSONS.md` 的寫入/編輯
+- Shell 指令：conda、bun、git、curl localhost、cat/ls/find/grep/head/tail/wc/echo/mkdir/cp/mv 等
+
+**已封鎖**（會被拒絕）：
+- `rm -rf`、`sudo`、`chmod`
+- 寫入 `src/QueryEngine.ts`、`src/Tool.ts`、`src/services/tools/StreamingToolExecutor.ts`（核心檔案 — 先問）
+- 寫入 `reference/`（唯讀的 Hermes 原始碼）
