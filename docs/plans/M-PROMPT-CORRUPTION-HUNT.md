@@ -178,6 +178,41 @@ hex: 63686f72653a20e58aa0e585a5206275756e2d6c6c616d612d63707020e4bd9c...
    - V8 string interning / heap allocation pattern 可能不同
    - 但這層通常不該外洩到使用者程式碼
 
+## 2026-04-30 接續：ICU table 嫌疑大幅縮窄
+
+#### 發現：corruption bytes 來自 ICU Unicode tables
+
+對 cli-dev.exe binary hex grep 各種 corruption byte 子序列：
+
+| 子序列 | hex hits | 上下文 |
+|---|---|---|
+| `e2 a6 a0` (variant_B `⦠` U+29A0) | 1 hit @ 0x531edc4 | `e2 a6 96 e2 a6 97 ... e2 a6 a0 e2 a6 a1 ...` 連續 Misc Math Symbols B 表 |
+| `e2 a0 a0` (variant_A `⠠` U+2820) | 1 hit @ 0x531e944 | `e2 a0 96 ... e2 a0 a0 e2 a0 a1 ...` 連續 Braille Patterns 表 |
+| `e3 8a 81` (variant_A `㊁` U+3281) | 1 hit @ 0x5320747 | `... 00 00 00 e3 89 bc e3 89 bd e3 89 be 00 00 00 e3 8a 80 e3 8a 81 ...` Enclosed CJK Letters 表 + **NULL byte gap**（解釋為何 variant A 含 NUL）|
+
+**結論**：corruption bytes 是從 ICU Unicode property tables 讀出來的（baked 在 binary `0x531e000`-`0x5321000` 區）。這些是 V8/Bun 用於 `String.prototype.normalize()` / `toUpperCase()` / `toLowerCase()` / `RegExp` Unicode flag / Intl 相關 API 的 lookup 表。
+
+每個 binary build 連結 ICU 在不同 virtual address，所以不同 build 的 corruption bytes 不同；同 build 內 deterministic（同 address 永遠讀同 bytes）。
+
+#### 排除：直接的 `.normalize('NFC')` 不是兇手
+
+寫 38KB 的合成 system prompt（含 `加入 buun-llama-cpp` 段落）+ 直接 `.normalize('NFC')` 測試：raw bun **與** compile binary 都正常，無 corruption。所以**不是** my-agent 直接呼 normalize 的問題。
+
+#### 關鍵剩餘嫌疑
+
+某條 path 在 interactive mode 觸發了走 ICU tables 的 string 操作，並且該操作在 my-agent's 31KB+ system prompt 上有 buffer overflow，**讀** ICU table 的 bytes **寫**回 system prompt buffer。寫入位置 = byte 31350，固定。
+
+可能的觸發點：
+- `Cursor.ts:1135` `text.normalize('NFC')` — 但只 normalize TUI 輸入框文字，不該影響 system prompt buffer
+- `Cursor.ts:857` `insertString.normalize('NFC').length`
+- `bootstrap/state.ts:268-528` 多個 `cwd.normalize('NFC')` — 短字串
+- 其他 vendor SDK 中的 `toLowerCase` / `toUpperCase` calls
+
+但這些都是 SHORT strings 上的操作。要造成 system prompt 在 byte 31350 corrupt，需要：
+- (a) 在 system prompt 自身上做 normalize/toLowerCase（沒找到這種 call）
+- (b) 或某個 native module 透過 ICU 操作其他 buffer 時意外踩進 system prompt buffer 的 31350 位置（可能性最高）
+- (c) Bun runtime 自身 string concat / GC / heap compaction 時 ICU table 與 user buffer 撞地址
+
 ## 已加診斷工具（adapter env-gated dump hooks）
 
 留在 `src/services/api/llamacpp-fetch-adapter.ts`，預設不啟動：
@@ -207,14 +242,19 @@ LLAMA_DUMP_RAWBODY=<dir>
 
 ## 還沒做的 root-cause 步驟
 
-1. **觸發 interactive TUI 模式並開 dump**
+1. **取得 interactive 模式下 raw body dump（M-CORR-A）**
    - User 端最直接（PowerShell + cli-dev + drag image + `LLAMA_DUMP_RAWBODY` env）
-   - 自動化用 `winpty` 在當前環境 ASSERT 炸掉，待研究替代方案（mintty / `script` POSIX）
-2. **取得 interactive 模式下 raw body dump**，比對 stdin-piped 模式 dump 找 differential
-3. **若 raw body 已含 corruption** → 在 SDK 入口前加 instrumentation 抓 caller stack
-4. **若 raw body 乾淨** → 問題在 adapter 之後，但目前 adapter 已 sanitize 不該再壞
-5. **嫌疑 (1) native module**：寫 minimal interactive Ink TUI（不含 my-agent 邏輯，只 import 同樣的 napi modules）+ 同樣 31KB 字串 → 看是否復現
+   - 自動化嘗試：`winpty` 在當前環境 ASSERT 炸掉、`Bun.spawn({pty:true})` Windows 不真分配 ConPTY（cli-dev 看到 stdin 不是 TTY 會 fall through 到 `--print` 模式）
+   - 替代方案：spawn cmd.exe new window with cli-dev → 從外部送 SendKeys？太脆弱
+   - 最實際路線：在 adapter 加「detect C0 byte → 自動 dump raw body + stack trace」的 unconditional hook，next user image 觸發時就有資料
+2. **比對 interactive vs stdin-piped raw body dump 找 differential（M-CORR-B）**
+3. **找出觸發 ICU read 的 call site（M-CORR-C）**
+   - 在 v8/Bun source 找 `String.prototype.normalize` / `toLowerCase` / `toUpperCase` 的 ICU table 存取點
+   - 判斷 my-agent 哪條 path 真正觸發（grep 完整 source + vendor + Ink 內部）
+4. **嫌疑 (b) 驗證**：在 interactive mode 的 mount path 加 instrumentation，每個 `.normalize` / `.toLowerCase` call 都記錄 input length + output length；找到不對等的 call
+5. **嫌疑 (1) 驗證**：寫 minimal interactive Ink TUI（不含 my-agent 邏輯，只 import 同樣的 napi modules + 31KB system prompt）→ 看是否復現
 6. **嫌疑 (2) Ink/React**：嘗試 `MY_AGENT_NO_TUI=1` 或類似 flag 跑 interactive but 不掛 Ink → 看是否復現
+7. **試 mintty 跑 cli-dev**：判斷是否 PowerShell ConPTY 特定問題 vs Windows 通用 vs Bun + Windows 通用
 
 ## 完成標準（暫未達成）
 

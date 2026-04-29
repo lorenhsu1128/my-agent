@@ -1161,6 +1161,61 @@ export function createLlamaCppFetch(
         }
       } catch {/* ignore */}
     }
+    // M-PROMPT-CORRUPTION-HUNT auto-detect：unconditional check for C0 byte
+    // before sanitize；命中即 dump 證據到 ~/.my-agent/corruption-evidence/
+    // （無需 env var）。配合 sanitize 的 bandaid，user 不會看到 user-facing crash，
+    // 但有資料供 root cause 調查。
+    {
+      const sysContent = (openaiBody.messages?.[0]?.content as string) || ''
+      // 只 catch NULL byte（最 specific 的 corruption 標記，
+      // 避開合法 ANSI escape \x1B / 其他 control char false positive）
+      const hasNul = typeof sysContent === 'string' && sysContent.includes('\x00')
+      if (hasNul) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const fs = require('fs')
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const path = require('path')
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const os = require('os')
+          const evidenceDir = path.join(os.homedir(), '.my-agent', 'corruption-evidence')
+          fs.mkdirSync(evidenceDir, { recursive: true })
+          const ts = Date.now()
+          // 找第一個 NULL byte 位置 + 周圍 80 chars
+          const idx = sysContent.indexOf('\x00')
+          const ctxStart = Math.max(0, idx - 80)
+          const ctxEnd = Math.min(sysContent.length, idx + 80)
+          const byteIdx = Buffer.byteLength(sysContent.slice(0, idx), 'utf-8')
+          const meta = {
+            timestamp: new Date(ts).toISOString(),
+            sysPromptLen: sysContent.length,
+            sysPromptBytes: Buffer.byteLength(sysContent, 'utf-8'),
+            firstNulCharIdx: idx,
+            firstNulByte: byteIdx,
+            contextBefore: sysContent.slice(ctxStart, idx),
+            contextAt: sysContent.slice(idx, idx + 16),
+            contextAfter: sysContent.slice(idx + 1, ctxEnd),
+            contextBytesHex: Buffer.from(sysContent.slice(ctxStart, ctxEnd), 'utf-8').toString('hex'),
+            cliVersion: process.env.npm_package_version || 'unknown',
+            agentVersion: 'cli-dev',
+            note: 'See docs/plans/M-PROMPT-CORRUPTION-HUNT.md for context',
+          }
+          fs.writeFileSync(
+            path.join(evidenceDir, `meta-${ts}.json`),
+            JSON.stringify(meta, null, 2),
+          )
+          fs.writeFileSync(
+            path.join(evidenceDir, `sysprompt-${ts}.bin`),
+            Buffer.from(sysContent, 'utf-8'),
+          )
+          // biome-ignore lint/suspicious/noConsole:: investigation breadcrumb
+          console.error(
+            `[M-PROMPT-CORRUPTION] NULL byte detected in system prompt (char ${idx}, byte ${byteIdx}). ` +
+              `Evidence saved to ${evidenceDir}. Sanitizing before send...`,
+          )
+        } catch {/* ignore — sanitize will handle it anyway */}
+      }
+    }
     // Defense: 任何字串值含 \x00 或其他 C0 控制字元都會讓 llama.cpp tokenizer 失敗
     // （image multimodal 路徑特別敏感）。觀察到 cli-dev compile binary 偶發
     // git log 拼接時產生這種 corruption（4-byte un-l 變成 9-byte 含 NULL）。

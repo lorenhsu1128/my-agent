@@ -2713,3 +2713,5 @@
 - 2026-04-29 22:24: Session 結束 | 進度：656/739 任務 | d72e111 chore: 加入 buun-llama-cpp 作為 git submodule
 
 - 2026-04-29 23:03: Session 結束 | 進度：660/748 任務 | d83d171 fix(llamacpp): sanitize 改用 key-skip + 加 LLAMA_DUMP_PRESANITIZE/RAWBODY 診斷 + 11 unit test
+
+- 2026-04-30 05:36: Session 結束 | 進度：660/748 任務 | 99e3e80 docs(corruption-hunt): 完整調查過程文件化到 docs/plans/
