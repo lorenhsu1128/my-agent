@@ -21,6 +21,13 @@
 
 ## 設定檔 seed 相關
 
+### TS Compiler API 解析 zod schema 比 .describe() 路線好用
+- **發生什麼事**：M-CONFIG-DOCS-ALIGN 要做 schema → markdown 自動產生器。原本兩條路：(A) 規定 schema 都加 `.describe('...')` 走 zod 內建 metadata；(B) 用 TS Compiler API 解析 schema.ts 抽 JSDoc + 預設值。
+- **根本原因**：路線 A 要 retrofit 既有 5 個 schema 數十個欄位的 `.describe()`，工作量大；且使用者可能更新 JSDoc 卻忘了同步 `.describe()`。路線 B 直接吃既有 JSDoc 是 single source of truth。
+- **正確做法**：用 `typescript` package 的 `createSourceFile` + AST 走訪，對 `z.object({...})` 內每個 property：(1) `getFullStart()` 與 `getStart()` 之間 raw text 抽 JSDoc 區塊；(2) `getText()` 用 regex 抽 `z.X(` 主類型 + `.default(...)` 值 + `.optional()`。多行 schema chain 要小心 regex `z\s*\.\s*` 容錯多行縮排（`z\n    .number()` 不會被 `z\.` 匹配到）。
+- **相關檔案**：`scripts/gen-config-docs.ts`、`tests/integration/configDocsGen/gen-config-docs.test.ts`。
+- **日期**：2026-04-30
+
 ### Config doctor 用「檔案優先 fast-path」打 setup.ts hot path
 - **發生什麼事**：M-CONFIG-DOCTOR session-start 自動 check，要求 < 50ms。原本擔心要全部 schema validate 5 個 jsonc 會慢；實測 34ms。
 - **根本原因**：Zod safeParse 對 130k+ context size config 也只 ~5ms；瓶頸是 fs.readFile（本地 SSD ~10ms）。整體靠 `existsSync → 缺檔提早 return` 把缺檔情境降到 < 1ms，已存在情境仍走 parse + validate。
@@ -42,6 +49,13 @@
 - **根本原因**：unsloth Qwen3.5-9B Q4_K_M 在 `--jinja` chat template 下，thinking 模式偶爾 fall back 到模型訓練時的 native Hermes 格式。直接 curl 同樣 prompt 會復現。`--chat-template-kwargs '{"enable_thinking":false}'` 8/8 不漏，但會關掉 thinking 失去 reasoning 品質。
 - **正確做法**：兩層防禦。(1) Server 側若不需要 thinking 直接加 `--chat-template-kwargs '{"enable_thinking":false}'` 一勞永逸。(2) Adapter 側保留 `parseLeakedXmlToolCalls` 偵測 `<tool_call>` 並合成 `tool_use` blocks（content + reasoning_content 兩通道都掃），stop_reason 改 `tool_use`，發 loud `[llamacpp-adapter] XML tool-call leaked into content stream` warn。違反 ADR-021 silent fallback 但有顯眼 warn 指向 root cause fix，可接受。10 次冒煙：7 clean / 1 fallback 救回 / 0 漏。
 - **相關檔案**：`src/services/api/llamacpp-fetch-adapter.ts`（`parseLeakedXmlToolCalls` + streaming/non-streaming 兩條路徑）、`tests/integration/llamacpp/xml-leak-fallback.test.ts`。
+- **日期**：2026-04-30
+
+### qwen3.5-9b 第二種 leak 變體：bare pythonic（無 `<tool_call>` 外層）→ 再加一層兜底
+- **發生什麼事**：使用者在 daemon / standalone 都看到「每次 model 想呼叫 Read 就斷在那」。TUI 顯示純文字 `<function=Read>\n<parameter=file_path>\nC:\path\file.md` —— 既不是 OpenAI 結構化 tool_calls、也**不是**前一條解過的 Hermes XML（沒有 `<tool_call>` 外層、沒有 `</function>` `</parameter>` 收尾）。`parseLeakedXmlToolCalls` 抓不到 → adapter 把整段當 text 吐出 → agent loop 死在原地。
+- **根本原因**：Qwen3.5-9b 走 `tools` 路徑時，jinja 對「bare pythonic」格式沒當 tool_call 過濾，整段直接漏進 content delta。和前一條的 Hermes XML 是**不同**漏點：那條是 thinking 結束後 fallback；這條是首次 tool_call 路徑就漏。
+- **正確做法**：在 adapter 加第二個 parser `parseLeakedBarePythonicToolCalls`，**不**擴充 Hermes parser（外層 / 結束標籤政策都不一樣，混在同一 regex 會把容錯邏輯搞糊）。觸發條件互斥：含 `<tool_call>` 走 Hermes、僅含 `<function=` 走 bare。tool id 前綴 `toolu_pyfallback_` 區分來源。warn 訊息也分開好排查。容錯重點：bare 變體沒收尾，邊界靠下一個 `<function=` / `<parameter=` / EOF 推算；model 半補的 `</parameter></function>` 在最後一個 param value trim 階段順序剝掉（先 function 再 parameter，因為 `value</parameter></function>` 尾巴順序）。
+- **相關檔案**：同上 + `tests/integration/llamacpp/bare-pythonic-leak-fallback.test.ts`。
 - **日期**：2026-04-30
 
 ---

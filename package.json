@@ -19,6 +19,8 @@
     "dev": "bun run ./scripts/dev.ts",
     "dev:raw": "bun run ./src/entrypoints/cli.tsx",
     "typecheck": "tsc --noEmit",
+    "docs:gen": "bun run ./scripts/gen-config-docs.ts",
+    "docs:verify": "bun run ./scripts/gen-config-docs.ts --check",
     "build:web": "cd web && bun install && bun run build",
     "dev:web": "cd web && bun install && bun run dev",
     "typecheck:web": "cd web && bun run typecheck"

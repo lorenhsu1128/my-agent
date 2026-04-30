@@ -1668,13 +1668,32 @@
 
 ---
 
-## 規劃中里程碑：M-CONFIG-DOCS-ALIGN — Schema / env / 文件對齊（2026-04-30 規劃）
+## 已完成里程碑：M-CONFIG-DOCS-ALIGN — Schema → 文件自動產生（2026-04-30 啟動 + 完成）
 
 **詳規劃**：`docs/plans/M-CONFIG-DOCS-ALIGN.md`
 
-**摘要**：自動產生器 `bun run docs:gen` 從 schema → markdown，CI 驗證一致性；env var 前綴統一為 `MYAGENT_<MODULE>_*`（舊的保留 deprecated alias）；明文「env > file > default」優先序。
+**對齊範圍**：使用者指定「只做 schema → 文件自動產生，不用統一命名」。env 前綴統一（原計畫 Phase 1）跳過。
 
-**待決策**（5 項，見 plan 文件）：產生方式、文件位置、env 命名統一策略、產生器 trigger、來源優先序。
+### 任務
+- [x] DOCS-1 盤點 5 個 config 的 env override 對照（手寫進產生器 lookup）
+- [x] DOCS-2 `scripts/gen-config-docs.ts` 自動產生器（TS Compiler API + zod 預設值 + JSDoc）
+- [x] DOCS-3 產出 4 份 doc + 主索引（llamacpp / web / discord / config-reference）
+- [x] DOCS-4 同一支腳本內建 `--check` mode 給 CI 用
+- [x] DOCS-5 `package.json` 加 `docs:gen` / `docs:verify` scripts
+- [x] DOCS-6 整合測試 8/8（`tests/integration/configDocsGen/`）
+- [x] DOCS-7 `CLAUDE.md` 加第 13 條黃金規則 + LESSONS + dev log + commit + push
+
+### 完成標準
+- [x] `bun run docs:gen` 產出 4 份 md 檔
+- [x] `bun run docs:verify` 在無修改時 exit 0
+- [x] global config 略過（無 zod schema，文件指向 `src/utils/config.ts:184`）
+- [x] system-prompt 略過（純 markdown 文本，文件指向 `src/systemPromptFiles/sections.ts`）
+
+### 不在範圍 → 後續
+- env var 命名統一（`MYAGENT_<MODULE>_*` 前綴）→ 使用者明確跳過
+- pre-commit hook 自動跑 docs:gen → 留作 contributor 體驗優化
+- CI workflow 加 docs:verify → 還沒 CI infra
+- global config 也走 zod schema → 大改動，獨立 milestone
 
 ---
 
@@ -2889,3 +2908,7 @@
 - 2026-04-30 22:11: Session 結束 | 進度：687/775 任務 | d8ebdfd feat(config-seed): M-CONFIG-SEED-COMPLETE 首次啟動 config seed 完整性
 
 - 2026-04-30 22:38: Session 結束 | 進度：687/775 任務 | 01da1b6 docs(config): M-CONFIG-DOCTOR 與 M-CONFIG-DOCS-ALIGN 詳規劃 + WebBrowserTool README 修正
+
+- 2026-04-30 22:47: Session 結束 | 進度：701/789 任務 | 7951b5c feat(config-doctor): M-CONFIG-DOCTOR config 健康診斷與自動修復
+
+- 2026-04-30 22:55: Session 結束 | 進度：701/789 任務 | 7951b5c feat(config-doctor): M-CONFIG-DOCTOR config 健康診斷與自動修復
