@@ -1632,9 +1632,28 @@
 - 黑箱測：daemon start 後 web.jsonc 已 seed（P5）
 
 ### 不在範圍 → 後續 milestone
-- 環境變數命名統一（LLAMACPP_/MYAGENT_/DISCORD_ 前綴混用）
-- Config doctor 自動檢查 / 修復工具
-- Schema 欄位 default 與 env override 對齊文件
+- ~~Config doctor 自動檢查 / 修復工具~~ → 已詳規劃 `docs/plans/M-CONFIG-DOCTOR.md`，等決策
+- ~~Schema 欄位 default 與 env override 對齊文件~~ → 已詳規劃 `docs/plans/M-CONFIG-DOCS-ALIGN.md`（含 env 命名統一），等決策
+
+---
+
+## 規劃中里程碑：M-CONFIG-DOCTOR — Config 健康診斷與自動修復工具（2026-04-30 規劃）
+
+**詳規劃**：`docs/plans/M-CONFIG-DOCTOR.md`
+
+**摘要**：`/config doctor` slash + `my-agent config doctor` CLI，分 `--check` / `--fix` / `--rewrite-with-docs` 三模式，覆蓋 5 個 jsonc + system-prompt/。daemon start 時自動跑 `--check`。
+
+**待決策**（5 項，見 plan 文件）：命令位置、自動執行時機、檢查範圍、backup 策略、跨檔一致性檢查嚴格度。
+
+---
+
+## 規劃中里程碑：M-CONFIG-DOCS-ALIGN — Schema / env / 文件對齊（2026-04-30 規劃）
+
+**詳規劃**：`docs/plans/M-CONFIG-DOCS-ALIGN.md`
+
+**摘要**：自動產生器 `bun run docs:gen` 從 schema → markdown，CI 驗證一致性；env var 前綴統一為 `MYAGENT_<MODULE>_*`（舊的保留 deprecated alias）；明文「env > file > default」優先序。
+
+**待決策**（5 項，見 plan 文件）：產生方式、文件位置、env 命名統一策略、產生器 trigger、來源優先序。
 
 ---
 
@@ -2845,3 +2864,5 @@
 - 2026-04-30 21:25: Session 結束 | 進度：678/766 任務 | 104c1e2 fix(llamacpp): adapter 兜底 qwen3.5-9b 偶發吐 Hermes XML tool_call
 
 - 2026-04-30 21:39: Session 結束 | 進度：678/766 任務 | 104c1e2 fix(llamacpp): adapter 兜底 qwen3.5-9b 偶發吐 Hermes XML tool_call
+
+- 2026-04-30 22:11: Session 結束 | 進度：687/775 任務 | d8ebdfd feat(config-seed): M-CONFIG-SEED-COMPLETE 首次啟動 config seed 完整性

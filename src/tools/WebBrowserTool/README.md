@@ -20,7 +20,7 @@ fields below.
 | `back` | — | Browser back button. |
 | `press` | `key` | Keyboard key (`Enter`, `Tab`, `Escape`…). |
 | `console` | `clear?` | Read accumulated `console.*` messages from the page. |
-| `evaluate` | `expression` | Run JS in the page context. **Requires explicit allow rule** in `.claude/settings.json`. |
+| `evaluate` | `expression` | Run JS in the page context. **Requires explicit allow rule** in `~/.my-agent/settings.jsonc`. |
 | `screenshot` | `full_page?` | PNG bytes (returned as base64). |
 | `vision` | `question` | Screenshot + ask a vision model about it. |
 | `get_images` | — | Enumerate `<img>` elements with `src`/`alt`/dimensions. |
