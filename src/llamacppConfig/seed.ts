@@ -25,6 +25,18 @@ import { logForDebugging } from '../utils/debug.js'
 
 const README_FILENAME = 'llamacpp.README.md'
 
+/**
+ * Template hardcodes Windows 副檔名。seed 時依平台改寫 binaryPath，
+ * 讓 macOS / Linux 使用者首次拿到的就是正確路徑（不用手動編輯）。
+ */
+function localizeTemplate(template: string): string {
+  if (process.platform === 'win32') return template
+  return template.replace(
+    'buun-llama-cpp/build/bin/Release/llama-server.exe',
+    'buun-llama-cpp/build/bin/llama-server',
+  )
+}
+
 // 既有 README 內容（M-LLAMA-CFG 時期的深度說明）。
 // 註解已搬到 JSONC 模板內；此 README 只在檔案不存在時 seed，已存在就不動。
 const README_CONTENT = `# ~/.my-agent/llamacpp.json
@@ -115,11 +127,12 @@ async function migrateStrictJsonToJsonc(
   }
 
   // 以模板為基底，把 validated 值套進去（保留註解）
-  const templateParsed = parseJsonc(LLAMACPP_JSONC_TEMPLATE)
+  const localized = localizeTemplate(LLAMACPP_JSONC_TEMPLATE)
+  const templateParsed = parseJsonc(localized)
   void templateParsed // used as sanity check that template itself is valid
   const { newText } = await writeJsoncPreservingComments(
     path, // 這裡的 path 僅供錯誤訊息；實際寫入走 forceRewrite
-    LLAMACPP_JSONC_TEMPLATE,
+    localized,
     validated.data,
   )
   // forceRewrite 會備份既有檔
@@ -135,7 +148,7 @@ export async function seedLlamaCppConfigIfMissing(): Promise<void> {
     if (!existsSync(path)) {
       // 首次 seed
       await mkdir(dirname(path), { recursive: true })
-      await writeFile(path, LLAMACPP_JSONC_TEMPLATE, 'utf-8')
+      await writeFile(path, localizeTemplate(LLAMACPP_JSONC_TEMPLATE), 'utf-8')
       // README sidecar（若不存在才寫，已存在尊重使用者）
       const readmePath = join(dirname(path), README_FILENAME)
       if (!existsSync(readmePath)) {

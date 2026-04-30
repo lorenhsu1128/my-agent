@@ -21,6 +21,10 @@ import {
   seedDiscordConfigIfMissing,
   loadDiscordConfigSnapshot,
 } from '../discordConfig/index.js'
+import {
+  seedWebConfigIfMissing,
+  loadWebConfigSnapshot,
+} from '../webConfig/index.js'
 
 export async function daemonMain(args: string[]): Promise<void> {
   // daemon fast-path 跳過 setup.ts，需要自行載入 config snapshot
@@ -28,6 +32,8 @@ export async function daemonMain(args: string[]): Promise<void> {
   await loadLlamaCppConfigSnapshot()
   await seedDiscordConfigIfMissing()
   await loadDiscordConfigSnapshot()
+  await seedWebConfigIfMissing()
+  await loadWebConfigSnapshot()
 
   const sub = args[0]
   const ctx: DaemonCliContext = {

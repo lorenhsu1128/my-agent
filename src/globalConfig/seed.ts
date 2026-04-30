@@ -1,20 +1,15 @@
 /**
- * 全域設定檔 seed：~/.my-agent/.my-agent.json 不存在時寫入完整模板。
+ * 全域設定檔 seed：~/.my-agent/.my-agent.jsonc 不存在時寫入完整模板。
  *
  * 與 llamacppConfig / discordConfig 不同：GlobalConfig 由 src/utils/config.ts
  * 的 `saveGlobalConfig` → `saveConfigWithLock` 在首次 `getGlobalConfig()` 後
  * 寫入。此 seed 函式在那之前搶先寫入帶繁中註解的模板版本，讓使用者第一
- * 次打開 ~/.my-agent/.my-agent.json 就看到完整欄位說明。
+ * 次打開 ~/.my-agent/.my-agent.jsonc 就看到完整欄位說明。
  *
- * 注意：目前 saveConfigWithLock 會把「等於預設值的欄位」過濾掉再寫回
- * （`pickBy(cfg, ≠ defaults)`），因此**模板產生的註解在下次寫回時會被
- * 洗掉**。要真正保留需要配合 M-CONFIG-JSONC-SAVE（saveGlobalConfig
- * 路徑改用 jsoncStore.writeJsoncPreservingComments）。
- *
- * 在 M-CONFIG-JSONC-SAVE 做完前，此 seed 提供的價值是：
- *   - 全新使用者首次啟動可以看到完整 schema + 中文解釋一次
- *   - 現有使用者可以透過手動觸發（未來 slash command /config-rewrite-with-docs）
- *     重新落盤看完整版本
+ * JSONC 註解保留：saveConfigWithLock（src/utils/config.ts:1216）已在原檔含
+ * 註解時走 jsonc.modify 路徑套變更，保留所有使用者加的繁中註解。檔案若是
+ * 純 strict JSON 才會走 filter-defaults + jsonStringify 的 legacy 路徑。
+ * 回歸測試：tests/integration/jsonc/saveGlobalConfig-preserve.test.ts。
  */
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { dirname } from 'path'

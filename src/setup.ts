@@ -304,17 +304,14 @@ export async function setup(
     // ensureReconciled 冪等 — M2-05 SessionSearchTool 之後也會 await 同一 Promise。
     void ensureReconciled(getProjectRoot())
     // M-SP-1：首次啟動種檔 + 載入 system-prompt snapshot。
-    // 兩者都是 best-effort，失敗時 loader/getSection 會回 null 讓 prompts.ts 走 bundled fallback。
-    void (async () => {
-      await seedSystemPromptDirIfMissing()
-      await loadSystemPromptSnapshot()
-    })()
-    // M-LLAMA-CFG：首次啟動種出 ~/.my-agent/llamacpp.json + 載入 snapshot。
-    // 同樣 best-effort；缺 / 壞都走 DEFAULT_LLAMACPP_CONFIG。
-    void (async () => {
-      await seedLlamaCppConfigIfMissing()
-      await loadLlamaCppConfigSnapshot()
-    })()
+    // 改 await（M-CONFIG-SEED-COMPLETE）：消除「snapshot 還沒 hydrate 就被存取」的 race。
+    // seed 是 ms 級寫檔，失敗也只 log warn 走 bundled fallback，不會阻擋 boot。
+    await seedSystemPromptDirIfMissing()
+    await loadSystemPromptSnapshot()
+    // M-LLAMA-CFG：首次啟動種出 ~/.my-agent/llamacpp.jsonc + 載入 snapshot。
+    // 同樣 await；缺 / 壞都走 DEFAULT_LLAMACPP_CONFIG。
+    await seedLlamaCppConfigIfMissing()
+    await loadLlamaCppConfigSnapshot()
     if (feature('CONTEXT_COLLAPSE')) {
       /* eslint-disable @typescript-eslint/no-require-imports */
       ;(

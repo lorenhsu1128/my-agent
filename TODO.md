@@ -1605,6 +1605,39 @@
 
 ---
 
+## 當前里程碑：M-CONFIG-SEED-COMPLETE — 首次啟動 config seed 完整性修復 + 全覆蓋測試（2026-04-30 啟動）
+
+**目標**：把 5 個 config 檔（settings.jsonc / .my-agent.jsonc / llamacpp.jsonc / web.jsonc / discord.jsonc）+ system-prompt 目錄的 seed 行為對齊，補完所有發現的洞，並寫整合測試覆蓋 seed / migration / 壞檔 fallback / schema validation。
+
+**對齊決策**：
+- P1 saveConfigWithLock 改用 jsonc-parser modify API 保留註解（取代 M-CONFIG-JSONC-SAVE 提案）
+- 寫回時若原檔不存在 → 走 bundled template；若已存在 → minimal modify
+- 系統 prompt 補寫缺檔但不覆蓋已存在檔（尊重使用者編輯）
+
+### 任務
+- [x] P1 `src/utils/config.ts::saveConfigWithLock` 已實作 JSONC 保留路徑（M-CONFIG-JSONC 落地）；本次只更新 globalConfig/seed.ts 的誤導註解
+- [x] P2 `src/webConfig/seed.ts` 加 strict JSON → JSONC migration
+- [x] P3 `src/systemPromptFiles/seed.ts` 改成「目錄存在但個別檔案不存在 → 補寫」
+- [x] P4 `src/setup.ts` seed 改 await（消除 race，與 daemon 對齊）
+- [x] P5 `src/daemon/main.ts` 加 seedWebConfigIfMissing + loadWebConfigSnapshot
+- [x] P6 `src/llamacppConfig/seed.ts::localizeTemplate` binaryPath 跨平台
+- [x] 寫 `tests/integration/bootstrap/seed-coverage.test.ts` 全覆蓋（18/18 綠）
+- [x] typecheck baseline + 179/179 regression 綠
+- [x] LESSONS.md + dev log + 繁中 commit + push
+
+### 完成標準
+- `bun run typecheck` 過
+- `bun test tests/integration/bootstrap/` 全綠
+- 黑箱測：清空 `~/.my-agent/`，跑 `./cli -p "hi"` 後所有 5 個 .jsonc + system-prompt/ + 子目錄齊全
+- 黑箱測：daemon start 後 web.jsonc 已 seed（P5）
+
+### 不在範圍 → 後續 milestone
+- 環境變數命名統一（LLAMACPP_/MYAGENT_/DISCORD_ 前綴混用）
+- Config doctor 自動檢查 / 修復工具
+- Schema 欄位 default 與 env override 對齊文件
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2806,3 +2839,9 @@
 - 2026-04-30 20:24: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
 
 - 2026-04-30 20:39: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
+
+- 2026-04-30 21:23: Session 結束 | 進度：678/766 任務 | 104c1e2 fix(llamacpp): adapter 兜底 qwen3.5-9b 偶發吐 Hermes XML tool_call
+
+- 2026-04-30 21:25: Session 結束 | 進度：678/766 任務 | 104c1e2 fix(llamacpp): adapter 兜底 qwen3.5-9b 偶發吐 Hermes XML tool_call
+
+- 2026-04-30 21:39: Session 結束 | 進度：678/766 任務 | 104c1e2 fix(llamacpp): adapter 兜底 qwen3.5-9b 偶發吐 Hermes XML tool_call

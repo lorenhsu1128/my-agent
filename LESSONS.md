@@ -19,6 +19,15 @@
 
 ---
 
+## 設定檔 seed 相關
+
+### 「documented bug 不一定還在」— 跟 milestone 文件當作真理會走錯
+- **發生什麼事**：`src/globalConfig/seed.ts` 註解明確寫「saveConfigWithLock 過濾預設值 → 模板註解被洗掉，要等 M-CONFIG-JSONC-SAVE 才修」。我以此為據規劃了 P1 修復項目，動工後實際讀 saveConfigWithLock 才發現 JSONC 保留路徑（`hasJsoncComments → diffPaths → jsonc.modify`）已落地，回歸測試 `tests/integration/jsonc/saveGlobalConfig-preserve.test.ts` 6/6 過。
+- **根本原因**：M-CONFIG-JSONC milestone 落地後，誰都沒回頭更新 `globalConfig/seed.ts` 那段註解，導致下游規劃以為還沒修。
+- **正確做法**：規劃前先驗 — 跑既有 regression test、grep 對應 helper（hasJsoncComments / writeJsoncPreservingComments）是否真的被呼叫，再決定是否要動。文件 / 註解只是線索不是真理。Milestone 完成時要回頭把舊註解的「TODO 等 X 修」字眼清掉。
+- **相關檔案**：`src/utils/config.ts:1216-1255`（實際的 JSONC 保留路徑）、`src/globalConfig/seed.ts`（已更新誤導註解）、`tests/integration/jsonc/saveGlobalConfig-preserve.test.ts`。
+- **日期**：2026-04-30
+
 ## 工具呼叫轉譯相關
 
 ### qwen3.5-9b thinking 模式偶發吐 Hermes 原生 XML tool_call → 必須 adapter 兜底
