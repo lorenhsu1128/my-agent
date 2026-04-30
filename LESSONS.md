@@ -21,7 +21,12 @@
 
 ## 工具呼叫轉譯相關
 
-（尚無記錄）
+### qwen3.5-9b thinking 模式偶發吐 Hermes 原生 XML tool_call → 必須 adapter 兜底
+- **發生什麼事**：daemon / standalone 都會非確定性看到 LLM「停止運算」。實際是 qwen3.5-9b 在 thinking 結束後 ~10-30% 機率不走 `<tool_call>{json}</tool_call>` 結構化輸出，而是直接吐 Hermes 原生 XML：`<tool_call><function=Bash><parameter=command>ls</parameter></function></tool_call>` 到 `content` 或 `reasoning_content` 通道。jinja chat template 沒攔，OpenAI 相容層也沒翻，最後當純文字回給使用者，agent 看不到 tool_use → 整輪卡住。
+- **根本原因**：unsloth Qwen3.5-9B Q4_K_M 在 `--jinja` chat template 下，thinking 模式偶爾 fall back 到模型訓練時的 native Hermes 格式。直接 curl 同樣 prompt 會復現。`--chat-template-kwargs '{"enable_thinking":false}'` 8/8 不漏，但會關掉 thinking 失去 reasoning 品質。
+- **正確做法**：兩層防禦。(1) Server 側若不需要 thinking 直接加 `--chat-template-kwargs '{"enable_thinking":false}'` 一勞永逸。(2) Adapter 側保留 `parseLeakedXmlToolCalls` 偵測 `<tool_call>` 並合成 `tool_use` blocks（content + reasoning_content 兩通道都掃），stop_reason 改 `tool_use`，發 loud `[llamacpp-adapter] XML tool-call leaked into content stream` warn。違反 ADR-021 silent fallback 但有顯眼 warn 指向 root cause fix，可接受。10 次冒煙：7 clean / 1 fallback 救回 / 0 漏。
+- **相關檔案**：`src/services/api/llamacpp-fetch-adapter.ts`（`parseLeakedXmlToolCalls` + streaming/non-streaming 兩條路徑）、`tests/integration/llamacpp/xml-leak-fallback.test.ts`。
+- **日期**：2026-04-30
 
 ---
 

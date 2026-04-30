@@ -447,6 +447,69 @@ export function translateRequestToOpenAI(
  */
 export const TOOL_USAGE_POLICY_NUDGE = `Tool usage policy: If a tool can answer the user's question, you MUST emit a tool_use block in the same turn. Do NOT answer with text-only intentions like "I will check ..." or "Let me look up ..." — either call the tool now, or answer fully without promising any tool call.`
 
+// ── XML tool-call 漏出復原（防禦性 fallback；違反 ADR-021 silent fallback —
+//    所以 detect 時印 loud warn 提醒 server template 仍有問題）──────────────
+
+/**
+ * Qwen3.5 在 thinking 結束後**有時**會 fall back 到 native Hermes-style XML
+ * 格式直接寫進 content text，jinja parser 沒攔截就漏出來：
+ *
+ *   <tool_call>
+ *   <function=Bash>
+ *   <parameter=command>ls -la</parameter>
+ *   <parameter=description>列出</parameter>
+ *   </function>
+ *   </tool_call>
+ *
+ * 此 helper 解析這種 XML，回傳 tool spec + 剝掉 XML 的 text。tolerant
+ * 容錯：允許大小寫、空白、parameter value 含換行、多個 tool_call 並列。
+ * 解析失敗（找不到 function= 名稱 / parameter 不成對）→ 視為無 tool，
+ * 整段保留為 text。
+ */
+export interface LeakedXmlToolCall {
+  name: string
+  input: Record<string, unknown>
+}
+
+export function parseLeakedXmlToolCalls(text: string): {
+  strippedText: string
+  toolCalls: LeakedXmlToolCall[]
+} {
+  if (!text.includes('<tool_call>')) {
+    return { strippedText: text, toolCalls: [] }
+  }
+  const toolCalls: LeakedXmlToolCall[] = []
+  let stripped = ''
+  let cursor = 0
+  // 大小寫不敏感、跨行 — `[\s\S]` 不依賴 dotall flag（Bun TS 全平台一致）
+  const blockRe = /<tool_call>([\s\S]*?)<\/tool_call>/gi
+  let m: RegExpExecArray | null
+  while ((m = blockRe.exec(text)) !== null) {
+    stripped += text.slice(cursor, m.index)
+    cursor = m.index + m[0].length
+    const inner = m[1] ?? ''
+    const fnMatch = /<function=([^>\s]+)>([\s\S]*?)<\/function>/i.exec(inner)
+    if (!fnMatch) continue
+    const name = fnMatch[1]?.trim()
+    const body = fnMatch[2] ?? ''
+    if (!name) continue
+    const input: Record<string, unknown> = {}
+    const paramRe = /<parameter=([^>\s]+)>([\s\S]*?)<\/parameter>/gi
+    let p: RegExpExecArray | null
+    while ((p = paramRe.exec(body)) !== null) {
+      const k = p[1]?.trim()
+      if (!k) continue
+      // qwen 通常會在 value 前後夾換行/空白；trim 掉避免多帶
+      input[k] = (p[2] ?? '').trim()
+    }
+    toolCalls.push({ name, input })
+  }
+  stripped += text.slice(cursor)
+  // 若一個 tool_call 都沒解析成功，視為解析失敗 — 不剝、不回 toolCalls
+  if (toolCalls.length === 0) return { strippedText: text, toolCalls: [] }
+  return { strippedText: stripped, toolCalls }
+}
+
 // ── 回應翻譯：OpenAI → Anthropic（non-streaming）──────────────────────────
 
 /**
@@ -488,11 +551,38 @@ function translateChatCompletionToAnthropic(
   }
 
   const textContent = choice.message.content
-  if (typeof textContent === 'string' && textContent.length > 0) {
+  let xmlSynthesized = false
+  // XML 可能漏在 content 或 reasoning_content（qwen 偶爾把 tool_call 寫進 thinking）
+  const noStructuredCalls = !Array.isArray(toolCalls) || toolCalls.length === 0
+  const xmlCorpus = (typeof textContent === 'string' ? textContent : '') +
+    '\n' + (typeof reasoning === 'string' ? reasoning : '')
+  if (noStructuredCalls && xmlCorpus.includes('<tool_call>')) {
+    const parsed = parseLeakedXmlToolCalls(xmlCorpus)
+    if (parsed.toolCalls.length > 0) {
+      // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
+      console.warn(
+        `[llamacpp-adapter] XML tool-call leaked into response (recovered ${parsed.toolCalls.length} call(s)). ` +
+          `Server jinja template did not intercept native Hermes-style format. ` +
+          `Consider adding --chat-template-kwargs '{"enable_thinking":false}' to llama-server extraArgs.`,
+      )
+      for (const tc of parsed.toolCalls) {
+        content.push({
+          type: 'tool_use',
+          id: `toolu_xmlfallback_${Date.now()}_${content.length}`,
+          name: tc.name,
+          input: tc.input,
+        })
+      }
+      xmlSynthesized = true
+    }
+  }
+  if (typeof textContent === 'string' && textContent.length > 0 && !xmlSynthesized) {
     content.push({ type: 'text', text: textContent })
   }
 
-  const stopReason = FINISH_TO_STOP[choice.finish_reason] ?? 'end_turn'
+  const stopReason = xmlSynthesized
+    ? 'tool_use'
+    : (FINISH_TO_STOP[choice.finish_reason] ?? 'end_turn')
 
   return {
     id: openai.id || mkMsgId(),
@@ -614,6 +704,9 @@ export async function* translateOpenAIStreamToAnthropic(
   // QueryEngine.ts:1156 的 `last(content).type === 'text'` 提取會落空，
   // 導致 cli `-p` 模式 stdout 空白（M-QWEN35-RENDER bug）。
   let accumulatedThinking = ''
+  // 累積 content text 是給 XML-leak fallback 用的（Qwen3.5 thinking 結束後
+  // 偶爾把 <tool_call><function=...> 寫進 content 而非結構化 tool_calls）
+  let accumulatedText = ''
   let emittedText = false
   let emittedThinking = false
   let emittedToolCall = false
@@ -697,6 +790,8 @@ export async function* translateOpenAIStreamToAnthropic(
   )
 
   let watchdogAborted: InstanceType<typeof WatchdogAbortError> | null = null
+  // hoist outside try：message_delta yield 在 catch 後面 reference 它
+  let xmlFallbackCount = 0
 
   try {
   for await (const payload of watchedSse) {
@@ -744,6 +839,7 @@ export async function* translateOpenAIStreamToAnthropic(
           delta: { type: 'text_delta', text: content },
         })
         emittedText = true
+        accumulatedText += content
       }
 
       // 3. tool_call deltas（可多筆，按 openai index 區分）
@@ -846,6 +942,58 @@ export async function* translateOpenAIStreamToAnthropic(
   openToolBlocks.clear()
   toolArgBuffers.clear()
 
+  // XML tool-call 漏出復原（防禦性）：若 stream 全程沒收到結構化 tool_calls
+  // 但 content text 含 <tool_call> XML，解析後補一組合成的 tool_use blocks。
+  // 注意 text_delta 已經 stream 出去了 — 文字端會殘留 XML 視覺雜訊，但 agent
+  // loop 至少能依合成 tool_use 真的執行 tool。違反 ADR-021 silent fallback —
+  // 印 loud warn 標示 server jinja 仍有問題（理想修法是 server 端關 thinking）。
+  // XML 可能漏在 content（accumulatedText）或 reasoning_content
+  // （accumulatedThinking）— qwen 偶爾把整段 tool_call 寫進 thinking。
+  const xmlCorpus = accumulatedText + '\n' + accumulatedThinking
+  if (
+    !watchdogAborted &&
+    !emittedToolCall &&
+    xmlCorpus.includes('<tool_call>')
+  ) {
+    const parsed = parseLeakedXmlToolCalls(xmlCorpus)
+    if (parsed.toolCalls.length > 0) {
+      // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
+      console.warn(
+        `[llamacpp-adapter] XML tool-call leaked into content stream (recovered ${parsed.toolCalls.length} call(s)). ` +
+          `Server jinja template did not intercept native Hermes-style format. ` +
+          `Consider adding --chat-template-kwargs '{"enable_thinking":false}' to llama-server extraArgs.`,
+      )
+      // 此時 text block 已 close（line 820-821）；直接開新 tool_use blocks
+      for (const tc of parsed.toolCalls) {
+        const idx = nextBlockIndex++
+        const toolId = `toolu_xmlfallback_${Date.now()}_${idx}`
+        let combined = ''
+        combined += formatSSE('content_block_start', {
+          type: 'content_block_start',
+          index: idx,
+          content_block: {
+            type: 'tool_use',
+            id: toolId,
+            name: tc.name,
+            input: {},
+          },
+        })
+        combined += formatSSE('content_block_delta', {
+          type: 'content_block_delta',
+          index: idx,
+          delta: { type: 'input_json_delta', partial_json: JSON.stringify(tc.input) },
+        })
+        combined += formatSSE('content_block_stop', {
+          type: 'content_block_stop',
+          index: idx,
+        })
+        yield combined
+        xmlFallbackCount++
+      }
+      emittedToolCall = true
+    }
+  }
+
   // M-QWEN35-RENDER bandaid：reasoning-only 收尾，把 thinking 內容鏡射成
   // text block，讓 QueryEngine `last(content).type === 'text'` 提取在 cli
   // `-p` headless 路徑能拿到值。觸發條件：模型只吐 thinking、沒 content、
@@ -931,7 +1079,9 @@ export async function* translateOpenAIStreamToAnthropic(
         ? watchdogAborted.layer === 'tokenCap'
           ? 'max_tokens'
           : 'end_turn'
-        : (FINISH_TO_STOP[finalFinishReason ?? ''] ?? 'end_turn'),
+        : xmlFallbackCount > 0
+          ? 'tool_use'
+          : (FINISH_TO_STOP[finalFinishReason ?? ''] ?? 'end_turn'),
       stop_sequence: null,
     },
     // M-TOKEN: 除了 output_tokens 外，一併送回 input_tokens / cache_read_input_tokens

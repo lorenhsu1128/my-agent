@@ -1587,6 +1587,24 @@
 
 ---
 
+## 已完成里程碑：M-QWEN35-XML-LEAK — qwen3.5-9b XML tool_call leak adapter fallback（2026-04-30 啟動 + 完成）
+
+**目標**：使用者回報 daemon 模式 LLM 停止運算；診斷後 standalone 也復現。Root cause = qwen3.5-9b thinking 模式偶發吐 Hermes 原生 XML（`<tool_call><function=Bash>...`）到 content 或 reasoning_content，jinja 沒攔。Adapter 加 defensive fallback 把 XML 解析合成 tool_use blocks。
+
+### 任務
+- [x] M-XMLLEAK-1 root cause 確認：直接 curl 復現 + `--chat-template-kwargs '{"enable_thinking":false}'` 8/8 不漏（驗證是 thinking 路徑）
+- [x] M-XMLLEAK-2 `parseLeakedXmlToolCalls(text)` helper：多 tool_call、多 parameter、含換行 value、混合 broken 都覆蓋
+- [x] M-XMLLEAK-3 streaming 路徑（`translateOpenAIStreamToAnthropic`）兩通道（accumulatedText + accumulatedThinking）合併偵測 + 合成 tool_use blocks + stop_reason override + loud warn
+- [x] M-XMLLEAK-4 non-streaming 路徑（`translateChatCompletionToAnthropic`）同步 patch
+- [x] M-XMLLEAK-5 `tests/integration/llamacpp/xml-leak-fallback.test.ts` 11/11 綠 + llamacpp suite 137/137
+- [x] M-XMLLEAK-6 實機冒煙 10 次：7 clean / 1 fallback 救回 / 0 broken
+- [x] M-XMLLEAK-7 LESSONS.md + dev log + commit
+
+### 不在範圍 → 後續
+- 根治：在 `~/.my-agent/llamacpp.jsonc` extraArgs 加 `--chat-template-kwargs '{"enable_thinking":false}'`（會關 thinking，目前先保留 thinking + adapter 兜底的折衷）
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2768,3 +2786,23 @@
 - 2026-04-30 11:05: Session 結束 | 進度：661/759 任務 | 2fce434 chore(todo): session log entries
 
 - 2026-04-30 11:45: Session 結束 | 進度：671/759 任務 | 73e1905 feat(qwen35): 換用 unsloth Qwen3.5-9B Q4_K_M + vision + 128k turbo4
+
+- 2026-04-30 12:03: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
+
+- 2026-04-30 12:18: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
+
+- 2026-04-30 12:27: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
+
+- 2026-04-30 12:35: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
+
+- 2026-04-30 13:46: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
+
+- 2026-04-30 16:13: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
+
+- 2026-04-30 16:17: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
+
+- 2026-04-30 17:00: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
+
+- 2026-04-30 20:24: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
+
+- 2026-04-30 20:39: Session 結束 | 進度：671/759 任務 | 889771a fix(llamacpp): reasoning-only stream 在 adapter 收尾補 text block
