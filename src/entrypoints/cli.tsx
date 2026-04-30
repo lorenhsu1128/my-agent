@@ -150,6 +150,31 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Fast-path for `my-agent config doctor` — config 健康診斷（M-CONFIG-DOCTOR）。
+  // 純讀 + 可選 fix，不需 daemon / setup，獨立短命周期。
+  if (args[0] === 'config' && args[1] === 'doctor') {
+    profileCheckpoint('cli_config_doctor_path');
+    const subArgs = args.slice(2);
+    const json = subArgs.includes('--json');
+    const subCmd = subArgs.find(a => !a.startsWith('--'));
+    let mode: 'check' | 'fix' | 'rewrite-with-docs' = 'check';
+    if (subCmd === 'fix' || subCmd === '--fix') mode = 'fix';
+    else if (
+      subCmd === 'rewrite' ||
+      subCmd === 'rewrite-with-docs' ||
+      subCmd === '--rewrite-with-docs'
+    ) {
+      mode = 'rewrite-with-docs';
+    }
+    const { runConfigDoctor, formatReport, hasErrors } = await import(
+      '../configDoctor/index.js'
+    );
+    const result = await runConfigDoctor({ mode, json });
+    // biome-ignore lint/suspicious/noConsole: CLI output
+    console.log(formatReport(result, json));
+    process.exit(hasErrors(result) ? 1 : 0);
+  }
+
   // Fast-path for `claude daemon [subcommand]`: long-running supervisor.
   if (feature('DAEMON') && args[0] === 'daemon') {
     profileCheckpoint('cli_daemon_path');

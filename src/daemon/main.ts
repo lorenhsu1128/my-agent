@@ -25,6 +25,7 @@ import {
   seedWebConfigIfMissing,
   loadWebConfigSnapshot,
 } from '../webConfig/index.js'
+import { runConfigDoctor, hasErrors, hasWarnings } from '../configDoctor/index.js'
 
 export async function daemonMain(args: string[]): Promise<void> {
   // daemon fast-path 跳過 setup.ts，需要自行載入 config snapshot
@@ -34,6 +35,23 @@ export async function daemonMain(args: string[]): Promise<void> {
   await loadDiscordConfigSnapshot()
   await seedWebConfigIfMissing()
   await loadWebConfigSnapshot()
+
+  // Session start 自動 config doctor check（M-CONFIG-DOCTOR）。
+  // 純讀，發現問題只 stderr warn，不阻擋 daemon 啟動。
+  try {
+    const r = await runConfigDoctor({ mode: 'check' })
+    if (hasErrors(r) || hasWarnings(r)) {
+      const errCount = r.issues.filter(i => i.severity === 'error').length
+      const warnCount = r.issues.filter(i => i.severity === 'warning').length
+      // biome-ignore lint/suspicious/noConsole: startup diagnostics
+      console.warn(
+        `[config-doctor] 偵測到設定問題：${errCount} error / ${warnCount} warning。` +
+          `跑 \`my-agent config doctor\` 看詳情，或 \`my-agent config doctor fix\` 嘗試修復。`,
+      )
+    }
+  } catch {
+    // best-effort，doctor 失敗不阻擋
+  }
 
   const sub = args[0]
   const ctx: DaemonCliContext = {

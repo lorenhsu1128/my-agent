@@ -21,6 +21,13 @@
 
 ## 設定檔 seed 相關
 
+### Config doctor 用「檔案優先 fast-path」打 setup.ts hot path
+- **發生什麼事**：M-CONFIG-DOCTOR session-start 自動 check，要求 < 50ms。原本擔心要全部 schema validate 5 個 jsonc 會慢；實測 34ms。
+- **根本原因**：Zod safeParse 對 130k+ context size config 也只 ~5ms；瓶頸是 fs.readFile（本地 SSD ~10ms）。整體靠 `existsSync → 缺檔提早 return` 把缺檔情境降到 < 1ms，已存在情境仍走 parse + validate。
+- **正確做法**：fast-path early-return 是 doctor 設計的核心 — 90% 使用者環境都全綠，所以缺檔 / 壞檔 case 才需要慢路徑。每個 check 函式優先做 `existsSync` 與 `parseJsonc`（壞 → 提早回 ERROR），最後才跑 schema 與跨檔檢查。
+- **相關檔案**：`src/configDoctor/checks/*.ts`、`src/configDoctor/index.ts`。
+- **日期**：2026-04-30
+
 ### 「documented bug 不一定還在」— 跟 milestone 文件當作真理會走錯
 - **發生什麼事**：`src/globalConfig/seed.ts` 註解明確寫「saveConfigWithLock 過濾預設值 → 模板註解被洗掉，要等 M-CONFIG-JSONC-SAVE 才修」。我以此為據規劃了 P1 修復項目，動工後實際讀 saveConfigWithLock 才發現 JSONC 保留路徑（`hasJsoncComments → diffPaths → jsonc.modify`）已落地，回歸測試 `tests/integration/jsonc/saveGlobalConfig-preserve.test.ts` 6/6 過。
 - **根本原因**：M-CONFIG-JSONC milestone 落地後，誰都沒回頭更新 `globalConfig/seed.ts` 那段註解，導致下游規劃以為還沒修。

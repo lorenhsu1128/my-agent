@@ -312,6 +312,27 @@ export async function setup(
     // 同樣 await；缺 / 壞都走 DEFAULT_LLAMACPP_CONFIG。
     await seedLlamaCppConfigIfMissing()
     await loadLlamaCppConfigSnapshot()
+    // M-CONFIG-DOCTOR：session start 自動 --check，純讀，不阻擋啟動。
+    // 走 fire-and-forget 避免阻塞 hot path（doctor 通常 < 50ms 但累積成本仍可省）。
+    void (async () => {
+      try {
+        const { runConfigDoctor, hasErrors, hasWarnings } = await import(
+          './configDoctor/index.js'
+        )
+        const r = await runConfigDoctor({ mode: 'check' })
+        if (hasErrors(r) || hasWarnings(r)) {
+          const e = r.issues.filter(i => i.severity === 'error').length
+          const w = r.issues.filter(i => i.severity === 'warning').length
+          // biome-ignore lint/suspicious/noConsole: startup diagnostics
+          console.warn(
+            `[config-doctor] 偵測到 ${e} error / ${w} warning。` +
+              `跑 /config-doctor 看詳情。`,
+          )
+        }
+      } catch {
+        // best-effort
+      }
+    })()
     if (feature('CONTEXT_COLLAPSE')) {
       /* eslint-disable @typescript-eslint/no-require-imports */
       ;(
