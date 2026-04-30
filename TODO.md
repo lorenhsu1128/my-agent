@@ -2715,3 +2715,7 @@
 - 2026-04-29 23:03: Session 結束 | 進度：660/748 任務 | d83d171 fix(llamacpp): sanitize 改用 key-skip + 加 LLAMA_DUMP_PRESANITIZE/RAWBODY 診斷 + 11 unit test
 
 - 2026-04-30 05:36: Session 結束 | 進度：660/748 任務 | 99e3e80 docs(corruption-hunt): 完整調查過程文件化到 docs/plans/
+
+- 2026-04-30 05:59: Session 結束 | 進度：660/748 任務 | 44e7e78 fix(llamacpp): 加 unconditional NULL-byte 偵測 + 重大發現 corruption bytes 來自 ICU table
+
+- 2026-04-30 06:06: Session 結束 | 進度：660/748 任務 | 8551134 feat(corruption-hunt): 三階段 NULL byte detection 待 user 觸發後定位來源
