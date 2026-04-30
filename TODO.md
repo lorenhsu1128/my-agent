@@ -1579,7 +1579,7 @@
 - [x] `bun run typecheck` 綠
 
 ### 不在範圍 → 後續 milestone
-- **M-QWEN35-RENDER**：修 headless `-p` 模式對 reasoning_content + tool_use 的渲染（standalone & daemon 都偶發 stdout 空輸出，pipeline 是通的，純 cli 端 print.ts 沒 flush）
+- ~~**M-QWEN35-RENDER**~~ ✅ 已修（2026-04-30）：root cause 是 reasoning-only stream 在 adapter 結束時沒 emit text block，QueryEngine `last(content).type === 'text'` 提取落空。修法在 adapter 邊界加 fallback：`emittedThinking && !emittedText && !emittedToolCall` → 鏡射 thinking 成 text block。3 unit test + vision E2E Phase 2/3 升級為 stdout 直接含 紅
 - M-QWEN35-VARIANT：UD-Q4_K_XL（5.97 GB）對比實驗 + 切換 UI
 - M-QWEN35-256K：上 256k ctx 需要等更激進壓縮（turbo2_tcq）+ partial offload，目前不做
 - M-QWEN35-THINKING：開啟 Qwen3.5 thinking 模式（`enable_thinking:true`）並導 reasoning trace 進 TUI panel
@@ -2766,3 +2766,5 @@
 - 2026-04-30 10:49: Session 結束 | 進度：661/759 任務 | 2fce434 chore(todo): session log entries
 
 - 2026-04-30 11:05: Session 結束 | 進度：661/759 任務 | 2fce434 chore(todo): session log entries
+
+- 2026-04-30 11:45: Session 結束 | 進度：671/759 任務 | 73e1905 feat(qwen35): 換用 unsloth Qwen3.5-9B Q4_K_M + vision + 128k turbo4

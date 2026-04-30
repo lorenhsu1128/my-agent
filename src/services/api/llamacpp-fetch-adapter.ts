@@ -594,7 +594,7 @@ async function* iterOpenAISSELines(
  *     — 每個工具呼叫佔一個 content block，全部留到 stream 結束才關
  *   - nextBlockIndex：單調遞增的 Anthropic content block index 分配器
  */
-async function* translateOpenAIStreamToAnthropic(
+export async function* translateOpenAIStreamToAnthropic(
   upstream: ReadableStream<Uint8Array>,
   model: string,
   msgId: string,
@@ -606,6 +606,14 @@ async function* translateOpenAIStreamToAnthropic(
   let textType: 'text' | 'thinking' | null = null
   // debug 觀測：追蹤整個 stream 是否吐過 text / thinking / tool_calls（供
   // finish_reason 結束時診斷「承諾用工具卻沒 emit」的情境）
+  // accumulatedThinking：累積整段 reasoning_content；當 stream 結束發現
+  // emittedThinking && !emittedText && !emittedToolCall（reasoning 模型只出
+  // thinking 沒 content 也沒 tool call —— 例如 Qwen3.5 thinking 在
+  // headless -p 模式 / 用完 max_tokens budget on reasoning），會在 stream
+  // 結尾追加一個 text block 把 thinking 內容當 final answer，否則
+  // QueryEngine.ts:1156 的 `last(content).type === 'text'` 提取會落空，
+  // 導致 cli `-p` 模式 stdout 空白（M-QWEN35-RENDER bug）。
+  let accumulatedThinking = ''
   let emittedText = false
   let emittedThinking = false
   let emittedToolCall = false
@@ -720,6 +728,7 @@ async function* translateOpenAIStreamToAnthropic(
           delta: { type: 'thinking_delta', thinking: reasoning_content },
         })
         emittedThinking = true
+        accumulatedThinking += reasoning_content
       }
 
       // 2. text delta
@@ -836,6 +845,44 @@ async function* translateOpenAIStreamToAnthropic(
   const finalToolBlockCount = openToolBlocks.size
   openToolBlocks.clear()
   toolArgBuffers.clear()
+
+  // M-QWEN35-RENDER bandaid：reasoning-only 收尾，把 thinking 內容鏡射成
+  // text block，讓 QueryEngine `last(content).type === 'text'` 提取在 cli
+  // `-p` headless 路徑能拿到值。觸發條件：模型只吐 thinking、沒 content、
+  // 也沒 tool_call（Qwen3.5 用完 budget on reasoning 或 chat template 把
+  // 答案留在 reasoning_content）。watchdog 中止與正常 emittedText 路徑
+  // 都會略過此 fallback。
+  if (
+    !watchdogAborted &&
+    emittedThinking &&
+    !emittedText &&
+    !emittedToolCall &&
+    accumulatedThinking.length > 0
+  ) {
+    // 先關掉開著的 thinking block
+    if (textIndex >= 0) {
+      yield stopBlock(textIndex)
+      textIndex = -1
+      textType = null
+    }
+    // 開一個新 text block，把累積 thinking 一次性 dump 進去
+    const fallbackIdx = nextBlockIndex++
+    yield formatSSE('content_block_start', {
+      type: 'content_block_start',
+      index: fallbackIdx,
+      content_block: { type: 'text', text: '' },
+    })
+    yield formatSSE('content_block_delta', {
+      type: 'content_block_delta',
+      index: fallbackIdx,
+      delta: { type: 'text_delta', text: accumulatedThinking },
+    })
+    yield formatSSE('content_block_stop', {
+      type: 'content_block_stop',
+      index: fallbackIdx,
+    })
+    emittedText = true
+  }
 
   // M-LLAMACPP-CTX: finish_reason=length + 0 output 是典型上下文溢出徵兆
   // （server 吃掉 prompt 但沒空間產 token）。寫一條 stderr 警示協助診斷。

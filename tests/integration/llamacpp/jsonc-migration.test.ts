@@ -69,7 +69,7 @@ describe('llamacpp JSONC template', () => {
     expect(server.port).toBe(8080)
     expect(server.ctxSize).toBe(131072)
     expect(server.gpuLayers).toBe(99)
-    expect(server.alias).toBe('qwen3.5-9b-neo')
+    expect(server.alias).toBe('qwen3.5-9b')
     expect(Array.isArray(server.extraArgs)).toBe(true)
   })
 })

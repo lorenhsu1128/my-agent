@@ -32,13 +32,28 @@ export const LlamaCppServerSchema = z.object({
   /** --model 路徑（相對 repo root 或絕對路徑） */
   modelPath: z
     .string()
-    .default('models/Jackrong_Qwen3.5-9B-Neo-Q5_K_M.gguf'),
+    .default('models/Qwen3.5-9B-Q4_K_M.gguf'),
   /** --alias，讓 OpenAI 相容客戶端用這名字呼叫模型 */
-  alias: z.string().default('qwen3.5-9b-neo'),
+  alias: z.string().default('qwen3.5-9b'),
   /** llama-server binary 位置（相對 repo root 或絕對路徑） */
-  binaryPath: z.string().default('llama/llama-server.exe'),
+  binaryPath: z
+    .string()
+    .default('buun-llama-cpp/build/bin/Release/llama-server.exe'),
   /** 要額外帶的 flag（例 --jinja、--slots、--cache-reuse 1） */
-  extraArgs: z.array(z.string()).default(['--flash-attn', 'auto', '--jinja']),
+  extraArgs: z
+    .array(z.string())
+    .default([
+      '--flash-attn', 'on',
+      '--cache-type-k', 'turbo4',
+      '--cache-type-v', 'turbo4',
+      '-b', '2048',
+      '-ub', '512',
+      '-np', '1',
+      '--threads', '12',
+      '--threads-batch', '12',
+      '--no-mmap',
+      '--jinja',
+    ]),
   /**
    * Vision 相關設定（M-VISION）：僅 shell 端使用。
    * 有 mmprojPath 才會對 llama-server 加 `--mmproj`。
@@ -106,7 +121,7 @@ export const LlamaCppRemoteSchema = z.object({
   /** OpenAI 相容 endpoint（含 /v1） */
   baseUrl: z.string().url().default('http://127.0.0.1:8080/v1'),
   /** 送給 server 的 model 名稱 */
-  model: z.string().default('qwen3.5-9b-neo'),
+  model: z.string().default('qwen3.5-9b'),
   /** Bearer token（optional）；有值時 fetch 加 Authorization header */
   apiKey: z.string().optional(),
   /** 估算用 context 長度（tokens）；用於 watchdog token-cap 判斷 */
@@ -142,7 +157,7 @@ export const LlamaCppConfigSchema = z.object({
   /** my-agent TS 端連線的 OpenAI 相容 endpoint（含 /v1） */
   baseUrl: z.string().url().default('http://127.0.0.1:8080/v1'),
   /** my-agent 端送給 server 的 model 名稱（需與 server.alias 一致） */
-  model: z.string().default('qwen3.5-9b-neo'),
+  model: z.string().default('qwen3.5-9b'),
   /** 用於 auto-compact 閾值計算；若 server /slots 查不到就用此值 */
   contextSize: z.number().int().positive().default(131072),
   /**
@@ -161,7 +176,7 @@ export const LlamaCppConfigSchema = z.object({
    */
   modelAliases: z
     .array(z.string())
-    .default(['qwen3.5-9b-neo', 'qwopus3.5-9b-v3']),
+    .default(['qwen3.5-9b', 'qwen3.5-9b-neo', 'qwopus3.5-9b-v3']),
   /** llama-server 啟動相關參數（scripts/llama/serve.sh 讀） */
   server: LlamaCppServerSchema.default({}),
   /**
