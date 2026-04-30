@@ -1552,6 +1552,41 @@
 
 ---
 
+## 當前里程碑：M-QWEN35 — 換用 unsloth Qwen3.5-9B Q4_K_M + vision + 128k turbo4（2026-04-30 啟動）
+
+**目標**：把 local + remote 的 llamacpp 模型從 Qwopus3.5-9B-v3 Q5_K_S 換成 unsloth Qwen3.5-9B Q4_K_M + 對應 mmproj-F16，全 GPU 跑 128k ctx + buun fork turbo4 KV cache 壓縮（4.25 bpv）；Vision 從 Gemopus mmproj 改用 Qwen3.5 原生 mmproj，把 vision E2E 自動化擴展到 TUI standalone + daemon 兩模式。
+
+**對齊決策**：
+- Q4_K_M（5.68 GB）vs Q5/Q6：選 Q4_K_M 是因為要把 KV cache 騰給 128k ctx（turbo4 ≈ 5.1 GB），總 ≈ 11.8 GB / 12 GB VRAM
+- 256k ctx 在 12 GB VRAM 不可行（純 turbo4 需 16.9 GB），降到 128k 換取全 GPU 載入
+- mmproj-F16（918 MB）vs F32：F16 品質夠且省 1 GB VRAM
+- local + remote 都換（remote 在 routing 層分流，但兩邊指向同一機）
+- 既有 Gemopus 模型 + Jackrong Neo 模型 keep（不刪 GGUF），只改 jsonc 預設指向
+
+### 任務
+- [x] M-QWEN35-1 確認 buun-llama-cpp build 8961 已存在 + CUDA 啟用 + RTX 5070 Ti 12GB 偵測（免重編）
+- [x] M-QWEN35-2 下載 `Qwen3.5-9B-Q4_K_M.gguf`（5.68 GB）+ `mmproj-Qwen3.5-9B-F16.gguf`（918 MB）→ `models/`
+- [x] M-QWEN35-3 改 `~/.my-agent/llamacpp.jsonc`：local + remote 都指 Qwen3.5-9B Q4_K_M；alias `qwen3.5-9b`；vision.enabled=true 加 `server.vision.mmprojPath`；modelAliases 加 `qwen3.5-9b`；extraArgs 升 `-b 2048 -ub 512 --threads 12 --no-mmap`
+- [x] M-QWEN35-4 同步改 `src/llamacppConfig/bundledTemplate.ts`（seed 對齊）+ 重寫 `scripts/llama/setup.sh`（buun submodule build + unsloth 模型）
+- [x] M-QWEN35-5 寫 vision E2E `tests/e2e/vision-e2e.sh` 三 phase（adapter 直連 / TUI standalone / daemon attach）+ `_make-red-png.ts` 128×128 PNG 產生器；雙準則：stdout 含 red/紅 OR server `/slots id_task` 在 cli 跑期間遞增（規避 my-agent 對 reasoning + tool_use 在 headless `-p` 不渲染的 bug）
+- [x] M-QWEN35-6 冒煙：`./cli -p` 純文字 PASS；vision E2E 3/3 綠（adapter ✓ red、TUI standalone pipeline ✓ id 23334→24122、daemon attach pipeline ✓ id 24122→24949）；`bun run typecheck` 只剩 baseline TS5101
+- [x] M-QWEN35-7 commit + dev-log + LESSONS
+
+### 完成標準
+- [x] llama-server.exe + Qwen3.5-9B Q4_K_M 載入後 fit 進 12 GB VRAM（實測 model 4861 MiB + KV turbo4 1056 MiB + compute 493 MiB ≈ 6.4 GB，剩餘 ~4.5 GB 給 mmproj/CUDA buf）
+- [x] `./cli -p "hi"` 回應正常
+- [x] vision E2E：TUI standalone 與 daemon 模式都驗證 vision request 抵達 server 並正確處理 image
+- [x] `bun run typecheck` 綠
+
+### 不在範圍 → 後續 milestone
+- **M-QWEN35-RENDER**：修 headless `-p` 模式對 reasoning_content + tool_use 的渲染（standalone & daemon 都偶發 stdout 空輸出，pipeline 是通的，純 cli 端 print.ts 沒 flush）
+- M-QWEN35-VARIANT：UD-Q4_K_XL（5.97 GB）對比實驗 + 切換 UI
+- M-QWEN35-256K：上 256k ctx 需要等更激進壓縮（turbo2_tcq）+ partial offload，目前不做
+- M-QWEN35-THINKING：開啟 Qwen3.5 thinking 模式（`enable_thinking:true`）並導 reasoning trace 進 TUI panel
+- 模型自動探測機制（VRAM 不夠就自動降 ctx）
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -2719,3 +2754,15 @@
 - 2026-04-30 05:59: Session 結束 | 進度：660/748 任務 | 44e7e78 fix(llamacpp): 加 unconditional NULL-byte 偵測 + 重大發現 corruption bytes 來自 ICU table
 
 - 2026-04-30 06:06: Session 結束 | 進度：660/748 任務 | 8551134 feat(corruption-hunt): 三階段 NULL byte detection 待 user 觸發後定位來源
+
+- 2026-04-30 09:00: Session 結束 | 進度：660/748 任務 | 2fce434 chore(todo): session log entries
+
+- 2026-04-30 10:03: Session 結束 | 進度：660/748 任務 | 2fce434 chore(todo): session log entries
+
+- 2026-04-30 10:23: Session 結束 | 進度：661/759 任務 | 2fce434 chore(todo): session log entries
+
+- 2026-04-30 10:28: Session 結束 | 進度：661/759 任務 | 2fce434 chore(todo): session log entries
+
+- 2026-04-30 10:49: Session 結束 | 進度：661/759 任務 | 2fce434 chore(todo): session log entries
+
+- 2026-04-30 11:05: Session 結束 | 進度：661/759 任務 | 2fce434 chore(todo): session log entries

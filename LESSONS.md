@@ -630,3 +630,17 @@
 - **日期**：2026-04-26
 
 ---
+
+### Qwen3.5 thinking model + tool_use 在 cli `-p` headless（非 TTY）路徑下不渲染 content
+
+- **發生什麼事**：M-QWEN35 vision E2E 跑 standalone TUI（`MY_AGENT_NO_DAEMON_AUTOSTART=1 ./cli-dev -p "請用 Read 讀 ${PNG} 然後說顏色"`）stdout 只有 `[sessionIndex]` 一行，模型實際輸出消失。同 prompt 直接打 server `/v1/chat/completions` 正常回 `Red`。Daemon attach 模式下也偶發。
+- **根本原因**：Qwen3.5 在 jinja chat template 預設帶 `thinking=1`（server log: `init: chat template, thinking = 1`），輸出走 `reasoning_content` + 末段 `content`。當「reasoning + tool_call + 第二輪 reasoning」混在同一 turn 時，my-agent 在 stdout 不是 TTY（被 `$(...)` 捕捉）的條件下沒把 final assistant text flush 出來。**vision pipeline 本身是通的** — server 端 `/slots` 的 `id_task` 會增、image 處理 log 也有，只是 cli 沒印。
+- **正確做法**：
+  - **驗 pipeline 用 server-side probe**：`tests/e2e/vision-e2e.sh` Phase 2/3 雙準則 — stdout 含預期字 OR `id_task` 在 cli 跑期間遞增 + server log 有 `process_chun: processing image`，後者證實請求抵達 server。
+  - **使用者層面**：reasoning 模型 + tool_use 場景優先走 daemon attach 模式（WS 路徑，rendering 較穩）或 interactive TTY；headless `-p` 暫不可靠，等 print.ts / headless renderer 對 reasoning_content 補洞。
+  - **debug 工具**：`LLAMA_DUMP_BODY=<dir>` 看請求；`curl /slots | jq '.[0].id_task'` 看 server 端有沒有收到。
+- **相關檔案**：`tests/e2e/vision-e2e.sh`、`src/print.ts`（待修）、`src/services/api/llamacpp-fetch-adapter.ts`
+- **後續 milestone**：M-QWEN35-RENDER（修 headless `-p` 對 reasoning_content + tool_use 的渲染）
+- **日期**：2026-04-30
+
+---

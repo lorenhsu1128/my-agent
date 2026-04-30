@@ -35,7 +35,7 @@ export const LLAMACPP_JSONC_TEMPLATE = `{
 
   // 送給 server 的模型名稱（必須與 server.alias 一致，否則 server 拒請求）。
   // env \`LLAMA_MODEL\` 覆蓋此欄位。
-  "model": "qwen3.5-9b-neo",
+  "model": "qwen3.5-9b",
 
   // 估算用的 context 長度（tokens）。用途：auto-compact 閾值計算。
   // 優先順序：server /slots 實際值 → env \`LLAMACPP_CTX_SIZE\` →
@@ -54,6 +54,7 @@ export const LLAMACPP_JSONC_TEMPLATE = `{
   // 使用者下 --model <alias> 且 alias 在此清單 → 即使沒設 MY_AGENT_USE_LLAMACPP
   // 也會走 llama.cpp（讓本地模型跟 Anthropic 模型可並存切換）。
   "modelAliases": [
+    "qwen3.5-9b",
     "qwen3.5-9b-neo",
     "qwopus3.5-9b-v3"
   ],
@@ -78,20 +79,28 @@ export const LLAMACPP_JSONC_TEMPLATE = `{
     "gpuLayers": 99,
 
     // --model：GGUF 檔路徑。相對 repo root 或絕對路徑。
-    "modelPath": "models/Jackrong_Qwen3.5-9B-Neo-Q5_K_M.gguf",
+    "modelPath": "models/Qwen3.5-9B-Q4_K_M.gguf",
 
     // --alias：OpenAI 相容層回給 client 的模型名。必須與 client 端 model 一致。
     // env \`LLAMA_ALIAS\` 覆蓋。
-    "alias": "qwen3.5-9b-neo",
+    "alias": "qwen3.5-9b",
 
     // llama-server 執行檔路徑（相對 repo root 或絕對）。Windows 要含 .exe 副檔名。
-    "binaryPath": "llama/llama-server.exe",
+    // buun-llama-cpp（TCQ KV cache 壓縮 fork）支援 turbo4 cache type。
+    "binaryPath": "buun-llama-cpp/build/bin/Release/llama-server.exe",
 
     // 額外傳給 llama-server 的 CLI flag。
-    // 常用：--cache-reuse 1（啟用 prefix cache）、--slots（啟用 /slots endpoint）
+    // turbo4 = buun TCQ KV cache 壓縮（4.25 bpv，~3.8x），幾乎無品質損失。
     "extraArgs": [
-      "--flash-attn",
-      "auto",
+      "--flash-attn", "on",
+      "--cache-type-k", "turbo4",
+      "--cache-type-v", "turbo4",
+      "-b", "2048",
+      "-ub", "512",
+      "-np", "1",
+      "--threads", "12",
+      "--threads-batch", "12",
+      "--no-mmap",
       "--jinja"
     ],
 
@@ -99,8 +108,7 @@ export const LLAMACPP_JSONC_TEMPLATE = `{
     "vision": {
       // mmproj（vision projector）GGUF 檔路徑。只有支援多模態的模型需要。
       // 設了才會把 --mmproj 加到 llama-server 啟動參數。
-      // 留空 → 不啟用多模態（純文字模型如 Qwen3.5-9B-Neo 保持此狀態）
-      // "mmprojPath": "models/Gemma-4-E4B-mmproj.gguf"
+      "mmprojPath": "models/mmproj-Qwen3.5-9B-F16.gguf"
     }
   },
 
@@ -108,10 +116,10 @@ export const LLAMACPP_JSONC_TEMPLATE = `{
 
   "vision": {
     // true  → adapter 把 Anthropic image block 翻成 OpenAI image_url（data URL / URL）
-    //         僅在模型有 vision 能力時開啟（例如 Gemopus-4-E4B-it）
+    //         僅在模型有 vision 能力時開啟（例如 Qwen3.5-9B + mmproj）
     // false → adapter 把 image 轉 [Image attachment] 文字佔位符
     //         純文字模型（Qwen3.5-9B-Neo 等）必須保持 false，否則 server 報錯
-    "enabled": false
+    "enabled": true
   },
 
   // ═══ Remote endpoint（M-LLAMACPP-REMOTE；可選）═══
@@ -123,7 +131,7 @@ export const LLAMACPP_JSONC_TEMPLATE = `{
   "remote": {
     "enabled": false,
     "baseUrl": "http://127.0.0.1:8080/v1",
-    "model": "qwen3.5-9b-neo",
+    "model": "qwen3.5-9b",
     // "apiKey": "sk-...",
     "contextSize": 131072
   },

@@ -61,7 +61,7 @@ async function main(): Promise<void> {
   const body = {
     model,
     messages: [{ role: 'system', content: 'You are a helpful vision assistant.' }, ...openaiMessages],
-    max_tokens: 64,
+    max_tokens: 2048,
     stream: false,
   }
 
@@ -80,17 +80,21 @@ async function main(): Promise<void> {
   }
 
   const json = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>
+    choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>
   }
-  const reply = json.choices?.[0]?.message?.content ?? ''
-  console.log(`← reply: ${reply}`)
+  const msg = json.choices?.[0]?.message
+  // Qwen3.5 thinking 模式：實際回答在 content；reasoning chain 在 reasoning_content。
+  // 兩處都比對，以兼容 thinking on/off。
+  const combined = `${msg?.content ?? ''}\n${msg?.reasoning_content ?? ''}`
+  console.log(`← content: ${msg?.content ?? '(empty)'}`)
+  console.log(`← reasoning: ${(msg?.reasoning_content ?? '').slice(0, 200)}`)
 
-  const lower = reply.toLowerCase()
-  if (lower.includes('red') || reply.includes('紅')) {
+  const lower = combined.toLowerCase()
+  if (lower.includes('red') || combined.includes('紅')) {
     console.log('✓ model identified color as red')
     process.exit(0)
   } else {
-    console.error(`✗ expected "red" / "紅" in reply; got: ${reply}`)
+    console.error(`✗ expected "red" / "紅" in reply; got content=${msg?.content} reasoning=${(msg?.reasoning_content ?? '').slice(0, 300)}`)
     process.exit(1)
   }
 }

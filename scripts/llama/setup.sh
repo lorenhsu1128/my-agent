@@ -1,26 +1,29 @@
 #!/usr/bin/env bash
-# 一次性部署：llama.cpp b8457 (CUDA 13.1) + Qwen3.5-9B-Neo Q5_K_M
+# 一次性部署：buun-llama-cpp（TCQ KV cache 壓縮 fork）+ unsloth Qwen3.5-9B Q4_K_M + mmproj-F16
 # 目標：所有產物放在專案根目錄，idempotent — 重跑會跳過已完成步驟。
 # 使用：bash scripts/llama/setup.sh [--force]
+#
+# 前置：
+#   - Windows: Visual Studio 2022 Build Tools（cmake / cl.exe）
+#   - CUDA Toolkit 12.x（nvcc 在 PATH）
+#   - Git LFS（HuggingFace 大檔下載）
 
 set -euo pipefail
 
 # --- 路徑與常數 ---------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-LLAMA_DIR="$ROOT_DIR/llama"
+BUUN_DIR="$ROOT_DIR/buun-llama-cpp"
+BUILD_DIR="$BUUN_DIR/build"
+SERVER_BIN="$BUILD_DIR/bin/Release/llama-server.exe"
 MODELS_DIR="$ROOT_DIR/models"
-CACHE_DIR="$ROOT_DIR/.cache/llama-setup"
-INSTALLED_MARK="$LLAMA_DIR/.installed"
+INSTALLED_MARK="$BUUN_DIR/.installed"
 
-LLAMA_BUILD="b8457"
-LLAMA_ZIP="llama-${LLAMA_BUILD}-bin-win-cuda-13.1-x64.zip"
-CUDART_ZIP="cudart-llama-bin-win-cuda-13.1-x64.zip"
-MODEL_FILE="Jackrong_Qwen3.5-9B-Neo-Q5_K_M.gguf"
-
-LLAMA_URL="https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_BUILD}/${LLAMA_ZIP}"
-CUDART_URL="https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_BUILD}/${CUDART_ZIP}"
-MODEL_URL="https://huggingface.co/bartowski/Jackrong_Qwen3.5-9B-Neo-GGUF/resolve/main/${MODEL_FILE}"
+# 模型來源：unsloth 官方 Qwen3.5-9B GGUF + mmproj-F16
+MODEL_FILE="Qwen3.5-9B-Q4_K_M.gguf"
+MMPROJ_FILE="mmproj-Qwen3.5-9B-F16.gguf"
+MODEL_URL="https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf"
+MMPROJ_URL="https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/mmproj-F16.gguf"
 
 FORCE=0
 [[ "${1:-}" == "--force" ]] && FORCE=1
@@ -31,7 +34,7 @@ c_ok()    { printf "\033[0;32m[+]\033[0m %s\n" "$*"; }
 c_warn()  { printf "\033[1;33m[!]\033[0m %s\n" "$*"; }
 c_fail()  { printf "\033[0;31m[x]\033[0m %s\n" "$*" >&2; exit 1; }
 
-need() { command -v "$1" &>/dev/null || c_fail "缺少指令：$1（Git Bash 應內建）"; }
+need() { command -v "$1" &>/dev/null || c_fail "缺少指令：$1"; }
 
 download() {
   local url="$1" dest="$2"
@@ -47,7 +50,8 @@ download() {
 
 # --- 前置檢查 -----------------------------------------------------------
 need curl
-need unzip
+need git
+need cmake
 
 if [[ -f "$INSTALLED_MARK" && $FORCE -eq 0 ]]; then
   c_ok "已安裝（$(cat "$INSTALLED_MARK")）— 用 --force 重裝"
@@ -56,46 +60,51 @@ if [[ -f "$INSTALLED_MARK" && $FORCE -eq 0 ]]; then
 fi
 
 c_info "部署目錄：$ROOT_DIR"
-mkdir -p "$LLAMA_DIR" "$MODELS_DIR" "$CACHE_DIR"
+mkdir -p "$MODELS_DIR"
 
-# --- 下載 ---------------------------------------------------------------
-download "$LLAMA_URL"  "$CACHE_DIR/$LLAMA_ZIP"
-download "$CUDART_URL" "$CACHE_DIR/$CUDART_ZIP"
-download "$MODEL_URL"  "$MODELS_DIR/$MODEL_FILE"
-
-# --- 解壓 ---------------------------------------------------------------
-c_info "解壓 llama.cpp 至 $LLAMA_DIR"
-unzip -oq "$CACHE_DIR/$LLAMA_ZIP"  -d "$LLAMA_DIR"
-c_info "解壓 cudart 至 $LLAMA_DIR"
-unzip -oq "$CACHE_DIR/$CUDART_ZIP" -d "$LLAMA_DIR"
-
-# llama.cpp zip 有時會解壓到子目錄；若是則平展
-if [[ -d "$LLAMA_DIR/build" ]]; then
-  c_info "平展 build/ 子目錄"
-  mv "$LLAMA_DIR/build/bin/"* "$LLAMA_DIR/" 2>/dev/null || true
-  rm -rf "$LLAMA_DIR/build"
+# --- 1. 確保 submodule 已 init ------------------------------------------
+if [[ ! -f "$BUUN_DIR/CMakeLists.txt" ]]; then
+  c_info "初始化 buun-llama-cpp submodule"
+  (cd "$ROOT_DIR" && git submodule update --init --recursive buun-llama-cpp)
 fi
 
-# --- 驗證 ---------------------------------------------------------------
-SERVER="$LLAMA_DIR/llama-server.exe"
-[[ -x "$SERVER" ]] || c_fail "找不到 $SERVER — 解壓可能失敗"
+# --- 2. 編譯（idempotent — 已存在 server bin 就跳過） -------------------
+if [[ ! -x "$SERVER_BIN" || $FORCE -eq 1 ]]; then
+  c_info "編譯 buun-llama-cpp（CUDA）— 約需 20–40 分鐘"
+  (cd "$BUUN_DIR" && cmake -B build \
+      -DGGML_CUDA=ON \
+      -DGGML_NATIVE=ON \
+      -DGGML_CUDA_FA=ON \
+      -DGGML_CUDA_FA_ALL_QUANTS=ON \
+      -DCMAKE_BUILD_TYPE=Release)
+  (cd "$BUUN_DIR" && cmake --build build --config Release -j)
+  [[ -x "$SERVER_BIN" ]] || c_fail "編譯完成但找不到 $SERVER_BIN"
+else
+  c_info "已編譯：$SERVER_BIN"
+fi
 
-VERSION_OUT="$("$SERVER" --version 2>&1 | head -3 || true)"
-c_info "llama-server 版本：$VERSION_OUT"
-echo "$VERSION_OUT" | grep -q "$LLAMA_BUILD" \
-  || c_warn "版本字串未包含 $LLAMA_BUILD（可能仍可運作）"
+# --- 3. 驗證版本 + CUDA --------------------------------------------------
+VERSION_OUT="$("$SERVER_BIN" --version 2>&1 | head -3 || true)"
+c_info "llama-server 版本/裝置："
+echo "$VERSION_OUT" | sed 's/^/    /'
 
-MODEL_PATH="$MODELS_DIR/$MODEL_FILE"
-MODEL_SIZE="$(du -h "$MODEL_PATH" | cut -f1)"
-c_info "模型：$MODEL_PATH ($MODEL_SIZE)"
+# --- 4. 下載模型 + mmproj ------------------------------------------------
+download "$MODEL_URL"  "$MODELS_DIR/$MODEL_FILE"
+download "$MMPROJ_URL" "$MODELS_DIR/$MMPROJ_FILE"
 
-# --- 完成標記 -----------------------------------------------------------
+MODEL_SIZE="$(du -h "$MODELS_DIR/$MODEL_FILE" | cut -f1)"
+MMPROJ_SIZE="$(du -h "$MODELS_DIR/$MMPROJ_FILE" | cut -f1)"
+c_info "模型：$MODELS_DIR/$MODEL_FILE ($MODEL_SIZE)"
+c_info "mmproj：$MODELS_DIR/$MMPROJ_FILE ($MMPROJ_SIZE)"
+
+# --- 5. 完成標記 ---------------------------------------------------------
 {
-  echo "build=$LLAMA_BUILD"
-  echo "cuda=13.1"
+  echo "fork=buun-llama-cpp"
+  echo "commit=$(cd "$BUUN_DIR" && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   echo "model=$MODEL_FILE"
+  echo "mmproj=$MMPROJ_FILE"
   echo "installed_at=$(date '+%Y-%m-%d %H:%M:%S')"
 } > "$INSTALLED_MARK"
 
-c_ok "Installed llama.cpp $LLAMA_BUILD with CUDA 13.1"
+c_ok "Installed buun-llama-cpp + Qwen3.5-9B Q4_K_M + mmproj-F16"
 c_info "下一步：bash scripts/llama/serve.sh"
