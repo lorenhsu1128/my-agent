@@ -510,6 +510,79 @@ export function parseLeakedXmlToolCalls(text: string): {
   return { strippedText: stripped, toolCalls }
 }
 
+/**
+ * 第二種 leak 變體：bare pythonic（無 `<tool_call>` 外層、無 `</function>` /
+ * `</parameter>` 收尾）。Qwen3.5-9b 走 `tools` 路徑時偶發直接吐：
+ *
+ *   <function=Read>
+ *   <parameter=file_path>
+ *   C:\path\file.md
+ *
+ * 邊界靠下一個 `<function=` / `<parameter=` 或 EOF 推算。容錯：若 model 半補
+ * `</function>` / `</parameter>` 收尾標籤，會在最後一個 param value trim
+ * 階段一併移除。觸發條件由 caller 控制（須無 `<tool_call>` 才走此路徑，
+ * 避免與 Hermes parser 重複）。
+ */
+export function parseLeakedBarePythonicToolCalls(text: string): {
+  strippedText: string
+  toolCalls: LeakedXmlToolCall[]
+} {
+  if (!text.includes('<function=')) {
+    return { strippedText: text, toolCalls: [] }
+  }
+  const fnRe = /<function=([^>\s]+)>/gi
+  const fnMatches: Array<{ name: string; start: number; afterTag: number }> = []
+  let fm: RegExpExecArray | null
+  while ((fm = fnRe.exec(text)) !== null) {
+    const name = fm[1]?.trim()
+    if (!name) continue
+    fnMatches.push({ name, start: fm.index, afterTag: fm.index + fm[0].length })
+  }
+  if (fnMatches.length === 0) {
+    return { strippedText: text, toolCalls: [] }
+  }
+  const toolCalls: LeakedXmlToolCall[] = []
+  for (let i = 0; i < fnMatches.length; i++) {
+    const cur = fnMatches[i]!
+    const nextStart = fnMatches[i + 1]?.start ?? text.length
+    const segment = text.slice(cur.afterTag, nextStart)
+    const input: Record<string, unknown> = {}
+    // 在 segment 內找所有 <parameter=KEY>，邊界＝下一個 <parameter= / EOF
+    const paramTagRe = /<parameter=([^>\s]+)>/gi
+    const paramMatches: Array<{ key: string; afterTag: number }> = []
+    let pm: RegExpExecArray | null
+    while ((pm = paramTagRe.exec(segment)) !== null) {
+      const k = pm[1]?.trim()
+      if (!k) continue
+      paramMatches.push({ key: k, afterTag: pm.index + pm[0].length })
+    }
+    if (paramMatches.length === 0) continue
+    for (let j = 0; j < paramMatches.length; j++) {
+      const p = paramMatches[j]!
+      const nextP = paramMatches[j + 1]?.afterTag
+      const valEnd = nextP !== undefined
+        ? segment.lastIndexOf('<parameter=', nextP)
+        : segment.length
+      let raw = segment.slice(p.afterTag, valEnd >= 0 ? valEnd : segment.length)
+      // 容錯：剝掉收尾標籤殘留（順序：先 function 再 parameter，因為
+      // 「最後一個 param」尾巴可能是 ...value</parameter></function>）
+      raw = raw.replace(/<\/function>\s*$/i, '')
+      raw = raw.replace(/<\/parameter>\s*$/i, '')
+      raw = raw.replace(/<\/function>\s*$/i, '')
+      input[p.key] = raw.trim()
+    }
+    toolCalls.push({ name: cur.name, input })
+  }
+  if (toolCalls.length === 0) {
+    return { strippedText: text, toolCalls: [] }
+  }
+  // strippedText：從第一個 <function=> 起整段都剝（含後續 param body 與
+  // model 半補的 closing tags）。前綴保留。
+  const firstStart = fnMatches[0]!.start
+  const stripped = text.slice(0, firstStart).replace(/\s+$/u, '')
+  return { strippedText: stripped, toolCalls }
+}
+
 // ── 回應翻譯：OpenAI → Anthropic（non-streaming）──────────────────────────
 
 /**
@@ -569,6 +642,26 @@ function translateChatCompletionToAnthropic(
         content.push({
           type: 'tool_use',
           id: `toolu_xmlfallback_${Date.now()}_${content.length}`,
+          name: tc.name,
+          input: tc.input,
+        })
+      }
+      xmlSynthesized = true
+    }
+  } else if (noStructuredCalls && xmlCorpus.includes('<function=')) {
+    // bare pythonic 變體：無 <tool_call> 包外層、可能無收尾標籤
+    const parsed = parseLeakedBarePythonicToolCalls(xmlCorpus)
+    if (parsed.toolCalls.length > 0) {
+      // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
+      console.warn(
+        `[llamacpp-adapter] bare pythonic tool-call leaked into response (recovered ${parsed.toolCalls.length} call(s)). ` +
+          `Server jinja did not parse <function=NAME>/<parameter=KEY> as tool_call. ` +
+          `Check llama-server chat template handling of the tools array.`,
+      )
+      for (const tc of parsed.toolCalls) {
+        content.push({
+          type: 'tool_use',
+          id: `toolu_pyfallback_${Date.now()}_${content.length}`,
           name: tc.name,
           input: tc.input,
         })
@@ -967,6 +1060,48 @@ export async function* translateOpenAIStreamToAnthropic(
       for (const tc of parsed.toolCalls) {
         const idx = nextBlockIndex++
         const toolId = `toolu_xmlfallback_${Date.now()}_${idx}`
+        let combined = ''
+        combined += formatSSE('content_block_start', {
+          type: 'content_block_start',
+          index: idx,
+          content_block: {
+            type: 'tool_use',
+            id: toolId,
+            name: tc.name,
+            input: {},
+          },
+        })
+        combined += formatSSE('content_block_delta', {
+          type: 'content_block_delta',
+          index: idx,
+          delta: { type: 'input_json_delta', partial_json: JSON.stringify(tc.input) },
+        })
+        combined += formatSSE('content_block_stop', {
+          type: 'content_block_stop',
+          index: idx,
+        })
+        yield combined
+        xmlFallbackCount++
+      }
+      emittedToolCall = true
+    }
+  } else if (
+    !watchdogAborted &&
+    !emittedToolCall &&
+    xmlCorpus.includes('<function=')
+  ) {
+    // bare pythonic 變體：無 <tool_call> 包外層、可能無收尾標籤
+    const parsed = parseLeakedBarePythonicToolCalls(xmlCorpus)
+    if (parsed.toolCalls.length > 0) {
+      // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
+      console.warn(
+        `[llamacpp-adapter] bare pythonic tool-call leaked into content stream (recovered ${parsed.toolCalls.length} call(s)). ` +
+          `Server jinja did not parse <function=NAME>/<parameter=KEY> as tool_call. ` +
+          `Check llama-server chat template handling of the tools array.`,
+      )
+      for (const tc of parsed.toolCalls) {
+        const idx = nextBlockIndex++
+        const toolId = `toolu_pyfallback_${Date.now()}_${idx}`
         let combined = ''
         combined += formatSSE('content_block_start', {
           type: 'content_block_start',
