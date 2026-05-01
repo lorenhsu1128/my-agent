@@ -8,6 +8,7 @@
  *   - outputFormat 不報錯（降級為純 prompt）
  */
 import {
+  afterAll,
   afterEach,
   beforeEach,
   describe,
@@ -16,26 +17,22 @@ import {
   test,
 } from 'bun:test'
 
-mock.module('../../../src/utils/model/providers', () => ({
-  isLlamaCppActive: () => true,
-  getAPIProvider: () => 'llamacpp',
-  isLlamaCppModel: () => true,
-  getLlamaCppModelAliases: () => [],
-  LLAMACPP_MODEL_ALIASES: [],
-  DEFAULT_LLAMACPP_BASE_URL: 'http://127.0.0.1:8080/v1',
-  DEFAULT_LLAMACPP_MODEL: 'test-haiku-model',
-  getLlamaCppConfig: () => null,
-  queryLlamaCppContextSize: async () => undefined,
-  getLlamaCppContextSize: () => null,
-  isFirstPartyAnthropicBaseUrl: () => false,
-  getAPIProviderForStatsig: () => 'llamacpp',
-}))
+// 不 mock providers 模組（會跨檔污染整個 process — bun:test 不能 unmock）。
+// 改用 env flag 讓 isLlamaCppActive() 自然回 true：MY_AGENT_USE_LLAMACPP=1
+// 配合下方 llamacppConfig/index 的 snapshot mock 提供假 baseUrl/model。
+const _origUseLlamacpp = process.env.MY_AGENT_USE_LLAMACPP
+process.env.MY_AGENT_USE_LLAMACPP = '1'
 
-// M-LLAMACPP-REMOTE: spread real index（LESSONS.md「mock.module 必須 spread」）
+// M-LLAMACPP-REMOTE: spread real index 與 spread real snapshot（LESSONS.md
+// 「mock.module 必須 spread」）。snapshot 必須 spread real 預設，否則只給
+// { baseUrl, model } 會讓後續 test 透過 context.ts 讀 cfg.contextSize/
+// modelAliases 等欄位變 undefined → NaN 連鎖。
 const _realLlamacppConfig_qh = await import('../../../src/llamacppConfig/index')
+const _realSnap_qh = _realLlamacppConfig_qh.getLlamaCppConfigSnapshot()
 mock.module('../../../src/llamacppConfig/index', () => ({
   ..._realLlamacppConfig_qh,
   getLlamaCppConfigSnapshot: () => ({
+    ..._realSnap_qh,
     baseUrl: 'http://127.0.0.1:8080/v1',
     model: 'test-haiku-model',
   }),
@@ -78,6 +75,11 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch
+})
+
+afterAll(() => {
+  if (_origUseLlamacpp === undefined) delete process.env.MY_AGENT_USE_LLAMACPP
+  else process.env.MY_AGENT_USE_LLAMACPP = _origUseLlamacpp
 })
 
 describe('queryHaiku — llamacpp path', () => {

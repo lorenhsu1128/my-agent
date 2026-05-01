@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { parseJsonc } from '../../../src/utils/jsoncStore'
+import { _resetLlamaCppConfigForTests } from '../../../src/llamacppConfig/loader'
 
 let testDir: string
 let originalEnv: string | undefined
@@ -42,6 +43,8 @@ afterEach(() => {
   } catch {
     // ignore
   }
+  // 清掉 loader module-level cache，避免污染後續測試（cached 可能指向已刪除的 testDir）
+  _resetLlamaCppConfigForTests()
 })
 
 // ════════════════════════════════════════════════════════════════════
