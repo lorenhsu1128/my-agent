@@ -9,11 +9,11 @@ import type { ToolUseContext } from '../../Tool.js';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
 import { getOauthAccountInfo, getSubscriptionType } from '../../utils/auth.js';
 import { hasClaudeAiBillingAccess } from '../../utils/billing.js';
-// my-agent: extra-usage command removed (cloud-only). Stubs.
+// my-agent: extra-usage / upgrade commands removed (cloud-only). Stubs.
 const extraUsageCall = async (..._args: unknown[]): Promise<React.ReactNode> => null;
 const extraUsage = { isEnabled: (): boolean => false };
-import upgrade from '../upgrade/index.js';
-import { call as upgradeCall } from '../upgrade/upgrade.js';
+const upgrade = { isEnabled: (): boolean => false };
+const upgradeCall = async (..._args: unknown[]): Promise<React.ReactNode> => null;
 type RateLimitOptionsMenuOptionType = 'upgrade' | 'extra-usage' | 'cancel';
 type RateLimitOptionsMenuProps = {
   onDone: (result?: string, options?: {
