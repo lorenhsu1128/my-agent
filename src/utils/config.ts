@@ -868,7 +868,7 @@ let configCacheHits = 0
 let configCacheMisses = 0
 // Session-total count of actual disk writes to the global config file.
 // Exposed for ant-only dev diagnostics (see inc-4552) so anomalous write
-// rates surface in the UI before they corrupt ~/.my-agent/.my-agent.json.
+// rates surface in the UI before they corrupt ~/.my-agent/.my-agent.jsonc.
 let globalConfigWriteCount = 0
 
 export function getGlobalConfigWriteCount(): number {
@@ -1198,7 +1198,7 @@ function saveConfigWithLock<A extends object>(
     const currentConfig = getConfig(file, createDefault)
     if (file === getGlobalClaudeFile() && wouldLoseAuthState(currentConfig)) {
       logForDebugging(
-        'saveConfigWithLock: re-read config is missing auth that cache has; refusing to write to avoid wiping ~/.my-agent/.my-agent.json. See GH #3117.',
+        'saveConfigWithLock: re-read config is missing auth that cache has; refusing to write to avoid wiping ~/.my-agent/.my-agent.jsonc. See GH #3117.',
         { level: 'error' },
       )
       logEvent('tengu_config_auth_loss_prevented', {})
@@ -1366,7 +1366,7 @@ export function enableConfigs(): void {
   // Any reads to configuration before this flag is set show an console warning
   // to prevent us from adding config reading during module initialization
   configReadingAllowed = true
-  // 首次落盤：若 ~/.my-agent/.my-agent.json 不存在，先寫入帶繁中 JSONC 註解
+  // 首次落盤：若 ~/.my-agent/.my-agent.jsonc 不存在，先寫入帶繁中 JSONC 註解
   // 的模板，後續 saveGlobalConfig 走 jsonc.modify 路徑保留註解。已存在則不
   // 動。需在第一次 getConfig 之前完成。
   // eslint-disable-next-line @typescript-eslint/no-require-imports

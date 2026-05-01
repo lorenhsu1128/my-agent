@@ -28,7 +28,7 @@ import { getSettingsForSource } from './settings/settings.js'
  * is lazy-initialized) and ensure Node.js compatibility.
  *
  * This is safe to call before the trust dialog because we only read from
- * user-controlled files (~/.my-agent/settings.json and ~/.my-agent/.my-agent.json),
+ * user-controlled files (~/.my-agent/settings.jsonc and ~/.my-agent/.my-agent.jsonc),
  * not from project-level settings.
  */
 export function applyExtraCACertsFromConfig(): void {
@@ -52,8 +52,8 @@ export function applyExtraCACertsFromConfig(): void {
  * after the trust dialog. But we need the CA cert early to establish the TLS
  * connection to an HTTPS proxy during init().
  *
- * We read from global config (~/.my-agent/.my-agent.json) and user settings
- * (~/.my-agent/settings.json). These are user-controlled files that don't
+ * We read from global config (~/.my-agent/.my-agent.jsonc) and user settings
+ * (~/.my-agent/settings.jsonc). These are user-controlled files that don't
  * require trust approval.
  */
 function getExtraCertsPathFromConfig(): string | undefined {

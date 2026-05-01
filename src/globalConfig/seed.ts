@@ -59,7 +59,7 @@ export function seedGlobalConfigIfMissingSync(path: string): void {
 }
 
 /**
- * 手動觸發：重寫 ~/.my-agent/.my-agent.json 為當前 bundled 模板版本，
+ * 手動觸發：重寫 ~/.my-agent/.my-agent.jsonc 為當前 bundled 模板版本，
  * 保留使用者現有值，**並剔除非 my-agent schema 的欄位**（典型來源：使用者
  * 從 upstream 的 `~/.my-agent/config.json` 整份複製過來，帶了 tipsHistory /
  * cachedGrowthBookFeatures / btwUseCount / oauthAccount 等 my-agent 不使用

@@ -252,7 +252,7 @@ async function resolveClaudePath(): Promise<string> {
  * Check whether the OS-level protocol handler is already registered AND
  * points at the expected `claude` binary. Reads the registration artifact
  * directly (symlink target, .desktop Exec line, registry value) rather than
- * a cached flag in ~/.my-agent/.my-agent.json, so:
+ * a cached flag in ~/.my-agent/.my-agent.jsonc, so:
  *   - the check is per-machine (config can sync across machines; OS state can't)
  *   - stale paths self-heal (install-method change → re-register next session)
  *   - deleted artifacts self-heal
@@ -310,7 +310,7 @@ export async function ensureDeepLinkProtocolRegistered(): Promise<void> {
   // EACCES/ENOSPC are deterministic — retrying next session won't help.
   // Throttle to once per 24h so a read-only ~/.local/share/applications
   // doesn't generate a failure event on every startup. Marker lives in
-  // ~/.my-agent (per-machine, not synced) rather than ~/.my-agent/.my-agent.json (can sync).
+  // ~/.my-agent (per-machine, not synced) rather than ~/.my-agent/.my-agent.jsonc (can sync).
   const failureMarkerPath = path.join(
     getMyAgentConfigHomeDir(),
     '.deep-link-register-failed',

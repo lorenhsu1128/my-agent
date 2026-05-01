@@ -505,12 +505,27 @@ export function getDefaultAppState(): AppState {
     ? initialSettings.disabledTools.filter(name => !UNTOGGLEABLE_TOOLS.has(name))
     : []
 
+  // 讀取全域 config 的 verbose 旗標（決定 thinking block 是否顯示等）。
+  // 直接啟動 REPL 走 main.tsx 自己 merge；daemon 路徑（discord/web/daemon）
+  // 直接吃這裡的預設值，因此必須在這裡也讀 config，否則 daemon session 內
+  // 即使設 verbose:true 也看不到 thinking。lazy require 避免 init 順序問題。
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const configModule =
+    require('../utils/config.js') as typeof import('../utils/config.js')
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  let verboseFromConfig = false
+  try {
+    verboseFromConfig = configModule.getGlobalConfig().verbose ?? false
+  } catch {
+    // config 尚未可讀（極早期初始化）— fallback false
+  }
+
   return {
     settings: initialSettings,
     tasks: {},
     agentNameRegistry: new Map(),
     disabledTools: new Set(configuredDisabled),
-    verbose: false,
+    verbose: verboseFromConfig,
     mainLoopModel: null, // alias, full name (as with --model or env var), or null (default)
     mainLoopModelForSession: null,
     statusLineText: undefined,

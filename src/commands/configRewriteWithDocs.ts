@@ -1,7 +1,7 @@
 /**
  * REPL slash command `/config-rewrite-with-docs`
  *
- * 強制把 ~/.my-agent/.my-agent.json 重寫為帶繁中註解的 JSONC 模板版本，
+ * 強制把 ~/.my-agent/.my-agent.jsonc 重寫為帶繁中註解的 JSONC 模板版本，
  * 保留使用者現有欄位值。寫前自動備份為 `*.pre-rewrite-<timestamp>`。
  *
  * 同時對 llamacpp.json / discord.json / scheduled_tasks.json 三個檔觸發
