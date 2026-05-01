@@ -9,26 +9,25 @@
  */
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
+// LESSONS.md「mock.module 必須 spread」
+const _realProviders_vf = await import('../../../src/utils/model/providers')
 mock.module('../../../src/utils/model/providers', () => ({
+  ..._realProviders_vf,
   isLlamaCppActive: () => true,
   getAPIProvider: () => 'llamacpp',
   isLlamaCppModel: () => true,
-  getLlamaCppModelAliases: () => [],
-  LLAMACPP_MODEL_ALIASES: [],
-  DEFAULT_LLAMACPP_BASE_URL: 'http://127.0.0.1:8080/v1',
-  DEFAULT_LLAMACPP_MODEL: 'Gemopus-4-E4B-it-Preview',
-  getLlamaCppConfig: () => null,
-  queryLlamaCppContextSize: async () => undefined,
   getLlamaCppContextSize: () => null,
   isFirstPartyAnthropicBaseUrl: () => false,
   getAPIProviderForStatsig: () => 'llamacpp',
 }))
 
-// M-LLAMACPP-REMOTE: spread real index（LESSONS.md「mock.module 必須 spread」）
+// M-LLAMACPP-REMOTE: spread real index 與 spread real snapshot
 const _realLlamacppConfig_vf = await import('../../../src/llamacppConfig/index')
+const _realSnap_vf = _realLlamacppConfig_vf.getLlamaCppConfigSnapshot()
 mock.module('../../../src/llamacppConfig/index', () => ({
   ..._realLlamacppConfig_vf,
   getLlamaCppConfigSnapshot: () => ({
+    ..._realSnap_vf,
     baseUrl: 'http://127.0.0.1:8080/v1',
     model: 'Gemopus-4-E4B-it-Preview',
   }),

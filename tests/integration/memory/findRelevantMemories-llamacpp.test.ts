@@ -174,21 +174,22 @@ const FAKE_MEMORY_HEADERS: MemoryHeader[] = [
 
 let scanResult: MemoryHeader[] = FAKE_MEMORY_HEADERS
 
+// LESSONS.md「mock.module 必須 spread」
+const _realProviders_fr = await import('../../../src/utils/model/providers')
 mock.module('../../../src/utils/model/providers', () => ({
+  ..._realProviders_fr,
   isLlamaCppActive: () => true,
   getAPIProvider: () => 'llamacpp',
   isLlamaCppModel: () => true,
-  getLlamaCppModelAliases: () => [],
-  LLAMACPP_MODEL_ALIASES: [],
-  DEFAULT_LLAMACPP_BASE_URL: 'http://localhost:8080/v1',
-  DEFAULT_LLAMACPP_MODEL: 'qwen3.5-9b-neo',
 }))
 
-// M-LLAMACPP-REMOTE: spread real index（LESSONS.md「mock.module 必須 spread」）
+// M-LLAMACPP-REMOTE: spread real index 與 spread real snapshot
 const _realLlamacppConfig_fr = await import('../../../src/llamacppConfig')
+const _realSnap_fr = _realLlamacppConfig_fr.getLlamaCppConfigSnapshot()
 mock.module('../../../src/llamacppConfig', () => ({
   ..._realLlamacppConfig_fr,
   getLlamaCppConfigSnapshot: () => ({
+    ..._realSnap_fr,
     baseUrl: 'http://localhost:8080/v1',
     model: 'qwen3.5-9b-neo',
   }),

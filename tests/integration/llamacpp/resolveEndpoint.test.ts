@@ -53,7 +53,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  _activeConfigPath = ''
+  // 指回真實預設路徑（不是空字串），避免後續 test 撞到 mocked path 拿到
+  // '' → readFileSync 失敗 → 影響 daemon e2e（closeout / phase3）。
+  _activeConfigPath = realPaths.getLlamaCppConfigPath()
   _resetLlamaCppConfigForTests()
   try {
     rmSync(testDir, { recursive: true, force: true })

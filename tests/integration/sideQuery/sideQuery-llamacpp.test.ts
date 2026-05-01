@@ -21,23 +21,25 @@ import {
   test,
 } from 'bun:test'
 
+// LESSONS.md「mock.module 必須 spread」：spread real，僅 override 必要 stubs。
+// 不 spread 會讓其他 test import providers 的 named exports（getLlamaCppConfig
+// 等）拿到 undefined → SyntaxError。
+const _realProviders_sq = await import('../../../src/utils/model/providers')
 mock.module('../../../src/utils/model/providers', () => ({
+  ..._realProviders_sq,
   isLlamaCppActive: () => true,
   getAPIProvider: () => 'llamacpp',
   isLlamaCppModel: () => true,
-  getLlamaCppModelAliases: () => [],
-  LLAMACPP_MODEL_ALIASES: [],
-  DEFAULT_LLAMACPP_BASE_URL: 'http://127.0.0.1:8080/v1',
-  DEFAULT_LLAMACPP_MODEL: 'test-model',
-  getLlamaCppConfig: () => null,
-  queryLlamaCppContextSize: async () => undefined,
+  getLlamaCppContextSize: () => null,
 }))
 
-// M-LLAMACPP-REMOTE: spread real index（LESSONS.md「mock.module 必須 spread」）
+// M-LLAMACPP-REMOTE: spread real index 與 spread real snapshot
 const _realLlamacppConfig_sq = await import('../../../src/llamacppConfig/index')
+const _realSnap_sq = _realLlamacppConfig_sq.getLlamaCppConfigSnapshot()
 mock.module('../../../src/llamacppConfig/index', () => ({
   ..._realLlamacppConfig_sq,
   getLlamaCppConfigSnapshot: () => ({
+    ..._realSnap_sq,
     baseUrl: 'http://127.0.0.1:8080/v1',
     model: 'test-model',
   }),

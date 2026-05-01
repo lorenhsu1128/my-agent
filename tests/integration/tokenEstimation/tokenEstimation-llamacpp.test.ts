@@ -17,27 +17,25 @@ import {
   test,
 } from 'bun:test'
 
+// LESSONS.md「mock.module 必須 spread」：spread real，僅 override 必要 stubs
+const _realProviders_te = await import('../../../src/utils/model/providers')
 mock.module('../../../src/utils/model/providers', () => ({
+  ..._realProviders_te,
   isLlamaCppActive: () => true,
   getAPIProvider: () => 'llamacpp',
   isLlamaCppModel: () => true,
-  getLlamaCppModelAliases: () => [],
-  LLAMACPP_MODEL_ALIASES: [],
-  DEFAULT_LLAMACPP_BASE_URL: 'http://127.0.0.1:8080/v1',
-  DEFAULT_LLAMACPP_MODEL: 'test-model',
-  getLlamaCppConfig: () => null,
-  queryLlamaCppContextSize: async () => undefined,
   getLlamaCppContextSize: () => null,
   isFirstPartyAnthropicBaseUrl: () => false,
   getAPIProviderForStatsig: () => 'llamacpp',
 }))
 
-// M-LLAMACPP-REMOTE: spread real index 才不會把 seedLlamaCppConfigIfMissing 等其他
-// export 砍掉（教訓見 LESSONS.md「mock.module 替換 paths.js 必須 spread 原始 export」）
+// M-LLAMACPP-REMOTE: spread real index 與 spread real snapshot
 const realLlamacppConfig = await import('../../../src/llamacppConfig/index')
+const _realSnap_te = realLlamacppConfig.getLlamaCppConfigSnapshot()
 mock.module('../../../src/llamacppConfig/index', () => ({
   ...realLlamacppConfig,
   getLlamaCppConfigSnapshot: () => ({
+    ..._realSnap_te,
     baseUrl: 'http://127.0.0.1:8080/v1',
     model: 'test-model',
   }),
