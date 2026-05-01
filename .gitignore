@@ -16,3 +16,27 @@ openclaw/
 
 # Claude Code 本機專屬設定（每台機器自己的權限覆蓋）
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# my-agent runtime data（cron 歷史、本機 skills、本機排程）
+.my-agent/
+
+# Build / 快取產物
+*.bun-build
+**/tsconfig.tsbuildinfo
+
+# 一次性測試報告與 log
+tests/e2e/*.log
+tests/e2e/decouple-*.txt
+tests/e2e/decouple-comprehensive-*.txt
+tests/e2e/vision-e2e-*.txt
+tests/integration/test-report-*.txt
+*-tests-report.txt
+test-report-e2e-*.txt
+
+# 探索用 scratch 目錄
+tmp/
+
+# llama.cpp 暫存備份目錄
+llama-b*-backup/
+llama-b*-temp/
