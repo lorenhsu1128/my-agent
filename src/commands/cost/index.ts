@@ -8,7 +8,7 @@ import { isClaudeAISubscriber } from '../../utils/auth.js'
 const cost = {
   type: 'local',
   name: 'cost',
-  description: 'Show the total cost and duration of the current session',
+  description: '顯示目前 session 累計花費與時長',
   get isHidden() {
     // Keep visible for Ants even if they're subscribers (they see cost breakdowns)
     if (process.env.USER_TYPE === 'ant') {

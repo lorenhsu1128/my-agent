@@ -4,6 +4,6 @@ export default {
   type: 'local-jsx',
   name: 'trash',
   description:
-    'Manage soft-deleted sessions / memory (list / restore / empty / prune). REPL only.',
+    '管理軟刪除的 session / memory（list / restore / empty / prune），僅限 REPL',
   load: () => import('./trash.js'),
 } satisfies Command

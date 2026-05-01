@@ -5,7 +5,7 @@ import type { Command } from '../../commands.js'
 const thinkbackPlay = {
   type: 'local',
   name: 'thinkback-play',
-  description: 'Play the thinkback animation',
+  description: '播放 thinkback 動畫',
   isEnabled: () => true,
   isHidden: true,
   supportsNonInteractive: false,

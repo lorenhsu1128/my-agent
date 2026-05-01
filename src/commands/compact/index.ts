@@ -5,7 +5,7 @@ const compact = {
   type: 'local',
   name: 'compact',
   description:
-    'Clear conversation history but keep a summary in context. Optional: /compact [instructions for summarization]',
+    '清除對話歷史但在 context 留下摘要。選填：/compact [摘要指示]',
   isEnabled: () => !isEnvTruthy(process.env.DISABLE_COMPACT),
   supportsNonInteractive: true,
   argumentHint: '<optional custom summarization instructions>',

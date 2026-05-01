@@ -4,7 +4,7 @@ import { isClaudeAISubscriber } from '../../utils/auth.js'
 const rateLimitOptions = {
   type: 'local-jsx',
   name: 'rate-limit-options',
-  description: 'Show options when rate limit is reached',
+  description: '顯示 rate limit 達到上限時的選項',
   isEnabled: () => {
     if (!isClaudeAISubscriber()) {
       return false

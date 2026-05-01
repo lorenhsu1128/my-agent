@@ -3,8 +3,7 @@ import type { Command } from '../commands.js'
 const command = {
   type: 'prompt',
   name: 'init-verifiers',
-  description:
-    'Create verifier skill(s) for automated verification of code changes',
+  description: '建立 verifier skill 以自動驗證程式碼變更',
   contentLength: 0, // Dynamic content
   progressMessage: 'analyzing your project and creating verifier skills',
   source: 'builtin',

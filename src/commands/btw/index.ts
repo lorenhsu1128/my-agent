@@ -3,8 +3,7 @@ import type { Command } from '../../commands.js'
 const btw = {
   type: 'local-jsx',
   name: 'btw',
-  description:
-    'Ask a quick side question without interrupting the main conversation',
+  description: '不中斷主對話，快速問一個側面問題',
   immediate: true,
   argumentHint: '<question>',
   load: () => import('./btw.js'),

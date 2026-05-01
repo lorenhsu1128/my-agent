@@ -245,7 +245,7 @@ const daemonCommand = {
   type: 'local',
   name: 'daemon',
   description:
-    'Daemon lifecycle + attach/detach (on | off | attach | detach | status)',
+    'Daemon 生命週期與 attach/detach（on | off | attach | detach | status）',
   argumentHint: '[on|off|attach|detach|status]',
   isEnabled: () => true,
   isHidden: false,

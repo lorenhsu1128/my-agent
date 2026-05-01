@@ -3,7 +3,7 @@ import type { Command } from '../../commands.js'
 const plan = {
   type: 'local-jsx',
   name: 'plan',
-  description: 'Enable plan mode or view the current session plan',
+  description: '啟用 plan 模式或檢視目前 session plan',
   argumentHint: '[open|<description>]',
   load: () => import('./plan.js'),
 } satisfies Command
