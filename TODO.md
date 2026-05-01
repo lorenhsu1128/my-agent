@@ -3,6 +3,27 @@
 > Claude Code 在每次 session 開始時讀取此檔案，在工作過程中更新任務狀態。
 > 里程碑結構由人類維護。Claude Code 負責管理任務狀態的勾選。
 
+## 當前里程碑：M-SELFIMPROVE-CMD — `/self-improve` 指令管理 nudge 開關與閾值（2026-05-01 啟動）
+
+**目標**：把內建的 5 個 self-improve nudge（skill creation / skill improvement / memory / session review / auto dream）改成可在 REPL 內透過 slash 指令開關與調閾值，不必手動編輯 `~/.my-agent/settings.jsonc`。
+
+**決策**：每個 nudge 新增獨立 `*Enabled` 布林欄位（預設 `true`，向後相容）；UX 採互動 React Ink 面板（仿 `/sandbox-toggle`）；只寫 `userSettings`（`~/.my-agent/settings.jsonc`）。
+
+### 任務
+- [ ] M-SELFIMPROVE-CMD-1 schema：`src/utils/settings/types.ts` 在 `selfImproveThresholds` 物件加 5 個 `*Enabled` 布林欄位
+- [ ] M-SELFIMPROVE-CMD-2 getter：`src/services/selfImprove/thresholds.ts` 擴充型別與 `getSelfImproveThresholds()` 回傳值（布林獨立 resolve helper，不能共用 `isValidPositive`）
+- [ ] M-SELFIMPROVE-CMD-3 早退：5 個 nudge 入口（skillCreationNudge / skillImprovement / memoryNudge / sessionReview / autoDream）讀 `*Enabled` 為 false 時直接 return
+- [ ] M-SELFIMPROVE-CMD-4 指令：`src/commands/self-improve/{index.ts,self-improve.tsx}` + `src/commands.ts` 註冊
+- [ ] M-SELFIMPROVE-CMD-5 文件：`docs/user-manual.md` 自訂指令表 + `docs/config-reference.md` selfImproveThresholds 段落補新欄位；跑 `bun run docs:gen` / `docs:verify`
+- [ ] M-SELFIMPROVE-CMD-6 驗證：`bun run typecheck` + `./cli -p hello` 冒煙 + 手測面板（toggle / 改閾值 / 持久化）
+
+### 不在範圍 → 後續 milestone
+- 個別 nudge 暫停 N 小時 / N session 的細粒度控制
+- Project 層級覆寫 UI（仍須手動編輯）
+- 匯出 / 匯入 preset
+
+---
+
 ## 當前里程碑：M-RENAME — 專案改名 free-code → My Agent（2026-04-19 啟動）
 
 **目標**：全倉庫 84 檔、265 處字串（free-code / freecode / Free Code）改名為 my-agent / My Agent。
@@ -2938,3 +2959,33 @@
 - 2026-05-01 09:49: Session 結束 | 進度：712/800 任務 | 1efab3a fix(llamacpp): adapter 兜底 qwen3.5-9b bare pythonic tool_call
 
 - 2026-05-01 09:55: Session 結束 | 進度：712/800 任務 | 1efab3a fix(llamacpp): adapter 兜底 qwen3.5-9b bare pythonic tool_call
+
+- 2026-05-01 10:33: Session 結束 | 進度：712/800 任務 | ecec212 chore: 清理專案廢檔與更新 .gitignore
+
+- 2026-05-01 11:00: Session 結束 | 進度：712/800 任務 | ecec212 chore: 清理專案廢檔與更新 .gitignore
+
+- 2026-05-01 11:05: Session 結束 | 進度：712/800 任務 | ecec212 chore: 清理專案廢檔與更新 .gitignore
+
+- 2026-05-01 11:19: Session 結束 | 進度：712/800 任務 | ecec212 chore: 清理專案廢檔與更新 .gitignore
+
+- 2026-05-01 11:25: Session 結束 | 進度：712/800 任務 | ecec212 chore: 清理專案廢檔與更新 .gitignore
+
+- 2026-05-01 11:29: Session 結束 | 進度：712/800 任務 | ecec212 chore: 清理專案廢檔與更新 .gitignore
+
+- 2026-05-01 12:04: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+
+- 2026-05-01 12:10: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+
+- 2026-05-01 12:32: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+
+- 2026-05-01 12:42: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+
+- 2026-05-01 12:49: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+
+- 2026-05-01 12:53: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+
+- 2026-05-01 13:07: Session 結束 | 進度：712/806 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+
+- 2026-05-01 13:15: Session 結束 | 進度：712/806 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+
+- 2026-05-01 13:24: Session 結束 | 進度：712/806 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留

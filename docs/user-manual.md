@@ -1129,6 +1129,43 @@ bun run build --define "FEATURE('CHICAGO_MCP')"
 └── website-blocklist.yaml            # 網站封鎖清單
 ```
 
+### Self-improve nudge 設定
+
+my-agent 內建 5 個會在背景觀察使用情況、適時跳出建議的 nudge：
+
+| Nudge | 觸發 | 預設閾值 |
+|------|------|---------|
+| Skill Creation | 單次 query 工具用量達閾值，分析後建議建立新 skill | 15 tool uses |
+| Skill Improvement | 每 N 個 user turn 檢查一次，依修正回饋更新專案 skill | 5 turns |
+| Memory Nudge | 每 N 個 user turn 提示儲存使用者偏好/修正 | 8 turns |
+| Session Review | 長 session 中觸發 auto-memory consolidation 提示 | 15 tool uses / 2 小時間隔 |
+| Auto Dream | 背景記憶整理 | 24 小時 / 5 sessions |
+
+在 REPL 內輸入 `/self-improve` 開啟互動面板，可：
+
+- ↑/↓ 切換項目；Space 切換啟用 / 停用
+- Enter 或 `e` 編輯數值閾值
+- 變更即時寫入 `~/.my-agent/settings.jsonc`（cowork 模式為 `cowork_settings.jsonc`；舊 `.json` 會自動遷移）的 `selfImproveThresholds`
+- Esc 或 `q` 關閉面板
+
+也可手動編輯 `~/.my-agent/settings.jsonc`：
+
+```jsonc
+{
+  "selfImproveThresholds": {
+    "skillCreationNudgeEnabled": true,
+    "skillCreationToolUseThreshold": 20,
+    "skillImprovementEnabled": false,
+    "memoryNudgeEnabled": true,
+    "memoryNudgeTurnBatch": 10,
+    "sessionReviewEnabled": true
+  },
+  "autoDreamEnabled": true
+}
+```
+
+> Auto Dream 的開關沿用既有的 top-level `autoDreamEnabled` 欄位（不在 `selfImproveThresholds` 物件下）。
+
 ---
 
 ## 第十章：最佳實踐

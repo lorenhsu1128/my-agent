@@ -118,6 +118,7 @@ import {
   resetLimitsNonInteractive,
 } from './commands/reset-limits/index.js'
 import sandboxToggle from './commands/sandbox-toggle/index.js'
+import selfImprove from './commands/self-improve/index.js'
 import advisor from './commands/advisor.js'
 import daemonCommand from './commands/daemon.js'
 import configRewriteWithDocsCommand from './commands/configRewriteWithDocs.js'
@@ -287,6 +288,7 @@ const COMMANDS = memoize((): Command[] => [
   hooks,
   exportCommand,
   sandboxToggle,
+  selfImprove,
   daemonCommand,
   configRewriteWithDocsCommand,
   configDoctorCommand,
