@@ -2989,3 +2989,33 @@
 - 2026-05-01 13:15: Session 結束 | 進度：712/806 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
 
 - 2026-05-01 13:24: Session 結束 | 進度：712/806 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+
+- 2026-05-01 13:41: Session 結束 | 進度：712/806 任務 | 85c4c31 feat(commands): 新增 /self-improve 指令管理 nudge 開關與閾值
+
+- 2026-05-01 14:21: Session 結束 | 進度：712/806 任務 | 85c4c31 feat(commands): 新增 /self-improve 指令管理 nudge 開關與閾值
+
+- 2026-05-01 14:36: Session 結束 | 進度：712/806 任務 | ac8c635 feat(tips): 移除雲端/品牌相關 tips 並翻成繁中
+
+- 2026-05-01 14:54: Session 結束 | 進度：712/806 任務 | ac8c635 feat(tips): 移除雲端/品牌相關 tips 並翻成繁中
+
+- 2026-05-01 15:17: Session 結束 | 進度：712/806 任務 | ac8c635 feat(tips): 移除雲端/品牌相關 tips 並翻成繁中
+
+- 2026-05-01 15:51: Session 結束 | 進度：712/806 任務 | d763e48 feat(commands): slash command TUI 說明翻成繁中
+
+- 2026-05-01 16:02: Session 結束 | 進度：712/806 任務 | d763e48 feat(commands): slash command TUI 說明翻成繁中
+
+- 2026-05-01 16:07: Session 結束 | 進度：712/806 任務 | d763e48 feat(commands): slash command TUI 說明翻成繁中
+
+- 2026-05-01 16:12: Session 結束 | 進度：712/806 任務 | d763e48 feat(commands): slash command TUI 說明翻成繁中
+
+- 2026-05-01 16:34: Session 結束 | 進度：712/806 任務 | 0839194 test(integration): 修復測試套件 test pollution（52 → 27 fail）
+
+- 2026-05-01 16:53: Session 結束 | 進度：712/806 任務 | d3b8407 test: 進一步修復測試 fail（27 → 3）
+
+- 2026-05-01 16:57: Session 結束 | 進度：712/806 任務 | d3b8407 test: 進一步修復測試 fail（27 → 3）
+
+- 2026-05-01 17:12: Session 結束 | 進度：712/806 任務 | 8faf56d test: 修完最後 3 fail（27 → 0），完整測試套件全 pass
+
+- 2026-05-01 17:16: Session 結束 | 進度：712/806 任務 | 4f806f4 feat(commands): slash command TUI 互動介面翻成繁中
+
+- 2026-05-01 17:24: Session 結束 | 進度：712/806 任務 | 4f806f4 feat(commands): slash command TUI 互動介面翻成繁中

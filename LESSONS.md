@@ -685,3 +685,24 @@
 - **日期**：2026-04-30
 
 ---
+
+### llama.cpp slot 配置：1×256K 比 2×128K 適合 my-agent（**2026-05-01 驗證**）
+
+- **問題**：使用者起 `-np 2 + ctxSize 262144` → 每 slot 128K，問哪種配置最佳。
+- **判斷**：my-agent 全鏈路序列化（daemon turn mutex `src/daemon/daemonTurnMutex.ts` + `-np 1` server 預設 + memory pipeline 都 sequential await），第二個 slot 99% 閒置；無 multi-slot 路由邏輯（`routing` 表只有 local/remote 二選）。整塊 256K 給單 slot 可讓長 session 延後觸發 auto-compact。
+- **改動**（`~/.my-agent/llamacpp.jsonc`）：
+  - `contextSize`: 131072 → 262144（client estimate 對齊 per-slot 實際值）
+  - `server.extraArgs` `-np 2` → `-np 1`
+  - `remote.contextSize`: 131072 → 262144
+  - `server.ctxSize` 保持 262144（總額不變）
+- **驗證**（RTX 5070 Ti Laptop 12G，Qwen3.5-9B Q4_K_M + turbo4 KV）：
+  - `/slots` 回 `n_ctx=262144`、單 slot
+  - VRAM idle 9.1G/12.2G（含 256K KV cache，turbo4 ~4.25 bpv 才壓得下）
+  - Needle-in-haystack 三層皆 pass：2K (12.5s) / 80K (97.8s) / 200K (352s)
+  - Prefill 速度 ~500-700 tok/s，180K+ 後攤平
+- **踩坑**：第一輪測試 `max_tokens=60` 全部回空字串。原因：qwen3.5-9b jinja template `generation_prompt` 內建 `<|im_start|>assistant\n<think>\n`，預設一律走 reasoning，60 token 全給 thinking 燒完才換 content → 空回應。長 prompt 測試務必給 ≥300 max_tokens。可從 `/slots` 看 `generation_prompt` 確認模型是否強制 thinking。
+- **何時該回頭考慮 2×128K**：未來 web mode 真的多用戶併發（拿掉 daemon turn mutex），或加機器跑遠端分流。目前不用。
+- **相關檔案**：`~/.my-agent/llamacpp.jsonc`（user 端 config，已改）、`src/llamacppConfig/schema.ts`（schema 預設仍 -np 1）、`scripts/llama/serve.sh`（讀 LLAMA_CTX）
+- **日期**：2026-05-01
+
+---
