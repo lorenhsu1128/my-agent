@@ -118,7 +118,6 @@ import {
   resetLimitsNonInteractive,
 } from './commands/reset-limits/index.js'
 import sandboxToggle from './commands/sandbox-toggle/index.js'
-import stickers from './commands/stickers/index.js'
 import advisor from './commands/advisor.js'
 import daemonCommand from './commands/daemon.js'
 import configRewriteWithDocsCommand from './commands/configRewriteWithDocs.js'
@@ -161,7 +160,6 @@ import sessionDeleteCommand from './commands/session-delete/index.js'
 import memoryDeleteCommand from './commands/memory-delete/index.js'
 import trashCommand from './commands/trash/index.js'
 import tag from './commands/tag/index.js'
-import outputStyle from './commands/output-style/index.js'
 import rateLimitOptions from './commands/rate-limit-options/index.js'
 import statusline from './commands/statusline.js'
 import effort from './commands/effort/index.js'
@@ -181,7 +179,6 @@ const usageReport: Command = {
     return real.getPromptForCommand(args, context)
   },
 }
-import oauthRefresh from './commands/oauth-refresh/index.js'
 import debugToolCall from './commands/debug-tool-call/index.js'
 import { getSettingSourceName } from './utils/settings/constants.js'
 import {
@@ -214,7 +211,6 @@ export const INTERNAL_ONLY_COMMANDS = [
   resetLimits,
   resetLimitsNonInteractive,
   summary,
-  oauthRefresh,
   debugToolCall,
   agentsPlatform,
   autofixPr,
@@ -257,7 +253,6 @@ const COMMANDS = memoize((): Command[] => [
   sessionDeleteCommand,
   memoryDeleteCommand,
   trashCommand,
-  outputStyle,
   plugin,
   pr_comments,
   releaseNotes,
@@ -269,7 +264,6 @@ const COMMANDS = memoize((): Command[] => [
   stats,
   status,
   statusline,
-  stickers,
   tag,
   theme,
   review,
@@ -600,7 +594,6 @@ export const REMOTE_SAFE_COMMANDS: Set<Command> = new Set([
   plan, // Plan mode toggle
   keybindings, // Keybinding management
   statusline, // Status line toggle
-  stickers, // Stickers
 ])
 
 /**
