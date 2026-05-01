@@ -84,11 +84,14 @@ export function createSkillCreationNudgeHook() {
     async shouldRun(context) {
       if (context.querySource !== 'repl_main_thread') return false
 
+      const t = getSelfImproveThresholds()
+      if (!t.skillCreationNudgeEnabled) return false
+
       const recentToolUses = countRecentToolUses(
         context.messages,
         lastAnalyzedIndex,
       )
-      if (recentToolUses < getSelfImproveThresholds().skillCreationToolUseThreshold) return false
+      if (recentToolUses < t.skillCreationToolUseThreshold) return false
 
       return true
     },

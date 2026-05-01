@@ -15,6 +15,10 @@ export type SelfImproveThresholds = {
   sessionReviewMinIntervalHours: number
   autoDreamMinHours: number
   autoDreamMinSessions: number
+  skillCreationNudgeEnabled: boolean
+  skillImprovementEnabled: boolean
+  memoryNudgeEnabled: boolean
+  sessionReviewEnabled: boolean
 }
 
 const DEFAULTS: SelfImproveThresholds = {
@@ -25,6 +29,10 @@ const DEFAULTS: SelfImproveThresholds = {
   sessionReviewMinIntervalHours: 2,
   autoDreamMinHours: 24,
   autoDreamMinSessions: 5,
+  skillCreationNudgeEnabled: true,
+  skillImprovementEnabled: true,
+  memoryNudgeEnabled: true,
+  sessionReviewEnabled: true,
 }
 
 type AutoDreamGBPayload = {
@@ -46,6 +54,14 @@ function resolve<K extends keyof SelfImproveThresholds>(
   return DEFAULTS[key]
 }
 
+function resolveBool<K extends keyof SelfImproveThresholds>(
+  key: K,
+): SelfImproveThresholds[K] {
+  const userVal = getInitialSettings().selfImproveThresholds?.[key]
+  if (typeof userVal === 'boolean') return userVal as SelfImproveThresholds[K]
+  return DEFAULTS[key]
+}
+
 export function getSelfImproveThresholds(): SelfImproveThresholds {
   const gb: AutoDreamGBPayload = null
 
@@ -57,6 +73,10 @@ export function getSelfImproveThresholds(): SelfImproveThresholds {
     sessionReviewMinIntervalHours: resolve('sessionReviewMinIntervalHours'),
     autoDreamMinHours: resolve('autoDreamMinHours', gb?.minHours),
     autoDreamMinSessions: resolve('autoDreamMinSessions', gb?.minSessions),
+    skillCreationNudgeEnabled: resolveBool('skillCreationNudgeEnabled'),
+    skillImprovementEnabled: resolveBool('skillImprovementEnabled'),
+    memoryNudgeEnabled: resolveBool('memoryNudgeEnabled'),
+    sessionReviewEnabled: resolveBool('sessionReviewEnabled'),
   }
 }
 

@@ -98,6 +98,7 @@ export async function executeSessionReview(
 
   // Gate: minimum time between reviews
   const thresholds = getSelfImproveThresholds()
+  if (!thresholds.sessionReviewEnabled) return
   const hoursSince = (Date.now() - lastReviewAt) / 3_600_000
   if (lastReviewAt > 0 && hoursSince < thresholds.sessionReviewMinIntervalHours) {
     logForDebugging(

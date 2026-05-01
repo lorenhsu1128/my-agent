@@ -1003,6 +1003,30 @@ export const SettingsSchema = lazySchema(() =>
             .describe(
               'Minimum sessions since last consolidation before auto-dream triggers (default: 5)',
             ),
+          skillCreationNudgeEnabled: z
+            .boolean()
+            .optional()
+            .describe(
+              'Enable the skill creation nudge (suggest saving multi-step workflows as skills). Default: true.',
+            ),
+          skillImprovementEnabled: z
+            .boolean()
+            .optional()
+            .describe(
+              'Enable the skill improvement nudge (suggest updates to project skill from corrections). Default: true.',
+            ),
+          memoryNudgeEnabled: z
+            .boolean()
+            .optional()
+            .describe(
+              'Enable the memory nudge (suggest saving user preferences/corrections to memory). Default: true.',
+            ),
+          sessionReviewEnabled: z
+            .boolean()
+            .optional()
+            .describe(
+              'Enable the periodic session review (auto-memory consolidation prompts during long sessions). Default: true.',
+            ),
         })
         .optional()
         .describe(

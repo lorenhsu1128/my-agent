@@ -75,13 +75,16 @@ function createSkillImprovementHook() {
         return false
       }
 
+      const t = getSelfImproveThresholds()
+      if (!t.skillImprovementEnabled) return false
+
       if (!findProjectSkill()) {
         return false
       }
 
       // Only run every N user messages (configurable via selfImproveThresholds)
       const userCount = count(context.messages, m => m.type === 'user')
-      if (userCount - lastAnalyzedCount < getSelfImproveThresholds().skillImprovementTurnBatch) {
+      if (userCount - lastAnalyzedCount < t.skillImprovementTurnBatch) {
         return false
       }
 

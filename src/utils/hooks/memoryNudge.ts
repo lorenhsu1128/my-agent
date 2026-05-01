@@ -66,8 +66,11 @@ export function createMemoryNudgeHook() {
     async shouldRun(context) {
       if (context.querySource !== 'repl_main_thread') return false
 
+      const t = getSelfImproveThresholds()
+      if (!t.memoryNudgeEnabled) return false
+
       const userCount = count(context.messages, m => m.type === 'user')
-      if (userCount - lastAnalyzedCount < getSelfImproveThresholds().memoryNudgeTurnBatch) return false
+      if (userCount - lastAnalyzedCount < t.memoryNudgeTurnBatch) return false
 
       lastAnalyzedCount = userCount
       return true
