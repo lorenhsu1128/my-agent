@@ -76,7 +76,7 @@ export function ToolsPicker({ onExit }: Props): React.ReactNode {
     if (mode !== 'picking') return
 
     if (key.escape) {
-      onExit('Tools picker cancelled (no changes)')
+      onExit('已取消（未變更）')
       return
     }
 
@@ -106,8 +106,8 @@ export function ToolsPicker({ onExit }: Props): React.ReactNode {
       const disabledList = Array.from(working).sort()
       const summary =
         disabledList.length === 0
-          ? 'All tools enabled for this session.'
-          : `Session: ${disabledList.length} tool(s) disabled — ${disabledList.join(', ')}`
+          ? '本 session 已啟用所有工具。'
+          : `本 session：已停用 ${disabledList.length} 個工具 — ${disabledList.join(', ')}`
       onExit(summary)
       return
     }
@@ -119,11 +119,11 @@ export function ToolsPicker({ onExit }: Props): React.ReactNode {
       setMode('done')
       if (error) {
         onExit(
-          `Saved session-only; project write FAILED: ${error.message}`,
+          `僅 session 套用；寫入 project 設定失敗：${error.message}`,
         )
       } else {
         onExit(
-          `Saved to project settings (~/.my-agent/projects/...): ${working.size} tool(s) disabled`,
+          `已寫入 project 設定 (~/.my-agent/projects/...)：停用 ${working.size} 個工具`,
         )
       }
       return
@@ -135,10 +135,10 @@ export function ToolsPicker({ onExit }: Props): React.ReactNode {
       const { error } = writePersistedDisabled('userSettings', working)
       setMode('done')
       if (error) {
-        onExit(`Saved session-only; global write FAILED: ${error.message}`)
+        onExit(`僅 session 套用；寫入 global 設定失敗：${error.message}`)
       } else {
         onExit(
-          `Saved to global settings (~/.my-agent/settings.json): ${working.size} tool(s) disabled`,
+          `已寫入 global 設定 (~/.my-agent/settings.json)：停用 ${working.size} 個工具`,
         )
       }
       return
@@ -152,8 +152,8 @@ export function ToolsPicker({ onExit }: Props): React.ReactNode {
       const err2 = writePersistedDisabled('userSettings', new Set()).error
       setFlash(
         err1 || err2
-          ? `Reset: session cleared; project=${err1 ? 'ERR' : 'ok'} global=${err2 ? 'ERR' : 'ok'}`
-          : 'Reset: session + project + global all cleared. All tools enabled.',
+          ? `已重置：session 已清空；project=${err1 ? 'ERR' : 'ok'} global=${err2 ? 'ERR' : 'ok'}`
+          : '已重置：session、project、global 全部清空，所有工具皆啟用。',
       )
       return
     }
@@ -169,10 +169,10 @@ export function ToolsPicker({ onExit }: Props): React.ReactNode {
   return (
     <Box flexDirection="column" gap={0}>
       <Box>
-        <Text bold>Tools</Text>
+        <Text bold>工具</Text>
         <Text dimColor>
           {' '}
-          · {enabledCount} enabled / {disabledCount} disabled
+          · 啟用 {enabledCount} / 停用 {disabledCount}
         </Text>
       </Box>
       <Box flexDirection="column">
@@ -190,7 +190,7 @@ export function ToolsPicker({ onExit }: Props): React.ReactNode {
               ? 'red'
               : 'green'
           const tags: string[] = []
-          if (row.isUntoggleable) tags.push('core, locked')
+          if (row.isUntoggleable) tags.push('核心，鎖定')
           if (row.disabledProject) tags.push('project')
           if (row.disabledGlobal) tags.push('global')
           const tagStr = tags.length > 0 ? ` [${tags.join(', ')}]` : ''
@@ -208,8 +208,8 @@ export function ToolsPicker({ onExit }: Props): React.ReactNode {
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
-          ↑/↓ move · space toggle · Enter = save session · p = save project · g
-          = save global · r = reset all · Esc = cancel
+          ↑/↓ 移動 · space 切換 · Enter 套用 session · p 存到 project · g 存到
+          global · r 全部重置 · Esc 取消
         </Text>
       </Box>
       {flash && (

@@ -330,7 +330,7 @@ function BridgeDisconnectDialog(t0) {
   const t17 = focusIndex === 0;
   let t18;
   if ($[32] === Symbol.for("react.memo_cache_sentinel")) {
-    t18 = <Text>Disconnect this session</Text>;
+    t18 = <Text>中斷此 session</Text>;
     $[32] = t18;
   } else {
     t18 = $[32];
@@ -365,7 +365,7 @@ function BridgeDisconnectDialog(t0) {
   const t24 = focusIndex === 2;
   let t25;
   if ($[40] === Symbol.for("react.memo_cache_sentinel")) {
-    t25 = <Text>Continue</Text>;
+    t25 = <Text>繼續</Text>;
     $[40] = t25;
   } else {
     t25 = $[40];

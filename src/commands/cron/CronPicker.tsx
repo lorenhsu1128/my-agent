@@ -608,7 +608,7 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
     return (
       <Box flexDirection="column">
         <Text color="red">Failed to load cron tasks: {loadError}</Text>
-        <Text dimColor>Press Esc to close</Text>
+        <Text dimColor>按 Esc 關閉</Text>
       </Box>
     )
   }
@@ -732,9 +732,9 @@ export function CronPicker({ onExit }: Props): React.ReactNode {
           <Text dimColor>Schedule: {selected.cron}</Text>
         </Box>
         <Box marginTop={1}>
-          <Text>Type </Text>
+          <Text>輸入 </Text>
           <Text bold color="red">y</Text>
-          <Text> to confirm, any other key to cancel.</Text>
+          <Text> 確認，其他鍵取消。</Text>
         </Box>
       </Box>
     )
@@ -795,7 +795,7 @@ function CronList({
   return (
     <Box flexDirection="column">
       <Box>
-        <Text bold>Cron Tasks</Text>
+        <Text bold>Cron 排程</Text>
         <Text dimColor>
           {' '}
           · {enriched.length} total ({counts.scheduled} scheduled, {counts.paused} paused, {counts.completed} completed)

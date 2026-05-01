@@ -194,7 +194,7 @@ export function SessionDeletePicker({ onExit }: Props): React.ReactNode {
       const row = rows[safeCursor]
       if (!row) return
       if (row.sessionId === currentSessionId) {
-        setFlash('Cannot delete the current session.')
+        setFlash('無法刪除目前 session。')
         return
       }
       const next = new Set(selected)
@@ -217,7 +217,7 @@ export function SessionDeletePicker({ onExit }: Props): React.ReactNode {
     }
     if (key.return) {
       if (selected.size === 0) {
-        setFlash('No sessions selected.')
+        setFlash('未選取任何 session。')
         return
       }
       setMode('confirming')

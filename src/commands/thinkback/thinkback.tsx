@@ -280,25 +280,25 @@ function ThinkbackMenu(t0) {
   let t1;
   if ($[0] !== hasGenerated) {
     t1 = hasGenerated ? [{
-      label: "Play animation",
+      label: "播放動畫",
       value: "play" as const,
-      description: "Watch your year in review"
+      description: "觀看你的年度回顧"
     }, {
-      label: "Edit content",
+      label: "編輯內容",
       value: "edit" as const,
-      description: "Modify the animation"
+      description: "修改動畫內容"
     }, {
-      label: "Fix errors",
+      label: "修復錯誤",
       value: "fix" as const,
-      description: "Fix validation or rendering issues"
+      description: "修復驗證或渲染問題"
     }, {
-      label: "Regenerate",
+      label: "重新產生",
       value: "regenerate" as const,
-      description: "Create a new animation from scratch"
+      description: "重新產生一個全新動畫"
     }] : [{
-      label: "Let's go!",
+      label: "開始！",
       value: "regenerate" as const,
-      description: "Generate your personalized animation"
+      description: "產生你的個人化動畫"
     }];
     $[0] = hasGenerated;
     $[1] = t1;

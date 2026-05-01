@@ -239,7 +239,7 @@ export function MemoryDeletePicker({ onExit }: Props): React.ReactNode {
     }
     if (key.return) {
       if (selected.size === 0) {
-        setFlash('No items selected.')
+        setFlash('未選取任何項目。')
         return
       }
       setMode('confirming')

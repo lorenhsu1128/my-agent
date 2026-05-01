@@ -220,7 +220,7 @@ export function TrashPicker({ onExit }: Props): React.ReactNode {
         if (mode === 'prune-input') {
           const n = parseInt(pruneDays, 10)
           if (!Number.isFinite(n) || n < 0) {
-            setFlash('Invalid day count.')
+            setFlash('天數格式錯誤。')
             setPruneDays('')
             setMode('picking')
             return
@@ -272,7 +272,7 @@ export function TrashPicker({ onExit }: Props): React.ReactNode {
 
     // picking
     if (key.escape) {
-      onExit(result ?? 'Trash closed')
+      onExit(result ?? '已關閉垃圾桶')
       return
     }
     if (key.upArrow) return setCursor(c => Math.max(0, c - 1))
@@ -290,16 +290,16 @@ export function TrashPicker({ onExit }: Props): React.ReactNode {
     if (input === 'a') return setSelected(new Set(rows.map(r => r.id)))
     if (input === 'n') return setSelected(new Set())
     if (input === 'r') {
-      if (selected.size === 0) return setFlash('Select entries to restore.')
+      if (selected.size === 0) return setFlash('請選取要還原的項目。')
       return setMode('confirm-restore')
     }
     if (input === 'x') {
-      if (allEntries.length === 0) return setFlash('Trash already empty.')
+      if (allEntries.length === 0) return setFlash('垃圾桶已是空的。')
       return setMode('confirm-empty')
     }
     if (input === 'p') return setMode('prune-input')
     if (key.return) {
-      if (selected.size === 0) return setFlash('No entries selected.')
+      if (selected.size === 0) return setFlash('未選取任何項目。')
       setMode('confirm-delete')
       return
     }
