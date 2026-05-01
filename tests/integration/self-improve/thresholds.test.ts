@@ -29,6 +29,9 @@ describe('selfImprove thresholds', () => {
   test('回傳值都是正數', () => {
     const t = getSelfImproveThresholds()
     for (const [key, value] of Object.entries(t)) {
+      // 只驗 number 欄位；M-SELF-IMPROVE-NUDGE-TOGGLE 後新增 4 個
+      // boolean 欄位（*Enabled）不該套此斷言。
+      if (typeof value !== 'number') continue
       expect(value).toBeGreaterThan(0)
       expect(Number.isFinite(value)).toBe(true)
     }

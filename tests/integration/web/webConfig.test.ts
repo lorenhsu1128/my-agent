@@ -149,7 +149,10 @@ describe('seed', () => {
   })
 
   test('existing file → not overwritten', async () => {
-    writeCfg({ enabled: true, port: 9999 })
+    // 必須是 JSONC（含註解）才會被 seed 視為已 migrate 而保留；
+    // strict JSON 會被 P2 邏輯 auto-migrate 到 JSONC 模板（覆蓋）。
+    const userText = `{\n  // user 自訂\n  "enabled": true,\n  "port": 9999\n}\n`
+    writeFileSync(process.env[PATH_KEY]!, userText, 'utf-8')
     const before = readFileSync(process.env[PATH_KEY]!, 'utf-8')
     await seedWebConfigIfMissing()
     const after = readFileSync(process.env[PATH_KEY]!, 'utf-8')

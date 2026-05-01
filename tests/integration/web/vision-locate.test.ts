@@ -36,7 +36,10 @@ describe('VisionClient', () => {
 
   test('getDefaultVisionClient returns a locate-capable client', () => {
     const client = getDefaultVisionClient()
-    expect(client.backendName).toBe('anthropic')
+    // backend 視 ~/.my-agent/llamacpp.jsonc 的 vision.enabled 而定：
+    // 啟用時是 llamacpp，否則 anthropic。本測試只驗 backend 為合法值
+    // 且具備 locate 介面，避免綁死使用者環境。
+    expect(['anthropic', 'llamacpp']).toContain(client.backendName)
     expect(typeof client.locate).toBe('function')
   })
 

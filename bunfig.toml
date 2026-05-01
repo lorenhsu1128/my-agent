@@ -1,0 +1,4 @@
+[test]
+# 排除 vendored / 第三方目錄；buun-llama-cpp 是 llama.cpp 上游 svelte webui，
+# 它的 test 用 vitest + $lib alias，不應該被 bun test 掃到。
+root = "tests"
