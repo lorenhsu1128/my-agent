@@ -79,6 +79,18 @@ export function useAppData(): { ws: WsClient | null } {
         case 'permission.modeChanged':
           permStore.setMode(e.projectId, e.mode)
           break
+        case 'session.rotated':
+          // M-WEB-PARITY-1：rotate 後重新拉 sessions list；selectSession 切到新 id。
+          api
+            .listSessions(e.projectId)
+            .then(({ sessions, activeSessionId }) => {
+              sessionStore.setSessions(e.projectId, sessions, activeSessionId)
+              sessionStore.selectSession(e.projectId, e.newSessionId)
+            })
+            .catch(err => {
+              console.error('[useAppData] post-rotate sessions fetch failed', err)
+            })
+          break
         // turn / cron / memory 事件由各別 component 透過 useTurnEvents 等 hook 訂閱
         default:
           break

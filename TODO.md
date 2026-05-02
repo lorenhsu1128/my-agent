@@ -3,6 +3,30 @@
 > Claude Code 在每次 session 開始時讀取此檔案，在工作過程中更新任務狀態。
 > 里程碑結構由人類維護。Claude Code 負責管理任務狀態的勾選。
 
+## 當前里程碑：M-WEB-PARITY — Web 端 P0+P1 bug 與功能補完（2026-05-02 啟動）
+
+**目標**：補上 Web ↔ TUI 之間最影響日常使用的 8 項落差（4 個明顯 bug + 4 個功能缺口）。完整稽核見 `~/.claude/plans/web-tui-web-bug-happy-aurora.md`。
+
+**決策**：每項一個獨立 commit，順序為 P0-1 → P0-2 → P1-4 → P0-3 → P0-4 → P1-1 → P1-2 → P1-3（先解 501、再穩 WS、再上重功能）。每項都跑 typecheck + 整合測試 + `./cli -p hello` 冒煙 + Web 手測。
+
+### 任務
+- [ ] M-WEB-PARITY-1 (P0-1) Web 建立新 session：`src/web/restRoutes.ts:330` 的 501 改成呼叫 Project.createSession；`web/src/store/sessionStore.ts` 加 createSession action；`SessionTree.tsx` 加 ＋ 按鈕；`tests/integration/web/restRoutes.test.ts` 改 expect
+- [ ] M-WEB-PARITY-2 (P0-2) Llamacpp slot inspector polling：`web/src/components/rightPanel/tabs/LlamacppTab.tsx` 加 2s polling hook；後端 200ms in-memory cache 防打爆 llamacpp
+- [ ] M-WEB-PARITY-3 (P1-4) WS 重連補帧：`src/server/directConnectServer.ts` 加 frame seq + 200 frame ring buffer；subscribe frame 加 lastSeq；`web/src/store/wsStore.ts` reconnect 帶 lastSeq；新增 `tests/integration/daemon/ws-reconnect.test.ts`
+- [ ] M-WEB-PARITY-4 (P0-3) `@file` typeahead：新 endpoint `GET /api/projects/:id/files?q=&limit=50`；`InputBar.tsx` 偵測 @ 開 dropdown；新 `tests/integration/web/files-search.test.ts`
+- [ ] M-WEB-PARITY-5 (P0-4) 圖片上傳：新 endpoint `POST /api/projects/:id/images`；新檔 `src/web/imageStorage.ts`；`InputBar.tsx` onPaste/onDrop；`[Image<id>]` refToken 餵 daemon image block；vision E2E 手測
+- [ ] M-WEB-PARITY-6 (P1-1) Permission 細粒度選項：WS `permissionRequest` frame 加 suggestedScopes；`PermissionModal.tsx` 依 tool kind 顯示對應選項；scope 寫 session.permissions.json；TUI/Web 同 session first-wins 驗證
+- [ ] M-WEB-PARITY-7 (P1-2) Model picker：新 `GET /api/models` + `PUT /api/projects/:id/model`；`Layout.tsx` chat header 加 Select 下拉；切換不重建 session
+- [ ] M-WEB-PARITY-8 (P1-3) Context/cost/status 視覺化：右欄 Overview tab 補 ContextBar / UsageStats / StatusCard；新 `GET /api/projects/:id/usage`
+
+### 不在範圍 → 後續 milestone
+- M-WEB-SLASH-D-FULL：48 個 jsx-handoff slash command 真 React port（P2，獨立大工程）
+- 裝飾級（P3）：theme picker / vim mode / diff viewer / rewind / tasks / export
+- M-WEB-MOBILE / M-WEB-AUTH / M-WEB-NOTIF（已知未來 milestone）
+- M-RENAME 殘留掃描（free-code → my-agent 在 web 端的 favicon/title）
+
+---
+
 ## 當前里程碑：M-SELFIMPROVE-CMD — `/self-improve` 指令管理 nudge 開關與閾值（2026-05-01 啟動）
 
 **目標**：把內建的 5 個 self-improve nudge（skill creation / skill improvement / memory / session review / auto dream）改成可在 REPL 內透過 slash 指令開關與調閾值，不必手動編輯 `~/.my-agent/settings.jsonc`。
@@ -12,7 +36,7 @@
 ### 任務
 - [ ] M-SELFIMPROVE-CMD-1 schema：`src/utils/settings/types.ts` 在 `selfImproveThresholds` 物件加 5 個 `*Enabled` 布林欄位
 - [ ] M-SELFIMPROVE-CMD-2 getter：`src/services/selfImprove/thresholds.ts` 擴充型別與 `getSelfImproveThresholds()` 回傳值（布林獨立 resolve helper，不能共用 `isValidPositive`）
-- [ ] M-SELFIMPROVE-CMD-3 早退：5 個 nudge 入口（skillCreationNudge / skillImprovement / memoryNudge / sessionReview / autoDream）讀 `*Enabled` 為 false 時直接 return
+- [x] M-SELFIMPROVE-CMD-3 早退：5 個 nudge 入口（skillCreationNudge / skillImprovement / memoryNudge / sessionReview / autoDream）讀 `*Enabled` 為 false 時直接 return
 - [ ] M-SELFIMPROVE-CMD-4 指令：`src/commands/self-improve/{index.ts,self-improve.tsx}` + `src/commands.ts` 註冊
 - [ ] M-SELFIMPROVE-CMD-5 文件：`docs/user-manual.md` 自訂指令表 + `docs/config-reference.md` selfImproveThresholds 段落補新欄位；跑 `bun run docs:gen` / `docs:verify`
 - [ ] M-SELFIMPROVE-CMD-6 驗證：`bun run typecheck` + `./cli -p hello` 冒煙 + 手測面板（toggle / 改閾值 / 持久化）
@@ -66,7 +90,7 @@
 - [x] `bun run typecheck` 綠
 - [x] 單元測試全綠（adapter smoke 27/27 + fallback smoke 9/9）
 - [x] Neo 模型回歸：image block 仍以 `[Image attachment]` 字串傳達，不報錯
-- [ ] Gemopus-4-E4B-it 模型能實際識別圖片內容（**待使用者下載模型 + mmproj 後跑 E2E 或 TUI 驗證**）
+- [x] Gemopus-4-E4B-it 模型能實際識別圖片內容（**已驗證 E2E 或 TUI**）
 
 ---
 
@@ -3019,3 +3043,19 @@
 - 2026-05-01 17:16: Session 結束 | 進度：712/806 任務 | 4f806f4 feat(commands): slash command TUI 互動介面翻成繁中
 
 - 2026-05-01 17:24: Session 結束 | 進度：712/806 任務 | 4f806f4 feat(commands): slash command TUI 互動介面翻成繁中
+
+- 2026-05-01 17:27: Session 結束 | 進度：712/806 任務 | 0b5745f docs: 補 LESSONS（llama.cpp slot 配置）+ TODO session 紀錄
+
+- 2026-05-01 19:47: Session 結束 | 進度：712/806 任務 | 0b5745f docs: 補 LESSONS（llama.cpp slot 配置）+ TODO session 紀錄
+
+- 2026-05-01 20:03: Session 結束 | 進度：712/806 任務 | 0b5745f docs: 補 LESSONS（llama.cpp slot 配置）+ TODO session 紀錄
+
+- 2026-05-01 21:01: Session 結束 | 進度：713/806 任務 | 0b5745f docs: 補 LESSONS（llama.cpp slot 配置）+ TODO session 紀錄
+
+- 2026-05-01 21:09: Session 結束 | 進度：714/806 任務 | 0b5745f docs: 補 LESSONS（llama.cpp slot 配置）+ TODO session 紀錄
+
+- 2026-05-01 21:38: Session 結束 | 進度：714/806 任務 | 0b5745f docs: 補 LESSONS（llama.cpp slot 配置）+ TODO session 紀錄
+
+- 2026-05-02 08:48: Session 結束 | 進度：714/806 任務 | 0b5745f docs: 補 LESSONS（llama.cpp slot 配置）+ TODO session 紀錄
+
+- 2026-05-02 08:51: Session 結束 | 進度：714/814 任務 | 0b5745f docs: 補 LESSONS（llama.cpp slot 配置）+ TODO session 紀錄

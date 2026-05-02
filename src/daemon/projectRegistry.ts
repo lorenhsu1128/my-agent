@@ -88,6 +88,15 @@ export interface ProjectRegistry {
   listProjects(): ProjectRuntime[]
   /** 手動 unload — 不管 idle / attach 狀態。sweep 看 idle。 */
   unloadProject(projectId: string): Promise<boolean>
+  /**
+   * M-WEB-PARITY-1：rotate（= /clear 等價語意）— 拆掉舊 runtime + 在同 cwd
+   * 重新 bootstrap，得到全新 sessionId / lockfile / broker.mutableMessages。
+   * 不存在或 cwd 拿不到回 null。新 runtime 不繼承 attachedReplIds（原來 attach
+   * 的 client 由 caller 透過 ws frame 通知重新 subscribe）。
+   */
+  rotateProject(
+    projectId: string,
+  ): Promise<{ oldSessionId: string; newSessionId: string; runtime: ProjectRuntime } | null>
   touchActivity(projectId: string): void
   /** 強制 sweep 一次（測試用）。回傳被 unload 的 projectId 列表。 */
   sweepIdle(): Promise<string[]>
@@ -276,12 +285,31 @@ export function createProjectRegistry(
     }
   }
 
+  const rotateProject = async (
+    projectId: string,
+  ): Promise<{ oldSessionId: string; newSessionId: string; runtime: ProjectRuntime } | null> => {
+    if (disposed) throw new Error('ProjectRegistry disposed')
+    const existing = runtimes.get(projectId)
+    if (!existing) return null
+    const cwd = existing.cwd
+    const oldSessionId = existing.sessionHandle.sessionId
+    const ok = await unloadProject(projectId, 'manual')
+    if (!ok) return null
+    const runtime = await loadProject(cwd)
+    return {
+      oldSessionId,
+      newSessionId: runtime.sessionHandle.sessionId,
+      runtime,
+    }
+  }
+
   return {
     loadProject,
     getProject,
     getProjectByCwd,
     listProjects,
     unloadProject: id => unloadProject(id, 'manual'),
+    rotateProject,
     touchActivity,
     sweepIdle,
     onLoad(handler) {

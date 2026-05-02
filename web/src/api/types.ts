@@ -83,6 +83,7 @@ export type ServerEvent =
   | DiscordStatusChangedEvent
   | MutationResultEvent
   | SlashCommandExecuteResultEvent
+  | SessionRotatedEvent
 
 export interface HelloEvent {
   type: 'hello'
@@ -196,6 +197,16 @@ export interface WebStatusChangedEvent {
 }
 export interface DiscordStatusChangedEvent {
   type: 'discord.statusChanged'
+}
+/**
+ * M-WEB-PARITY-1：rotate（= /clear）後 daemon 廣播的 frame；客戶端用來觸發
+ * sessions 重新拉 + 切到新 sessionId。
+ */
+export interface SessionRotatedEvent {
+  type: 'session.rotated'
+  projectId: string
+  oldSessionId: string
+  newSessionId: string
 }
 export interface MutationResultEvent {
   type: 'mutation.result'

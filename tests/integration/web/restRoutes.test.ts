@@ -52,6 +52,23 @@ function fakeRegistry(over?: {
       (async id => {
         return projects.delete(id)
       }),
+    rotateProject: async id => {
+      const old = projects.get(id)
+      if (!old) return null
+      const cwd = old.cwd
+      const oldSessionId = old.sessionHandle.sessionId
+      projects.delete(id)
+      const fresh = fakeRuntime(id, cwd)
+      // 模擬 rotate：sessionId 換新
+      ;(fresh.sessionHandle as unknown as { sessionId: string }).sessionId =
+        'sess-' + id + '-rotated-' + Date.now()
+      projects.set(id, fresh)
+      return {
+        oldSessionId,
+        newSessionId: fresh.sessionHandle.sessionId,
+        runtime: fresh,
+      }
+    },
     touchActivity: () => {},
     sweepIdle: async () => [],
     onLoad: () => () => {},
@@ -205,15 +222,45 @@ describe('REST /api/* routes', () => {
     expect(body.activeSessionId).toBe(body.sessions[0]!.sessionId)
   })
 
-  test('POST /api/projects/:id/sessions → 501 not implemented', async () => {
+  test('POST /api/projects/:id/sessions → 201 rotate (新 sessionId 不同舊的，且廣播 session.rotated)', async () => {
     await reg.loadProject('/p1')
     const id = reg.listProjects()[0]!.projectId
-    const r = await rest.handle(
+    const oldSessionId = reg.getProject(id)!.sessionHandle.sessionId
+    const broadcasts: { projectId: string; payload: unknown }[] = []
+    const restWithBroadcast = createRestRoutes({
+      registry: reg,
+      broadcastToProject: (pid, payload) => broadcasts.push({ projectId: pid, payload }),
+    })
+    const r = await restWithBroadcast.handle(
       new Request(`http://x/api/projects/${encodeURIComponent(id)}/sessions`, {
         method: 'POST',
       }),
     )
-    expect(r!.status).toBe(501)
+    expect(r!.status).toBe(201)
+    const body = (await r!.json()) as {
+      sessionId: string
+      oldSessionId: string
+      projectId: string
+    }
+    expect(body.oldSessionId).toBe(oldSessionId)
+    expect(body.sessionId).not.toBe(oldSessionId)
+    expect(body.projectId).toBe(id)
+    // broadcast 至少 1 次 session.rotated
+    const rotated = broadcasts.find(
+      b =>
+        (b.payload as { type?: string }).type === 'session.rotated' &&
+        b.projectId === id,
+    )
+    expect(rotated).toBeDefined()
+  })
+
+  test('POST /api/projects/:id/sessions → 404 if not loaded', async () => {
+    const r = await rest.handle(
+      new Request(`http://x/api/projects/nonexistent/sessions`, {
+        method: 'POST',
+      }),
+    )
+    expect(r!.status).toBe(404)
   })
 
   test('OPTIONS preflight → 204', async () => {

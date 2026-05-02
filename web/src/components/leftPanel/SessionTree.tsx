@@ -1,9 +1,12 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { useSessionStore } from '../../store/sessionStore'
 import { useProjectStore } from '../../store/projectStore'
 import { formatTimeAgo } from '../../utils/timeAgo'
+import { api, ApiError } from '../../api/client'
 import type { WebSessionInfo } from '../../api/types'
 import { cn } from '@/lib/utils'
+import { Plus } from 'lucide-react'
 
 export interface SessionTreeProps {
   projectId: string
@@ -26,9 +29,45 @@ export function SessionTree({ projectId }: SessionTreeProps) {
   const selectSession = useSessionStore(s => s.selectSession)
   const selectProject = useProjectStore(s => s.selectProject)
   const [showAll, setShowAll] = useState(false)
+  const [creating, setCreating] = useState(false)
+
+  async function handleCreateSession(): Promise<void> {
+    if (creating) return
+    setCreating(true)
+    try {
+      const r = await api.createSession(projectId)
+      // 後端會廣播 session.rotated；useAppData 訂閱會自動 setSessions + selectSession。
+      // 這裡 toast 即時回饋；若 ws 慢回也至少先讓使用者看到結果。
+      toast.success('已建立新 session', {
+        description: r.sessionId.slice(0, 8) + '…',
+      })
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : String(err)
+      toast.error('建立 session 失敗', { description: msg })
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const newButton = (
+    <button
+      onClick={handleCreateSession}
+      disabled={creating}
+      className="px-2 py-1 mx-1 my-0.5 text-xs flex items-center gap-1 text-primary hover:bg-sidebar-accent/60 rounded-md disabled:opacity-50"
+      title="建立新 session（= /clear）"
+    >
+      <Plus className="h-3 w-3" />
+      <span>{creating ? '建立中…' : '新 session'}</span>
+    </button>
+  )
 
   if (sessions.length === 0) {
-    return <div className="pl-6 py-1 text-xs text-muted-foreground">（無 session）</div>
+    return (
+      <div className="ml-3">
+        {newButton}
+        <div className="pl-6 py-1 text-xs text-muted-foreground">（無 session）</div>
+      </div>
+    )
   }
 
   const sorted = [
@@ -40,6 +79,7 @@ export function SessionTree({ projectId }: SessionTreeProps) {
 
   return (
     <ul className="ml-3 border-l border-border/50">
+      <li>{newButton}</li>
       {visible.map(s => {
         const isSelected = s.sessionId === selectedSessionId
         const isActive = s.sessionId === activeSessionId

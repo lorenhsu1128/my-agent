@@ -84,6 +84,22 @@ export const api = {
       `/api/projects/${encodeURIComponent(projectId)}/sessions`,
     )
   },
+  /**
+   * M-WEB-PARITY-1：建立新 session（rotate runtime = /clear 等價語意）。
+   * 後端會 dispose 舊 broker、釋放 lockfile、重新 bootstrap，並廣播
+   * `session.rotated` frame；UI 收到後切到新 sessionId。
+   */
+  createSession(projectId: string): Promise<{
+    sessionId: string
+    oldSessionId: string
+    projectId: string
+    createdAt: number
+  }> {
+    return request(
+      `/api/projects/${encodeURIComponent(projectId)}/sessions`,
+      { method: 'POST', json: {} },
+    )
+  },
   // M-WEB-22：messages backfill — 從 sessionIndex（FTS5 表）拉某 session 最近 N 條
   messages: {
     list(

@@ -31,6 +31,7 @@ export type ServerEvent =
   | WebStatusChangedEvent
   | PongEvent
   | MutationResultEvent
+  | SessionRotatedEvent
 
 export interface HelloEvent {
   type: 'hello'
@@ -55,6 +56,17 @@ export interface ErrorEvent {
 export interface PongEvent {
   type: 'pong'
   t: number
+}
+
+/**
+ * M-WEB-PARITY-1：rotate（= /clear）後廣播；client 收到後切到新 sessionId 並
+ * 重新拉 sessions list。
+ */
+export interface SessionRotatedEvent {
+  type: 'session.rotated'
+  projectId: string
+  oldSessionId: string
+  newSessionId: string
 }
 
 export interface WebProjectInfo {

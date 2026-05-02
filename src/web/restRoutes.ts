@@ -327,15 +327,48 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
       }
     }
 
-    // POST /api/projects/:id/sessions — Phase 1 stub（S3 完整實作 M-WEB-11）
+    // POST /api/projects/:id/sessions — M-WEB-PARITY-1：rotate（= /clear 等價）
+    // 拆掉舊 runtime（dispose broker + 釋放 lockfile）→ 同 cwd 重新 bootstrap →
+    // 廣播 session.rotated frame，attached client 收到後切到新 sessionId。
     {
       const m = /^\/api\/projects\/([^/]+)\/sessions$/.exec(url.pathname)
       if (m && method === 'POST') {
-        return errorResponse(
-          'NOT_IMPLEMENTED',
-          'POST /api/projects/:id/sessions 需要 daemon 端建立新 session 的 API（M-WEB-11）',
-          501,
-        )
+        const id = decodeURIComponent(m[1]!)
+        if (!isProjectIdSafe(id)) {
+          return errorResponse('BAD_ID', 'invalid project id', 400)
+        }
+        const existing = registry.getProject(id)
+        if (!existing) return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
+        try {
+          const result = await registry.rotateProject(id)
+          if (!result) {
+            return errorResponse('ROTATE_FAILED', 'rotateProject returned null', 500)
+          }
+          // 通知所有同 project 的 web client 切到新 sessionId。WS reconnect /
+          // hello frame 自然會帶新 sessionId，但 rotated 事件可讓 client 立即
+          // 觸發 backfill / 切換 UI 而不必等 ws 重連。
+          opts.broadcastToProject?.(id, {
+            type: 'session.rotated',
+            projectId: id,
+            oldSessionId: result.oldSessionId,
+            newSessionId: result.newSessionId,
+          })
+          return jsonResponse(
+            {
+              sessionId: result.newSessionId,
+              oldSessionId: result.oldSessionId,
+              projectId: id,
+              createdAt: Date.now(),
+            },
+            201,
+          )
+        } catch (e) {
+          return errorResponse(
+            'ROTATE_FAILED',
+            e instanceof Error ? e.message : String(e),
+            500,
+          )
+        }
       }
     }
 
