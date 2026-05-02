@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle'
+import { getSessionId } from '../bootstrap/state.js'
 import { logForDebugging } from '../utils/debug.js'
 import { errorMessage } from '../utils/errors.js'
 import { jsonParse } from '../utils/slowOperations.js'
@@ -7,28 +8,73 @@ import {
   type MemoryHeader,
   scanMemoryFiles,
 } from './memoryScan.js'
+import { recordRecall } from './sessionRecallLog.js'
 
 /**
- * Fallback cap when the selector returns empty (no API key, parse failure,
+ * Default fallback cap when the selector returns empty (no API key, parse failure,
  * llamacpp server down, etc). Without this, llama.cpp users see zero memory
  * recall — the selector silently fails and the prefetch returns []. Capped
  * by file count rather than bytes to avoid an extra stat round; memories
  * are already mtime-sorted so we keep the freshest N.
+ *
+ * Overridable via settings `memoryRecall.fallbackMaxFiles` (M-MEMRECALL-CMD).
  */
-const FALLBACK_MAX_FILES = 8
+const DEFAULT_FALLBACK_MAX_FILES = 8
+
+/**
+ * Default selector cap (max files the LLM may pick per turn).
+ * Overridable via settings `memoryRecall.maxFiles` (M-MEMRECALL-CMD).
+ */
+const DEFAULT_SELECTOR_MAX_FILES = 5
+
+/**
+ * Read memoryRecall settings with safe defaults + range clamp.
+ * Exported for unit tests and TUI / Web tabs that need to display current values.
+ */
+export function readMemoryRecallSettings(): {
+  maxFiles: number
+  fallbackMaxFiles: number
+} {
+  try {
+    // Lazy require：避免 module 載入期撞 settings 初始化序列
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getInitialSettings } =
+      require('../utils/settings/settings.js') as typeof import('../utils/settings/settings.js')
+    const r = getInitialSettings().memoryRecall ?? {}
+    return {
+      maxFiles:
+        typeof r.maxFiles === 'number' && r.maxFiles >= 1 && r.maxFiles <= 20
+          ? r.maxFiles
+          : DEFAULT_SELECTOR_MAX_FILES,
+      fallbackMaxFiles:
+        typeof r.fallbackMaxFiles === 'number' &&
+        r.fallbackMaxFiles >= 1 &&
+        r.fallbackMaxFiles <= 20
+          ? r.fallbackMaxFiles
+          : DEFAULT_FALLBACK_MAX_FILES,
+    }
+  } catch {
+    return {
+      maxFiles: DEFAULT_SELECTOR_MAX_FILES,
+      fallbackMaxFiles: DEFAULT_FALLBACK_MAX_FILES,
+    }
+  }
+}
 
 export type RelevantMemory = {
   path: string
   mtimeMs: number
 }
 
-const SELECT_MEMORIES_SYSTEM_PROMPT = `You are selecting memories that will be useful to my-agent as it processes a user's query. You will be given the user's query and a list of available memory files with their filenames and descriptions.
+function buildSelectMemoriesSystemPrompt(maxFiles: number): string {
+  return `You are selecting memories that will be useful to my-agent as it processes a user's query. You will be given the user's query and a list of available memory files with their filenames and descriptions.
 
-Return a list of filenames for the memories that will clearly be useful to my-agent as it processes the user's query (up to 5). Only include memories that you are certain will be helpful based on their name and description.
+Return a list of filenames for the memories that will clearly be useful to my-agent as it processes the user's query (up to ${maxFiles}). Only include memories that you are certain will be helpful based on their name and description.
 - If you are unsure if a memory will be useful in processing the user's query, then do not include it in your list. Be selective and discerning.
 - If there are no memories in the list that would clearly be useful, feel free to return an empty list.
 - If a list of recently-used tools is provided, do not select memories that are usage reference or API documentation for those tools (my-agent is already exercising them). DO still select memories containing warnings, gotchas, or known issues about those tools — active use is exactly when those matter.
 `
+}
 
 /**
  * Find memory files relevant to a query by scanning memory file headers
@@ -57,16 +103,22 @@ export async function findRelevantMemories(
     return []
   }
 
+  const recallCfg = readMemoryRecallSettings()
+
   const selectedFilenames = await selectRelevantMemories(
     query,
     memories,
     signal,
     recentTools,
+    recallCfg.maxFiles,
   )
   const byFilename = new Map(memories.map(m => [m.filename, m]))
   let selected = selectedFilenames
     .map(filename => byFilename.get(filename))
     .filter((m): m is MemoryHeader => m !== undefined)
+  // 截到 maxFiles（防 LLM 不守規則）
+  selected = selected.slice(0, recallCfg.maxFiles)
+  let recallSource: import('./sessionRecallLog.js').RecallSource = 'selector'
 
   // M-MEMRECALL-LOCAL: selector returned nothing but candidates exist.
   // Most likely cause: no Anthropic API key + llamacpp parse failure / server
@@ -74,11 +126,20 @@ export async function findRelevantMemories(
   // every new session starts blind. Take the freshest N (already mtime-sorted)
   // so the model at least sees recent context.
   if (selected.length === 0 && memories.length > 0) {
-    selected = memories.slice(0, FALLBACK_MAX_FILES)
+    selected = memories.slice(0, recallCfg.fallbackMaxFiles)
+    recallSource = 'fallback'
     logForDebugging(
       `[memdir] selector returned 0 of ${memories.length} candidates; fallback attached ${selected.length} freshest memories`,
       { level: 'warn' },
     )
+  }
+
+  // M-MEMRECALL-CMD：把命中結果寫到 session-scoped log，供 /memory-recall 顯示
+  if (selected.length > 0) {
+    const sessionId = getSessionId()
+    for (const m of selected) {
+      recordRecall(sessionId, m.filePath, recallSource)
+    }
   }
 
   // Fires even on empty selection: selection-rate needs the denominator,
@@ -99,6 +160,7 @@ async function selectRelevantMemories(
   memories: MemoryHeader[],
   signal: AbortSignal,
   recentTools: readonly string[],
+  maxFiles: number,
 ): Promise<string[]> {
   const validFilenames = new Set(memories.map(m => m.filename))
 
@@ -123,6 +185,7 @@ async function selectRelevantMemories(
     toolsSection,
     validFilenames,
     signal,
+    maxFiles,
   )
 }
 
@@ -143,6 +206,7 @@ async function selectViaLlamaCpp(
   toolsSection: string,
   validFilenames: Set<string>,
   signal: AbortSignal,
+  maxFiles: number,
 ): Promise<string[]> {
   try {
     // M-LLAMACPP-REMOTE: 走 routing.memoryPrefetch（缺欄位 = 'local'）
@@ -159,7 +223,7 @@ async function selectViaLlamaCpp(
         max_tokens: 256,
         temperature: 0,
         messages: [
-          { role: 'system', content: SELECT_MEMORIES_SYSTEM_PROMPT },
+          { role: 'system', content: buildSelectMemoriesSystemPrompt(maxFiles) },
           { role: 'user', content: userPrompt },
         ],
       }),
