@@ -14,7 +14,7 @@
 - [x] M-WEB-PARITY-2 (P0-2) Llamacpp slot inspector polling：發現 5s polling 已存在；縮為 2s + 後端 500ms cache 防多 client 打爆
 - [x] M-WEB-PARITY-3 (P1-4) WS 重連補帧：browserSessionRegistry 加 broadcastWithSeq + replayTo + 200 frame ring buffer；subscribe frame 收 lastSeq map；commit f4d16dd
 - [x] M-WEB-PARITY-4 (P0-3) `@file` typeahead：新 endpoint + fileSearch.ts fuzzy match + InputBar 200ms debounce dropdown
-- [ ] M-WEB-PARITY-5 (P0-4) 圖片上傳：新 endpoint `POST /api/projects/:id/images`；新檔 `src/web/imageStorage.ts`；`InputBar.tsx` onPaste/onDrop；`[Image<id>]` refToken 餵 daemon image block；vision E2E 手測
+- [x] M-WEB-PARITY-5 (P0-4) 圖片上傳：imageStorage.ts + POST /api/projects/:id/images；InputBar onPaste/onDrop + preview chips；queryEngineRunner 解析 [Image:<id>] refToken 為 base64 image content block 餵 ask()；vision-ready
 - [x] M-WEB-PARITY-6 (P1-1) Permission scope：daemon router 加 sessionAllowedTools Set + scope='session-tool' 處理；Web PermissionModal 加「永遠允許 X」按鈕；rotateProject 自然清空（router lifetime = ProjectRuntime）。Bash prefix / FileEdit 路徑等更細粒度留 P2
 - [x] M-WEB-PARITY-7 (P1-2) Model picker：GET /api/models + PUT /api/models/current（走 setMainLoopModelOverride，下次 turn 即生效）+ chat header Select
 - [x] M-WEB-PARITY-8 (P1-3) Status 視覺化：Overview tab StatusCard 顯示 model / permission / state / messages / approx tokens（粗估）；訂閱 model.changed 即時刷新；不暴露 daemon 內部 usage（避免假資料）

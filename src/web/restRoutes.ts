@@ -47,6 +47,7 @@ import {
 } from '../services/sessionIndex/index.js'
 import { getSlashCommandMetadataSnapshot } from '../daemon/slashCommandRegistry.js'
 import { searchProjectFiles } from './fileSearch.js'
+import { storeImage, MAX_IMAGE_BYTES } from './imageStorage.js'
 import { getModelOptions } from '../utils/model/modelOptions.js'
 import {
   getDefaultMainLoopModel,
@@ -402,6 +403,66 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
           e instanceof Error ? e.message : String(e),
           500,
         )
+      }
+    }
+
+    // POST /api/projects/:id/images — M-WEB-PARITY-5：Web 圖片上傳
+    // body 期望 { mimeType, data: base64 }；存到 ~/.my-agent/web-images/...，
+    // 回 refToken 讓 web textarea 插入。
+    {
+      const m = /^\/api\/projects\/([^/]+)\/images$/.exec(url.pathname)
+      if (m && method === 'POST') {
+        const id = decodeURIComponent(m[1]!)
+        if (!isProjectIdSafe(id)) {
+          return errorResponse('BAD_ID', 'invalid project id', 400)
+        }
+        if (!registry.getProject(id)) {
+          return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
+        }
+        try {
+          const body = (await req.json()) as {
+            mimeType?: unknown
+            data?: unknown
+          }
+          if (typeof body.mimeType !== 'string' || typeof body.data !== 'string') {
+            return errorResponse(
+              'BAD_INPUT',
+              'body 需要 { mimeType: string, data: base64 string }',
+              400,
+            )
+          }
+          const buf = Buffer.from(body.data, 'base64')
+          if (buf.length === 0) {
+            return errorResponse('BAD_INPUT', 'empty image data', 400)
+          }
+          if (buf.length > MAX_IMAGE_BYTES) {
+            return errorResponse(
+              'IMAGE_TOO_LARGE',
+              `max ${MAX_IMAGE_BYTES} bytes`,
+              413,
+            )
+          }
+          const stored = storeImage({
+            projectId: id,
+            data: buf,
+            mimeType: body.mimeType,
+          })
+          return jsonResponse(
+            {
+              imageId: stored.imageId,
+              refToken: stored.refToken,
+              size: stored.size,
+              mimeType: stored.mimeType,
+            },
+            201,
+          )
+        } catch (e) {
+          return errorResponse(
+            'IMAGE_STORE_FAILED',
+            e instanceof Error ? e.message : String(e),
+            500,
+          )
+        }
       }
     }
 

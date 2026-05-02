@@ -73,6 +73,11 @@ export function InputBar({
   >([])
   const [fileAcIndex, setFileAcIndex] = useState(0)
   const fileQueryRef = useRef<string>('')
+  // M-WEB-PARITY-5：圖片上傳狀態
+  const [pendingImages, setPendingImages] = useState<
+    { imageId: string; refToken: string; previewUrl: string; size: number }[]
+  >([])
+  const [uploading, setUploading] = useState(false)
 
   // 第一次顯示 dropdown 時拉 metadata（5min cache 內 noop）
   const showAc = text.startsWith('/') && !text.includes('\n')
@@ -116,6 +121,57 @@ export function InputBar({
     }, 200)
     return () => clearTimeout(handle)
   }, [showFileAc, projectId, atToken?.token])
+
+  // M-WEB-PARITY-5：上傳一張圖片 → 拿 refToken → 插到 textarea + 加 preview chip
+  async function uploadImageFile(file: File): Promise<void> {
+    if (!projectId) {
+      toast.error('未選 project，無法上傳')
+      return
+    }
+    if (!file.type.startsWith('image/')) {
+      toast.error('只接受圖片', { description: file.type })
+      return
+    }
+    setUploading(true)
+    try {
+      const arrBuf = await file.arrayBuffer()
+      // base64 — atob/btoa 對 binary 在 unicode 處不穩，分塊轉
+      const bytes = new Uint8Array(arrBuf)
+      let bin = ''
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+      }
+      const b64 = btoa(bin)
+      const r = await api.uploadImage(projectId, file.type, b64)
+      const previewUrl = URL.createObjectURL(file)
+      setPendingImages(prev => [
+        ...prev,
+        {
+          imageId: r.imageId,
+          refToken: r.refToken,
+          previewUrl,
+          size: r.size,
+        },
+      ])
+      // 在當前游標插入 refToken
+      const ta = taRef.current
+      const pos = ta?.selectionEnd ?? text.length
+      const before = text.slice(0, pos)
+      const after = text.slice(pos)
+      setText(before + r.refToken + after)
+      requestAnimationFrame(() => {
+        if (!ta) return
+        const newPos = pos + r.refToken.length
+        ta.focus()
+        ta.setSelectionRange(newPos, newPos)
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error('圖片上傳失敗', { description: msg })
+    } finally {
+      setUploading(false)
+    }
+  }
 
   function applyFileAutocomplete(): void {
     const f = fileMatches[fileAcIndex]
@@ -273,12 +329,72 @@ export function InputBar({
           ))}
         </div>
       )}
+      {pendingImages.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {pendingImages.map(img => (
+            <div
+              key={img.imageId}
+              className="flex items-center gap-1.5 bg-muted rounded-md pl-1 pr-2 py-0.5"
+              title={img.refToken + ` · ${(img.size / 1024).toFixed(1)} KB`}
+            >
+              <img
+                src={img.previewUrl}
+                alt=""
+                className="h-6 w-6 object-cover rounded-sm"
+              />
+              <span className="text-[10px] font-mono">
+                {img.imageId.slice(0, 8)}
+              </span>
+              <button
+                onClick={() => {
+                  setPendingImages(prev => prev.filter(p => p.imageId !== img.imageId))
+                  setText(t => t.replace(img.refToken, '').replace(/\s\s+/g, ' '))
+                  URL.revokeObjectURL(img.previewUrl)
+                }}
+                className="text-muted-foreground hover:text-destructive text-xs leading-none"
+                title="移除"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {uploading && <span className="text-xs text-muted-foreground self-center">上傳中…</span>}
+        </div>
+      )}
       <Textarea
         ref={taRef}
         value={text}
         onChange={e => setText(e.target.value)}
         onCompositionStart={() => setComposing(true)}
         onCompositionEnd={() => setComposing(false)}
+        onPaste={e => {
+          // M-WEB-PARITY-5：偵測剪貼簿圖片
+          const items = e.clipboardData?.items
+          if (!items) return
+          for (const item of items) {
+            if (item.type.startsWith('image/')) {
+              const file = item.getAsFile()
+              if (file) {
+                e.preventDefault()
+                void uploadImageFile(file)
+                break
+              }
+            }
+          }
+        }}
+        onDrop={e => {
+          // M-WEB-PARITY-5：拖放圖片
+          const files = e.dataTransfer?.files
+          if (!files || files.length === 0) return
+          const imgs = Array.from(files).filter(f => f.type.startsWith('image/'))
+          if (imgs.length === 0) return
+          e.preventDefault()
+          for (const f of imgs) void uploadImageFile(f)
+        }}
+        onDragOver={e => {
+          // 必須 preventDefault 才能 fire onDrop
+          if (e.dataTransfer.types.includes('Files')) e.preventDefault()
+        }}
         onKeyDown={e => {
           if (composing) return
           if (showAc && acFiltered.length > 0) {

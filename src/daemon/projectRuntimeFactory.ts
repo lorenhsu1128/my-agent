@@ -89,6 +89,8 @@ export function createDefaultProjectRuntimeFactory(
       const rawRunner = createQueryEngineRunner({
         context,
         canUseTool: permissionRouter.canUseTool,
+        // M-WEB-PARITY-5：讓 runner 能解析 prompt 內 [Image:<id>] refToken
+        projectId,
       })
       const wrappedRunner = wrapRunnerWithProjectCwd(rawRunner, {
         mutex: deps.mutex,

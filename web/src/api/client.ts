@@ -85,6 +85,24 @@ export const api = {
     )
   },
   /**
+   * M-WEB-PARITY-5：上傳圖片到 daemon。data 為 base64 純字串（不含 dataURL 前綴）。
+   */
+  uploadImage(
+    projectId: string,
+    mimeType: string,
+    base64Data: string,
+  ): Promise<{
+    imageId: string
+    refToken: string
+    size: number
+    mimeType: string
+  }> {
+    return request(
+      `/api/projects/${encodeURIComponent(projectId)}/images`,
+      { method: 'POST', json: { mimeType, data: base64Data } },
+    )
+  },
+  /**
    * M-WEB-PARITY-7：列可用 model + 當前選擇。
    */
   listModels(): Promise<{

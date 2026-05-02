@@ -74,6 +74,11 @@ export interface QueryEngineRunnerOptions {
     toolUseID: string
     input: unknown
   }) => void
+  /**
+   * M-WEB-PARITY-5：projectId — 用來解析 prompt 內的 `[Image:<id>]` refToken
+   * 為 base64 image content block。未給 → 圖片功能停用（純 text passthrough）。
+   */
+  projectId?: string
 }
 
 /**
@@ -151,17 +156,37 @@ export function createQueryEngineRunner(
       if (signal.aborted) forward()
       else signal.addEventListener('abort', forward, { once: true })
 
-      // Prompt：payload 可能是 string 或 ContentBlockParam[]（我們不限定）。
-      const prompt =
-        typeof input.payload === 'string'
-          ? input.payload
-          : (input.payload as unknown as string) // runtime tolerant
+      // Prompt：payload 可能是 string 或 ContentBlockParam[]。
+      // M-WEB-PARITY-5：string payload 內如有 [Image:<id>] refToken，解析成
+      // base64 image content block，prompt 改成 ContentBlockParam[]。
+      let prompt: string | unknown[]
+      if (typeof input.payload === 'string') {
+        if (opts.projectId && /\[Image:[0-9a-f-]{16,}\]/i.test(input.payload)) {
+          // 動態 import 避免 image storage 依賴洩漏到沒有 web 的 daemon path
+          const { resolveImageRefs } = await import('../web/imageStorage.js')
+          const r = resolveImageRefs(input.payload, opts.projectId)
+          if (r.images.length > 0) {
+            prompt = [
+              ...r.images,
+              { type: 'text', text: r.text || '請看上面的圖片' },
+            ]
+          } else {
+            prompt = input.payload
+          }
+        } else {
+          prompt = input.payload
+        }
+      } else {
+        prompt = input.payload as unknown[]
+      }
 
       let done = false
       try {
         for await (const sdkMessage of ask({
           commands: context.commands,
-          prompt,
+          // ContentBlockParam[] 是 SDK 提供型別；此處 prompt 已限制為兩種其中之一
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          prompt: prompt as any,
           promptUuid: input.id as `${string}-${string}-${string}-${string}-${string}`,
           cwd: context.cwd,
           tools: context.buildTools(),
