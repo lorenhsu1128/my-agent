@@ -286,6 +286,8 @@ export function createWebGateway(opts: WebGatewayOptions): WebGatewayHandle {
           toolUseID: frame.toolUseID,
           decision: frame.decision,
           updatedInput: frame.updatedInput,
+          // M-WEB-PARITY-6：scope 透傳；'session-tool' 觸發 router 加入 allow 清單
+          scope: (frame as { scope?: 'once' | 'session-tool' }).scope,
         })
         if (!handled) {
           session.send(

@@ -22,13 +22,17 @@ export function PermissionModal() {
 
   if (!selectedId || !pending) return null
 
-  function decide(decision: 'allow' | 'deny') {
+  function decide(
+    decision: 'allow' | 'deny',
+    scope: 'once' | 'session-tool' = 'once',
+  ) {
     if (!ws || !selectedId || !pending) return
     ws.send({
       type: 'permission.respond',
       projectId: selectedId,
       toolUseID: pending.toolUseID,
       decision,
+      scope,
     })
   }
 
@@ -77,9 +81,18 @@ export function PermissionModal() {
             })()}
           </pre>
         </details>
-        <AlertDialogFooter>
+        <AlertDialogFooter className="flex-col sm:flex-row gap-2">
           <AlertDialogCancel onClick={() => decide('deny')}>Deny</AlertDialogCancel>
-          <AlertDialogAction onClick={() => decide('allow')}>Allow</AlertDialogAction>
+          <AlertDialogAction onClick={() => decide('allow', 'once')}>
+            Allow（本次）
+          </AlertDialogAction>
+          <AlertDialogAction
+            onClick={() => decide('allow', 'session-tool')}
+            className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
+            title={`本 session 內所有 ${pending.toolName} 直接放行（不再彈窗），rotate session 後重置`}
+          >
+            永遠允許 {pending.toolName}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

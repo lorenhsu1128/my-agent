@@ -70,6 +70,12 @@ export interface PermissionResponseFrame {
   decision: 'allow' | 'deny'
   updatedInput?: unknown
   message?: string
+  /**
+   * M-WEB-PARITY-6：scope — 'once'（預設）只本次；'session-tool' 將該 toolName
+   * 加入本 router 的 session 允許清單（lifetime 等於 ProjectRuntime；rotate
+   * session 後重置）。後續同名 tool 不再 prompt。
+   */
+  scope?: 'once' | 'session-tool'
 }
 
 export interface PermissionFallbackHandler {
@@ -108,6 +114,8 @@ interface PendingRequest {
   toolUseID: string
   resolve: (d: PermissionDecision) => void
   timer: unknown
+  /** M-WEB-PARITY-6：handleResponse 收 scope=session-tool 時要把這個加入 allow 清單。 */
+  toolName?: string
 }
 
 export interface PermissionRouter {
@@ -133,11 +141,17 @@ export interface PermissionRouter {
 function isPermissionResponse(v: unknown): v is PermissionResponseFrame {
   if (!v || typeof v !== 'object') return false
   const r = v as Record<string, unknown>
-  return (
-    r.type === 'permissionResponse' &&
-    typeof r.toolUseID === 'string' &&
-    (r.decision === 'allow' || r.decision === 'deny')
-  )
+  if (r.type !== 'permissionResponse') return false
+  if (typeof r.toolUseID !== 'string') return false
+  if (r.decision !== 'allow' && r.decision !== 'deny') return false
+  if (
+    r.scope !== undefined &&
+    r.scope !== 'once' &&
+    r.scope !== 'session-tool'
+  ) {
+    return false
+  }
+  return true
 }
 
 function inferRiskLevel(tool: {
@@ -216,6 +230,10 @@ export function createPermissionRouter(
     updatedInput: input as Record<string, unknown>,
   })
 
+  // M-WEB-PARITY-6：session-scoped 「永遠允許此工具」清單。Lifetime = router
+  // 物件本身（= ProjectRuntime）；rotateProject 會建新 router 自然清空。
+  const sessionAllowedTools = new Set<string>()
+
   const canUseTool: CanUseToolFn = async (
     tool,
     input,
@@ -230,6 +248,10 @@ export function createPermissionRouter(
     // client。若 forceDecision 已給（譬如 classifier 自動通過）也直接用。
     if (forceDecision !== undefined) {
       return forceDecision
+    }
+    // M-WEB-PARITY-6：先查 session-scoped 允許清單
+    if (sessionAllowedTools.has(tool.name)) {
+      return autoAllow(input)
     }
     try {
       const preJudge = await hasPermissionsToUseTool(
@@ -311,6 +333,7 @@ export function createPermissionRouter(
           toolUseID,
           resolve: d => finish(d),
           timer,
+          toolName: tool.name,
         })
         if (fallback) {
           fallback
@@ -388,6 +411,7 @@ export function createPermissionRouter(
         toolUseID,
         resolve,
         timer,
+        toolName: tool.name,
       })
     })
   }
@@ -402,6 +426,14 @@ export function createPermissionRouter(
       scheduler.clearTimeout(entry.timer)
       fireResolved(frame.toolUseID)
       if (frame.decision === 'allow') {
+        // M-WEB-PARITY-6：scope=session-tool → 加入本 session 允許清單
+        if (frame.scope === 'session-tool') {
+          // 從 entry 對應的 meta 拿 toolName（meta 在 firePending 時已存進
+          // pending 旁邊的 sub-list；簡單做法是從廣播的 frame 帶 toolName，
+          // 但目前 frame.toolName 不在 response 裡）— 改成查當前 pending
+          // 的 meta：fireResolved 之前 entry 存了 toolName。
+          if (entry.toolName) sessionAllowedTools.add(entry.toolName)
+        }
         entry.resolve({
           behavior: 'allow',
           updatedInput: (frame.updatedInput ?? {}) as Record<string, unknown>,

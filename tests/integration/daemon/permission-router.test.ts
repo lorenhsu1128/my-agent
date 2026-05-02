@@ -359,4 +359,109 @@ describe('createPermissionRouter', () => {
     expect(router.handleResponse('c', { type: 'nope' })).toBe(false)
     expect(router.handleResponse('c', null)).toBe(false)
   })
+
+  test('M-WEB-PARITY-6: scope=session-tool 把 toolName 加入 allow 清單，後續同名 tool 不再 prompt', async () => {
+    const cap = { sends: [] as SendCall[], broadcasts: [] as BroadcastCall[] }
+    const router = createPermissionRouter({
+      server: makeFakeServer(cap),
+      resolveSourceClientId: () => 'client-A',
+      resolveCurrentInputId: () => 'input-1',
+    })
+    // 第一次 — 應 prompt + 收 scope=session-tool
+    const p1 = router.canUseTool(
+      makeFakeTool({ name: 'Bash' }),
+      { command: 'ls' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+      'toolUse-1',
+    )
+    await new Promise(r => setTimeout(r, 5))
+    expect(router.pendingCount()).toBe(1)
+    router.handleResponse('client-A', {
+      type: 'permissionResponse',
+      toolUseID: 'toolUse-1',
+      decision: 'allow',
+      scope: 'session-tool',
+    })
+    const d1 = await p1
+    expect(d1.behavior).toBe('allow')
+    expect(router.pendingCount()).toBe(0)
+
+    // 第二次同 toolName — 應直接 allow（不 prompt、不 broadcast）
+    cap.sends.length = 0
+    cap.broadcasts.length = 0
+    const d2 = await router.canUseTool(
+      makeFakeTool({ name: 'Bash' }),
+      { command: 'pwd' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+      'toolUse-2',
+    )
+    expect(d2.behavior).toBe('allow')
+    expect(cap.sends.length).toBe(0)
+    expect(router.pendingCount()).toBe(0)
+
+    // 不同 toolName — 仍 prompt
+    const p3 = router.canUseTool(
+      makeFakeTool({ name: 'Edit' }),
+      { file_path: '/tmp/x' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+      'toolUse-3',
+    )
+    await new Promise(r => setTimeout(r, 5))
+    expect(router.pendingCount()).toBe(1)
+    router.handleResponse('client-A', {
+      type: 'permissionResponse',
+      toolUseID: 'toolUse-3',
+      decision: 'deny',
+    })
+    const d3 = await p3
+    expect(d3.behavior).toBe('deny')
+  })
+
+  test('M-WEB-PARITY-6: scope=once 不影響後續（仍 prompt）', async () => {
+    const cap = { sends: [] as SendCall[], broadcasts: [] as BroadcastCall[] }
+    const router = createPermissionRouter({
+      server: makeFakeServer(cap),
+      resolveSourceClientId: () => 'client-A',
+      resolveCurrentInputId: () => 'input-1',
+    })
+    const p1 = router.canUseTool(
+      makeFakeTool({ name: 'Bash' }),
+      { command: 'ls' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+      'tu1',
+    )
+    await new Promise(r => setTimeout(r, 5))
+    router.handleResponse('client-A', {
+      type: 'permissionResponse',
+      toolUseID: 'tu1',
+      decision: 'allow',
+      scope: 'once',
+    })
+    await p1
+    cap.sends.length = 0
+    // 第二次仍 prompt
+    void router.canUseTool(
+      makeFakeTool({ name: 'Bash' }),
+      { command: 'pwd' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+      'tu2',
+    )
+    await new Promise(r => setTimeout(r, 5))
+    expect(cap.sends.length).toBe(1)
+  })
 })

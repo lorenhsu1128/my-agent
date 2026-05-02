@@ -277,6 +277,12 @@ export interface PermissionRespondFrame {
   toolUseID: string
   decision: 'allow' | 'deny'
   updatedInput?: unknown
+  /**
+   * M-WEB-PARITY-6：scope — 'once'（預設，等同 TUI 單次允許）；'session-tool'
+   * 把該 toolName 加入 daemon router 的 session 允許清單，後續同名 tool 不再
+   * 彈窗。Lifetime = ProjectRuntime。
+   */
+  scope?: 'once' | 'session-tool'
 }
 export interface PermissionModeFrame {
   type: 'permission.modeSet'
