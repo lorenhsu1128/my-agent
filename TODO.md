@@ -12,7 +12,7 @@
 ### 任務
 - [x] M-WEB-PARITY-1 (P0-1) Web 建立新 session：rotateProject 包 unload+load；session.rotated frame 廣播；SessionTree ＋ 按鈕；commit 6c4bdc4
 - [x] M-WEB-PARITY-2 (P0-2) Llamacpp slot inspector polling：發現 5s polling 已存在；縮為 2s + 後端 500ms cache 防多 client 打爆
-- [ ] M-WEB-PARITY-3 (P1-4) WS 重連補帧：`src/server/directConnectServer.ts` 加 frame seq + 200 frame ring buffer；subscribe frame 加 lastSeq；`web/src/store/wsStore.ts` reconnect 帶 lastSeq；新增 `tests/integration/daemon/ws-reconnect.test.ts`
+- [x] M-WEB-PARITY-3 (P1-4) WS 重連補帧：browserSessionRegistry 加 broadcastWithSeq + replayTo + 200 frame ring buffer；subscribe frame 收 lastSeq map；commit f4d16dd
 - [ ] M-WEB-PARITY-4 (P0-3) `@file` typeahead：新 endpoint `GET /api/projects/:id/files?q=&limit=50`；`InputBar.tsx` 偵測 @ 開 dropdown；新 `tests/integration/web/files-search.test.ts`
 - [ ] M-WEB-PARITY-5 (P0-4) 圖片上傳：新 endpoint `POST /api/projects/:id/images`；新檔 `src/web/imageStorage.ts`；`InputBar.tsx` onPaste/onDrop；`[Image<id>]` refToken 餵 daemon image block；vision E2E 手測
 - [ ] M-WEB-PARITY-6 (P1-1) Permission 細粒度選項：WS `permissionRequest` frame 加 suggestedScopes；`PermissionModal.tsx` 依 tool kind 顯示對應選項；scope 寫 session.permissions.json；TUI/Web 同 session first-wins 驗證
