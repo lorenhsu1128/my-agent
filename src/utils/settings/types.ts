@@ -947,6 +947,31 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Enable background memory consolidation (auto-dream). When set, overrides the server-side default.',
         ),
+      memoryRecall: z
+        .object({
+          maxFiles: z
+            .number()
+            .int()
+            .min(1)
+            .max(20)
+            .optional()
+            .describe(
+              'Max memory files the selector LLM may pick per turn (default 5; range 1-20). Lower → less context pollution; higher → more recall.',
+            ),
+          fallbackMaxFiles: z
+            .number()
+            .int()
+            .min(1)
+            .max(20)
+            .optional()
+            .describe(
+              'When the selector LLM fails (no key / parse error / server down), attach the freshest N memories instead. Default 8; range 1-20.',
+            ),
+        })
+        .optional()
+        .describe(
+          'Tunables for query-driven memory prefetch (the "Recalled N memories" rows in the UI). See `/memory-recall` slash command.',
+        ),
       selfImproveThresholds: z
         .object({
           skillImprovementTurnBatch: z
