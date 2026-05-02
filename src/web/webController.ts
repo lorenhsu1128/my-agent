@@ -42,6 +42,16 @@ export interface WebServerControllerOptions {
   getDiscordController?: () =>
     | import('../discord/discordController.js').DiscordController
     | null
+  /**
+   * M-WEB-PARITY-9：當 web 改 permission mode 時，廣播給 daemon thin client
+   * （REPL/Discord）— daemonCli 在 enableServer 時注入，內部走 directConnectServer.
+   * broadcast `permissionModeChanged`。未注入則只更新 daemon state + web 端，
+   * TUI 收不到。
+   */
+  notifyPermissionModeToThinClients?: (
+    projectId: string,
+    mode: string,
+  ) => void
 }
 
 export interface WebServerController {
@@ -87,6 +97,7 @@ export function createWebServerController(
       const gw = createWebGateway({
         registry: opts.registry,
         browserSessions: ws.registry,
+        notifyPermissionModeToThinClients: opts.notifyPermissionModeToThinClients,
       })
       const rest = createRestRoutes({
         registry: opts.registry,

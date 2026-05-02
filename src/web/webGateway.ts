@@ -48,6 +48,16 @@ export interface WebGatewayOptions {
   browserSessions: BrowserSessionRegistry
   /** 注入給 webRpc / TUI 顯示 status 用（M-WEB-7）。 */
   onStatusChange?: (running: boolean) => void
+  /**
+   * M-WEB-PARITY-9：當 web 端改 permission mode 時，廣播給 daemon 的 thin
+   * client（REPL / Discord）— 走 directConnectServer.broadcast `permissionModeChanged`
+   * frame，TUI useDaemonMode hook 已會接。未注入則 web 端只更新 daemon state，
+   * 不通知其他 client（Web tab 自己仍會收到 permission.modeChanged）。
+   */
+  notifyPermissionModeToThinClients?: (
+    projectId: string,
+    mode: string,
+  ) => void
 }
 
 export interface WebGatewayHandle {
@@ -301,14 +311,55 @@ export function createWebGateway(opts: WebGatewayOptions): WebGatewayHandle {
         return
       }
       case 'permission.modeSet': {
-        // M-WEB-13 才接上 toolPermissionContext.setMode + 廣播 permission.modeChanged
-        session.send(
-          JSON.stringify({
-            type: 'error',
-            code: 'NOT_IMPLEMENTED',
-            message: 'permission.modeSet will be wired in M-WEB-13',
-          }),
+        // M-WEB-PARITY-9：真實作 — 同步到 runtime AppState + 廣播 web/TUI/Discord
+        const runtime = registry.getProject(frame.projectId)
+        if (!runtime) {
+          session.send(
+            JSON.stringify({
+              type: 'error',
+              code: 'PROJECT_NOT_FOUND',
+              message: `project ${frame.projectId} not loaded`,
+            }),
+          )
+          return
+        }
+        const mode = frame.mode as import(
+          '../types/permissions.js'
+        ).PermissionMode
+        if (
+          mode !== 'default' &&
+          mode !== 'acceptEdits' &&
+          mode !== 'bypassPermissions' &&
+          mode !== 'plan'
+        ) {
+          session.send(
+            JSON.stringify({
+              type: 'error',
+              code: 'BAD_MODE',
+              message: `unknown mode: ${frame.mode}`,
+            }),
+          )
+          return
+        }
+        runtime.context.setAppState(prev =>
+          prev.toolPermissionContext.mode === mode
+            ? prev
+            : {
+                ...prev,
+                toolPermissionContext: {
+                  ...prev.toolPermissionContext,
+                  mode,
+                },
+              },
         )
+        // 廣播給所有訂閱該 project 的 web tab
+        broadcastToProject(frame.projectId, {
+          type: 'permission.modeChanged',
+          projectId: frame.projectId,
+          mode,
+        })
+        // 廣播給 daemon 的 thin client（REPL / Discord）
+        opts.notifyPermissionModeToThinClients?.(frame.projectId, mode)
         return
       }
       case 'mutation': {

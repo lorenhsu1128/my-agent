@@ -515,6 +515,77 @@ describe('webGateway inbound message routing', () => {
     gw.dispose()
   })
 
+  test('M-WEB-PARITY-9: permission.modeSet → 更新 toolPermissionContext.mode + 廣播 web frame + notify thin clients', () => {
+    const reg = fakeRegistry()
+    const sessions = fakeBrowserSessions()
+    const r = fakeRuntime('p1', '/x/p1')
+    // 把 context.setAppState stub 起來收 mutation
+    const stateMutations: unknown[] = []
+    let currentState: { toolPermissionContext: { mode: string } } = {
+      toolPermissionContext: { mode: 'default' },
+    }
+    ;(r as unknown as { context: { setAppState: (fn: (p: unknown) => unknown) => void } }).context = {
+      setAppState: (fn: (p: unknown) => unknown) => {
+        const next = fn(currentState) as typeof currentState
+        stateMutations.push(next)
+        currentState = next
+      },
+    }
+    reg._add(r as unknown as ProjectRuntime)
+    const thinClientNotifies: { projectId: string; mode: string }[] = []
+    const gw = createWebGateway({
+      registry: reg,
+      browserSessions: sessions,
+      notifyPermissionModeToThinClients: (projectId, mode) => {
+        thinClientNotifies.push({ projectId, mode })
+      },
+    })
+    const sub = fakeSession('s1')
+    sub.subs.add('p1')
+    sessions._addSession(sub.session)
+
+    gw.handleClientMessage(sub.session, {
+      type: 'permission.modeSet',
+      projectId: 'p1',
+      mode: 'acceptEdits',
+    })
+
+    expect(currentState.toolPermissionContext.mode).toBe('acceptEdits')
+    // 廣播給 web tab
+    const broadcast = sessions._broadcasts.find(b => {
+      const p = JSON.parse(b.payload as string) as { type?: string; mode?: string }
+      return p.type === 'permission.modeChanged' && p.mode === 'acceptEdits'
+    })
+    expect(broadcast).toBeTruthy()
+    // 通知 thin client
+    expect(thinClientNotifies).toEqual([{ projectId: 'p1', mode: 'acceptEdits' }])
+    gw.dispose()
+  })
+
+  test('M-WEB-PARITY-9: permission.modeSet 未知 mode → BAD_MODE error', () => {
+    const reg = fakeRegistry()
+    const sessions = fakeBrowserSessions()
+    const r = fakeRuntime('p1', '/x/p1')
+    ;(r as unknown as { context: { setAppState: (fn: (p: unknown) => unknown) => void } }).context = {
+      setAppState: () => {},
+    }
+    reg._add(r as unknown as ProjectRuntime)
+    const gw = createWebGateway({ registry: reg, browserSessions: sessions })
+    const sub = fakeSession('s1')
+    sessions._addSession(sub.session)
+    gw.handleClientMessage(sub.session, {
+      type: 'permission.modeSet',
+      projectId: 'p1',
+      mode: 'totally-fake',
+    })
+    const err = sub.sent.find(s => {
+      const p = JSON.parse(s) as { code?: string }
+      return p.code === 'BAD_MODE'
+    })
+    expect(err).toBeTruthy()
+    gw.dispose()
+  })
+
   test('mutation → not implemented response (Phase 1)', () => {
     const reg = fakeRegistry()
     const sessions = fakeBrowserSessions()

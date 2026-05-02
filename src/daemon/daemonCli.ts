@@ -582,6 +582,14 @@ export async function runDaemonStart(
           },
           log: msg => void handle.logger.info(`[web] ${msg}`),
           getDiscordController: () => discordController,
+          // M-WEB-PARITY-9：把 web 改 mode 廣播給 thin client（REPL/Discord）
+          notifyPermissionModeToThinClients: (projectId, mode) => {
+            if (!handle.server) return
+            handle.server.broadcast(
+              { type: 'permissionModeChanged', projectId, mode },
+              c => c.projectId === projectId,
+            )
+          },
         })
         if (webCfg.enabled && webCfg.autoStart) {
           try {

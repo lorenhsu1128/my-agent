@@ -3063,3 +3063,5 @@
 - 2026-05-02 09:13: Session 結束 | 進度：716/814 任務 | 6c35e51 feat(web): M-WEB-PARITY-2 — Llamacpp slot 5s polling 縮為 2s + 後端 cache
 
 - 2026-05-02 10:06: Session 結束 | 進度：722/814 任務 | 7ed0729 feat(web,daemon): M-WEB-PARITY-5 — Web 圖片上傳（paste/drop + vision)
+
+- 2026-05-02 10:34: Session 結束 | 進度：722/814 任務 | 0dc57ea docs: TODO session log — M-WEB-PARITY 全 8 項完成
