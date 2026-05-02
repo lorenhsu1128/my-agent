@@ -85,6 +85,10 @@ function errorResponse(code: string, message: string, status = 400): Response {
   return jsonResponse({ error: message, code }, status)
 }
 
+// M-WEB-PARITY-2：slot 查詢 cache TTL（多 client polling 不重複打 llamacpp）。
+// 實際 cache state 在 createRestRoutes 閉包內，每個 handler 獨立（避免測試串擾）。
+const SLOTS_CACHE_TTL_MS = 500
+
 function isProjectIdSafe(id: string): boolean {
   // sanitizePath 已 normalize；額外擋斜線 / null / 過長
   if (id.length === 0 || id.length > 256) return false
@@ -94,6 +98,15 @@ function isProjectIdSafe(id: string): boolean {
 
 export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
   const { registry } = opts
+  let slotsCache: { at: number; payload: unknown } | null = null
+  const getCachedSlots = (): unknown => {
+    if (!slotsCache) return null
+    if (Date.now() - slotsCache.at > SLOTS_CACHE_TTL_MS) return null
+    return slotsCache.payload
+  }
+  const setCachedSlots = (payload: unknown): void => {
+    slotsCache = { at: Date.now(), payload }
+  }
 
   async function handle(req: Request): Promise<Response | null> {
     const url = new URL(req.url)
@@ -1120,12 +1133,16 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
     }
 
     // ----- M-WEB-CLOSEOUT-1：Llamacpp slots inspector（read-only + erase action）-----
+    // M-WEB-PARITY-2：多 client polling 時加 500ms in-memory cache，防止打爆 llamacpp。
     if (url.pathname === '/api/llamacpp/slots' && method === 'GET') {
+      const cached = getCachedSlots()
+      if (cached) return jsonResponse(cached)
       const r = await fetchSlots()
-      if (r.ok) {
-        return jsonResponse({ available: true, slots: r.slots })
-      }
-      return jsonResponse({ available: false, reason: r.error, slots: [] })
+      const payload = r.ok
+        ? { available: true, slots: r.slots }
+        : { available: false, reason: r.error, slots: [] }
+      setCachedSlots(payload)
+      return jsonResponse(payload)
     }
     {
       const m = url.pathname.match(/^\/api\/llamacpp\/slots\/(\d+)\/erase$/)

@@ -10,8 +10,8 @@
 **決策**：每項一個獨立 commit，順序為 P0-1 → P0-2 → P1-4 → P0-3 → P0-4 → P1-1 → P1-2 → P1-3（先解 501、再穩 WS、再上重功能）。每項都跑 typecheck + 整合測試 + `./cli -p hello` 冒煙 + Web 手測。
 
 ### 任務
-- [ ] M-WEB-PARITY-1 (P0-1) Web 建立新 session：`src/web/restRoutes.ts:330` 的 501 改成呼叫 Project.createSession；`web/src/store/sessionStore.ts` 加 createSession action；`SessionTree.tsx` 加 ＋ 按鈕；`tests/integration/web/restRoutes.test.ts` 改 expect
-- [ ] M-WEB-PARITY-2 (P0-2) Llamacpp slot inspector polling：`web/src/components/rightPanel/tabs/LlamacppTab.tsx` 加 2s polling hook；後端 200ms in-memory cache 防打爆 llamacpp
+- [x] M-WEB-PARITY-1 (P0-1) Web 建立新 session：rotateProject 包 unload+load；session.rotated frame 廣播；SessionTree ＋ 按鈕；commit 6c4bdc4
+- [x] M-WEB-PARITY-2 (P0-2) Llamacpp slot inspector polling：發現 5s polling 已存在；縮為 2s + 後端 500ms cache 防多 client 打爆
 - [ ] M-WEB-PARITY-3 (P1-4) WS 重連補帧：`src/server/directConnectServer.ts` 加 frame seq + 200 frame ring buffer；subscribe frame 加 lastSeq；`web/src/store/wsStore.ts` reconnect 帶 lastSeq；新增 `tests/integration/daemon/ws-reconnect.test.ts`
 - [ ] M-WEB-PARITY-4 (P0-3) `@file` typeahead：新 endpoint `GET /api/projects/:id/files?q=&limit=50`；`InputBar.tsx` 偵測 @ 開 dropdown；新 `tests/integration/web/files-search.test.ts`
 - [ ] M-WEB-PARITY-5 (P0-4) 圖片上傳：新 endpoint `POST /api/projects/:id/images`；新檔 `src/web/imageStorage.ts`；`InputBar.tsx` onPaste/onDrop；`[Image<id>]` refToken 餵 daemon image block；vision E2E 手測

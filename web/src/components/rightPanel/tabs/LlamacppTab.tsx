@@ -489,9 +489,11 @@ function SlotsPanel() {
     }
   }
 
+  // M-WEB-PARITY-2：縮為 2s 讓 slot 狀態看起來即時；後端 500ms cache 防止
+  // 多 client polling 同步打爆 llamacpp。
   useEffect(() => {
     void refresh()
-    const t = setInterval(refresh, 5000)
+    const t = setInterval(refresh, 2000)
     return () => clearInterval(t)
   }, [])
 
