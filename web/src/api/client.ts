@@ -85,6 +85,21 @@ export const api = {
     )
   },
   /**
+   * M-WEB-PARITY-7：列可用 model + 當前選擇。
+   */
+  listModels(): Promise<{
+    models: { value: string; label: string; description: string }[]
+    current: string | null
+  }> {
+    return request('/api/models')
+  },
+  /**
+   * M-WEB-PARITY-7：切 model（走 setMainLoopModelOverride，下次 turn 生效）。
+   */
+  setCurrentModel(model: string): Promise<{ ok: boolean; model: string }> {
+    return request('/api/models/current', { method: 'PUT', json: { model } })
+  },
+  /**
    * M-WEB-PARITY-4：搜 project 檔案（@file typeahead 用）。
    * q 為空時回前 N 個 entry（無排序）；非空走 fuzzy match。
    */

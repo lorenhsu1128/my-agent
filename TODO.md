@@ -16,7 +16,7 @@
 - [x] M-WEB-PARITY-4 (P0-3) `@file` typeahead：新 endpoint + fileSearch.ts fuzzy match + InputBar 200ms debounce dropdown
 - [ ] M-WEB-PARITY-5 (P0-4) 圖片上傳：新 endpoint `POST /api/projects/:id/images`；新檔 `src/web/imageStorage.ts`；`InputBar.tsx` onPaste/onDrop；`[Image<id>]` refToken 餵 daemon image block；vision E2E 手測
 - [ ] M-WEB-PARITY-6 (P1-1) Permission 細粒度選項：WS `permissionRequest` frame 加 suggestedScopes；`PermissionModal.tsx` 依 tool kind 顯示對應選項；scope 寫 session.permissions.json；TUI/Web 同 session first-wins 驗證
-- [ ] M-WEB-PARITY-7 (P1-2) Model picker：新 `GET /api/models` + `PUT /api/projects/:id/model`；`Layout.tsx` chat header 加 Select 下拉；切換不重建 session
+- [x] M-WEB-PARITY-7 (P1-2) Model picker：GET /api/models + PUT /api/models/current（走 setMainLoopModelOverride，下次 turn 即生效）+ chat header Select
 - [ ] M-WEB-PARITY-8 (P1-3) Context/cost/status 視覺化：右欄 Overview tab 補 ContextBar / UsageStats / StatusCard；新 `GET /api/projects/:id/usage`
 
 ### 不在範圍 → 後續 milestone

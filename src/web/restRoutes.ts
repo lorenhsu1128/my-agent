@@ -47,6 +47,12 @@ import {
 } from '../services/sessionIndex/index.js'
 import { getSlashCommandMetadataSnapshot } from '../daemon/slashCommandRegistry.js'
 import { searchProjectFiles } from './fileSearch.js'
+import { getModelOptions } from '../utils/model/modelOptions.js'
+import {
+  getDefaultMainLoopModel,
+  getUserSpecifiedModelSetting,
+} from '../utils/model/model.js'
+import { setMainLoopModelOverride } from '../bootstrap/state.js'
 
 export interface RestRoutesOptions {
   registry: ProjectRegistry
@@ -338,6 +344,64 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
             500,
           )
         }
+      }
+    }
+
+    // GET /api/models — M-WEB-PARITY-7：列可用 model + 當前選擇
+    if (url.pathname === '/api/models' && method === 'GET') {
+      try {
+        const options = getModelOptions()
+        const current =
+          getUserSpecifiedModelSetting() ?? getDefaultMainLoopModel() ?? null
+        return jsonResponse({
+          // 過濾 sentinel 值（NO_PREFERENCE / null）— UI 只該選真實 model id
+          models: options
+            .filter(o => typeof o.value === 'string' && o.value.length > 0)
+            .map(o => ({
+              value: o.value,
+              label: o.label,
+              description: o.description,
+            })),
+          current: typeof current === 'string' ? current : null,
+        })
+      } catch (e) {
+        return errorResponse(
+          'MODEL_LIST_FAILED',
+          e instanceof Error ? e.message : String(e),
+          500,
+        )
+      }
+    }
+
+    // PUT /api/models/current — M-WEB-PARITY-7：切 model（走 in-session override）
+    // 等價於 /model command 的效果：setMainLoopModelOverride 是優先級最高的
+    // 來源（高於 env / userSettings.model），下次 turn 立即生效。
+    if (url.pathname === '/api/models/current' && method === 'PUT') {
+      try {
+        const body = (await req.json()) as { model?: unknown }
+        if (typeof body.model !== 'string' || body.model.length === 0) {
+          return errorResponse('BAD_INPUT', 'body.model 必須是非空字串', 400)
+        }
+        const known = getModelOptions().map(o => o.value)
+        if (!known.includes(body.model)) {
+          return errorResponse(
+            'UNKNOWN_MODEL',
+            `model ${body.model} 不在已知清單`,
+            400,
+          )
+        }
+        setMainLoopModelOverride(body.model)
+        opts.broadcastAll?.({
+          type: 'model.changed',
+          model: body.model,
+        })
+        return jsonResponse({ ok: true, model: body.model })
+      } catch (e) {
+        return errorResponse(
+          'MODEL_SET_FAILED',
+          e instanceof Error ? e.message : String(e),
+          500,
+        )
       }
     }
 

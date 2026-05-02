@@ -13,6 +13,7 @@ import { useWsClient } from '../../hooks/useWsClient'
 import { useSessionBackfill } from '../../hooks/useSessionBackfill'
 import { MessageList } from './MessageList'
 import { InputBar } from './InputBar'
+import { ModelPicker } from './ModelPicker'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 
@@ -169,12 +170,15 @@ export function ChatView() {
 
   return (
     <main className="h-full flex flex-col bg-background min-w-0">
-      <header className="h-12 px-4 border-b flex items-center justify-between flex-shrink-0">
+      <header className="h-12 px-4 border-b flex items-center justify-between flex-shrink-0 gap-3">
         <div className="flex flex-col min-w-0">
           <span className="font-semibold truncate">{project.name}</span>
           <span className="text-muted-foreground text-xs font-mono truncate">{project.cwd}</span>
         </div>
-        <span className="text-muted-foreground text-xs">{stateLabel}</span>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <ModelPicker />
+          <span className="text-muted-foreground text-xs">{stateLabel}</span>
+        </div>
       </header>
       {isHistoricalSession && (
         <div className="px-4 py-2 bg-accent border-b text-xs flex items-center justify-between gap-3 flex-shrink-0">
