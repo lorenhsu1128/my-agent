@@ -91,7 +91,11 @@ export function createWebServerController(
       const rest = createRestRoutes({
         registry: opts.registry,
         broadcastToProject: (projectId, payload) => {
-          ws.registry.broadcast(JSON.stringify(payload), projectId)
+          // M-WEB-PARITY-3：REST mutation 廣播也帶 seq，跟 daemon event 同 ring。
+          ws.registry.broadcastWithSeq(
+            payload as Record<string, unknown>,
+            projectId,
+          )
         },
         broadcastAll: payload => {
           ws.registry.broadcastAll(JSON.stringify(payload))

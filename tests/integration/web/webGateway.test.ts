@@ -234,6 +234,16 @@ function fakeBrowserSessions(): BrowserSessionRegistry & {
       }
       return n
     },
+    broadcastWithSeq: (payload, projectId) => {
+      // 測試 stub：行為等價 broadcast，但記錄成 broadcasts（讓既有 expect 不變）。
+      const stamped = JSON.stringify(payload)
+      broadcasts.push({ payload: stamped, projectId })
+      for (const s of sessions.values()) {
+        if (s.isSubscribedTo(projectId)) s.send(stamped)
+      }
+      return 1
+    },
+    replayTo: () => 0,
     broadcastAll: payload => {
       broadcastAlls.push(payload)
       let n = 0

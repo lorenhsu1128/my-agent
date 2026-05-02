@@ -61,6 +61,8 @@ export function createWsClient(opts: WsClientOptions = {}): WsClient {
   let staleTimer: ReturnType<typeof setInterval> | null = null
   let lastMsgAt = Date.now()
   let pendingSubscriptions: string[] = []
+  // M-WEB-PARITY-3：lastSeq per project — frame 帶 _seq 回來，重連時送回讓 server replay。
+  const lastSeqByProject = new Map<string, number>()
 
   const stateHandlers: StateHandler[] = []
   const frameHandlers: FrameHandler[] = []
@@ -132,9 +134,9 @@ export function createWsClient(opts: WsClientOptions = {}): WsClient {
       setState('open')
       backoffIdx = 0
       lastMsgAt = Date.now()
-      // 重發訂閱
+      // 重發訂閱（reconnect 時帶 lastSeq 讓 server 補帧）
       if (pendingSubscriptions.length > 0) {
-        sendRaw({ type: 'subscribe', projectIds: pendingSubscriptions })
+        sendSubscribeWithLastSeq(pendingSubscriptions)
       }
       startStaleCheck()
     })
@@ -147,7 +149,18 @@ export function createWsClient(opts: WsClientOptions = {}): WsClient {
       } catch {
         return
       }
-      if (parsed) emitFrame(parsed)
+      if (parsed) {
+        // M-WEB-PARITY-3：track per-project _seq（server 廣播帶的）
+        const anyP = parsed as unknown as { _seq?: number; projectId?: string }
+        if (
+          typeof anyP._seq === 'number' &&
+          typeof anyP.projectId === 'string'
+        ) {
+          const prev = lastSeqByProject.get(anyP.projectId) ?? 0
+          if (anyP._seq > prev) lastSeqByProject.set(anyP.projectId, anyP._seq)
+        }
+        emitFrame(parsed)
+      }
     })
     s.addEventListener('close', () => {
       stopStaleCheck()
@@ -169,6 +182,21 @@ export function createWsClient(opts: WsClientOptions = {}): WsClient {
     backoffIdx++
     clearReconnectTimer()
     reconnectTimer = setTimeout(connect, wait)
+  }
+
+  function sendSubscribeWithLastSeq(projectIds: string[]): boolean {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false
+    const lastSeq: Record<string, number> = {}
+    for (const pid of projectIds) {
+      const v = lastSeqByProject.get(pid)
+      if (v !== undefined) lastSeq[pid] = v
+    }
+    try {
+      socket.send(JSON.stringify({ type: 'subscribe', projectIds, lastSeq }))
+      return true
+    } catch {
+      return false
+    }
   }
 
   function sendRaw(frame: ClientFrame): boolean {
@@ -193,7 +221,7 @@ export function createWsClient(opts: WsClientOptions = {}): WsClient {
     subscribe(projectIds) {
       pendingSubscriptions = [...new Set(projectIds)]
       if (state === 'open') {
-        sendRaw({ type: 'subscribe', projectIds: pendingSubscriptions })
+        sendSubscribeWithLastSeq(pendingSubscriptions)
       }
     },
     on(event: 'state' | 'frame', handler: StateHandler | FrameHandler) {

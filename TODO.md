@@ -3059,3 +3059,5 @@
 - 2026-05-02 08:48: Session 結束 | 進度：714/806 任務 | 0b5745f docs: 補 LESSONS（llama.cpp slot 配置）+ TODO session 紀錄
 
 - 2026-05-02 08:51: Session 結束 | 進度：714/814 任務 | 0b5745f docs: 補 LESSONS（llama.cpp slot 配置）+ TODO session 紀錄
+
+- 2026-05-02 09:13: Session 結束 | 進度：716/814 任務 | 6c35e51 feat(web): M-WEB-PARITY-2 — Llamacpp slot 5s polling 縮為 2s + 後端 cache

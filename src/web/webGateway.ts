@@ -79,7 +79,11 @@ export function createWebGateway(opts: WebGatewayOptions): WebGatewayHandle {
   const perRuntime = new Map<string, PerRuntimeUnsub>()
 
   function broadcastToProject(projectId: string, evt: ServerEvent): void {
-    browserSessions.broadcast(jsonStringify(evt), projectId)
+    // M-WEB-PARITY-3：per-project event 走 seq+ring buffer，提供 reconnect 補帧。
+    browserSessions.broadcastWithSeq(
+      evt as unknown as Record<string, unknown>,
+      projectId,
+    )
   }
   function broadcastToAll(evt: ServerEvent): void {
     browserSessions.broadcastAll(jsonStringify(evt))

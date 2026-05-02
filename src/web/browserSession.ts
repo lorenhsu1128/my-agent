@@ -68,10 +68,26 @@ export interface BrowserSessionRegistry {
    * 這類 lifecycle 事件每個 tab 都該知道。
    */
   broadcastAll(payload: string): number
+  /**
+   * M-WEB-PARITY-3：帶 seq 的 per-project 廣播。
+   * - 自動 stamp `_seq` 欄位（單調遞增，per project）
+   * - 進 ring buffer（預設 200 frame）讓 reconnect 補帧用
+   * - 回傳分配到的 seq（測試 / 客戶端追蹤用）
+   */
+  broadcastWithSeq(payload: Record<string, unknown>, projectId: string): number
+  /**
+   * M-WEB-PARITY-3：補帧 — 把 (lastSeq, ...] 之間的所有 ring buffer 內 frame
+   * 重送給指定 session。回傳重送的數量。lastSeq 比 ring 最舊還早回 0（無法補，
+   * caller 應改用 full refresh）。
+   */
+  replayTo(sessionId: string, projectId: string, lastSeq: number): number
   /** 點對點送訊息。 */
   send(sessionId: string, payload: string): boolean
   closeAll(reason?: string): void
 }
+
+/** Ring buffer size per project — 配合 30s WS timeout × 一般訊息頻率取整 */
+export const DEFAULT_RING_SIZE_PER_PROJECT = 200
 
 class BrowserSessionImpl implements BrowserSession {
   public readonly id: string
@@ -131,8 +147,26 @@ class BrowserSessionImpl implements BrowserSession {
   }
 }
 
-export function createBrowserSessionRegistry(): BrowserSessionRegistry {
+export function createBrowserSessionRegistry(opts?: {
+  ringSizePerProject?: number
+}): BrowserSessionRegistry {
   const sessions = new Map<string, BrowserSessionImpl>()
+  const ringSize = opts?.ringSizePerProject ?? DEFAULT_RING_SIZE_PER_PROJECT
+  // projectId → { nextSeq, ring（環狀 buffer，oldest-first 線性化的時候用） }
+  const projectState = new Map<
+    string,
+    { nextSeq: number; ring: { seq: number; payload: string }[] }
+  >()
+  const ensureProject = (
+    projectId: string,
+  ): { nextSeq: number; ring: { seq: number; payload: string }[] } => {
+    let s = projectState.get(projectId)
+    if (!s) {
+      s = { nextSeq: 1, ring: [] }
+      projectState.set(projectId, s)
+    }
+    return s
+  }
 
   return {
     size: () => sessions.size,
@@ -162,6 +196,34 @@ export function createBrowserSessionRegistry(): BrowserSessionRegistry {
           projectId === null ? s.hasAnySubscription() : s.isSubscribedTo(projectId)
         if (target) {
           s.send(payload)
+          n++
+        }
+      }
+      return n
+    },
+    broadcastWithSeq(payload, projectId) {
+      const state = ensureProject(projectId)
+      const seq = state.nextSeq++
+      const stamped = JSON.stringify({ ...payload, _seq: seq })
+      // 進 ring（保持 oldest-first；超過 ringSize 砍頭）
+      state.ring.push({ seq, payload: stamped })
+      if (state.ring.length > ringSize) state.ring.shift()
+      // 廣播給訂閱該 project 的 session
+      for (const s of sessions.values()) {
+        if (s.isSubscribedTo(projectId)) s.send(stamped)
+      }
+      return seq
+    },
+    replayTo(sessionId, projectId, lastSeq) {
+      const s = sessions.get(sessionId)
+      if (!s) return 0
+      const state = projectState.get(projectId)
+      if (!state) return 0
+      // 找 ring 內 seq > lastSeq 的全部送
+      let n = 0
+      for (const item of state.ring) {
+        if (item.seq > lastSeq) {
+          s.send(item.payload)
           n++
         }
       }

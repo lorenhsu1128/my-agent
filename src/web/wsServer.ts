@@ -140,6 +140,16 @@ export function createWebWsServer(
         session.send(
           jsonStringifySafe({ type: 'subscribed', projectIds: ids }),
         )
+        // M-WEB-PARITY-3：reconnect 補帧。client 若帶 lastSeq map，逐 project replay。
+        const lastSeq = parsed.lastSeq
+        if (lastSeq && typeof lastSeq === 'object' && lastSeq !== null) {
+          for (const pid of ids) {
+            const v = (lastSeq as Record<string, unknown>)[pid]
+            if (typeof v === 'number' && Number.isFinite(v)) {
+              registry.replayTo(session.id, pid, v)
+            }
+          }
+        }
         return
       }
       opts.onMessage?.(session, parsed)
