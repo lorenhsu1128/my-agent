@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useProjectStore } from '../../store/projectStore'
 import { useUiStore, type ContextSection } from '../../store/uiStore'
 import { useCronStore } from '../../store/cronStore'
 import { usePermissionStore } from '../../store/permissionStore'
+import { useSessionStore } from '../../store/sessionStore'
+import { useMessageStore } from '../../store/messageStore'
 import { useWsClient } from '../../hooks/useWsClient'
+import { useTurnState } from '../../hooks/useTurnState'
 import { api } from '../../api/client'
 import type { ServerEvent } from '../../api/types'
 import { CronTab } from './tabs/CronTab'
@@ -162,6 +165,7 @@ function OverviewBody({ projectId }: { projectId: string }) {
   if (!project) return null
   return (
     <div className="flex flex-col gap-3">
+      <StatusCard projectId={projectId} />
       <Section title="Project">
         <KV
           k="id"
@@ -176,6 +180,95 @@ function OverviewBody({ projectId }: { projectId: string }) {
         <KV k="last activity" v={new Date(project.lastActivityAt).toLocaleString()} />
       </Section>
     </div>
+  )
+}
+
+/**
+ * M-WEB-PARITY-8：Overview tab 上方的即時狀態卡片。
+ * - Model：當前生效的 model（GET /api/models 拉，refresh on model.changed frame）
+ * - Permission mode：來自 permissionStore
+ * - State：來自 useTurnState（IDLE / RUNNING / INTERRUPTING）
+ * - Messages：當前 session 的訊息數（含 assistant turn 中的 in-flight）
+ * - Approx tokens：簡單 char/4 估算（精確 cost 要 daemon 暴露 usage 才行；
+ *   目前先給粗略概念，避免假資訊）
+ */
+function StatusCard({ projectId }: { projectId: string }) {
+  const ws = useWsClient()
+  const [model, setModel] = useState<string | null>(null)
+  const mode = usePermissionStore(s => s.modeByProject[projectId] ?? 'default')
+  const sessionId = useSessionStore(
+    s => s.selectedSessionByProject[projectId],
+  )
+  const messages = useMessageStore(s =>
+    sessionId ? (s.bySession[sessionId] ?? []) : [],
+  )
+  const turnState = useTurnState(projectId)
+
+  // 拉當前 model + 訂閱 model.changed
+  useEffect(() => {
+    let cancelled = false
+    const refresh = (): void => {
+      api
+        .listModels()
+        .then(r => {
+          if (!cancelled) setModel(r.current)
+        })
+        .catch(() => {
+          if (!cancelled) setModel(null)
+        })
+    }
+    refresh()
+    if (!ws) return () => {
+      cancelled = true
+    }
+    const off = ws.on('frame', (f: ServerEvent) => {
+      if ((f as { type?: string }).type === 'model.changed') refresh()
+    })
+    return () => {
+      cancelled = true
+      off()
+    }
+  }, [ws])
+
+  const messageCount = messages.length
+  // 粗略估 token 數：sum(各 block 文字長度) / 4
+  const approxTokens = useMemo(() => {
+    let total = 0
+    for (const m of messages) {
+      for (const b of m.blocks) {
+        if (b.kind === 'text' || b.kind === 'thinking') total += b.text.length
+      }
+    }
+    return Math.round(total / 4)
+  }, [messages])
+
+  return (
+    <Section title="Status">
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="flex flex-col">
+          <span className="text-xs text-muted-foreground">model</span>
+          <span className="text-xs font-mono truncate" title={model ?? ''}>
+            {model ?? '—'}
+          </span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xs text-muted-foreground">permission</span>
+          <span className="text-xs font-mono">{mode}</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xs text-muted-foreground">state</span>
+          <span className="text-xs font-mono">{turnState}</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xs text-muted-foreground">messages</span>
+          <span className="text-xs font-mono">{messageCount}</span>
+        </div>
+        <div className="flex flex-col col-span-2">
+          <span className="text-xs text-muted-foreground">~ tokens（粗估）</span>
+          <span className="text-xs font-mono">{approxTokens.toLocaleString()}</span>
+        </div>
+      </div>
+    </Section>
   )
 }
 

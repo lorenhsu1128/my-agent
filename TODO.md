@@ -17,7 +17,7 @@
 - [ ] M-WEB-PARITY-5 (P0-4) 圖片上傳：新 endpoint `POST /api/projects/:id/images`；新檔 `src/web/imageStorage.ts`；`InputBar.tsx` onPaste/onDrop；`[Image<id>]` refToken 餵 daemon image block；vision E2E 手測
 - [ ] M-WEB-PARITY-6 (P1-1) Permission 細粒度選項：WS `permissionRequest` frame 加 suggestedScopes；`PermissionModal.tsx` 依 tool kind 顯示對應選項；scope 寫 session.permissions.json；TUI/Web 同 session first-wins 驗證
 - [x] M-WEB-PARITY-7 (P1-2) Model picker：GET /api/models + PUT /api/models/current（走 setMainLoopModelOverride，下次 turn 即生效）+ chat header Select
-- [ ] M-WEB-PARITY-8 (P1-3) Context/cost/status 視覺化：右欄 Overview tab 補 ContextBar / UsageStats / StatusCard；新 `GET /api/projects/:id/usage`
+- [x] M-WEB-PARITY-8 (P1-3) Status 視覺化：Overview tab StatusCard 顯示 model / permission / state / messages / approx tokens（粗估）；訂閱 model.changed 即時刷新；不暴露 daemon 內部 usage（避免假資料）
 
 ### 不在範圍 → 後續 milestone
 - M-WEB-SLASH-D-FULL：48 個 jsx-handoff slash command 真 React port（P2，獨立大工程）
