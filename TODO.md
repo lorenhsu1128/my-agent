@@ -3065,3 +3065,5 @@
 - 2026-05-02 10:06: Session 結束 | 進度：722/814 任務 | 7ed0729 feat(web,daemon): M-WEB-PARITY-5 — Web 圖片上傳（paste/drop + vision)
 
 - 2026-05-02 10:34: Session 結束 | 進度：722/814 任務 | 0dc57ea docs: TODO session log — M-WEB-PARITY 全 8 項完成
+
+- 2026-05-02 14:44: Session 結束 | 進度：722/814 任務 | 2a3046d fix(web,daemon): permission.modeSet 從 NOT_IMPLEMENTED stub 改成真實作

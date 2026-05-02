@@ -166,10 +166,12 @@ export function createQueryEngineRunner(
           const { resolveImageRefs } = await import('../web/imageStorage.js')
           const r = resolveImageRefs(input.payload, opts.projectId)
           if (r.images.length > 0) {
-            prompt = [
-              ...r.images,
-              { type: 'text', text: r.text || '請看上面的圖片' },
-            ]
+            // 有圖：image blocks 在前。若 user 有寫文字才追加 text block；
+            // 純圖時不加 placeholder（避免「請看上面的圖片」之類模糊指示讓模型
+            // 反射式去 Read 檔案系統，已踩到）。
+            prompt = r.text
+              ? [...r.images, { type: 'text', text: r.text }]
+              : [...r.images]
           } else {
             prompt = input.payload
           }
