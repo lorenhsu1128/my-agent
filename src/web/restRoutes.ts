@@ -1029,6 +1029,140 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
       }
     }
 
+    // ----- M-MEMRECALL-CMD：4 endpoints for /memory-recall Web 整合 -----
+
+    // GET /api/projects/:id/memory-recall/settings
+    {
+      const m = /^\/api\/projects\/([^/]+)\/memory-recall\/settings$/.exec(url.pathname)
+      if (m && method === 'GET') {
+        const id = decodeURIComponent(m[1]!)
+        const runtime = registry.getProject(id)
+        if (!runtime) return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
+        const { getInitialSettings } = await import('../utils/settings/settings.js')
+        const { readMemoryRecallSettings } = await import(
+          '../memdir/findRelevantMemories.js'
+        )
+        const recall = readMemoryRecallSettings()
+        const enabled = getInitialSettings().autoMemoryEnabled
+        return jsonResponse({
+          enabled: typeof enabled === 'boolean' ? enabled : true,
+          maxFiles: recall.maxFiles,
+          fallbackMaxFiles: recall.fallbackMaxFiles,
+        })
+      }
+    }
+
+    // PUT /api/projects/:id/memory-recall/settings — body { enabled?, maxFiles?, fallbackMaxFiles? }
+    {
+      const m = /^\/api\/projects\/([^/]+)\/memory-recall\/settings$/.exec(url.pathname)
+      if (m && method === 'PUT') {
+        const id = decodeURIComponent(m[1]!)
+        const runtime = registry.getProject(id)
+        if (!runtime) return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
+        let body: Record<string, unknown>
+        try {
+          body = (await req.json()) as Record<string, unknown>
+        } catch {
+          return errorResponse('BAD_JSON', 'invalid JSON body', 400)
+        }
+        const { updateSettingsForSource } = await import('../utils/settings/settings.js')
+        const patch: Record<string, unknown> = {}
+        if (typeof body.enabled === 'boolean') {
+          patch.autoMemoryEnabled = body.enabled
+        }
+        const recallPatch: Record<string, number> = {}
+        for (const k of ['maxFiles', 'fallbackMaxFiles'] as const) {
+          if (typeof body[k] === 'number') {
+            const v = Math.round(body[k] as number)
+            if (v < 1 || v > 20) {
+              return errorResponse('OUT_OF_RANGE', `${k} must be 1-20`, 400)
+            }
+            recallPatch[k] = v
+          }
+        }
+        if (Object.keys(recallPatch).length > 0) {
+          patch.memoryRecall = recallPatch
+        }
+        if (Object.keys(patch).length === 0) {
+          return errorResponse('NO_FIELDS', 'at least one of enabled/maxFiles/fallbackMaxFiles required', 400)
+        }
+        try {
+          updateSettingsForSource(
+            'userSettings',
+            patch as Parameters<typeof updateSettingsForSource>[1],
+          )
+        } catch (e) {
+          return errorResponse('SETTINGS_WRITE_FAILED', (e as Error).message, 500)
+        }
+        opts.broadcastToProject?.(runtime.projectId, {
+          type: 'memoryRecall.settingsChanged',
+          projectId: runtime.projectId,
+        })
+        return jsonResponse({ ok: true })
+      }
+    }
+
+    // GET /api/projects/:id/memory-recall/session-log?sessionId=<id>
+    {
+      const m = /^\/api\/projects\/([^/]+)\/memory-recall\/session-log$/.exec(url.pathname)
+      if (m && method === 'GET') {
+        const id = decodeURIComponent(m[1]!)
+        const runtime = registry.getProject(id)
+        if (!runtime) return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
+        const sid = url.searchParams.get('sessionId') ?? ''
+        if (!sid) return errorResponse('MISSING_SID', 'query.sessionId required', 400)
+        const { listRecall } = await import('../memdir/sessionRecallLog.js')
+        return jsonResponse({ entries: listRecall(sid) })
+      }
+    }
+
+    // POST /api/projects/:id/memory-recall/test — body { query }
+    {
+      const m = /^\/api\/projects\/([^/]+)\/memory-recall\/test$/.exec(url.pathname)
+      if (m && method === 'POST') {
+        const id = decodeURIComponent(m[1]!)
+        const runtime = registry.getProject(id)
+        if (!runtime) return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
+        let body: Record<string, unknown>
+        try {
+          body = (await req.json()) as Record<string, unknown>
+        } catch {
+          return errorResponse('BAD_JSON', 'invalid JSON body', 400)
+        }
+        const query = typeof body.query === 'string' ? body.query : ''
+        if (query.trim().length === 0) {
+          return errorResponse('BAD_FIELDS', 'query (string) required', 400)
+        }
+        try {
+          const { findRelevantMemories } = await import(
+            '../memdir/findRelevantMemories.js'
+          )
+          const { getAutoMemPath } = await import('../memdir/paths.js')
+          // 不寫進 sessionRecallLog（測試模式用一個專屬 sid 避免污染主畫面）
+          const dir = getAutoMemPath()
+          const ctrl = new AbortController()
+          const t = setTimeout(() => ctrl.abort(), 30_000)
+          let results: Awaited<ReturnType<typeof findRelevantMemories>> = []
+          try {
+            results = await findRelevantMemories(
+              query,
+              dir,
+              ctrl.signal,
+              [],
+              new Set(),
+            )
+          } finally {
+            clearTimeout(t)
+          }
+          return jsonResponse({
+            entries: results.map(r => ({ path: r.path, mtimeMs: r.mtimeMs })),
+          })
+        } catch (e) {
+          return errorResponse('TEST_FAILED', (e as Error).message, 500)
+        }
+      }
+    }
+
     // ----- M-WEB-20：PNG QR code endpoint（給瀏覽器顯示給手機掃）-----
     if (url.pathname === '/api/qr' && method === 'GET') {
       const target = url.searchParams.get('url')

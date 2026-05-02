@@ -11,6 +11,7 @@ import { api } from '../../api/client'
 import type { ServerEvent } from '../../api/types'
 import { CronTab } from './tabs/CronTab'
 import { MemoryTab } from './tabs/MemoryTab'
+import { MemoryRecallTab } from './tabs/MemoryRecallTab'
 import { LlamacppTab } from './tabs/LlamacppTab'
 import { DiscordTab } from './tabs/DiscordTab'
 import { PermissionsTab } from './tabs/PermissionsTab'
@@ -29,6 +30,7 @@ import {
   Cpu,
   MessageCircle,
   Shield,
+  Brain,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -42,6 +44,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'overview', label: 'Overview', icon: Info },
   { id: 'cron', label: 'Cron', icon: Clock },
   { id: 'memory', label: 'Memory', icon: Database },
+  { id: 'memory-recall', label: 'Memory Recall', icon: Brain },
   { id: 'llamacpp', label: 'Llamacpp', icon: Cpu },
   { id: 'discord', label: 'Discord', icon: MessageCircle },
   { id: 'permissions', label: 'Permissions', icon: Shield },
@@ -151,6 +154,8 @@ function SectionBody({
       return <CronTab projectId={projectId} />
     case 'memory':
       return <MemoryTab projectId={projectId} />
+    case 'memory-recall':
+      return <MemoryRecallTab projectId={projectId} />
     case 'llamacpp':
       return <LlamacppTab />
     case 'discord':

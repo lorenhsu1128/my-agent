@@ -78,6 +78,7 @@ export type ServerEvent =
   | CronTasksChangedEvent
   | CronFiredEvent
   | MemoryItemsChangedEvent
+  | MemoryRecallSettingsChangedEvent
   | LlamacppConfigChangedEvent
   | WebStatusChangedEvent
   | DiscordStatusChangedEvent
@@ -184,6 +185,22 @@ export interface CronFiredEvent {
 export interface MemoryItemsChangedEvent {
   type: 'memory.itemsChanged'
   projectId: string
+}
+/** M-MEMRECALL-CMD：跨 client 同步 memory recall settings 變更 */
+export interface MemoryRecallSettingsChangedEvent {
+  type: 'memoryRecall.settingsChanged'
+  projectId: string
+}
+export interface MemoryRecallSettings {
+  enabled: boolean
+  maxFiles: number
+  fallbackMaxFiles: number
+}
+export interface MemoryRecallLogEntry {
+  path: string
+  ts: number
+  hitCount: number
+  source: 'selector' | 'fallback'
 }
 export interface LlamacppConfigChangedEvent {
   type: 'llamacpp.configChanged'

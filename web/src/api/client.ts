@@ -255,6 +255,42 @@ export const api = {
       )
     },
   },
+  // M-MEMRECALL-CMD：memory recall settings + session log + ad-hoc test
+  memoryRecall: {
+    getSettings(
+      projectId: string,
+    ): Promise<import('./types').MemoryRecallSettings> {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/memory-recall/settings`,
+      )
+    },
+    setSettings(
+      projectId: string,
+      patch: Partial<import('./types').MemoryRecallSettings>,
+    ): Promise<{ ok: boolean }> {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/memory-recall/settings`,
+        { method: 'PUT', json: patch },
+      )
+    },
+    sessionLog(
+      projectId: string,
+      sessionId: string,
+    ): Promise<{ entries: import('./types').MemoryRecallLogEntry[] }> {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/memory-recall/session-log?sessionId=${encodeURIComponent(sessionId)}`,
+      )
+    },
+    test(
+      projectId: string,
+      query: string,
+    ): Promise<{ entries: { path: string; mtimeMs: number }[] }> {
+      return request(
+        `/api/projects/${encodeURIComponent(projectId)}/memory-recall/test`,
+        { method: 'POST', json: { query } },
+      )
+    },
+  },
   // M-WEB-16：Llamacpp watchdog（daemon 全域；不需 projectId）
   llamacpp: {
     getWatchdog(): Promise<{ config: WebWatchdogConfig }> {

@@ -27,6 +27,8 @@ export type ServerEvent =
   | CronTasksChangedEvent
   | CronFiredEvent
   | MemoryItemsChangedEvent
+  | MemoryRecallSettingsChangedEvent
+  | MemoryRecallSessionLogUpdatedEvent
   | LlamacppConfigChangedEvent
   | WebStatusChangedEvent
   | PongEvent
@@ -165,6 +167,17 @@ export interface MemoryItemsChangedEvent {
 export interface LlamacppConfigChangedEvent {
   type: 'llamacpp.configChanged'
   changedSection?: string
+}
+/** M-MEMRECALL-CMD：cross-client 同步 memoryRecall settings 變更 */
+export interface MemoryRecallSettingsChangedEvent {
+  type: 'memoryRecall.settingsChanged'
+  projectId: string
+}
+/** M-MEMRECALL-CMD：每次 prefetch 命中後 broadcast，讓 Web tab 即時刷新 history */
+export interface MemoryRecallSessionLogUpdatedEvent {
+  type: 'memoryRecall.sessionLogUpdated'
+  projectId: string
+  sessionId: string
 }
 export interface WebStatusChangedEvent {
   type: 'web.statusChanged'

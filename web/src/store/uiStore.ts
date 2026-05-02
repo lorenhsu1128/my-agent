@@ -10,6 +10,7 @@ export type ContextTabId =
   | 'overview'
   | 'cron'
   | 'memory'
+  | 'memory-recall'
   | 'llamacpp'
   | 'discord'
   | 'permissions'
