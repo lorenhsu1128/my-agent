@@ -3152,9 +3152,10 @@ export function REPL({
       proactiveModule?.resumeProactive();
     }
 
-    // M-DAEMON-7b：attached 模式下 /allow / /deny 回應 pending permission。
-    // 處理要在「一般 attached input 攔截」之前；這兩個是給 daemon 用的 meta command
-    // 不是 daemon-side slash。
+    // M-DAEMON-7b：/allow /deny 對 pending permission 的快速攔截。
+    // 同時也有正式註冊的 slash command（src/commands/allow.ts、deny.ts），
+    // 這裡保留純文字攔截避免被 autocomplete fuzzy match 偷走（例：/allow 被
+    // 誤導向 /permissions TUI），並涵蓋所有 daemon mode 給可讀回饋。
     {
       const trimmed = input.trim();
       if (
@@ -3162,32 +3163,36 @@ export function REPL({
         !speculationAccept
       ) {
         const mgr = getCurrentDaemonManager();
-        if (mgr && mgr.state.mode === 'attached') {
+        const decision = trimmed === '/allow' ? 'allow' : 'deny';
+        let msg: string;
+        let level: 'info' | 'warning' = 'info';
+        if (!mgr) {
+          msg = '✗ 未連接 daemon';
+          level = 'warning';
+        } else if (mgr.state.mode !== 'attached') {
+          msg = `✗ daemon 連線狀態：${mgr.state.mode}（需 attached）`;
+          level = 'warning';
+        } else {
           const pending = getLatestPendingPermission();
-          if (pending) {
-            const decision = trimmed === '/allow' ? 'allow' : 'deny';
-            const ok = respondToPermission(pending.toolUseID, decision);
-            setMessages(prev => [
-              ...prev,
-              createSystemMessage(
-                ok
-                  ? `→ 已送出 ${decision} 給 ${pending.toolName} (toolUseID=${pending.toolUseID.slice(0, 8)}…)`
-                  : `✗ 無法送出 permission response（socket 狀態異常）`,
-                ok ? 'info' : 'warning'
-              )
-            ]);
+          if (!pending) {
+            msg = '目前沒有 pending permission 需要回應。';
           } else {
-            setMessages(prev => [
-              ...prev,
-              createSystemMessage('目前沒有 pending permission 需要回應。', 'info')
-            ]);
+            const ok = respondToPermission(pending.toolUseID, decision);
+            msg = ok
+              ? `→ 已送出 ${decision} 給 ${pending.toolName} (toolUseID=${pending.toolUseID.slice(0, 8)}…)`
+              : `✗ 無法送出 permission response（socket 狀態異常）`;
+            level = ok ? 'info' : 'warning';
           }
-          helpers.setCursorOffset(0);
-          helpers.clearBuffer();
-          setInputValue('');
-          setPastedContents({});
-          return;
         }
+        setMessages(prev => [
+          ...prev,
+          createSystemMessage(msg, level)
+        ]);
+        helpers.setCursorOffset(0);
+        helpers.clearBuffer();
+        setInputValue('');
+        setPastedContents({});
+        return;
       }
     }
 
