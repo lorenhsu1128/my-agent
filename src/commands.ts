@@ -14,6 +14,7 @@ import cost from './commands/cost/index.js'
 import diff from './commands/diff/index.js'
 import doctor from './commands/doctor/index.js'
 import memory from './commands/memory/index.js'
+import memoryRecall from './commands/memory-recall/index.js'
 import help from './commands/help/index.js'
 import ide from './commands/ide/index.js'
 import init from './commands/init.js'
@@ -246,6 +247,7 @@ const COMMANDS = memoize((): Command[] => [
   keybindings,
   mcp,
   memory,
+  memoryRecall,
   model,
   toolsCommand,
   cronCommand,

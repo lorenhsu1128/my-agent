@@ -3,7 +3,31 @@
 > Claude Code 在每次 session 開始時讀取此檔案，在工作過程中更新任務狀態。
 > 里程碑結構由人類維護。Claude Code 負責管理任務狀態的勾選。
 
-## 當前里程碑：M-LLAMACPP-GEMMA — Gemma 4 / Gemopus 模板適配與 native tool 雙向轉譯（2026-05-02 啟動）
+## 當前里程碑：M-MEMRECALL-CMD — `/memory-recall` 命令 + Web 右欄整合（2026-05-02 啟動）
+
+**目標**：使用者觀察到 TUI 每輪會冒 `Recalled <N> memories`（query-driven memory selector），希望能：(1) 觀察本 session 命中過哪些 memory；(2) 即時調 selector / fallback 上限與 enable 開關；(3) 從面板內 edit/delete 那些檔；(4) Web 模式同樣可改。完整設計見 `~/.claude/plans/llamacpp-gemopus-4-e4b-it-preview-q5-k-twinkly-hickey.md`。
+
+**決策**：獨立 `/memory-recall` 命令（不擴充 `/memory`），TUI 風格 + 鍵位完全參考 `/memory`，edit/delete 直接 import `memoryMutations.ts` 既有 API；Web 沿用既有 accordion 設計加新 section。Settings 加新群組 `memoryRecall.{maxFiles, fallbackMaxFiles}`，session recall log 用 module-level Map（process exit 自然消失）。
+
+### 任務
+- [ ] M-MEMRECALL-CMD-1 settings schema：`src/utils/settings/types.ts` 加 `memoryRecall` 群組（maxFiles / fallbackMaxFiles）
+- [ ] M-MEMRECALL-CMD-2 sessionRecallLog：`src/memdir/sessionRecallLog.ts` 新模組，Map<sessionId, Map<absPath, RecallLogEntry>>
+- [ ] M-MEMRECALL-CMD-3 findRelevantMemories：read settings + recordRecall（去掉 hardcoded `FALLBACK_MAX_FILES` 與 selector cap=5）
+- [ ] M-MEMRECALL-CMD-4 TUI 命令：`src/commands/memory-recall/{index.ts, memory-recall.tsx, MemoryRecallManager.tsx, memoryRecallLogic.ts}` + commands.ts 註冊
+- [ ] M-MEMRECALL-CMD-5 REST + WS：`src/web/restRoutes.ts` 加 4 endpoints + 2 個 WS frame（settings 同步 / session-log 即時更新）
+- [ ] M-MEMRECALL-CMD-6 Web 右欄：`web/src/components/rightPanel/tabs/MemoryRecallTab.tsx` + ContextPanel SECTIONS 註冊（accordion）
+- [ ] M-MEMRECALL-CMD-7 測試：5 個 test 檔 ≥30 cases（settings-roundtrip / session-log / find-relevant / rest-endpoints / tui-logic）
+- [ ] M-MEMRECALL-CMD-8 typecheck + bun test 全綠 + `./cli-dev` 跑 `/memory-recall` 手測
+- [ ] M-MEMRECALL-CMD-9 commit：5 段（schema / find-relevant / TUI / REST+Web / 測試）
+
+### 不在範圍 → 後續 milestone
+- Per-project memory dir override（`autoMemoryDirectory` 已能做）
+- Selector LLM model 切換 / re-rank 改進（M-MEMRECALL-V2）
+- Trash 還原（已在 `/memory` 內）
+
+---
+
+## 已完成里程碑：M-LLAMACPP-GEMMA — Gemma 4 / Gemopus 模板適配與 native tool 雙向轉譯（2026-05-02 完成）
 
 **目標**：把 llamacpp 後端從 Qwen3.5 換到 Gemopus-4-E4B 後，補上 Gemma 4 chat_template 嚴格交替與 native tool calling 的雙向轉譯。完整方案見 `~/.claude/plans/llamacpp-gemopus-4-e4b-it-preview-q5-k-twinkly-hickey.md`、token 規格見 `docs/llamacpp-gemma-tool-format.md`。
 
@@ -3106,3 +3130,29 @@
 - 2026-05-02 17:35: Session 結束 | 進度：722/814 任務 | c2a60d3 fix(daemon): 純圖 prompt 不再追加 placeholder text 防模型幻想 Read 路徑
 
 - 2026-05-02 18:12: Session 結束 | 進度：731/824 任務 | c2a60d3 fix(daemon): 純圖 prompt 不再追加 placeholder text 防模型幻想 Read 路徑
+
+- 2026-05-02 18:28: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 18:42: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 18:53: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 18:58: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 19:01: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 19:03: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 19:13: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 19:17: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 19:26: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 19:42: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 19:47: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 20:05: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
+
+- 2026-05-02 20:08: Session 結束 | 進度：731/824 任務 | d4bf6c5 test(llamacpp): Gemma format / packing / stream parser 共 74 cases
