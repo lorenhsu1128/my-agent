@@ -3,6 +3,31 @@
 > Claude Code 在每次 session 開始時讀取此檔案，在工作過程中更新任務狀態。
 > 里程碑結構由人類維護。Claude Code 負責管理任務狀態的勾選。
 
+## 當前里程碑：M-LLAMACPP-GEMMA — Gemma 4 / Gemopus 模板適配與 native tool 雙向轉譯（2026-05-02 啟動）
+
+**目標**：把 llamacpp 後端從 Qwen3.5 換到 Gemopus-4-E4B 後，補上 Gemma 4 chat_template 嚴格交替與 native tool calling 的雙向轉譯。完整方案見 `~/.claude/plans/llamacpp-gemopus-4-e4b-it-preview-q5-k-twinkly-hickey.md`、token 規格見 `docs/llamacpp-gemma-tool-format.md`。
+
+**決策**：所有改動只在偵測 Gemma 系列模型（`/^(gemopus|gemma)/i`）時觸發；Qwen 與其他 provider 零影響。實作分 3 個純函式模組（format / stream-parser / adapter 接線），測試覆蓋 stringify round-trip、message packing 6 種違規模式、stream parser chunk 切割與異常 fallback。
+
+### 任務
+- [x] M-LLAMACPP-GEMMA-1 docs/llamacpp-gemma-tool-format.md：記錄 Gemma 4 token 規格與轉譯規則
+- [x] M-LLAMACPP-GEMMA-2 `src/services/api/llamacpp-gemma-format.ts`：stringify / parse / renderToolDeclaration / renderToolCall / renderToolResponse + bare-string fallback
+- [x] M-LLAMACPP-GEMMA-3 `src/services/api/llamacpp-gemma-stream-parser.ts`：streaming `<|tool_call>` 抽取器（含 chunk 邊界 buffer + 未閉合 fallback）
+- [x] M-LLAMACPP-GEMMA-4 `src/services/api/llamacpp-fetch-adapter.ts`：isGemmaModel 偵測 / packMessagesForGemma / SSE stream hook / non-streaming extraGemmaToolCalls / vision parts image-first
+- [x] M-LLAMACPP-GEMMA-5 `tests/integration/llamacpp/gemma-format.test.ts`：40 cases（含 bare-string fallback / Windows path / 文件範例對齊）
+- [x] M-LLAMACPP-GEMMA-6 `tests/integration/llamacpp/gemma-pack-messages.test.ts`：15 cases（tool 併入 system / packing / 連續 role 合併 / image-first / alternation invariant / Qwen 不執行）
+- [x] M-LLAMACPP-GEMMA-7 `tests/integration/llamacpp/gemma-stream-parser.test.ts`：19 cases（完整 / chunk split / 多 tool_call / 未閉合 fallback / 純文字穿插 / non-streaming）
+- [x] M-LLAMACPP-GEMMA-8 `bun run typecheck` + `bun test tests/integration/llamacpp/` 全綠（223 / 0）
+- [x] M-LLAMACPP-GEMMA-9 E2E 冒煙：`./cli-dev --model gemopus-4-e4b` 用 Bash 工具讀 TODO.md 第一行 → 模型成功呼叫 + 拿到結果 + 回繁中。觀察期間主對話路徑無 500
+- [ ] M-LLAMACPP-GEMMA-10 commit：依各模組分段 commit（Conventional Commit 前綴英文 + 訊息繁中）
+
+### 不在範圍 → 後續 milestone
+- M-LLAMACPP-GEMMA-AUDIO：Gemma 4 audio 輸入（mmproj 已含 audio encoder，但 my-agent 還沒 audio block）
+- M-LLAMACPP-GEMMA-VISION-BUDGET：vision token budget 控制（70/140/280/560/1120）
+- M-LLAMACPP-GEMMA-UPSTREAM-MIGRATE：llama.cpp 上游若加入 native Gemma 4 tool parser → 移除我們的響應端 parser
+
+---
+
 ## 當前里程碑：M-WEB-PARITY — Web 端 P0+P1 bug 與功能補完（2026-05-02 啟動）
 
 **目標**：補上 Web ↔ TUI 之間最影響日常使用的 8 項落差（4 個明顯 bug + 4 個功能缺口）。完整稽核見 `~/.claude/plans/web-tui-web-bug-happy-aurora.md`。
@@ -3067,3 +3092,17 @@
 - 2026-05-02 10:34: Session 結束 | 進度：722/814 任務 | 0dc57ea docs: TODO session log — M-WEB-PARITY 全 8 項完成
 
 - 2026-05-02 14:44: Session 結束 | 進度：722/814 任務 | 2a3046d fix(web,daemon): permission.modeSet 從 NOT_IMPLEMENTED stub 改成真實作
+
+- 2026-05-02 15:07: Session 結束 | 進度：722/814 任務 | c2a60d3 fix(daemon): 純圖 prompt 不再追加 placeholder text 防模型幻想 Read 路徑
+
+- 2026-05-02 17:08: Session 結束 | 進度：722/814 任務 | c2a60d3 fix(daemon): 純圖 prompt 不再追加 placeholder text 防模型幻想 Read 路徑
+
+- 2026-05-02 17:20: Session 結束 | 進度：722/814 任務 | c2a60d3 fix(daemon): 純圖 prompt 不再追加 placeholder text 防模型幻想 Read 路徑
+
+- 2026-05-02 17:26: Session 結束 | 進度：722/814 任務 | c2a60d3 fix(daemon): 純圖 prompt 不再追加 placeholder text 防模型幻想 Read 路徑
+
+- 2026-05-02 17:29: Session 結束 | 進度：722/814 任務 | c2a60d3 fix(daemon): 純圖 prompt 不再追加 placeholder text 防模型幻想 Read 路徑
+
+- 2026-05-02 17:35: Session 結束 | 進度：722/814 任務 | c2a60d3 fix(daemon): 純圖 prompt 不再追加 placeholder text 防模型幻想 Read 路徑
+
+- 2026-05-02 18:12: Session 結束 | 進度：731/824 任務 | c2a60d3 fix(daemon): 純圖 prompt 不再追加 placeholder text 防模型幻想 Read 路徑

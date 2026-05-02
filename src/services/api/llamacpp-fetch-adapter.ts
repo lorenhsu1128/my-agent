@@ -19,6 +19,20 @@
  *  - 工具翻譯：函數簽名預留，實作留階段三
  */
 
+// ── M-LLAMACPP-GEMMA：Gemma 4 / Gemopus 專用 token 格式 helpers ─────────
+import {
+  isGemmaModel,
+  renderToolDeclaration,
+  renderToolCall,
+  renderToolResponse,
+  type OpenAIToolDef,
+} from './llamacpp-gemma-format.js'
+import {
+  createGemmaToolCallExtractor,
+  extractGemmaToolCalls,
+  type GemmaStreamEvent,
+} from './llamacpp-gemma-stream-parser.js'
+
 // ── 型別（inline，不 import SDK）────────────────────────────────────────
 
 interface AnthropicContentBlock {
@@ -305,12 +319,13 @@ export function translateMessagesToOpenAI(
         }
       }
       if (imageParts.length > 0) {
-        // Vision 路徑：多部分 content（text + image_url parts）
+        // Vision 路徑：多部分 content（image parts + text）
+        // 順序：image 在前、text 在後（Gemma 4 model card 建議；Qwen 中性）
         const parts: OpenAIContentPart[] = []
+        parts.push(...imageParts)
         if (textParts.length > 0) {
           parts.push({ type: 'text', text: textParts.join('\n') })
         }
-        parts.push(...imageParts)
         out.push({ role: 'user', content: parts })
       } else if (textParts.length > 0) {
         out.push({ role: 'user', content: textParts.join('\n') })
@@ -365,6 +380,196 @@ function translateToolsToOpenAI(
       parameters: t.input_schema ?? { type: 'object', properties: {} },
     },
   }))
+}
+
+/**
+ * M-LLAMACPP-GEMMA：把 OpenAI 訊息序列重新打包成 Gemma 4 chat_template
+ * 能消化的形狀，並把 tools 定義併入 system 訊息（Gemma 4 native tool 格式）。
+ *
+ * 規則（順序）：
+ *  1. tools 經 renderToolDeclaration concat → append 到第一筆 system content 尾端
+ *  2. 多筆 system 合併（`\n\n`）
+ *  3. 掃 messages：assistant{tool_calls} + 後續 tool messages + 後續 assistant{text}
+ *     → 全部併成一筆 assistant，content 為 prev_text + <|tool_call>... + <|tool_response>... + next_text
+ *  4. 首個非-system 是 assistant → prepend `{role:'user', content:'(continue)'}`
+ *  5. 殘留連續同 role 訊息 → 合併（user：文字 join+image parts concat；assistant：文字 join）
+ *  6. assistant content null/undefined → 補空字串
+ *
+ * 此函式為純函式（純資料轉換），不依賴 isGemmaModel；caller 自行決定是否套用。
+ * 規格詳見 docs/llamacpp-gemma-tool-format.md。
+ */
+export function packMessagesForGemma(
+  messages: OpenAIMessage[],
+  tools: OpenAIRequestBody['tools'] | undefined,
+): OpenAIMessage[] {
+  // ── 步驟 1+2：合併 system + 併入 tool 定義 ───────────────────────────
+  const work: OpenAIMessage[] = []
+  let mergedSystemText = ''
+  let sawSystem = false
+  const nonSystem: OpenAIMessage[] = []
+  for (const m of messages) {
+    if (m.role === 'system') {
+      sawSystem = true
+      const text =
+        typeof m.content === 'string'
+          ? m.content
+          : Array.isArray(m.content)
+            ? m.content
+                .map(p => (p.type === 'text' ? p.text : ''))
+                .join('')
+            : ''
+      mergedSystemText = mergedSystemText
+        ? mergedSystemText + '\n\n' + text
+        : text
+    } else {
+      nonSystem.push(m)
+    }
+  }
+  if (Array.isArray(tools) && tools.length > 0) {
+    const decls = tools
+      .map(t => renderToolDeclaration(t as OpenAIToolDef))
+      .join('')
+    mergedSystemText = mergedSystemText
+      ? mergedSystemText + '\n\n' + decls
+      : decls
+    sawSystem = true
+  }
+  if (sawSystem && mergedSystemText.length > 0) {
+    work.push({ role: 'system', content: mergedSystemText })
+  }
+
+  // ── 步驟 3：packing window（assistant{tool_calls} + tool* + assistant{text}?） ──
+  const packed: OpenAIMessage[] = []
+  let i = 0
+  while (i < nonSystem.length) {
+    const cur = nonSystem[i]
+    if (
+      cur.role === 'assistant' &&
+      Array.isArray(cur.tool_calls) &&
+      cur.tool_calls.length > 0
+    ) {
+      const parts: string[] = []
+      // 前置 assistant 文字
+      const prevText =
+        typeof cur.content === 'string'
+          ? cur.content
+          : Array.isArray(cur.content)
+            ? cur.content
+                .map(p => (p.type === 'text' ? p.text : ''))
+                .join('')
+            : ''
+      if (prevText.length > 0) parts.push(prevText)
+      // tool_calls 渲染
+      for (const tc of cur.tool_calls) {
+        parts.push(renderToolCall(tc.function.name, tc.function.arguments))
+      }
+      // 收集後續所有 tool messages
+      let j = i + 1
+      const callIndexByName = new Map<string, string>()
+      for (const tc of cur.tool_calls) {
+        callIndexByName.set(tc.id, tc.function.name)
+      }
+      while (j < nonSystem.length && nonSystem[j].role === 'tool') {
+        const t = nonSystem[j]
+        const callId = t.tool_call_id ?? ''
+        const name = callIndexByName.get(callId) ?? 'unknown'
+        const resultText =
+          typeof t.content === 'string'
+            ? t.content
+            : Array.isArray(t.content)
+              ? t.content.map(p => (p.type === 'text' ? p.text : '')).join('')
+              : ''
+        parts.push(renderToolResponse(name, resultText))
+        j++
+      }
+      // 後續可能緊接 assistant{text only}（不含 tool_calls） → 併入
+      if (
+        j < nonSystem.length &&
+        nonSystem[j].role === 'assistant' &&
+        (!Array.isArray(nonSystem[j].tool_calls) ||
+          (nonSystem[j].tool_calls?.length ?? 0) === 0)
+      ) {
+        const next = nonSystem[j]
+        const nextText =
+          typeof next.content === 'string'
+            ? next.content
+            : Array.isArray(next.content)
+              ? next.content.map(p => (p.type === 'text' ? p.text : '')).join('')
+              : ''
+        if (nextText.length > 0) parts.push(nextText)
+        j++
+      }
+      packed.push({ role: 'assistant', content: parts.join('') })
+      i = j
+    } else {
+      packed.push(cur)
+      i++
+    }
+  }
+
+  // ── 步驟 4：首個非-system 是 assistant → prepend user ────────────────
+  if (packed.length > 0 && packed[0].role === 'assistant') {
+    packed.unshift({ role: 'user', content: '(continue)' })
+  }
+
+  // ── 步驟 5：合併殘留連續同 role ──────────────────────────────────────
+  const merged: OpenAIMessage[] = []
+  for (const m of packed) {
+    const prev = merged[merged.length - 1]
+    if (prev && prev.role === m.role) {
+      // 合併
+      if (m.role === 'user') {
+        // 處理 multipart（含 image）
+        const prevParts = normalizeUserParts(prev.content)
+        const curParts = normalizeUserParts(m.content)
+        const combinedTextParts: string[] = []
+        const combinedImageParts: OpenAIContentPart[] = []
+        for (const p of [...prevParts, ...curParts]) {
+          if (p.type === 'text') combinedTextParts.push(p.text)
+          else combinedImageParts.push(p)
+        }
+        if (combinedImageParts.length > 0) {
+          // image 在前 + text 在後（Gemma 建議）
+          const next: OpenAIContentPart[] = [...combinedImageParts]
+          if (combinedTextParts.length > 0) {
+            next.push({ type: 'text', text: combinedTextParts.join('\n\n') })
+          }
+          prev.content = next
+        } else {
+          prev.content = combinedTextParts.join('\n\n')
+        }
+      } else {
+        // assistant
+        const prevText =
+          typeof prev.content === 'string' ? prev.content : ''
+        const curText = typeof m.content === 'string' ? m.content : ''
+        prev.content = (prevText + curText) || ''
+      }
+    } else {
+      merged.push({ ...m })
+    }
+  }
+
+  // ── 步驟 6：null content → 空字串 ────────────────────────────────────
+  for (const m of merged) {
+    if (m.role === 'assistant' && (m.content === null || m.content === undefined)) {
+      m.content = ''
+    }
+    // assistant tool_calls 已在 packing 階段轉成文字，移除欄位避免污染
+    delete m.tool_calls
+    delete m.tool_call_id
+  }
+
+  // 把 system 接回前面
+  return [...work, ...merged]
+}
+
+function normalizeUserParts(
+  content: string | null | OpenAIContentPart[],
+): OpenAIContentPart[] {
+  if (typeof content === 'string') return [{ type: 'text', text: content }]
+  if (Array.isArray(content)) return content
+  return []
 }
 
 /**
@@ -436,6 +641,14 @@ export function translateRequestToOpenAI(
     // tools 存在時仍把 tool-call 視為一等公民。配合 streamWithRetry 的
     // retry-on-empty-tool 降低 sampling 走 text-only 分支的機率。
     body.tool_choice = 'auto'
+  }
+  // M-LLAMACPP-GEMMA：偵測 Gemma 系列模型 → 重新打包訊息序列、把 tools 併入
+  // system，並移除頂層 tools 欄位（Gemma 的 chat_template 不認得 tools 參數，
+  // tool_calls 用 native token 在 content 內渲染。詳見 docs/llamacpp-gemma-tool-format.md）
+  if (isGemmaModel(body.model)) {
+    body.messages = packMessagesForGemma(body.messages, body.tools)
+    delete body.tools
+    delete body.tool_choice
   }
   return body
 }
@@ -623,10 +836,38 @@ function translateChatCompletionToAnthropic(
     }
   }
 
-  const textContent = choice.message.content
+  let textContent = choice.message.content
   let xmlSynthesized = false
-  // XML 可能漏在 content 或 reasoning_content（qwen 偶爾把 tool_call 寫進 thinking）
   const noStructuredCalls = !Array.isArray(toolCalls) || toolCalls.length === 0
+
+  // M-LLAMACPP-GEMMA：Gemma 4 native tool format 解析（響應端）
+  // 模型把 tool_call 寫成 `<|tool_call>call:NAME{...}<tool_call|>` 嵌在 content 內，
+  // llama.cpp 沒幫我們解出 OpenAI tool_calls 欄位。在這裡攔截、抽出、生成 tool_use block，
+  // 並把剝除 token 的純文字寫回 textContent 以避免污染最終 message。
+  if (
+    isGemmaModel(model) &&
+    noStructuredCalls &&
+    typeof textContent === 'string' &&
+    (textContent.includes('<|tool_call>') ||
+      textContent.includes('<|tool_response>'))
+  ) {
+    const extracted = extractGemmaToolCalls(textContent)
+    if (extracted.toolCalls.length > 0) {
+      for (const tc of extracted.toolCalls) {
+        content.push({
+          type: 'tool_use',
+          id: tc.id,
+          name: tc.name,
+          input: tc.args,
+        })
+      }
+      xmlSynthesized = true
+    }
+    // 即使沒有 tool_call，仍 strip tool_response 殘留
+    textContent = extracted.text
+  }
+
+  // XML 可能漏在 content 或 reasoning_content（qwen 偶爾把 tool_call 寫進 thinking）
   const xmlCorpus = (typeof textContent === 'string' ? textContent : '') +
     '\n' + (typeof reasoning === 'string' ? reasoning : '')
   if (noStructuredCalls && xmlCorpus.includes('<tool_call>')) {
@@ -886,6 +1127,62 @@ export async function* translateOpenAIStreamToAnthropic(
   // hoist outside try：message_delta yield 在 catch 後面 reference 它
   let xmlFallbackCount = 0
 
+  // M-LLAMACPP-GEMMA：響應端 stream extractor — 只在 Gemma 模型啟用。
+  // 攔截 content delta 中的 `<|tool_call>...<tool_call|>` token，轉成
+  // 合成 OpenAI tool_calls delta（caller 再走原 toolCalls 路徑）。
+  const useGemmaExtractor = isGemmaModel(model)
+  const gemmaExt = useGemmaExtractor ? createGemmaToolCallExtractor() : null
+  // 每個 emit 的 tool_call 配一個遞增的 openai-style index 以便復用既有 toolBlocks 機制
+  let gemmaSyntheticIndex = 0
+  const emitGemmaEvent = function* (
+    ev: GemmaStreamEvent,
+  ): Generator<string, void, unknown> {
+    if (ev.type === 'text') {
+      if (ev.text.length === 0) return
+      if (textType !== 'text') {
+        const stop = closeTextBlock()
+        if (stop) yield stop
+        yield openTextBlock('text')
+      }
+      yield formatSSE('content_block_delta', {
+        type: 'content_block_delta',
+        index: textIndex,
+        delta: { type: 'text_delta', text: ev.text },
+      })
+      emittedText = true
+      accumulatedText += ev.text
+      return
+    }
+    // tool_call：先關 text block，開 tool_use block，一次 yield 完整 input
+    if (textIndex >= 0) {
+      yield stopBlock(textIndex)
+      textIndex = -1
+      textType = null
+    }
+    const anthropicIdx = nextBlockIndex++
+    yield formatSSE('content_block_start', {
+      type: 'content_block_start',
+      index: anthropicIdx,
+      content_block: {
+        type: 'tool_use',
+        id: ev.id,
+        name: ev.name,
+        input: {},
+      },
+    })
+    yield formatSSE('content_block_delta', {
+      type: 'content_block_delta',
+      index: anthropicIdx,
+      delta: { type: 'input_json_delta', partial_json: ev.argsJson },
+    })
+    yield formatSSE('content_block_stop', {
+      type: 'content_block_stop',
+      index: anthropicIdx,
+    })
+    emittedToolCall = true
+    gemmaSyntheticIndex++
+  }
+
   try {
   for await (const payload of watchedSse) {
     let chunk: OpenAIStreamChunk
@@ -921,18 +1218,26 @@ export async function* translateOpenAIStreamToAnthropic(
 
       // 2. text delta
       if (typeof content === 'string' && content.length > 0) {
-        if (textType !== 'text') {
-          const stop = closeTextBlock()
-          if (stop) yield stop
-          yield openTextBlock('text')
+        if (gemmaExt) {
+          // Gemma 路徑：先過 extractor，把 token 序列轉成 text/tool_call 事件
+          const events = gemmaExt.push(content)
+          for (const ev of events) {
+            yield* emitGemmaEvent(ev)
+          }
+        } else {
+          if (textType !== 'text') {
+            const stop = closeTextBlock()
+            if (stop) yield stop
+            yield openTextBlock('text')
+          }
+          yield formatSSE('content_block_delta', {
+            type: 'content_block_delta',
+            index: textIndex,
+            delta: { type: 'text_delta', text: content },
+          })
+          emittedText = true
+          accumulatedText += content
         }
-        yield formatSSE('content_block_delta', {
-          type: 'content_block_delta',
-          index: textIndex,
-          delta: { type: 'text_delta', text: content },
-        })
-        emittedText = true
-        accumulatedText += content
       }
 
       // 3. tool_call deltas（可多筆，按 openai index 區分）
@@ -1004,6 +1309,14 @@ export async function* translateOpenAIStreamToAnthropic(
   // 收尾
   if (!msgStarted) {
     yield startMessage()
+  }
+
+  // M-LLAMACPP-GEMMA：flush extractor，吐出 buffer 內剩餘事件
+  if (gemmaExt) {
+    const tail = gemmaExt.flush()
+    for (const ev of tail) {
+      yield* emitGemmaEvent(ev)
+    }
   }
 
   const lastTextStop = closeTextBlock()
@@ -1214,7 +1527,7 @@ export async function* translateOpenAIStreamToAnthropic(
         ? watchdogAborted.layer === 'tokenCap'
           ? 'max_tokens'
           : 'end_turn'
-        : xmlFallbackCount > 0
+        : xmlFallbackCount > 0 || gemmaSyntheticIndex > 0
           ? 'tool_use'
           : (FINISH_TO_STOP[finalFinishReason ?? ''] ?? 'end_turn'),
       stop_sequence: null,
@@ -1718,8 +2031,11 @@ export function createLlamaCppFetch(
           { status: 500, headers: { 'Content-Type': 'application/json' } },
         )
       }
+      // M-LLAMACPP-GEMMA：Gemma 模型 packing 時已把 tools 移除（併入 system 文字），
+      // 仍視為「有 tools」以便走 retry wrapper（觀察是否 model 承諾呼叫卻沒 emit）
       const hasTools =
-        Array.isArray(openaiBody.tools) && openaiBody.tools.length > 0
+        (Array.isArray(openaiBody.tools) && openaiBody.tools.length > 0) ||
+        (Array.isArray(anthropicBody.tools) && anthropicBody.tools.length > 0)
       // 有 tools 時走 retry wrapper：第一輪完整 buffer 後偵測空 tool_use 情境，
       // 命中就追加 nudge 重發一次。失去漸進輸出 UX 換 correctness。
       const sseGen = hasTools
