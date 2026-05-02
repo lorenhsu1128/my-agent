@@ -85,6 +85,23 @@ export const api = {
     )
   },
   /**
+   * M-WEB-PARITY-4：搜 project 檔案（@file typeahead 用）。
+   * q 為空時回前 N 個 entry（無排序）；非空走 fuzzy match。
+   */
+  searchFiles(
+    projectId: string,
+    q: string,
+    limit = 30,
+  ): Promise<{
+    files: { path: string; type: 'file' | 'dir'; score?: number }[]
+    query: string
+  }> {
+    const params = new URLSearchParams({ q, limit: String(limit) })
+    return request(
+      `/api/projects/${encodeURIComponent(projectId)}/files?${params.toString()}`,
+    )
+  },
+  /**
    * M-WEB-PARITY-1：建立新 session（rotate runtime = /clear 等價語意）。
    * 後端會 dispose 舊 broker、釋放 lockfile、重新 bootstrap，並廣播
    * `session.rotated` frame；UI 收到後切到新 sessionId。

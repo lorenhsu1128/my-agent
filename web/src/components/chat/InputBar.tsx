@@ -7,6 +7,7 @@ import {
   filterCommandsForAutocomplete,
   useSlashCommandStore,
 } from '@/store/slashCommandStore'
+import { api } from '@/api/client'
 import type {
   WebSlashCommandKind,
   WebSlashCommandMetadata,
@@ -66,12 +67,72 @@ export function InputBar({
   const [acIndex, setAcIndex] = useState(0)
   const taRef = useRef<HTMLTextAreaElement | null>(null)
   const { commands, ensureLoaded } = useSlashCommandStore()
+  // M-WEB-PARITY-4：@file typeahead 狀態
+  const [fileMatches, setFileMatches] = useState<
+    { path: string; type: 'file' | 'dir' }[]
+  >([])
+  const [fileAcIndex, setFileAcIndex] = useState(0)
+  const fileQueryRef = useRef<string>('')
 
   // 第一次顯示 dropdown 時拉 metadata（5min cache 內 noop）
   const showAc = text.startsWith('/') && !text.includes('\n')
   useEffect(() => {
     if (showAc) void ensureLoaded(projectId)
   }, [showAc, projectId, ensureLoaded])
+
+  // M-WEB-PARITY-4：偵測游標前最後一個 @<token>。游標位置由 textarea 的
+  // selectionEnd 取得；token 從 @ 後到下一個空白為止。
+  function getAtToken(): { token: string; start: number; end: number } | null {
+    const ta = taRef.current
+    if (!ta) return null
+    const pos = ta.selectionEnd ?? text.length
+    const before = text.slice(0, pos)
+    const m = /(?:^|\s)@([^\s@]*)$/.exec(before)
+    if (!m) return null
+    const tokenStart = pos - m[1]!.length
+    return { token: m[1]!, start: tokenStart - 1, end: pos }
+  }
+
+  const atToken = getAtToken()
+  const showFileAc = atToken !== null && !showAc
+
+  useEffect(() => {
+    if (!showFileAc || !projectId || !atToken) {
+      setFileMatches([])
+      return
+    }
+    // 200ms debounce 防 keystroke 高頻打 API
+    fileQueryRef.current = atToken.token
+    const handle = setTimeout(() => {
+      if (fileQueryRef.current !== atToken.token) return
+      api
+        .searchFiles(projectId, atToken.token, 30)
+        .then(r => {
+          if (fileQueryRef.current !== atToken.token) return // 已輸入新值
+          setFileMatches(r.files)
+          setFileAcIndex(0)
+        })
+        .catch(() => setFileMatches([]))
+    }, 200)
+    return () => clearTimeout(handle)
+  }, [showFileAc, projectId, atToken?.token])
+
+  function applyFileAutocomplete(): void {
+    const f = fileMatches[fileAcIndex]
+    if (!f || !atToken) return
+    const before = text.slice(0, atToken.start)
+    const after = text.slice(atToken.end)
+    const insert = '@' + f.path + (f.type === 'dir' ? '/' : ' ')
+    setText(before + insert + after)
+    setFileMatches([])
+    requestAnimationFrame(() => {
+      const ta = taRef.current
+      if (!ta) return
+      const newPos = before.length + insert.length
+      ta.focus()
+      ta.setSelectionRange(newPos, newPos)
+    })
+  }
 
   const acFiltered = useMemo<WebSlashCommandMetadata[]>(() => {
     if (!showAc) return []
@@ -187,6 +248,31 @@ export function InputBar({
           沒有符合的命令
         </div>
       )}
+      {showFileAc && fileMatches.length > 0 && (
+        <div className="absolute left-4 right-4 bottom-full mb-2 bg-popover text-popover-foreground border rounded-md shadow-md max-h-72 overflow-y-auto z-10">
+          {fileMatches.map((f, i) => (
+            <div
+              key={f.path}
+              onMouseEnter={() => setFileAcIndex(i)}
+              onClick={() => {
+                setFileAcIndex(i)
+                applyFileAutocomplete()
+              }}
+              className={cn(
+                'px-3 py-1.5 cursor-pointer flex items-center gap-2 text-xs font-mono',
+                i === fileAcIndex
+                  ? 'bg-accent text-accent-foreground'
+                  : 'hover:bg-accent/60',
+              )}
+            >
+              <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 flex-shrink-0">
+                {f.type === 'dir' ? 'dir' : 'file'}
+              </Badge>
+              <span className="truncate">{f.path}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <Textarea
         ref={taRef}
         value={text}
@@ -214,6 +300,28 @@ export function InputBar({
             if (e.key === 'Escape') {
               e.preventDefault()
               setText('')
+              return
+            }
+          }
+          if (showFileAc && fileMatches.length > 0) {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              setFileAcIndex(i => Math.min(fileMatches.length - 1, i + 1))
+              return
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              setFileAcIndex(i => Math.max(0, i - 1))
+              return
+            }
+            if (e.key === 'Tab' || e.key === 'Enter') {
+              e.preventDefault()
+              applyFileAutocomplete()
+              return
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              setFileMatches([])
               return
             }
           }

@@ -46,6 +46,7 @@ import {
   searchProject,
 } from '../services/sessionIndex/index.js'
 import { getSlashCommandMetadataSnapshot } from '../daemon/slashCommandRegistry.js'
+import { searchProjectFiles } from './fileSearch.js'
 
 export interface RestRoutesOptions {
   registry: ProjectRegistry
@@ -333,6 +334,35 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
         } catch (e) {
           return errorResponse(
             'SEARCH_FAILED',
+            e instanceof Error ? e.message : String(e),
+            500,
+          )
+        }
+      }
+    }
+
+    // GET /api/projects/:id/files?q=&limit=50 — M-WEB-PARITY-4：@file typeahead
+    // 簡單子字串 + 子路徑分數 fuzzy match，跳過常見 ignore dir。
+    {
+      const m = /^\/api\/projects\/([^/]+)\/files$/.exec(url.pathname)
+      if (m && method === 'GET') {
+        const id = decodeURIComponent(m[1]!)
+        if (!isProjectIdSafe(id)) {
+          return errorResponse('BAD_ID', 'invalid project id', 400)
+        }
+        const runtime = registry.getProject(id)
+        if (!runtime)
+          return errorResponse('NOT_FOUND', `project ${id} not loaded`, 404)
+        const q = (url.searchParams.get('q') ?? '').trim()
+        const limitRaw = url.searchParams.get('limit')
+        const limit = limitRaw ? Number(limitRaw) : 50
+        const cap = Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 200) : 50
+        try {
+          const files = await searchProjectFiles(runtime.cwd, q, cap)
+          return jsonResponse({ files, query: q })
+        } catch (e) {
+          return errorResponse(
+            'FILE_SEARCH_FAILED',
             e instanceof Error ? e.message : String(e),
             500,
           )
