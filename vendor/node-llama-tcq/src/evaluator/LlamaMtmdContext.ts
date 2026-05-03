@@ -170,39 +170,61 @@ export class LlamaMtmdContext {
         }
 
         // Streaming：JS 端 loop 用 mtmdGenerateStep 單步驅動
-        // F3 — UTF-8 邊界處理：每 step 都 detokenize 「全部累積 tokens」，
-        // 相減算出 delta；遇到半 byte token，detokenize 回的 string 不會比上次長
-        // （或可能換出 U+FFFD，但下個 token 完整時就會修正），因此：
-        //   1) 只 emit「以 valid UTF-8 結尾」的 delta
-        //   2) 半段 byte 的部分留在 emittedSoFar，下個 step 再嘗試
-        // 這比 per-token piece detokenize 穩定，因為避免 BPE byte token 拆字。
+        // F-perf — detokenize 視窗化：原本 F3 每 step 都 detokenize(allTokens)
+        // 是 O(n²)；改成只 detokenize 最近 K=16 tokens（windowText），加上
+        // 已凍結的 prefixText 拼成 fullText。
+        //   - K=16 對 BPE byte fragment（最多 4-byte UTF-8 char ≈ 4 token）綽綽有餘
+        //   - 每 K 步把 prefix 推進一段（穩定下來不會再變）
+        //   - F3 邊界 trim 邏輯保留：U+FFFD / unpaired high surrogate 留下次 emit
+        //   - Fallback：若 window 拼裝與已 emit 對不齊，退一次全量 detokenize
+        //   - 結尾仍呼一次 detokenize(allTokens) 為 source of truth
+        const WINDOW = 16;
         const tokens: number[] = [];
         let cur = nPast;
         let emittedSoFar = "";
+        let windowStart = 0;        // tokens[windowStart..end] 為 detokenize window
+        let prefixText = "";        // tokens[0..windowStart-1] 對應的 detokenize 結果
 
-        // 偵測字串尾端是否落在 valid UTF-8 邊界（不是 surrogate / replacement char tail）
-        // 簡化判斷：尾端不為 U+FFFD（通常是 codepoint truncated）
-        const REPLACEMENT_CHAR = "�";
+        // 偵測字串尾端是否落在 valid UTF-8 邊界
         const endsAtValidBoundary = (s: string): boolean => {
             if (s.length === 0) return true;
             const last = s.charCodeAt(s.length - 1);
-            if (last === 0xFFFD) return false;
-            // high surrogate 沒 paired
-            if (last >= 0xD800 && last <= 0xDBFF) return false;
+            if (last === 0xFFFD) return false; // codepoint truncated → U+FFFD
+            if (last >= 0xD800 && last <= 0xDBFF) return false; // unpaired high surrogate
             return true;
         };
+
+        const detok = (slice: number[]): string =>
+            modelNative.detokenize(new Uint32Array(slice), false);
+
+        const fullDetok = (): string => detok(tokens);
 
         for (let i = 0; i < maxTokens; ++i) {
             const r = await bindings.mtmdGenerateStep(llamaCtxNative, sampler, cur, {seqId: opts.seqId});
             tokens.push(r.token);
             cur = r.nPast;
 
-            // 重新 detokenize 全部累積，避免半 byte 拆字
-            const fullText: string = modelNative.detokenize(new Uint32Array(tokens), false);
+            // 視窗滑動：當 tokens 累積超過 2*WINDOW，把前半段固化為 prefix
+            if (tokens.length - windowStart > WINDOW * 2) {
+                const proposedPrefix = detok(tokens.slice(0, windowStart + WINDOW));
+                // 安全檢查：新 prefix 必須與已 emit 內容相容（互為 prefix）
+                if (
+                    emittedSoFar.startsWith(proposedPrefix) ||
+                    proposedPrefix.startsWith(emittedSoFar) ||
+                    proposedPrefix.startsWith(prefixText)
+                ) {
+                    prefixText = proposedPrefix;
+                    windowStart += WINDOW;
+                }
+                // 對不齊就保持原 windowStart，下次重試
+            }
+
+            // 只 detokenize window 部分
+            const windowText = detok(tokens.slice(windowStart));
+            const fullText = prefixText + windowText;
 
             if (fullText.length > emittedSoFar.length && fullText.startsWith(emittedSoFar)) {
                 let delta = fullText.slice(emittedSoFar.length);
-                // 若 delta 結尾不是 valid UTF-8 邊界，吐前綴留尾巴
                 while (delta.length > 0 && !endsAtValidBoundary(delta)) {
                     delta = delta.slice(0, -1);
                 }
@@ -211,16 +233,28 @@ export class LlamaMtmdContext {
                     emittedSoFar += delta;
                 }
             } else if (fullText.length > 0 && fullText !== emittedSoFar) {
-                // 邊緣情況：detokenize 改寫了前面（替換字元），重新對齊
-                opts.onTextChunk(fullText.slice(emittedSoFar.length));
-                emittedSoFar = fullText;
+                // Fallback：window 拼裝與已 emit 不一致 → 退一次全量 detokenize 重對齊
+                const fallback = fullDetok();
+                if (fallback.length > emittedSoFar.length && fallback.startsWith(emittedSoFar)) {
+                    let delta = fallback.slice(emittedSoFar.length);
+                    while (delta.length > 0 && !endsAtValidBoundary(delta)) {
+                        delta = delta.slice(0, -1);
+                    }
+                    if (delta.length > 0) {
+                        opts.onTextChunk(delta);
+                        emittedSoFar += delta;
+                    }
+                    // 重置 prefix 為新基準避免下次再 fallback
+                    prefixText = fallback;
+                    windowStart = tokens.length;
+                }
             }
 
             if (r.eos) break;
         }
 
-        // Flush 任何尚未 emit 的尾段（包括之前因 boundary 卡住的）
-        const finalText: string = modelNative.detokenize(new Uint32Array(tokens), false);
+        // 結尾仍用全量 detokenize 為 source of truth + flush 未 emit 尾段
+        const finalText: string = fullDetok();
         if (finalText.length > emittedSoFar.length && finalText.startsWith(emittedSoFar)) {
             const trailing = finalText.slice(emittedSoFar.length);
             if (trailing.length > 0) opts.onTextChunk(trailing);
