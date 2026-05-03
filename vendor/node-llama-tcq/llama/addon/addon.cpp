@@ -330,6 +330,7 @@ Napi::Object registerCallback(Napi::Env env, Napi::Object exports) {
     exports.Set("mtmdBitmapFromFile", Napi::Function::New(env, AddonMtmdBitmapFromFile));
     exports.Set("mtmdBitmapFromBuffer", Napi::Function::New(env, AddonMtmdBitmapFromBuffer));
     exports.Set("mtmdGenerate", Napi::Function::New(env, AddonMtmdGenerate));
+    exports.Set("mtmdGenerateStep", Napi::Function::New(env, AddonMtmdGenerateStep));
 
     llama_log_set(addonLlamaCppLogCallback, nullptr);
 

@@ -501,3 +501,110 @@ Napi::Value AddonMtmdGenerate(const Napi::CallbackInfo& info) {
     worker->Queue();
     return deferred.Promise();
 }
+
+// ---------- mtmdGenerateStep（單步 sample + decode，用於 streaming） ----------
+
+class MtmdGenerateStepWorker : public Napi::AsyncWorker {
+public:
+    MtmdGenerateStepWorker(Napi::Promise::Deferred def, AddonContext* lctx, AddonSampler* sampler,
+                           llama_pos nPast, llama_seq_id seqId)
+        : Napi::AsyncWorker(def.Env()),
+          deferred(def), lctxWrap(lctx), samplerWrap(sampler),
+          nPast(nPast), seqId(seqId) {
+        lctxWrap->Ref();
+        samplerWrap->Ref();
+    }
+    ~MtmdGenerateStepWorker() {
+        lctxWrap->Unref();
+        samplerWrap->Unref();
+    }
+
+    void Execute() override {
+        llama_context* ctx = lctxWrap->ctx;
+        const llama_model* model = lctxWrap->model->model;
+        const llama_vocab* vocab = llama_model_get_vocab(model);
+
+        samplerWrap->rebuildChainIfNeeded();
+
+        const float* logits = llama_get_logits_ith(ctx, -1);
+        if (!logits) {
+            SetError("llama_get_logits_ith returned null");
+            return;
+        }
+        const int32_t n_vocab = llama_vocab_n_tokens(vocab);
+        auto& candidates = samplerWrap->tokenCandidates;
+        for (llama_token t = 0; t < n_vocab; ++t) {
+            candidates[t] = llama_token_data{t, logits[t], 0.0f};
+        }
+        llama_token_data_array cur_p = {candidates.data(), candidates.size(), -1, false};
+        llama_sampler_apply(samplerWrap->chain, &cur_p);
+        if (cur_p.selected < 0 || cur_p.selected >= (int32_t)cur_p.size) {
+            SetError("sampler produced no selected token");
+            return;
+        }
+        token = cur_p.data[cur_p.selected].id;
+        llama_sampler_accept(samplerWrap->chain, token);
+
+        if (llama_vocab_is_eog(vocab, token)) {
+            eos = true;
+            return;
+        }
+
+        // 餵回去推進 KV
+        llama_batch batch = llama_batch_init(1, 0, 1);
+        batch.token[0] = token;
+        batch.pos[0] = nPast;
+        batch.n_seq_id[0] = 1;
+        batch.seq_id[0][0] = seqId;
+        batch.logits[0] = true;
+        batch.n_tokens = 1;
+        int32_t rc = llama_decode(ctx, batch);
+        llama_batch_free(batch);
+        if (rc != 0) {
+            SetError("llama_decode failed rc=" + std::to_string(rc));
+            return;
+        }
+        nPast += 1;
+    }
+
+    void OnOK() override {
+        Napi::Object res = Napi::Object::New(Env());
+        res.Set("token", Napi::Number::New(Env(), (double)token));
+        res.Set("eos", Napi::Boolean::New(Env(), eos));
+        res.Set("nPast", Napi::Number::New(Env(), (double)nPast));
+        deferred.Resolve(res);
+    }
+    void OnError(const Napi::Error& e) override { deferred.Reject(e.Value()); }
+
+private:
+    Napi::Promise::Deferred deferred;
+    AddonContext* lctxWrap;
+    AddonSampler* samplerWrap;
+    llama_pos nPast;
+    llama_seq_id seqId;
+    llama_token token = 0;
+    bool eos = false;
+};
+
+Napi::Value AddonMtmdGenerateStep(const Napi::CallbackInfo& info) {
+    if (info.Length() < 3 || !info[0].IsObject() || !info[1].IsObject() || !info[2].IsNumber()) {
+        Napi::TypeError::New(info.Env(), "mtmdGenerateStep(llamaCtx, sampler, nPast, opts?)").ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+    AddonContext* lctx = Napi::ObjectWrap<AddonContext>::Unwrap(info[0].As<Napi::Object>());
+    AddonSampler* sampler = Napi::ObjectWrap<AddonSampler>::Unwrap(info[1].As<Napi::Object>());
+    llama_pos nPast = (llama_pos)info[2].As<Napi::Number>().Int32Value();
+    llama_seq_id seqId = 0;
+    if (info.Length() >= 4 && info[3].IsObject()) {
+        Napi::Object opts = info[3].As<Napi::Object>();
+        if (opts.Has("seqId")) seqId = opts.Get("seqId").ToNumber().Int32Value();
+    }
+    if (!lctx->ctx) {
+        Napi::Error::New(info.Env(), "llamaCtx not initialized").ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+    auto deferred = Napi::Promise::Deferred::New(info.Env());
+    auto worker = new MtmdGenerateStepWorker(deferred, lctx, sampler, nPast, seqId);
+    worker->Queue();
+    return deferred.Promise();
+}

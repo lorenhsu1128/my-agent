@@ -83,10 +83,19 @@ sampler.applyConfig({
 });
 
 const t0 = Date.now();
-const result = await mtmdCtx.generate(ctx, sampler, newNPast, 200, {seqId: seq.sequenceId ?? 0});
+let chunkCount = 0;
+process.stdout.write("[vision] streaming: ");
+const result = await mtmdCtx.generate(ctx, sampler, newNPast, 200, {
+    seqId: seq.sequenceId ?? 0,
+    onTextChunk: (c) => {
+        chunkCount += 1;
+        process.stdout.write(c);
+    }
+});
+process.stdout.write("\n");
 const dt = Date.now() - t0;
 
-console.log(`[vision] generated ${result.tokens.length} tokens in ${dt}ms (${(result.tokens.length / (dt / 1000)).toFixed(1)} tok/s)`);
+console.log(`[vision] generated ${result.tokens.length} tokens in ${dt}ms (${(result.tokens.length / (dt / 1000)).toFixed(1)} tok/s), chunks=${chunkCount}`);
 console.log("[vision] reply text: " + JSON.stringify(result.text));
 
 if (result.text.trim().length === 0) {

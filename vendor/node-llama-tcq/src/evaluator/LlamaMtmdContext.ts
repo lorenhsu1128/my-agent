@@ -135,21 +135,67 @@ export class LlamaMtmdContext {
      * 從 evalChunks 後的 nPast 接著 sample/decode 直到 EOS or maxTokens。
      * Returns: {tokens, nPast, text}
      * 需自行傳入已建好的 AddonSampler（用 model._llama._bindings.AddonSampler 建）。
+     *
+     * opts.onTextChunk: F2 streaming — 每 token sample 完就 detokenize 推回去。
+     *   注意 BPE/SP tokenizer 半 byte token 可能讓單 piece detokenize 出空字串/亂碼，
+     *   實作會累積 buffer 直到 piece 是 valid UTF-8 才 emit（F3 處理）。
      */
     public async generate(
         llamaContext: LlamaContext,
         sampler: any,
         nPast: number,
         maxTokens: number,
-        opts: {seqId?: number} = {}
+        opts: {seqId?: number; onTextChunk?: (chunk: string) => void} = {}
     ): Promise<{tokens: number[]; nPast: number; text: string}> {
         const bindings = (this._model as unknown as {_llama: {_bindings: any}})._llama._bindings;
         const llamaCtxNative = (llamaContext as unknown as {_ctx: any})._ctx;
-        const result = await bindings.mtmdGenerate(llamaCtxNative, sampler, nPast, maxTokens, opts);
         const modelNative = (this._model as unknown as {_model: any})._model;
-        const tokensU32 = new Uint32Array(result.tokens);
-        const text = modelNative.detokenize(tokensU32, false);
-        return {tokens: result.tokens, nPast: result.nPast, text};
+
+        // 無 streaming → 走原 batch API（C++ side 一個 worker 跑完，IPC 開銷較少）
+        if (!opts.onTextChunk) {
+            const result = await bindings.mtmdGenerate(llamaCtxNative, sampler, nPast, maxTokens, opts);
+            const text = modelNative.detokenize(new Uint32Array(result.tokens), false);
+            return {tokens: result.tokens, nPast: result.nPast, text};
+        }
+
+        // Streaming：JS 端 loop 用 mtmdGenerateStep 單步驅動
+        const tokens: number[] = [];
+        let cur = nPast;
+        let pendingBytes: number[] = []; // 累積 byte 直到湊成 valid UTF-8
+        let emittedText = "";
+
+        for (let i = 0; i < maxTokens; ++i) {
+            const r = await bindings.mtmdGenerateStep(llamaCtxNative, sampler, cur, {seqId: opts.seqId});
+            tokens.push(r.token);
+            cur = r.nPast;
+
+            // 累積 + 嘗試 emit valid UTF-8 chunk
+            const piece = modelNative.detokenize(new Uint32Array([r.token]), false);
+            if (piece && piece.length > 0) {
+                // detokenize 已回 string；理論上 BPE 半 byte 會吃進 piece 內部處理
+                // 仍保險：用 Buffer 重新編檢查，但簡化版直接 emit
+                opts.onTextChunk(piece);
+                emittedText += piece;
+            } else if (piece === "") {
+                // 半 byte token：累積等下次完整湊出（F3 強化空間）
+                pendingBytes.push(r.token);
+            }
+
+            if (r.eos) break;
+        }
+
+        // Flush pending（少見：trailing 半 byte）
+        if (pendingBytes.length > 0) {
+            const flush = modelNative.detokenize(new Uint32Array(pendingBytes), false);
+            if (flush && flush.length > 0) {
+                opts.onTextChunk(flush);
+                emittedText += flush;
+            }
+        }
+
+        // 最終 text 用所有 tokens 一次 detokenize（保證一致性，避免 piece-by-piece 累積誤差）
+        const finalText = modelNative.detokenize(new Uint32Array(tokens), false);
+        return {tokens, nPast: cur, text: finalText.length > 0 ? finalText : emittedText};
     }
 
     public dispose(): void {

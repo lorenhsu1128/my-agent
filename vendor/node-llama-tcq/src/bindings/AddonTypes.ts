@@ -120,7 +120,11 @@ export type BindingModule = {
     mtmdGenerate(
         llamaCtx: AddonContext, sampler: AddonSampler, nPast: number, maxTokens: number,
         opts?: {seqId?: number}
-    ): Promise<{tokens: number[], nPast: number}>
+    ): Promise<{tokens: number[], nPast: number}>,
+    mtmdGenerateStep(
+        llamaCtx: AddonContext, sampler: AddonSampler, nPast: number,
+        opts?: {seqId?: number}
+    ): Promise<{token: number, eos: boolean, nPast: number}>
 };
 
 export type AddonMtmdContext = {

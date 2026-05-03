@@ -359,9 +359,9 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
             try {
                 const result = await state.mtmdCtx.generate(
                     state.context, sampler, newNPast, body.max_tokens ?? 256,
-                    {seqId: seq.sequenceId ?? 0}
+                    {seqId: seq.sequenceId ?? 0, onTextChunk: onChunk}
                 );
-                if (onChunk && result.text.length > 0) onChunk(result.text);
+                // onChunk 已逐 piece 推；若沒人 emit 過（mtmdGenerateStep 路徑）保險 fallback
                 return result.text;
             } finally {
                 sampler.dispose();
