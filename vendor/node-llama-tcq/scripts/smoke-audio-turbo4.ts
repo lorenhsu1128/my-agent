@@ -38,6 +38,7 @@ console.log("[audio] creating context (TURBO4 KV, ctx=4096)");
 const ctx = await model.createContext({
     contextSize: 4096,
     flashAttention: true,
+    ignoreMemorySafetyChecks: true,
     experimentalKvCacheKeyType: GgmlType.TURBO4_0,
     experimentalKvCacheValueType: GgmlType.TURBO4_0
 });
