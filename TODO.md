@@ -3,6 +3,27 @@
 > Claude Code 在每次 session 開始時讀取此檔案，在工作過程中更新任務狀態。
 > 里程碑結構由人類維護。Claude Code 負責管理任務狀態的勾選。
 
+## 當前里程碑：M-DISCORD-TUI — `/discord` 整合 TUI（2026-05-03 啟動）
+
+**目標**：把 8 個 `/discord-*` 文字指令整合為單一 `/discord` Tab 式 TUI（仿 `/memory`），4 個 tab：Bindings / Whitelist / Guilds / Invite。daemon RPC 層不動，TUI 直接走既有 `mgr.discordBind()` / `mgr.discordUnbind()` / `mgr.discordAdmin()`。完整設計見 `~/.claude/plans/discord-repl-memory-cron-tui-cached-pony.md`。
+
+**決策**：8 個舊指令完全移除（含檔案刪除），使用者一律從 `/discord` 進入。TUI 列表的 disk read 不走 cached snapshot（直接 readFile + parseJsonc），避免 REPL process cache 污染。
+
+### 任務
+- [ ] M-DISCORD-TUI-1 新增 `src/commands/discord/`：index / discord.tsx / DiscordManager.tsx / discordManagerLogic.ts / DiscordBindWizard.tsx
+- [ ] M-DISCORD-TUI-2 `src/commands.ts` 移除 8 個 `discordXxxCommand` import 與 entries，註冊 `discordCommand`
+- [ ] M-DISCORD-TUI-3 刪除 `src/commands/discord{Bind,Unbind,BindOtherChannel,UnbindOtherChannel,WhitelistAdd,WhitelistRemove,Invite,Guilds}.ts`
+- [ ] M-DISCORD-TUI-4 `tests/unit/commands/discordManagerLogic.test.ts` 單元測試（list 處理、cwd 標星、binding/project 對應）
+- [ ] M-DISCORD-TUI-5 `bun run typecheck` + `bun run build:dev` + `./cli-dev` 冒煙（`/help` 確認舊指令消失、`/discord` 4 tab 正常）
+- [ ] M-DISCORD-TUI-6 commit（繁中）：`feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）`
+
+### 不在範圍 → 後續 milestone
+- Web admin 對應的 Discord 頁面
+- `src/discord/slashCommands.ts` 內 Discord-side 機器人指令（屬另一條線）
+- TUI 內 binding / whitelist 搜尋過濾（list 規模小，先不做）
+
+---
+
 ## 當前里程碑：M-MEMRECALL-CMD — `/memory-recall` 命令 + Web 右欄整合（2026-05-02 啟動）
 
 **目標**：使用者觀察到 TUI 每輪會冒 `Recalled <N> memories`（query-driven memory selector），希望能：(1) 觀察本 session 命中過哪些 memory；(2) 即時調 selector / fallback 上限與 enable 開關；(3) 從面板內 edit/delete 那些檔；(4) Web 模式同樣可改。完整設計見 `~/.claude/plans/llamacpp-gemopus-4-e4b-it-preview-q5-k-twinkly-hickey.md`。
@@ -3172,3 +3193,11 @@
 - 2026-05-02 22:24: Session 結束 | 進度：731/833 任務 | 895fb5a test(memory-recall): sessionRecallLog / TUI logic / settings schema 共 29 cases
 
 - 2026-05-02 22:39: Session 結束 | 進度：731/833 任務 | 895fb5a test(memory-recall): sessionRecallLog / TUI logic / settings schema 共 29 cases
+
+- 2026-05-02 22:54: Session 結束 | 進度：731/833 任務 | a13cf32 feat(daemon): /allow /deny 註冊為正式 slash command 防 fuzzy 偷走
+
+- 2026-05-03 07:59: Session 結束 | 進度：731/833 任務 | a13cf32 feat(daemon): /allow /deny 註冊為正式 slash command 防 fuzzy 偷走
+
+- 2026-05-03 08:02: Session 結束 | 進度：731/833 任務 | a13cf32 feat(daemon): /allow /deny 註冊為正式 slash command 防 fuzzy 偷走
+
+- 2026-05-03 08:35: Session 結束 | 進度：731/839 任務 | a13cf32 feat(daemon): /allow /deny 註冊為正式 slash command 防 fuzzy 偷走

@@ -126,14 +126,7 @@ import advisor from './commands/advisor.js'
 import daemonCommand from './commands/daemon.js'
 import configRewriteWithDocsCommand from './commands/configRewriteWithDocs.js'
 import configDoctorCommand from './commands/configDoctor.js'
-import discordBindCommand from './commands/discordBind.js'
-import discordUnbindCommand from './commands/discordUnbind.js'
-import discordBindOtherChannelCommand from './commands/discordBindOtherChannel.js'
-import discordUnbindOtherChannelCommand from './commands/discordUnbindOtherChannel.js'
-import discordWhitelistAddCommand from './commands/discordWhitelistAdd.js'
-import discordWhitelistRemoveCommand from './commands/discordWhitelistRemove.js'
-import discordInviteCommand from './commands/discordInvite.js'
-import discordGuildsCommand from './commands/discordGuilds.js'
+import discordCommand from './commands/discord/index.js'
 import { logError } from './utils/log.js'
 import { toError } from './utils/errors.js'
 import { logForDebugging } from './utils/debug.js'
@@ -298,14 +291,7 @@ const COMMANDS = memoize((): Command[] => [
   daemonCommand,
   configRewriteWithDocsCommand,
   configDoctorCommand,
-  discordBindCommand,
-  discordUnbindCommand,
-  discordBindOtherChannelCommand,
-  discordUnbindOtherChannelCommand,
-  discordWhitelistAddCommand,
-  discordWhitelistRemoveCommand,
-  discordInviteCommand,
-  discordGuildsCommand,
+  discordCommand,
   // my-agent: /login /logout 已移除（本地模型不需要 Anthropic OAuth）
   ...(peersCmd ? [peersCmd] : []),
   tasks,
