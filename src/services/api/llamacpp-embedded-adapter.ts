@@ -33,7 +33,24 @@ interface OpenAITextPart {
     text: string;
 }
 
-type OpenAIContentPart = OpenAITextPart | OpenAIImageUrl | {type: string; text?: string};
+/** OpenAI / Anthropic input_audio 格式 — base64 + format hint */
+interface OpenAIInputAudio {
+    type: "input_audio";
+    input_audio: {data: string; format?: "mp3" | "wav" | "flac" | "ogg"};
+}
+
+/** 沿用 image_url 模式的 audio_url（社群常見） */
+interface OpenAIAudioUrl {
+    type: "audio_url";
+    audio_url: {url: string};
+}
+
+type OpenAIContentPart =
+    | OpenAITextPart
+    | OpenAIImageUrl
+    | OpenAIInputAudio
+    | OpenAIAudioUrl
+    | {type: string; text?: string};
 
 interface OpenAIChatRequest {
     model?: string;
@@ -156,11 +173,21 @@ function lastUserMessage(messages: OpenAIChatRequest["messages"]): string {
  *
  * 同時組出 prompt 文字 — 每張圖前插一個 mtmd marker。
  */
-function extractVisionInput(
+/**
+ * 從 last user message 萃取 image / audio inputs。
+ * 支援格式：
+ *   image_url: data: / file: / 絕對路徑
+ *   input_audio: {data: <base64>, format: "mp3"|"wav"|...}
+ *   audio_url: data: / file: / 絕對路徑（同 image 模式）
+ *
+ * 對每個 marker 在 prompt 中插一個 mtmd marker。
+ * 順序對應 mtmd_tokenize 期望（marker 順序 = bitmaps 陣列順序）。
+ */
+function extractMediaInput(
     messages: OpenAIChatRequest["messages"],
     marker: string
-): {prompt: string; imagePaths: string[]; tempFiles: string[]} {
-    const imagePaths: string[] = [];
+): {prompt: string; mediaPaths: string[]; tempFiles: string[]} {
+    const mediaPaths: string[] = [];
     const tempFiles: string[] = [];
 
     let lastUser: OpenAIChatRequest["messages"][number] | undefined;
@@ -171,53 +198,84 @@ function extractVisionInput(
             break;
         }
     }
-    if (!lastUser) return {prompt: "", imagePaths: [], tempFiles: []};
+    if (!lastUser) return {prompt: "", mediaPaths: [], tempFiles: []};
 
     if (typeof lastUser.content === "string") {
-        return {prompt: lastUser.content, imagePaths: [], tempFiles: []};
+        return {prompt: lastUser.content, mediaPaths: [], tempFiles: []};
     }
+
+    const writeBase64ToTemp = (b64: string, ext: string): string => {
+        const buf = Buffer.from(b64, "base64");
+        const tmpPath = path.join(
+            os.tmpdir(),
+            `nltcq-media-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+        );
+        fs.writeFileSync(tmpPath, buf);
+        tempFiles.push(tmpPath);
+        return tmpPath;
+    };
+
+    const resolveUrlToPath = (url: string, defaultExt: string): string => {
+        if (url.startsWith("data:")) {
+            const m = /^data:([^;]+);base64,(.+)$/.exec(url);
+            if (!m) throw new Error("invalid data: URL");
+            const mime = m[1]!.toLowerCase();
+            const ext = mime.includes("png") ? ".png"
+                : mime.includes("jpeg") || mime.includes("jpg") ? ".jpg"
+                    : mime.includes("mp3") || mime.includes("mpeg") ? ".mp3"
+                        : mime.includes("wav") ? ".wav"
+                            : mime.includes("flac") ? ".flac"
+                                : mime.includes("ogg") ? ".ogg"
+                                    : defaultExt;
+            return writeBase64ToTemp(m[2]!, ext);
+        }
+        if (url.startsWith("file://")) return url.slice(7);
+        if (url.startsWith("/") || /^[A-Za-z]:[\\/]/.test(url)) return url;
+        throw new Error(`unsupported media URL scheme: ${url.slice(0, 30)}...`);
+    };
 
     const textParts: string[] = [];
     for (const part of lastUser.content) {
         if (part.type === "image_url" && "image_url" in part && part.image_url?.url) {
-            const url = part.image_url.url;
-            if (url.startsWith("data:")) {
-                const m = /^data:[^;]+;base64,(.+)$/.exec(url);
-                if (!m) throw new Error("invalid data: URL");
-                const buf = Buffer.from(m[1]!, "base64");
-                const ext = url.includes("image/png") ? ".png"
-                    : url.includes("image/jpeg") || url.includes("image/jpg") ? ".jpg"
-                        : ".bin";
-                const tmpPath = path.join(os.tmpdir(), `nltcq-img-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
-                fs.writeFileSync(tmpPath, buf);
-                tempFiles.push(tmpPath);
-                imagePaths.push(tmpPath);
-            } else if (url.startsWith("file://")) {
-                imagePaths.push(url.slice(7));
-            } else if (url.startsWith("/") || /^[A-Za-z]:[\\/]/.test(url)) {
-                imagePaths.push(url);
-            } else {
-                throw new Error(`unsupported image URL scheme: ${url.slice(0, 30)}...`);
-            }
+            mediaPaths.push(resolveUrlToPath(part.image_url.url, ".bin"));
+            textParts.push(marker);
+        } else if (part.type === "audio_url" && "audio_url" in part && part.audio_url?.url) {
+            mediaPaths.push(resolveUrlToPath(part.audio_url.url, ".mp3"));
+            textParts.push(marker);
+        } else if (part.type === "input_audio" && "input_audio" in part && part.input_audio?.data) {
+            const fmt = part.input_audio.format ?? "mp3";
+            mediaPaths.push(writeBase64ToTemp(part.input_audio.data, "." + fmt));
             textParts.push(marker);
         } else if (part.type === "text" && "text" in part) {
             textParts.push(part.text ?? "");
         }
     }
 
-    return {
-        prompt: textParts.join("\n"),
-        imagePaths,
-        tempFiles
-    };
+    return {prompt: textParts.join("\n"), mediaPaths, tempFiles};
 }
 
-function hasVisionContent(messages: OpenAIChatRequest["messages"]): boolean {
+/** @deprecated 改用 extractMediaInput */
+function extractVisionInput(
+    messages: OpenAIChatRequest["messages"],
+    marker: string
+): {prompt: string; imagePaths: string[]; tempFiles: string[]} {
+    const {prompt, mediaPaths, tempFiles} = extractMediaInput(messages, marker);
+    return {prompt, imagePaths: mediaPaths, tempFiles};
+}
+
+function hasMediaContent(messages: OpenAIChatRequest["messages"]): boolean {
     for (const m of messages) {
         if (typeof m.content === "string") continue;
-        if (m.content.some(p => p.type === "image_url")) return true;
+        if (m.content.some(p =>
+            p.type === "image_url" || p.type === "audio_url" || p.type === "input_audio"
+        )) return true;
     }
     return false;
+}
+
+/** @deprecated 改用 hasMediaContent — 保留向後相容 */
+function hasVisionContent(messages: OpenAIChatRequest["messages"]): boolean {
+    return hasMediaContent(messages);
 }
 
 /**
@@ -265,12 +323,12 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
         const state = await ensure(opts.config);
         const modelLabel = body.model ?? "embedded";
 
-        const wantsVision = hasVisionContent(body.messages);
-        const visionAvailable = state.mtmdCtx != null;
+        const wantsMedia = hasMediaContent(body.messages);
+        const mediaAvailable = state.mtmdCtx != null;
 
         // 非 streaming：等完整 reply 再回 JSON
         const generateReplyBlocking = async (): Promise<string> => {
-            if (wantsVision && visionAvailable) return await runVisionPath(state, body);
+            if (wantsMedia && mediaAvailable) return await runVisionPath(state, body);
             const userMsg = lastUserMessage(body.messages);
             return await state.session.prompt(userMsg, {
                 maxTokens: body.max_tokens ?? 256,
@@ -282,7 +340,7 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
         const generateReplyStreaming = async (
             onChunk: (text: string) => void
         ): Promise<string> => {
-            if (wantsVision && visionAvailable) return await runVisionPath(state, body, onChunk);
+            if (wantsMedia && mediaAvailable) return await runVisionPath(state, body, onChunk);
             const userMsg = lastUserMessage(body.messages);
             return await state.session.prompt(userMsg, {
                 maxTokens: body.max_tokens ?? 256,
@@ -337,11 +395,11 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
         // F2 改 mtmdCtx.generate 接 onTextChunk 後可逐 token push。
         const m = await loadModule();
         const marker = state.mtmdCtx.defaultMarker;
-        const {prompt, imagePaths, tempFiles} = extractVisionInput(body.messages, marker);
+        const {prompt, mediaPaths, tempFiles} = extractMediaInput(body.messages, marker);
         try {
             const chunks = await state.mtmdCtx.tokenize({
                 text: prompt,
-                images: imagePaths.map(p => ({type: "file", data: p}))
+                media: mediaPaths.map(p => ({type: "file", data: p}))
             });
             const seq = state.context.getSequence();
             const newNPast = await state.mtmdCtx.evalChunks(state.context, chunks, 0, {

@@ -222,10 +222,14 @@ describe('createLlamaCppEmbeddedFetch', () => {
       },
       mtmdCtx: {
         defaultMarker: '<__media__>',
-        tokenize: async (opts: {text: string; images?: Array<{type: string; data: string}>}) => {
+        tokenize: async (opts: {
+          text: string
+          media?: Array<{type: string; data: string}>
+          images?: Array<{type: string; data: string}>
+        }) => {
           mtmdCalled = true
           capturedPrompt = opts.text
-          capturedImages = (opts.images ?? []).map(i => i.data)
+          capturedImages = (opts.media ?? opts.images ?? []).map(i => i.data)
           return {dispose: () => undefined}
         },
         evalChunks: async () => 100,
@@ -328,6 +332,115 @@ describe('createLlamaCppEmbeddedFetch', () => {
     expect(txt).toContain('[DONE]')
     const dataChunks = txt.match(/data: /g) ?? []
     expect(dataChunks.length).toBeGreaterThanOrEqual(3)
+  })
+
+  test('input_audio 走 mtmd 路徑（base64 解碼成 temp 檔）', async () => {
+    let mtmdMediaCount = 0
+    let capturedPrompt = ''
+
+    const mockState = {
+      config: {enabled: true, modelPath: 'fake.gguf'},
+      llama: null,
+      model: {_llama: {_bindings: {AddonSampler: class {
+        applyConfig() {} dispose() {}
+      }}}, _model: null},
+      context: {getSequence: () => ({sequenceId: 0})},
+      session: {prompt: async () => 'should-not-call'},
+      mtmdCtx: {
+        defaultMarker: '<__media__>',
+        tokenize: async (opts: {
+          text: string
+          media?: Array<{type: string; data: string}>
+        }) => {
+          capturedPrompt = opts.text
+          mtmdMediaCount = (opts.media ?? []).length
+          // 驗證 base64 真的有寫到 temp 檔（path 存在 & 內容非空）
+          for (const m of opts.media ?? []) {
+            if (m.type === 'file') {
+              const fs = await import('node:fs')
+              expect(fs.existsSync(m.data)).toBe(true)
+              expect(fs.statSync(m.data).size).toBeGreaterThan(0)
+            }
+          }
+          return {dispose: () => undefined}
+        },
+        evalChunks: async () => 100,
+        generate: async () => ({tokens: [], nPast: 100, text: 'audio understood'}),
+      },
+    }
+
+    const fetchFn = createLlamaCppEmbeddedFetch({
+      config: {enabled: true, modelPath: 'fake.gguf', mmprojPath: 'mm.gguf', gpu: 'cuda'},
+      overrideEnsureState: async () => mockState as never,
+    })
+
+    // 假 mp3 base64：3 byte ID3 header 即可
+    const fakeMp3B64 = Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00]).toString('base64')
+
+    const res = await fetchFn('http://embedded/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {type: 'text', text: 'transcribe'},
+              {type: 'input_audio', input_audio: {data: fakeMp3B64, format: 'mp3'}},
+            ],
+          },
+        ],
+        stream: false,
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as {choices: Array<{message: {content: string}}>}
+    expect(json.choices[0]!.message.content).toBe('audio understood')
+    expect(mtmdMediaCount).toBe(1)
+    expect(capturedPrompt).toContain('<__media__>')
+    expect(capturedPrompt).toContain('transcribe')
+  })
+
+  test('audio_url 走 mtmd 路徑（file:// path）', async () => {
+    let mediaPath = ''
+    const mockState = {
+      config: {enabled: true, modelPath: 'fake.gguf'},
+      llama: null,
+      model: {_llama: {_bindings: {AddonSampler: class {
+        applyConfig() {} dispose() {}
+      }}}, _model: null},
+      context: {getSequence: () => ({sequenceId: 0})},
+      session: {prompt: async () => 'should-not-call'},
+      mtmdCtx: {
+        defaultMarker: '<__media__>',
+        tokenize: async (opts: {media?: Array<{type: string; data: string}>}) => {
+          mediaPath = opts.media?.[0]?.data ?? ''
+          return {dispose: () => undefined}
+        },
+        evalChunks: async () => 50,
+        generate: async () => ({tokens: [], nPast: 50, text: 'ok'}),
+      },
+    }
+    const fetchFn = createLlamaCppEmbeddedFetch({
+      config: {enabled: true, modelPath: 'fake.gguf', mmprojPath: 'mm.gguf', gpu: 'cuda'},
+      overrideEnsureState: async () => mockState as never,
+    })
+    await fetchFn('http://embedded/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {type: 'text', text: 'listen'},
+              {type: 'audio_url', audio_url: {url: 'file:///tmp/foo.mp3'}},
+            ],
+          },
+        ],
+        stream: false,
+      }),
+    })
+    expect(mediaPath).toBe('/tmp/foo.mp3')
   })
 
   test('純文字 content（即使含 image_url 但無 mtmdCtx）走 chat 路徑', async () => {
