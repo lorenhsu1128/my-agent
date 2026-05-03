@@ -69,6 +69,7 @@ void AddonMtmdContext::init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("supportsVision", &AddonMtmdContext::SupportsVision),
         InstanceMethod("supportsAudio", &AddonMtmdContext::SupportsAudio),
         InstanceMethod("defaultMarker", &AddonMtmdContext::DefaultMarker),
+        InstanceMethod("audioSampleRate", &AddonMtmdContext::AudioSampleRate),
         InstanceMethod("dispose", &AddonMtmdContext::Dispose)
     });
     exports.Set("MtmdContext", fn);
@@ -118,6 +119,10 @@ Napi::Value AddonMtmdContext::SupportsAudio(const Napi::CallbackInfo& info) {
 }
 Napi::Value AddonMtmdContext::DefaultMarker(const Napi::CallbackInfo& info) {
     return Napi::String::New(info.Env(), mtmd_default_marker());
+}
+Napi::Value AddonMtmdContext::AudioSampleRate(const Napi::CallbackInfo& info) {
+    if (!ctx) return Napi::Number::New(info.Env(), -1);
+    return Napi::Number::New(info.Env(), (double)mtmd_get_audio_sample_rate(ctx));
 }
 Napi::Value AddonMtmdContext::Dispose(const Napi::CallbackInfo& info) {
     if (ctx && !disposed) {
@@ -207,6 +212,35 @@ Napi::Value AddonMtmdBitmapFromBuffer(const Napi::CallbackInfo& info) {
     mtmd_bitmap* bm = mtmd_bitmap_init(w, h, buf.Data());
     if (!bm) {
         Napi::Error::New(info.Env(), "mtmd_bitmap_init failed").ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+    Napi::Object bitmapObj = g_mtmdBitmapCtor.New({});
+    AddonMtmdBitmap* wrap = Napi::ObjectWrap<AddonMtmdBitmap>::Unwrap(bitmapObj);
+    wrap->bitmap = bm;
+    return bitmapObj;
+}
+
+// mtmdBitmapFromAudio(mtmdCtx, Float32Array pcmMono)
+// data 必須是 PCM F32 mono；sample rate 預期符合 mtmd_get_audio_sample_rate（通常 16000）
+Napi::Value AddonMtmdBitmapFromAudio(const Napi::CallbackInfo& info) {
+    if (info.Length() < 2 || !info[0].IsObject() ||
+        !(info[1].IsTypedArray() || info[1].IsArrayBuffer())) {
+        Napi::TypeError::New(info.Env(),
+            "mtmdBitmapFromAudio(mtmdCtx, Float32Array)")
+            .ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+    AddonMtmdContext* mctx = Napi::ObjectWrap<AddonMtmdContext>::Unwrap(info[0].As<Napi::Object>());
+    if (!mctx->ctx) {
+        Napi::Error::New(info.Env(), "mtmd context not initialized").ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+    Napi::Float32Array arr = info[1].As<Napi::Float32Array>();
+    size_t nSamples = arr.ElementLength();
+    const float* data = arr.Data();
+    mtmd_bitmap* bm = mtmd_bitmap_init_from_audio(nSamples, data);
+    if (!bm) {
+        Napi::Error::New(info.Env(), "mtmd_bitmap_init_from_audio failed").ThrowAsJavaScriptException();
         return info.Env().Undefined();
     }
     Napi::Object bitmapObj = g_mtmdBitmapCtor.New({});

@@ -11,20 +11,25 @@ export interface LlamaMtmdContextOptions {
     nThreads?: number;
 }
 
-export interface MtmdImageInput {
-    type: "file" | "rgb-buffer";
-    /** path（type=file）或 RGB raw bytes（type=rgb-buffer） */
-    data: string | Buffer | Uint8Array;
-    /** type=rgb-buffer 必填 */
-    width?: number;
-    height?: number;
-}
+/**
+ * 媒體輸入：影像（file / rgb-buffer）或音訊（audio-pcm / file 自動偵測 mp3/wav）。
+ * mtmd_helper_bitmap_init_from_file 內含 stb_image + miniaudio.h，會自動判斷檔案類型。
+ */
+export type MtmdMediaInput =
+    | {type: "file"; data: string}                           // path：圖片或音訊檔（.mp3/.wav 自動解碼）
+    | {type: "rgb-buffer"; data: Buffer | Uint8Array; width: number; height: number}  // 影像 raw RGB
+    | {type: "audio-pcm"; data: Float32Array; sampleRate?: number};                    // PCM mono F32
+
+/** @deprecated 改用 MtmdMediaInput */
+export type MtmdImageInput = MtmdMediaInput;
 
 export interface MtmdTokenizeOptions {
     /** prompt 文字，須含一個或多個 marker（mtmd default: "<__media__>"） */
     text: string;
-    /** 對應 marker 的 image inputs */
-    images?: MtmdImageInput[];
+    /** 統一媒體陣列；順序對應 prompt 中 marker 順序 */
+    media?: MtmdMediaInput[];
+    /** @deprecated 改用 media；仍支援以保向後相容 */
+    images?: MtmdMediaInput[];
     addSpecial?: boolean;
     parseSpecial?: boolean;
 }
@@ -77,6 +82,11 @@ export class LlamaMtmdContext {
         return this._native.defaultMarker();
     }
 
+    /** mtmd 期望的音訊取樣率（典型 16000 Hz Whisper）。不支援 audio 回 -1 */
+    public get audioSampleRate(): number {
+        return this._native.audioSampleRate();
+    }
+
     /**
      * Tokenize 文字 + 圖片（含 marker 替換）→ MtmdChunks。
      * Returns: chunks 物件可後續餵給 evalChunks。
@@ -86,10 +96,11 @@ export class LlamaMtmdContext {
         const bindings = (this._model as unknown as {_llama: {_bindings: any}})._llama._bindings;
         const chunks: AddonMtmdChunks = new bindings.MtmdChunks();
 
+        const inputs = opts.media ?? opts.images ?? [];
         const bitmaps: AddonMtmdBitmap[] = [];
         try {
-            for (const img of opts.images ?? []) {
-                const bm = await this._loadBitmap(img);
+            for (const item of inputs) {
+                const bm = await this._loadBitmap(item);
                 bitmaps.push(bm);
             }
             const rc = bindings.mtmdTokenize(this._native, chunks, opts.text, bitmaps, {
@@ -205,19 +216,28 @@ export class LlamaMtmdContext {
     }
 
     /** @internal */
-    private async _loadBitmap(img: MtmdImageInput): Promise<AddonMtmdBitmap> {
+    private async _loadBitmap(input: MtmdMediaInput): Promise<AddonMtmdBitmap> {
         const bindings = (this._model as unknown as {_llama: {_bindings: any}})._llama._bindings;
-        if (img.type === "file") {
-            if (typeof img.data !== "string") throw new Error("type=file requires data: string");
-            return bindings.mtmdBitmapFromFile(this._native, img.data);
+        if (input.type === "file") {
+            // mtmd_helper_bitmap_init_from_file 自動偵測：圖片 (PNG/JPG) 或音訊 (MP3/WAV)
+            return bindings.mtmdBitmapFromFile(this._native, input.data);
         }
-        if (img.type === "rgb-buffer") {
-            if (img.width == null || img.height == null)
-                throw new Error("type=rgb-buffer requires width and height");
-            const buf = img.data instanceof Buffer ? img.data : Buffer.from(img.data as Uint8Array);
-            return bindings.mtmdBitmapFromBuffer(buf, img.width, img.height);
+        if (input.type === "rgb-buffer") {
+            const buf = input.data instanceof Buffer ? input.data : Buffer.from(input.data as Uint8Array);
+            return bindings.mtmdBitmapFromBuffer(buf, input.width, input.height);
         }
-        throw new Error(`unsupported image input type: ${(img as MtmdImageInput).type}`);
+        if (input.type === "audio-pcm") {
+            // 取樣率僅用於警告，bitmap_init_from_audio 不接 sampleRate（內部假設與 model 一致）
+            if (input.sampleRate != null && this.audioSampleRate > 0 && input.sampleRate !== this.audioSampleRate) {
+                throw new Error(
+                    `audio sampleRate ${input.sampleRate} does not match model expected ${this.audioSampleRate}; ` +
+                    `please resample to ${this.audioSampleRate} Hz mono before calling`
+                );
+            }
+            const pcm = input.data instanceof Float32Array ? input.data : new Float32Array(input.data);
+            return bindings.mtmdBitmapFromAudio(this._native, pcm);
+        }
+        throw new Error(`unsupported media input type: ${(input as MtmdMediaInput).type}`);
     }
 }
 

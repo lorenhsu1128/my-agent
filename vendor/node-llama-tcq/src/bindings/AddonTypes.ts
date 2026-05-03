@@ -117,6 +117,7 @@ export type BindingModule = {
     ): Promise<number>,
     mtmdBitmapFromFile(ctx: AddonMtmdContext, path: string): AddonMtmdBitmap,
     mtmdBitmapFromBuffer(buffer: Uint8Array, width: number, height: number): AddonMtmdBitmap,
+    mtmdBitmapFromAudio(ctx: AddonMtmdContext, pcmMono: Float32Array): AddonMtmdBitmap,
     mtmdGenerate(
         llamaCtx: AddonContext, sampler: AddonSampler, nPast: number, maxTokens: number,
         opts?: {seqId?: number}
@@ -133,6 +134,8 @@ export type AddonMtmdContext = {
     supportsVision(): boolean,
     supportsAudio(): boolean,
     defaultMarker(): string,
+    /** mtmd_get_audio_sample_rate；不支援 audio 回 -1 */
+    audioSampleRate(): number,
     dispose(): void
 };
 
