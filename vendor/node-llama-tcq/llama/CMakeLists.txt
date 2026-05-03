@@ -26,6 +26,11 @@ endif()
 
 project("llama-addon" C CXX)
 
+# node-llama-tcq patch: buun-llama-cpp common.h 使用 std::string_view 需 C++17
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 if (MSVC)
     if (GGML_STATIC)
         add_link_options(-static)

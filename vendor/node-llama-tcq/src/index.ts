@@ -335,3 +335,18 @@ export {
     type OverridesObject,
     experimentalChunkDocument
 };
+
+// node-llama-tcq additions
+export {
+    applyTCQCodebooks,
+    clearTCQCodebooks,
+    defaultCodebooks,
+    isTCQType,
+    type TCQCodebookConfig,
+    isTCQAvailable,
+    assertTCQCompatibleHeadDim,
+    type TCQAvailability,
+    TCQPresets,
+    type TCQPreset,
+    type TCQPresetName
+} from "./tcq/index.js";

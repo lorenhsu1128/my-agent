@@ -61,7 +61,16 @@ export enum GgmlType {
     IQ4_NL_4_8 = 37,
     IQ4_NL_8_8 = 38,
     MXFP4 = 39, // MXFP4 (1 block)
-    NVFP4 = 40 // NVFP4 (4 blocks, E4M3 scale)
+    NVFP4 = 40, // NVFP4 (4 blocks, E4M3 scale)
+
+    // node-llama-tcq: buun-llama-cpp TCQ KV cache 壓縮新增的 ggml type
+    // 對應 buun 的 GGML_TYPE_TURBO* 常數，僅供 KV cache 使用、不存於 GGUF 權重
+    Q1_0       = 41,
+    TURBO3_0   = 42, // 純標量量化（無 TCQ）
+    TURBO4_0   = 43, // 4.25 bpv，無損品質
+    TURBO2_0   = 44,
+    TURBO3_TCQ = 45, // 3.25 bpv，超越 FP16（推薦預設）
+    TURBO2_TCQ = 46  // 2.25 bpv，最大壓縮
 }
 
 export function resolveGgmlTypeOption(option?: keyof typeof GgmlType | GgmlType) {
