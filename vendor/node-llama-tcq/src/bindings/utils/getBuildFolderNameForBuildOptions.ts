@@ -13,7 +13,8 @@ export async function getBuildFolderNameForBuildOptions(buildOptions: BuildOptio
 
     if (buildOptions.llamaCpp.repo !== builtinLlamaCppGitHubRepo || buildOptions.llamaCpp.release !== builtinLlamaCppRelease) {
         const releaseFolderNamePart = await getFolderNamePartForRelease(buildOptions.llamaCpp.repo, buildOptions.llamaCpp.release);
-        nameParts.push("release-" + releaseFolderNamePart);
+        // node-llama-tcq patch: 資料夾名也換成底線，避免 Windows MSBuild 路徑含空格時 link.exe 失敗
+        nameParts.push("release-" + releaseFolderNamePart.replaceAll(" ", "_"));
         binParts.push(releaseFolderNamePart.replaceAll(" ", "_"));
     } else if (buildOptions.llamaCpp.release !== "latest")
         binParts.push(buildOptions.llamaCpp.release);
