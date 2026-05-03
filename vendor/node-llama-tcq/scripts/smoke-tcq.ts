@@ -41,7 +41,8 @@ console.log("[tcq] preset=" + preset.label + " bpv=" + preset.bpv +
     " keyType=" + GgmlType[preset.keyType] + "(" + preset.keyType + ")");
 
 const ctx = await model.createContext({
-    contextSize: 8192,
+    contextSize: 4096,
+    flashAttention: true,
     experimentalKvCacheKeyType: preset.keyType,
     experimentalKvCacheValueType: preset.valueType
 });

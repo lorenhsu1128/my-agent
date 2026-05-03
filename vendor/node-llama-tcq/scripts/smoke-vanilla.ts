@@ -17,10 +17,11 @@ if (!modelPath) {
 
 console.log("[vanilla] loading llama, model=" + path.basename(modelPath));
 
-const llama = await getLlama();
+const llama = await getLlama({gpu: "cuda"});
 const model = await llama.loadModel({modelPath});
 const ctx = await model.createContext({
     contextSize: 4096,
+    flashAttention: true,
     experimentalKvCacheKeyType: GgmlType.Q8_0,
     experimentalKvCacheValueType: GgmlType.Q8_0
 });
