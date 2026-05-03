@@ -207,6 +207,42 @@ export class LlamaContext {
         await this._disposeAggregator.dispose();
     }
 
+    /**
+     * Phase G2/G3：純文字 speculative decoding。
+     * 用 buun 的 common_speculative API 在 C++ 端跑完整 draft+verify 迴圈。
+     * 注意：上游 llama.cpp 在 server 三處明示 speculative + multimodal 不相容
+     * （server-context.cpp:909/1698/2310），這條路徑**只能用於純文字**，不可
+     * 與 LlamaMtmdContext.generate / evalChunks 的 KV state 共用 sequence。
+     *
+     * Model-free types（不需 drafter）：copyspec / ngram_simple / ngram_map_k
+     *   / ngram_map_k4v / ngram_mod / ngram_cache / suffix / recycle
+     * Drafter-required types（需先載入 draft model，目前 Phase G3 暫未支援
+     * 從 JS 傳 drafter）：draft / eagle3 / dflash
+     */
+    public async generateWithSpeculative(opts: {
+        sampler: any,                    // AddonSampler 實例
+        promptTokens?: import("../../types.js").Token[],
+        nPast?: number,
+        maxTokens?: number,
+        seqId?: number,
+        spec: import("../../bindings/AddonTypes.js").SpeculativeOpts
+    }): Promise<{tokens: import("../../types.js").Token[], nPast: number, nDrafted: number, nAccepted: number}> {
+        const bindings = this._llama._bindings;
+        const result = await bindings.generateWithSpec(this._ctx, opts.sampler, {
+            prompt: opts.promptTokens as number[] | undefined,
+            nPast: opts.nPast ?? 0,
+            maxTokens: opts.maxTokens ?? 256,
+            seqId: opts.seqId ?? 0,
+            spec: opts.spec
+        });
+        return {
+            tokens: result.tokens as unknown as import("../../types.js").Token[],
+            nPast: result.nPast,
+            nDrafted: result.nDrafted,
+            nAccepted: result.nAccepted
+        };
+    }
+
     /** @hidden */
     public [Symbol.asyncDispose]() {
         return this.dispose();

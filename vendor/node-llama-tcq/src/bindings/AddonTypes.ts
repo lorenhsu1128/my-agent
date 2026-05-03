@@ -125,8 +125,47 @@ export type BindingModule = {
     mtmdGenerateStep(
         llamaCtx: AddonContext, sampler: AddonSampler, nPast: number,
         opts?: {seqId?: number}
-    ): Promise<{token: number, eos: boolean, nPast: number}>
+    ): Promise<{token: number, eos: boolean, nPast: number}>,
+
+    // Phase G2/G3 — speculative decoding（純文字路徑，不可用於 mtmd）
+    generateWithSpec(
+        llamaCtx: AddonContext, sampler: AddonSampler,
+        opts: {
+            prompt?: number[],
+            nPast?: number,
+            maxTokens?: number,
+            seqId?: number,
+            spec?: SpeculativeOpts
+        }
+    ): Promise<{tokens: number[], nPast: number, nDrafted: number, nAccepted: number}>
 };
+
+export interface SpeculativeOpts {
+    /** 推論型別（model-free 不需 drafter；DFlash/DRAFT 需要） */
+    type?: "off" | "ngram_simple" | "ngram_map_k" | "ngram_map_k4v" | "ngram_mod"
+        | "ngram_cache" | "suffix" | "copyspec" | "recycle"
+        | "draft" | "eagle3" | "dflash";
+    nMax?: number;       // 每回合最多 draft tokens（default 16）
+    nMin?: number;       // 低於此 draft 數量直接回退非 spec 路徑
+    treeBudget?: number; // DDTree 節點預算（0 = flat）
+    dflashMaxSlots?: number;
+    pSplit?: number;
+    pMin?: number;
+    sampleTemp?: number;
+    draftTopk?: number;
+
+    // CopySpec 專屬
+    copyspecGamma?: number; // rolling hash window（default 6）
+
+    // Suffix tree 專屬
+    suffixMaxDepth?: number;
+    suffixSpecFactor?: number;
+    suffixSpecOffset?: number;
+    suffixMinProb?: number;
+
+    // Recycle
+    recycleK?: number;
+}
 
 export type AddonMtmdContext = {
     /** 內部 init Promise — 必須 await 後 ctx 才就緒 */

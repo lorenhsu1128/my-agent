@@ -6,6 +6,7 @@
 #include "AddonSampler.h"
 #include "AddonContext.h"
 #include "AddonMtmd.h"
+#include "AddonGenerateWithSpec.h"
 #include "globals/addonLog.h"
 #include "globals/addonProgress.h"
 #include "globals/getGpuInfo.h"
@@ -332,6 +333,9 @@ Napi::Object registerCallback(Napi::Env env, Napi::Object exports) {
     exports.Set("mtmdBitmapFromAudio", Napi::Function::New(env, AddonMtmdBitmapFromAudio));
     exports.Set("mtmdGenerate", Napi::Function::New(env, AddonMtmdGenerate));
     exports.Set("mtmdGenerateStep", Napi::Function::New(env, AddonMtmdGenerateStep));
+
+    // Phase G2/G3 — speculative decoding（純文字路徑）
+    exports.Set("generateWithSpec", Napi::Function::New(env, AddonGenerateWithSpec));
 
     llama_log_set(addonLlamaCppLogCallback, nullptr);
 

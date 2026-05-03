@@ -360,3 +360,6 @@ export {
     type MtmdTokenizeOptions,
     type MtmdEvalOptions
 } from "./evaluator/LlamaMtmdContext.js";
+
+// node-llama-tcq Phase G2/G3: speculative decoding（純文字）
+export type {SpeculativeOpts} from "./bindings/AddonTypes.js";
