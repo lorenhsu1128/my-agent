@@ -1,0 +1,8 @@
+node-llama-cpp: 57bea3da9ffa78955e8b25f195ce6cc714980cb5
+buun-llama-cpp: aecbbd5daa47abd4229fb2c0906e8f102d814022
+synced-at: 2026-05-03
+
+# Notes
+# - node-llama-cpp 原始 llama/llama.cpp 為 git submodule，clone 時未拉取。
+# - 直接以 buun-llama-cpp 完整原始碼覆蓋 llama/llama.cpp/。
+# - codebooks/ 從 buun 的 llama.cpp/codebooks/ 移到 vendor 根目錄統一管理。
