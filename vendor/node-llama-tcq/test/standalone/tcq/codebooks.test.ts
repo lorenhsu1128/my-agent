@@ -38,6 +38,46 @@ describe("tcq/codebooks", () => {
         expect(process.env.TURBO_LAYER_ADAPTIVE).toBeUndefined();
     });
 
+    describe("G1 runtime tunables", () => {
+        test("encodeAlpha / alpha / alphaV / decodeAlphaK / decodeAlphaV", () => {
+            applyTCQCodebooks({
+                encodeAlpha: "context",
+                alpha: 0.5,
+                alphaV: 0.6,
+                decodeAlphaK: 0.7,
+                decodeAlphaV: 0.8
+            });
+            expect(process.env.TURBO_TCQ_ENCODE_ALPHA).toBe("context");
+            expect(process.env.TURBO_TCQ_ALPHA).toBe("0.5");
+            expect(process.env.TURBO_TCQ_ALPHA_V).toBe("0.6");
+            expect(process.env.TURBO_TCQ_DECODE_ALPHA_K).toBe("0.7");
+            expect(process.env.TURBO_TCQ_DECODE_ALPHA_V).toBe("0.8");
+        });
+
+        test("prefillVec / mmaFused / decodeNative 開關", () => {
+            applyTCQCodebooks({prefillVec: true, mmaFused: false, decodeNative: true});
+            expect(process.env.TURBO_PREFILL_VEC).toBe("1");
+            expect(process.env.GGML_TURBO_MMA_FUSED).toBe("0");
+            expect(process.env.GGML_TURBO_DECODE_NATIVE).toBe("1");
+        });
+
+        test("innerq trio", () => {
+            applyTCQCodebooks({innerq: true, innerqMode: "static", innerqStrength: 0.3});
+            expect(process.env.TURBO_INNERQ).toBe("1");
+            expect(process.env.TURBO_INNERQ_MODE).toBe("static");
+            expect(process.env.TURBO_INNERQ_STRENGTH).toBe("0.3");
+        });
+
+        test("clearTCQCodebooks 也清 G1 旋鈕", () => {
+            applyTCQCodebooks({alpha: 0.5, mmaFused: true, innerqMode: "dynamic", dumpErrors: true});
+            clearTCQCodebooks();
+            expect(process.env.TURBO_TCQ_ALPHA).toBeUndefined();
+            expect(process.env.GGML_TURBO_MMA_FUSED).toBeUndefined();
+            expect(process.env.TURBO_INNERQ_MODE).toBeUndefined();
+            expect(process.env.TURBO_TCQ_DUMP_ERRORS).toBeUndefined();
+        });
+    });
+
     describe("isTCQType", () => {
         test.each([
             [GgmlType.TURBO3_0, true],
