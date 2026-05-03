@@ -113,7 +113,7 @@ public:
             n_drafted += (int32_t)drafts.size();
 
             // 2. build batch [token_last, drafts...]
-            llama_batch_clear(batch);
+            common_batch_clear(batch);
             common_batch_add(batch, token_last, nPast, {seqId}, true);
             for (size_t i = 0; i < drafts.size(); ++i) {
                 common_batch_add(batch, drafts[i], nPast + 1 + (llama_pos)i, {seqId}, true);

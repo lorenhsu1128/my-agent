@@ -72,28 +72,25 @@ sampler.applyConfig({temperature: 0, topK: 40, topP: 0.95, minP: 0.05});
 const nPast = (seq as any).nextTokenIndex;
 console.log("[spec] starting nPast=" + nPast);
 
-async function runVariant(label: string, specType: string | "off"): Promise<void> {
-    const t0 = Date.now();
-    const result = await ctx.generateWithSpeculative({
-        sampler,
-        nPast,
-        maxTokens: 60,
-        seqId,
-        spec: specType === "off" ? {type: "off"} : {type: specType as any, nMax: 16, copyspecGamma: 6}
-    });
-    const dt = Date.now() - t0;
-    const text = (model as any).detokenize(new Uint32Array(result.tokens as number[]), false);
-    const accept = result.nDrafted > 0 ? (result.nAccepted / result.nDrafted * 100).toFixed(1) : "0";
-    console.log(`[spec] ${label}: ${result.tokens.length} tokens in ${dt}ms (${(result.tokens.length / (dt / 1000)).toFixed(1)} tok/s), drafted=${result.nDrafted}, accepted=${result.nAccepted} (${accept}%)`);
-    console.log(`         text: ${JSON.stringify(text.slice(0, 100))}`);
-    // KV cache 改變了，下個 variant 不能用同 seq；但這裡只是 demo
+const t0 = Date.now();
+const result = await ctx.generateWithSpeculative({
+    sampler,
+    nPast,
+    maxTokens: 60,
+    seqId,
+    spec: {type: "copyspec", nMax: 16, copyspecGamma: 6}
+});
+const dt = Date.now() - t0;
+const text = (model as any).detokenize(new Uint32Array(result.tokens as number[]), false);
+const accept = result.nDrafted > 0 ? (result.nAccepted / result.nDrafted * 100).toFixed(1) : "0";
+console.log(`[spec] copyspec: ${result.tokens.length} tokens in ${dt}ms (${(result.tokens.length / (dt / 1000)).toFixed(1)} tok/s)`);
+console.log(`[spec]    drafted=${result.nDrafted}, accepted=${result.nAccepted} (${accept}%)`);
+console.log(`[spec]    text: ${JSON.stringify(text.slice(0, 200))}`);
+
+if (result.tokens.length === 0) {
+    console.error("[spec] ⚠ no tokens generated");
+    process.exit(3);
 }
 
-// 跑 baseline（無 spec）
-await runVariant("baseline (off)", "off");
-// 注意：上面已 generate，KV state 已被推進；CopySpec 跑會從新位置繼續而非同起點
-// 為公平對比，最佳是兩個 fresh context — 簡化版這裡只示意 spec API 通路
-// 之後 benchmark 才正式對比
-
-console.log("[spec] OK ✓ — generateWithSpec API 通");
+console.log("[spec] OK ✓ — generateWithSpec CopySpec 路徑通");
 process.exit(0);
