@@ -11,6 +11,7 @@ import {makeUsage} from "./usage.js";
 import {toOpenAIFinishReason, ShimStopReason} from "./finishReason.js";
 import {splitReasoning, StreamReasoningSplitter} from "./reasoningSplit.js";
 import {extractToolCalls, buildToolPromptSuffix} from "./toolCallExtract.js";
+import {StreamToolSniffer} from "./streamToolSniffer.js";
 import {flattenContent, extractMediaParts} from "./visionPath.js";
 import {sendJson} from "./httpHelpers.js";
 
@@ -223,6 +224,7 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
     const {req, res, body, chatSession, lastUserPrompt, session, id, created, model, declaredTools} = opts;
     const sse = new SseWriter(res);
     const splitter = new StreamReasoningSplitter();
+    const sniffer = new StreamToolSniffer(declaredTools);
     const reasoning = resolveReasoning(session, body);
     let totalRaw = "";
 
@@ -260,8 +262,11 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
                         prefixToStrip = "";
                     }
                 }
-                totalRaw += text;
-                const part = splitter.feed(text);
+                totalRaw += text; // always accumulate raw for end-of-stream tool extract
+                // Sniffer suppresses content while it looks like a tool-call JSON
+                const visible = sniffer.feed(text);
+                if (visible.length === 0) return;
+                const part = splitter.feed(visible);
                 if (part.content || part.reasoning) {
                     sse.send(makeChunk(id, created, model, {
                         ...(part.content ? {content: part.content} : {}),
@@ -270,6 +275,18 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
                 }
             }
         });
+
+        // Flush sniffer head if undecided / decided text
+        const sniffTail = sniffer.flush();
+        if (sniffTail.length > 0) {
+            const part = splitter.feed(sniffTail);
+            if (part.content || part.reasoning) {
+                sse.send(makeChunk(id, created, model, {
+                    ...(part.content ? {content: part.content} : {}),
+                    ...(part.reasoning ? {reasoning_content: part.reasoning} : {})
+                }, null));
+            }
+        }
 
         const tail = splitter.flush();
         if (tail.content || tail.reasoning) {
