@@ -43,6 +43,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
+    "dev": "bun src/cli/cli.ts",
     "prepare": "node --experimental-require-module -e \"process.env.CI !== 'true' && console.log(require('husky').default())\"",
     "postinstall": "cd templates && npm install",
     "postversion": "vite-node scripts/postVersion.ts",
