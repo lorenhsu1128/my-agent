@@ -1,9 +1,9 @@
 node_modules/
 dist/
-cli
-cli.exe
-cli-dev
-cli-dev.exe
+/cli
+/cli.exe
+/cli-dev
+/cli-dev.exe
 openclaw/
 
 # 本地 llama.cpp 部署（scripts/llama/setup.sh 建立）
