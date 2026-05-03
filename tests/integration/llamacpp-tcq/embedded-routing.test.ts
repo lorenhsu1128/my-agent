@@ -264,6 +264,72 @@ describe('createLlamaCppEmbeddedFetch', () => {
     expect(capturedPrompt).toContain('What is this?')
   })
 
+  test('vision streaming：mtmdCtx.generate(onTextChunk) 多 chunk → SSE', async () => {
+    const mockState = {
+      config: {enabled: true, modelPath: 'fake.gguf'},
+      llama: null,
+      model: {_llama: {_bindings: {AddonSampler: class {
+        applyConfig() {} dispose() {}
+      }}}, _model: null},
+      context: {getSequence: () => ({sequenceId: 0})},
+      session: {prompt: async () => 'should-not-call'},
+      mtmdCtx: {
+        defaultMarker: '<__media__>',
+        tokenize: async () => ({dispose: () => undefined}),
+        evalChunks: async () => 50,
+        generate: async (
+          _ctx: unknown,
+          _sampler: unknown,
+          _nPast: number,
+          _maxTokens: number,
+          opts?: {onTextChunk?: (s: string) => void},
+        ) => {
+          // 模擬 mtmdGenerateStep loop 逐 token detokenize delta
+          const pieces = ['Vis', 'ion', ' chunk']
+          for (const p of pieces) opts?.onTextChunk?.(p)
+          return {tokens: [1, 2, 3], nPast: 53, text: pieces.join('')}
+        },
+      },
+    }
+
+    const fetchFn = createLlamaCppEmbeddedFetch({
+      config: {enabled: true, modelPath: 'fake.gguf', mmprojPath: 'mm.gguf', gpu: 'cuda'},
+      overrideEnsureState: async () => mockState as never,
+    })
+
+    const res = await fetchFn('http://embedded/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {type: 'text', text: 'describe'},
+              {type: 'image_url', image_url: {url: 'file:///tmp/x.png'}},
+            ],
+          },
+        ],
+        stream: true,
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toMatch(/text\/event-stream/)
+    const reader = res.body!.getReader()
+    let txt = ''
+    while (true) {
+      const {value, done} = await reader.read()
+      if (done) break
+      txt += new TextDecoder().decode(value)
+    }
+    expect(txt).toContain('"Vis"')
+    expect(txt).toContain('"ion"')
+    expect(txt).toContain('" chunk"')
+    expect(txt).toContain('[DONE]')
+    const dataChunks = txt.match(/data: /g) ?? []
+    expect(dataChunks.length).toBeGreaterThanOrEqual(3)
+  })
+
   test('純文字 content（即使含 image_url 但無 mtmdCtx）走 chat 路徑', async () => {
     let chatCalled = false
 

@@ -170,43 +170,63 @@ export class LlamaMtmdContext {
         }
 
         // Streaming：JS 端 loop 用 mtmdGenerateStep 單步驅動
+        // F3 — UTF-8 邊界處理：每 step 都 detokenize 「全部累積 tokens」，
+        // 相減算出 delta；遇到半 byte token，detokenize 回的 string 不會比上次長
+        // （或可能換出 U+FFFD，但下個 token 完整時就會修正），因此：
+        //   1) 只 emit「以 valid UTF-8 結尾」的 delta
+        //   2) 半段 byte 的部分留在 emittedSoFar，下個 step 再嘗試
+        // 這比 per-token piece detokenize 穩定，因為避免 BPE byte token 拆字。
         const tokens: number[] = [];
         let cur = nPast;
-        let pendingBytes: number[] = []; // 累積 byte 直到湊成 valid UTF-8
-        let emittedText = "";
+        let emittedSoFar = "";
+
+        // 偵測字串尾端是否落在 valid UTF-8 邊界（不是 surrogate / replacement char tail）
+        // 簡化判斷：尾端不為 U+FFFD（通常是 codepoint truncated）
+        const REPLACEMENT_CHAR = "�";
+        const endsAtValidBoundary = (s: string): boolean => {
+            if (s.length === 0) return true;
+            const last = s.charCodeAt(s.length - 1);
+            if (last === 0xFFFD) return false;
+            // high surrogate 沒 paired
+            if (last >= 0xD800 && last <= 0xDBFF) return false;
+            return true;
+        };
 
         for (let i = 0; i < maxTokens; ++i) {
             const r = await bindings.mtmdGenerateStep(llamaCtxNative, sampler, cur, {seqId: opts.seqId});
             tokens.push(r.token);
             cur = r.nPast;
 
-            // 累積 + 嘗試 emit valid UTF-8 chunk
-            const piece = modelNative.detokenize(new Uint32Array([r.token]), false);
-            if (piece && piece.length > 0) {
-                // detokenize 已回 string；理論上 BPE 半 byte 會吃進 piece 內部處理
-                // 仍保險：用 Buffer 重新編檢查，但簡化版直接 emit
-                opts.onTextChunk(piece);
-                emittedText += piece;
-            } else if (piece === "") {
-                // 半 byte token：累積等下次完整湊出（F3 強化空間）
-                pendingBytes.push(r.token);
+            // 重新 detokenize 全部累積，避免半 byte 拆字
+            const fullText: string = modelNative.detokenize(new Uint32Array(tokens), false);
+
+            if (fullText.length > emittedSoFar.length && fullText.startsWith(emittedSoFar)) {
+                let delta = fullText.slice(emittedSoFar.length);
+                // 若 delta 結尾不是 valid UTF-8 邊界，吐前綴留尾巴
+                while (delta.length > 0 && !endsAtValidBoundary(delta)) {
+                    delta = delta.slice(0, -1);
+                }
+                if (delta.length > 0) {
+                    opts.onTextChunk(delta);
+                    emittedSoFar += delta;
+                }
+            } else if (fullText.length > 0 && fullText !== emittedSoFar) {
+                // 邊緣情況：detokenize 改寫了前面（替換字元），重新對齊
+                opts.onTextChunk(fullText.slice(emittedSoFar.length));
+                emittedSoFar = fullText;
             }
 
             if (r.eos) break;
         }
 
-        // Flush pending（少見：trailing 半 byte）
-        if (pendingBytes.length > 0) {
-            const flush = modelNative.detokenize(new Uint32Array(pendingBytes), false);
-            if (flush && flush.length > 0) {
-                opts.onTextChunk(flush);
-                emittedText += flush;
-            }
+        // Flush 任何尚未 emit 的尾段（包括之前因 boundary 卡住的）
+        const finalText: string = modelNative.detokenize(new Uint32Array(tokens), false);
+        if (finalText.length > emittedSoFar.length && finalText.startsWith(emittedSoFar)) {
+            const trailing = finalText.slice(emittedSoFar.length);
+            if (trailing.length > 0) opts.onTextChunk(trailing);
         }
 
-        // 最終 text 用所有 tokens 一次 detokenize（保證一致性，避免 piece-by-piece 累積誤差）
-        const finalText = modelNative.detokenize(new Uint32Array(tokens), false);
-        return {tokens, nPast: cur, text: finalText.length > 0 ? finalText : emittedText};
+        return {tokens, nPast: cur, text: finalText};
     }
 
     public dispose(): void {
