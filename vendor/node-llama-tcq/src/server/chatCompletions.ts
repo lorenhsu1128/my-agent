@@ -3,7 +3,7 @@ import {withLock} from "lifecycle-utils";
 import type {IncomingMessage, ServerResponse} from "node:http";
 import {LlamaChatSession} from "../evaluator/LlamaChatSession/LlamaChatSession.js";
 import type {ChatHistoryItem} from "../types.js";
-import {ServerSession} from "./session.js";
+import type {ServerSession} from "./session.js";
 import {SseWriter} from "./streaming.js";
 import {OpenAIChatChunk, OpenAIChatRequest, OpenAIChatCompletion, OpenAIMessage} from "./types.js";
 import {makeError} from "./errors.js";
@@ -65,10 +65,12 @@ export async function handleChatCompletions(
 
         const chatSession = new LlamaChatSession({
             contextSequence: session.sequence,
-            systemPrompt,
-            // Use the model's resolved chat wrapper (auto)
+            ...(systemPrompt ? {systemPrompt} : {}),
             autoDisposeSequence: false
         });
+        if (session.options.debug) {
+            console.error(`[TCQ-shim:chat] systemPrompt=${systemPrompt.length} hist=${history.length} prompt=${JSON.stringify(lastUserPrompt).slice(0, 100)}`);
+        }
 
         if (history.length > 0) {
             chatSession.setChatHistory(history);
@@ -77,11 +79,13 @@ export async function handleChatCompletions(
         if (stream) {
             await runStreaming({
                 req, res, body, chatSession, lastUserPrompt,
+                systemPrompt, history, session,
                 id, created, model, declaredTools: body.tools ?? []
             });
         } else {
             await runNonStreaming({
                 res, body, chatSession, lastUserPrompt,
+                systemPrompt, history, session,
                 id, created, model, declaredTools: body.tools ?? []
             });
         }
@@ -92,14 +96,85 @@ type RunCtx = {
     body: OpenAIChatRequest,
     chatSession: LlamaChatSession,
     lastUserPrompt: string,
+    systemPrompt: string,
+    history: ChatHistoryItem[],
+    session: ServerSession,
     id: string,
     created: number,
     model: string,
     declaredTools: NonNullable<OpenAIChatRequest["tools"]>
 };
 
+function countTokens(session: ServerSession, text: string | undefined): number {
+    if (text == null || text.length === 0) return 0;
+    try { return session.model.tokenize(text).length; }
+    catch { return 0; }
+}
+
+function countPromptTokens(session: ServerSession, lastUserPrompt: string): number {
+    // Approximate — covers user turn only. Real chat-template overhead is on top.
+    return countTokens(session, lastUserPrompt);
+}
+
+/** Strip the responsePrefix we injected (e.g. "</think>\n\n") from start of model output, if present. */
+function stripResponsePrefix(text: string, prefix: string | undefined): string {
+    if (prefix == null || prefix === "" || text == null) return text;
+    if (text.startsWith(prefix)) return text.slice(prefix.length);
+    // Sometimes the model echoes a slightly different leading whitespace pattern.
+    const trimmedPrefix = prefix.trimEnd();
+    if (text.startsWith(trimmedPrefix)) return text.slice(trimmedPrefix.length).replace(/^\s+/, "");
+    return text;
+}
+
+/**
+ * Decide reasoning behavior for this request.
+ *
+ * Precedence: per-request OpenAI body fields > server defaults.
+ * - body.reasoning_effort: low|medium|high — maps to 256/1024/4096 thoughtTokens
+ * - body.chat_template_kwargs.enable_thinking (informal): false → off
+ * - server --reasoning off → forces responsePrefix "</think>\n\n" so model skips CoT
+ * - server --reasoning-budget N → applies as default thoughtTokens cap
+ *
+ * Returns:
+ *   - responsePrefix: optional string injected at start of assistant turn
+ *   - thoughtTokens: optional cap for budgets.thoughtTokens (undefined = engine default)
+ */
+function resolveReasoning(
+    session: ServerSession,
+    body: OpenAIChatRequest
+): {responsePrefix?: string, thoughtTokens?: number} {
+    const serverMode = session.options.reasoning ?? "auto";
+    const serverBudget = session.options.reasoningBudget;
+
+    // Per-request override: chat_template_kwargs.enable_thinking (jinja-style key)
+    const ctk = (body as any).chat_template_kwargs;
+    let perReqOff = false;
+    if (ctk != null && typeof ctk === "object" && ctk.enable_thinking === false) perReqOff = true;
+
+    // Per-request OpenAI reasoning_effort
+    const effort = body.reasoning_effort;
+    let perReqBudget: number | undefined;
+    if (effort === "low") perReqBudget = 256;
+    else if (effort === "medium") perReqBudget = 1024;
+    else if (effort === "high") perReqBudget = 4096;
+
+    const off = perReqOff || serverMode === "off";
+    if (off) {
+        // </think>\n\n responsePrefix tells model "thinking already done", emits visible answer immediately.
+        return {responsePrefix: "</think>\n\n", thoughtTokens: 0};
+    }
+
+    let thoughtTokens: number | undefined;
+    if (perReqBudget != null) thoughtTokens = perReqBudget;
+    else if (typeof serverBudget === "number" && serverBudget >= 0) thoughtTokens = serverBudget;
+    // serverBudget < 0 (default -1 unlimited) → leave undefined → engine default (75% ctx)
+
+    return {thoughtTokens};
+}
+
 async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<void> {
     const {res, body, chatSession, lastUserPrompt, id, created, model, declaredTools} = opts;
+    const reasoning = resolveReasoning(opts.session, body);
 
     let stopReason: ShimStopReason = undefined;
     const meta = await chatSession.promptWithMeta(lastUserPrompt, {
@@ -108,12 +183,20 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
         topP: body.top_p,
         topK: body.top_k,
         seed: body.seed,
-        customStopTriggers: normalizeStop(body.stop)
+        customStopTriggers: normalizeStop(body.stop),
+        ...(reasoning.responsePrefix ? {responsePrefix: reasoning.responsePrefix} : {}),
+        ...(reasoning.thoughtTokens != null ? {budgets: {thoughtTokens: reasoning.thoughtTokens}} : {})
     });
     stopReason = mapStopReason((meta as any).stopReason);
 
-    const split = splitReasoning(meta.responseText);
+    const cleanText = stripResponsePrefix(meta.responseText, reasoning.responsePrefix);
+    const split = splitReasoning(cleanText);
     const {content, toolCalls} = extractToolCalls(split.content, declaredTools);
+    const promptTokens = countPromptTokens(opts.session, lastUserPrompt);
+    const completionTokens = countTokens(opts.session, cleanText);
+    if (opts.session.options.debug) {
+        console.error(`[TCQ-shim:chat] respLen=${meta.responseText?.length ?? 0} stopReason=${(meta as any).stopReason} pTok=${promptTokens} cTok=${completionTokens}`);
+    }
 
     const completion: OpenAIChatCompletion = {
         id,
@@ -130,19 +213,17 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
             },
             finish_reason: toOpenAIFinishReason(stopReason, toolCalls.length > 0)
         }],
-        usage: makeUsage(
-            (meta as any).usage?.promptTokens ?? 0,
-            (meta as any).usage?.completionTokens ?? 0
-        )
+        usage: makeUsage(promptTokens, completionTokens)
     };
 
     sendJson(res, 200, completion);
 }
 
 async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerResponse}): Promise<void> {
-    const {req, res, body, chatSession, lastUserPrompt, id, created, model, declaredTools} = opts;
+    const {req, res, body, chatSession, lastUserPrompt, session, id, created, model, declaredTools} = opts;
     const sse = new SseWriter(res);
     const splitter = new StreamReasoningSplitter();
+    const reasoning = resolveReasoning(session, body);
     let totalRaw = "";
 
     // Initial role chunk (OpenAI convention)
@@ -151,6 +232,7 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
     const abort = new AbortController();
     req.on("close", () => abort.abort());
 
+    let prefixToStrip = reasoning.responsePrefix ?? "";
     try {
         const meta = await chatSession.promptWithMeta(lastUserPrompt, {
             maxTokens: body.max_tokens,
@@ -161,7 +243,23 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
             customStopTriggers: normalizeStop(body.stop),
             signal: abort.signal,
             stopOnAbortSignal: true,
-            onTextChunk(text: string) {
+            ...(reasoning.responsePrefix ? {responsePrefix: reasoning.responsePrefix} : {}),
+            ...(reasoning.thoughtTokens != null ? {budgets: {thoughtTokens: reasoning.thoughtTokens}} : {}),
+            onTextChunk(rawText: string) {
+                let text = rawText;
+                // Strip injected responsePrefix from the head of the stream
+                if (prefixToStrip.length > 0) {
+                    if (text.startsWith(prefixToStrip)) {
+                        text = text.slice(prefixToStrip.length);
+                        prefixToStrip = "";
+                    } else if (prefixToStrip.startsWith(text)) {
+                        prefixToStrip = prefixToStrip.slice(text.length);
+                        return; // entire chunk consumed by prefix
+                    } else {
+                        // No clean alignment — give up stripping.
+                        prefixToStrip = "";
+                    }
+                }
                 totalRaw += text;
                 const part = splitter.feed(text);
                 if (part.content || part.reasoning) {
@@ -204,8 +302,8 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
         const stopReason = mapStopReason((meta as any).stopReason);
         const finalChunk = makeChunk(id, created, model, {}, toOpenAIFinishReason(stopReason, toolCalls.length > 0));
         finalChunk.usage = makeUsage(
-            (meta as any).usage?.promptTokens ?? 0,
-            (meta as any).usage?.completionTokens ?? 0
+            countPromptTokens(session, lastUserPrompt),
+            countTokens(session, totalRaw)
         );
         sse.send(finalChunk);
         sse.done();

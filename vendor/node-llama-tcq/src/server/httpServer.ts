@@ -16,7 +16,9 @@ export type ShimServerOptions = SessionInitOptions & {
     parallel: number,
     enableCorsProxy: boolean,
     enableTools: boolean,
-    webuiDir?: string
+    webuiDir?: string,
+    reasoning?: "on" | "off" | "auto",
+    reasoningBudget?: number
 };
 
 export type ShimServerHandle = {
@@ -38,7 +40,9 @@ export async function startTcqShimServer(opts: ShimServerOptions): Promise<ShimS
         cacheTypeV: opts.cacheTypeV,
         flashAttention: opts.flashAttention,
         noMmap: opts.noMmap,
-        debug: opts.debug
+        debug: opts.debug,
+        reasoning: opts.reasoning,
+        reasoningBudget: opts.reasoningBudget
     });
 
     const routerOpts: RouterOptions = {

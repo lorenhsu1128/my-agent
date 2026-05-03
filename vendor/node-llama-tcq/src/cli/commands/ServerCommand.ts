@@ -31,7 +31,9 @@ type ServerCommandArgs = {
     enableCorsProxy: boolean,
     enableTools: boolean,
     webuiDir?: string,
-    debug: boolean
+    debug: boolean,
+    reasoning: "on" | "off" | "auto",
+    reasoningBudget: number
 };
 
 export const ServerCommand: CommandModule<object, ServerCommandArgs> = {
@@ -173,6 +175,19 @@ export const ServerCommand: CommandModule<object, ServerCommandArgs> = {
                 type: "boolean",
                 default: false,
                 description: "Enable verbose debug logging to stderr"
+            })
+            .option("reasoning", {
+                alias: ["rea"],
+                type: "string",
+                choices: ["on", "off", "auto"] as const,
+                default: "auto" as const,
+                description: "Use reasoning/thinking ('on', 'off', 'auto'). Mirrors llama-server --reasoning. 'off' uses </think> responsePrefix to skip CoT."
+            })
+            .option("reasoningBudget", {
+                alias: ["reasoning-budget"],
+                type: "number",
+                default: -1,
+                description: "Token budget for thinking: -1 unlimited, 0 immediate end, N>0 cap. Mirrors llama-server --reasoning-budget."
             });
     },
     async handler(args) {
@@ -212,7 +227,9 @@ export const ServerCommand: CommandModule<object, ServerCommandArgs> = {
             enableCorsProxy: args.enableCorsProxy,
             enableTools: args.enableTools,
             webuiDir: args.webuiDir,
-            debug: args.debug
+            debug: args.debug,
+            reasoning: args.reasoning,
+            reasoningBudget: args.reasoningBudget
         });
 
         // Keep process alive until SIGINT/SIGTERM

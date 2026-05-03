@@ -21,7 +21,11 @@ export type SessionInitOptions = {
     cacheTypeV: string,
     flashAttention: boolean,
     noMmap: boolean,
-    debug: boolean
+    debug: boolean,
+    /** "on" | "off" | "auto" — server-level default; per-request reasoning_effort can override */
+    reasoning?: "on" | "off" | "auto",
+    /** -1 unlimited, 0 disable, N>0 cap — server-level default */
+    reasoningBudget?: number
 };
 
 export type ServerSession = {
@@ -74,7 +78,10 @@ export async function ensureSession(opts: SessionInitOptions): Promise<ServerSes
             threads: opts.threads,
             flashAttention: opts.flashAttention,
             experimentalKvCacheKeyType: kCache.type,
-            experimentalKvCacheValueType: vCache.type
+            experimentalKvCacheValueType: vCache.type,
+            // TCQ 壓縮率（TURBO4 ~3.5x, TURBO2 ~7x）upstream estimator 不知道，預設按 F16 估會
+            // 誤判 VRAM 不夠 → 用 TCQ 時自動跳過 memory safety check（buun-llama-cpp server 沒這層）。
+            ignoreMemorySafetyChecks: kCache.isTcq || vCache.isTcq
         });
 
         const sequence = context.getSequence();
