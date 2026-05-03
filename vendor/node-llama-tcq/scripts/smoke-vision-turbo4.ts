@@ -72,19 +72,31 @@ const newNPast = await mtmdCtx.evalChunks(ctx, chunks, 0, {
 });
 console.log("[vision] eval done, newNPast=" + newNPast);
 
-console.log("[vision] continuing inference from nPast=" + newNPast);
-// 用 sequence 直接 generateWithMetadata 從 newNPast 開始（簡化：直接用 LlamaChatSession 不行，因為它從 0 開始）
-// 改用底層 sequence 的 evaluate API 跑單 token 為 demo
-// 實際生產用法應該寫個 MtmdChatSession，這裡先驗 binding 通即可
+console.log("[vision] continuing inference via mtmdGenerate from nPast=" + newNPast);
+const bindings = (model as any)._llama._bindings;
+const sampler = new bindings.AddonSampler((model as any)._model);
+sampler.applyConfig({
+    temperature: 0,
+    topK: 40,
+    topP: 0.95,
+    minP: 0.05
+});
 
-// 最小驗證：直接 sample 一個 token 看不爆
-try {
-    // 用 ctx.getSequence().evaluate 抓 logits 後手動 sample
-    // 但 LlamaChatSession 沒接這條路徑。我們先確認上面 tokenize+eval 沒爆即可。
-    console.log("[vision] OK ✓ — tokenize + evalChunks 端到端通過");
-} finally {
-    chunks.dispose();
-    mtmdCtx.dispose();
+const t0 = Date.now();
+const result = await mtmdCtx.generate(ctx, sampler, newNPast, 200, {seqId: seq.sequenceId ?? 0});
+const dt = Date.now() - t0;
+
+console.log(`[vision] generated ${result.tokens.length} tokens in ${dt}ms (${(result.tokens.length / (dt / 1000)).toFixed(1)} tok/s)`);
+console.log("[vision] reply text: " + JSON.stringify(result.text));
+
+if (result.text.trim().length === 0) {
+    console.error("[vision] ⚠ reply is empty");
+    process.exit(3);
 }
 
+console.log("[vision] OK ✓ — vision + TURBO4 + 完整生成端到端通過");
+
+chunks.dispose();
+sampler.dispose();
+mtmdCtx.dispose();
 process.exit(0);

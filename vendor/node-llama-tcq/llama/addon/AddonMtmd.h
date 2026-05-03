@@ -61,3 +61,6 @@ Napi::Value AddonMtmdTokenize(const Napi::CallbackInfo& info);
 Napi::Value AddonMtmdEvalChunks(const Napi::CallbackInfo& info);
 Napi::Value AddonMtmdBitmapFromFile(const Napi::CallbackInfo& info);
 Napi::Value AddonMtmdBitmapFromBuffer(const Napi::CallbackInfo& info);
+// 從 mtmd_helper_eval_chunks 之後的 nPast 位置接著 sample/decode 直到 EOS or maxTokens。
+// 回傳產生的 token id 陣列（每個 token 也會 emit 給 JS layer 透過 callback）。
+Napi::Value AddonMtmdGenerate(const Napi::CallbackInfo& info);

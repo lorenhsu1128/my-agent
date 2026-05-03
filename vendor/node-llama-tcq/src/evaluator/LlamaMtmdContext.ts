@@ -131,6 +131,27 @@ export class LlamaMtmdContext {
         });
     }
 
+    /**
+     * 從 evalChunks 後的 nPast 接著 sample/decode 直到 EOS or maxTokens。
+     * Returns: {tokens, nPast, text}
+     * 需自行傳入已建好的 AddonSampler（用 model._llama._bindings.AddonSampler 建）。
+     */
+    public async generate(
+        llamaContext: LlamaContext,
+        sampler: any,
+        nPast: number,
+        maxTokens: number,
+        opts: {seqId?: number} = {}
+    ): Promise<{tokens: number[]; nPast: number; text: string}> {
+        const bindings = (this._model as unknown as {_llama: {_bindings: any}})._llama._bindings;
+        const llamaCtxNative = (llamaContext as unknown as {_ctx: any})._ctx;
+        const result = await bindings.mtmdGenerate(llamaCtxNative, sampler, nPast, maxTokens, opts);
+        const modelNative = (this._model as unknown as {_model: any})._model;
+        const tokensU32 = new Uint32Array(result.tokens);
+        const text = modelNative.detokenize(tokensU32, false);
+        return {tokens: result.tokens, nPast: result.nPast, text};
+    }
+
     public dispose(): void {
         if (this._disposed) return;
         this._native.dispose();

@@ -116,7 +116,11 @@ export type BindingModule = {
         nPast: number, opts?: {seqId?: number, nBatch?: number, logitsLast?: boolean}
     ): Promise<number>,
     mtmdBitmapFromFile(ctx: AddonMtmdContext, path: string): AddonMtmdBitmap,
-    mtmdBitmapFromBuffer(buffer: Uint8Array, width: number, height: number): AddonMtmdBitmap
+    mtmdBitmapFromBuffer(buffer: Uint8Array, width: number, height: number): AddonMtmdBitmap,
+    mtmdGenerate(
+        llamaCtx: AddonContext, sampler: AddonSampler, nPast: number, maxTokens: number,
+        opts?: {seqId?: number}
+    ): Promise<{tokens: number[], nPast: number}>
 };
 
 export type AddonMtmdContext = {

@@ -18,6 +18,7 @@
 #include "AddonMtmd.h"
 #include "AddonContext.h"
 #include "AddonModel.h"
+#include "AddonSampler.h"
 #include "addonGlobals.h"
 
 #include <vector>
@@ -375,6 +376,128 @@ Napi::Value AddonMtmdEvalChunks(const Napi::CallbackInfo& info) {
     auto deferred = Napi::Promise::Deferred::New(info.Env());
     auto worker = new MtmdEvalWorker(deferred, mctx->ctx, lctx->ctx, chunks->chunks,
                                      nPast, seqId, nBatch, logitsLast);
+    worker->Queue();
+    return deferred.Promise();
+}
+
+// ---------- mtmdGenerate (vision continuation: sample + decode loop) ----------
+
+class MtmdGenerateWorker : public Napi::AsyncWorker {
+public:
+    MtmdGenerateWorker(Napi::Promise::Deferred def, AddonContext* lctx, AddonSampler* sampler,
+                       llama_pos nPast, int32_t maxTokens, llama_seq_id seqId)
+        : Napi::AsyncWorker(def.Env()),
+          deferred(def), lctxWrap(lctx), samplerWrap(sampler),
+          nPast(nPast), maxTokens(maxTokens), seqId(seqId) {
+        lctxWrap->Ref();
+        samplerWrap->Ref();
+    }
+    ~MtmdGenerateWorker() {
+        lctxWrap->Unref();
+        samplerWrap->Unref();
+    }
+
+    void Execute() override {
+        llama_context* ctx = lctxWrap->ctx;
+        const llama_model* model = lctxWrap->model->model;
+        const llama_vocab* vocab = llama_model_get_vocab(model);
+
+        samplerWrap->rebuildChainIfNeeded();
+
+        llama_batch batch = llama_batch_init(1, 0, 1);
+        const int32_t n_vocab = llama_vocab_n_tokens(vocab);
+        auto& candidates = samplerWrap->tokenCandidates;
+
+        for (int32_t step = 0; step < maxTokens; ++step) {
+            // 從上一次 decode 留下的 last logits（或 mtmd_helper_eval_chunks 留下）sample
+            const float* logits = llama_get_logits_ith(ctx, -1);
+            if (!logits) {
+                SetError("llama_get_logits_ith returned null at step " + std::to_string(step));
+                break;
+            }
+            for (llama_token t = 0; t < n_vocab; ++t) {
+                candidates[t] = llama_token_data{t, logits[t], 0.0f};
+            }
+            llama_token_data_array cur_p = {candidates.data(), candidates.size(), -1, false};
+            llama_sampler_apply(samplerWrap->chain, &cur_p);
+            if (cur_p.selected < 0 || cur_p.selected >= (int32_t)cur_p.size) {
+                break;
+            }
+            llama_token tok = cur_p.data[cur_p.selected].id;
+            generated.push_back(tok);
+            llama_sampler_accept(samplerWrap->chain, tok);
+
+            if (llama_vocab_is_eog(vocab, tok)) {
+                break;
+            }
+
+            // 把 token 餵回去
+            batch.token[0] = tok;
+            batch.pos[0] = nPast;
+            batch.n_seq_id[0] = 1;
+            batch.seq_id[0][0] = seqId;
+            batch.logits[0] = true;
+            batch.n_tokens = 1;
+
+            int32_t rc = llama_decode(ctx, batch);
+            if (rc != 0) {
+                SetError("llama_decode failed rc=" + std::to_string(rc));
+                break;
+            }
+            nPast += 1;
+        }
+
+        llama_batch_free(batch);
+    }
+
+    void OnOK() override {
+        Napi::Array arr = Napi::Array::New(Env(), generated.size());
+        for (size_t i = 0; i < generated.size(); ++i) {
+            arr.Set((uint32_t)i, Napi::Number::New(Env(), (double)generated[i]));
+        }
+        Napi::Object res = Napi::Object::New(Env());
+        res.Set("tokens", arr);
+        res.Set("nPast", Napi::Number::New(Env(), (double)nPast));
+        deferred.Resolve(res);
+    }
+    void OnError(const Napi::Error& e) override {
+        deferred.Reject(e.Value());
+    }
+
+private:
+    Napi::Promise::Deferred deferred;
+    AddonContext* lctxWrap;
+    AddonSampler* samplerWrap;
+    llama_pos nPast;
+    int32_t maxTokens;
+    llama_seq_id seqId;
+    std::vector<llama_token> generated;
+};
+
+Napi::Value AddonMtmdGenerate(const Napi::CallbackInfo& info) {
+    // mtmdGenerate(llamaCtx, sampler, nPast, maxTokens, opts?: { seqId })
+    if (info.Length() < 4 || !info[0].IsObject() || !info[1].IsObject() ||
+        !info[2].IsNumber() || !info[3].IsNumber()) {
+        Napi::TypeError::New(info.Env(), "mtmdGenerate(llamaCtx, sampler, nPast, maxTokens)").ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+    AddonContext* lctx = Napi::ObjectWrap<AddonContext>::Unwrap(info[0].As<Napi::Object>());
+    AddonSampler* sampler = Napi::ObjectWrap<AddonSampler>::Unwrap(info[1].As<Napi::Object>());
+    llama_pos nPast = (llama_pos)info[2].As<Napi::Number>().Int32Value();
+    int32_t maxTokens = info[3].As<Napi::Number>().Int32Value();
+    llama_seq_id seqId = 0;
+    if (info.Length() >= 5 && info[4].IsObject()) {
+        Napi::Object opts = info[4].As<Napi::Object>();
+        if (opts.Has("seqId")) seqId = opts.Get("seqId").ToNumber().Int32Value();
+    }
+
+    if (!lctx->ctx) {
+        Napi::Error::New(info.Env(), "llamaCtx not initialized").ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+
+    auto deferred = Napi::Promise::Deferred::New(info.Env());
+    auto worker = new MtmdGenerateWorker(deferred, lctx, sampler, nPast, maxTokens, seqId);
     worker->Queue();
     return deferred.Promise();
 }
