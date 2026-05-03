@@ -12,6 +12,13 @@ import {toOpenAIFinishReason, ShimStopReason} from "./finishReason.js";
 import {splitReasoning, StreamReasoningSplitter} from "./reasoningSplit.js";
 import {extractToolCalls, buildToolPromptSuffix} from "./toolCallExtract.js";
 import {StreamToolSniffer} from "./streamToolSniffer.js";
+import {
+    isQwenModel,
+    buildQwenToolsSystemBlock,
+    renderQwenToolCall,
+    renderQwenToolResponse,
+    parseQwenToolCalls
+} from "./qwenToolFormat.js";
 import {flattenContent, extractMediaParts} from "./visionPath.js";
 import {sendJson} from "./httpHelpers.js";
 
@@ -53,7 +60,11 @@ export async function handleChatCompletions(
         return;
     }
 
-    const {systemPrompt, history, lastUserPrompt} = packMessages(body.messages, body.tools ?? []);
+    const useQwenFormat = isQwenModel(primaryAlias);
+    const {systemPrompt, history, lastUserPrompt} = packMessages(body.messages, body.tools ?? [], useQwenFormat);
+    if (session.options.debug) {
+        console.error(`[TCQ-shim:chat] tool-format=${useQwenFormat ? "qwen-native" : "json-fallback"} alias=${primaryAlias}`);
+    }
 
     const id = `chatcmpl-${nanoid(16)}`;
     const created = Math.floor(Date.now() / 1000);
@@ -80,13 +91,13 @@ export async function handleChatCompletions(
         if (stream) {
             await runStreaming({
                 req, res, body, chatSession, lastUserPrompt,
-                systemPrompt, history, session,
+                systemPrompt, history, session, useQwenFormat,
                 id, created, model, declaredTools: body.tools ?? []
             });
         } else {
             await runNonStreaming({
                 res, body, chatSession, lastUserPrompt,
-                systemPrompt, history, session,
+                systemPrompt, history, session, useQwenFormat,
                 id, created, model, declaredTools: body.tools ?? []
             });
         }
@@ -100,11 +111,23 @@ type RunCtx = {
     systemPrompt: string,
     history: ChatHistoryItem[],
     session: ServerSession,
+    useQwenFormat: boolean,
     id: string,
     created: number,
     model: string,
     declaredTools: NonNullable<OpenAIChatRequest["tools"]>
 };
+
+function extractToolCallsForFormat(
+    text: string,
+    declaredTools: OpenAIChatRequest["tools"],
+    useQwenFormat: boolean
+): {content: string, toolCalls: ReturnType<typeof extractToolCalls>["toolCalls"]} {
+    if (useQwenFormat) {
+        return parseQwenToolCalls(text, declaredTools ?? []);
+    }
+    return extractToolCalls(text, declaredTools ?? []);
+}
 
 function countTokens(session: ServerSession, text: string | undefined): number {
     if (text == null || text.length === 0) return 0;
@@ -192,7 +215,7 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
 
     const cleanText = stripResponsePrefix(meta.responseText, reasoning.responsePrefix);
     const split = splitReasoning(cleanText);
-    const {content, toolCalls} = extractToolCalls(split.content, declaredTools);
+    const {content, toolCalls} = extractToolCallsForFormat(split.content, declaredTools, opts.useQwenFormat);
     const promptTokens = countPromptTokens(opts.session, lastUserPrompt);
     const completionTokens = countTokens(opts.session, cleanText);
     if (opts.session.options.debug) {
@@ -298,7 +321,7 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
 
         // Tool extraction is whole-text only in Phase 1 — emit as single chunk after stream.
         const fullSplit = splitReasoning(totalRaw);
-        const {toolCalls} = extractToolCalls(fullSplit.content, declaredTools);
+        const {toolCalls} = extractToolCallsForFormat(fullSplit.content, declaredTools, opts.useQwenFormat);
         if (toolCalls.length > 0) {
             for (let i = 0; i < toolCalls.length; i++) {
                 const tc = toolCalls[i]!;
@@ -365,7 +388,7 @@ function mapStopReason(raw: unknown): ShimStopReason {
  * Tool/assistant messages with tool_calls are flattened to text since the underlying
  * chat wrapper does not natively model OpenAI tool call turns yet (Phase 2 task).
  */
-function packMessages(messages: OpenAIMessage[], tools: OpenAIChatRequest["tools"]): {
+function packMessages(messages: OpenAIMessage[], tools: OpenAIChatRequest["tools"], useQwenFormat: boolean): {
     systemPrompt: string,
     history: ChatHistoryItem[],
     lastUserPrompt: string
@@ -374,10 +397,13 @@ function packMessages(messages: OpenAIMessage[], tools: OpenAIChatRequest["tools
     const middle: ChatHistoryItem[] = [];
     let lastUser = "";
 
-    // Find the last user message — that becomes the active prompt.
+    // Find the last user (or tool) message — that becomes the active prompt.
+    // Qwen template requires last turn be user-shaped; if final is `tool` we'll
+    // also treat it as the active prompt by wrapping in <tool_response>.
     let lastUserIdx = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i]!.role === "user") { lastUserIdx = i; break; }
+        const r = messages[i]!.role;
+        if (r === "user" || r === "tool") { lastUserIdx = i; break; }
     }
 
     for (let i = 0; i < messages.length; i++) {
@@ -386,22 +412,34 @@ function packMessages(messages: OpenAIMessage[], tools: OpenAIChatRequest["tools
         if (m.role === "system") {
             systemParts.push(text);
         } else if (i === lastUserIdx) {
-            lastUser = text;
+            // Final turn drives the generation prompt
+            if (m.role === "tool" && useQwenFormat) {
+                lastUser = renderQwenToolResponse(text);
+            } else if (m.role === "tool") {
+                lastUser = `[tool_result id=${m.tool_call_id ?? ""}] ${text}`;
+            } else {
+                lastUser = text;
+            }
         } else if (m.role === "user") {
             middle.push({type: "user", text});
         } else if (m.role === "assistant") {
-            const toolCallText = (m.tool_calls ?? []).map((tc) =>
-                `[tool_call name=${tc.function.name} args=${tc.function.arguments}]`
+            const tcRendered = (m.tool_calls ?? []).map((tc) =>
+                useQwenFormat
+                    ? renderQwenToolCall(tc)
+                    : `[tool_call name=${tc.function.name} args=${tc.function.arguments}]`
             ).join("\n");
-            const combined = [text, toolCallText].filter(Boolean).join("\n");
+            const combined = [text, tcRendered].filter(Boolean).join("\n");
             middle.push({type: "model", response: combined === "" ? [] : [combined]});
         } else if (m.role === "tool") {
-            middle.push({type: "user", text: `[tool_result id=${m.tool_call_id ?? ""}] ${text}`});
+            const wrapped = useQwenFormat
+                ? renderQwenToolResponse(text)
+                : `[tool_result id=${m.tool_call_id ?? ""}] ${text}`;
+            middle.push({type: "user", text: wrapped});
         }
     }
 
     if (tools && tools.length > 0) {
-        systemParts.push(buildToolPromptSuffix(tools));
+        systemParts.push(useQwenFormat ? buildQwenToolsSystemBlock(tools) : buildToolPromptSuffix(tools));
     }
 
     return {

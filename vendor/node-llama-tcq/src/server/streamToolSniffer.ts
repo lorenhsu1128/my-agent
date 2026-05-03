@@ -24,6 +24,7 @@ import {OpenAIToolDef} from "./types.js";
 
 const MAX_HEAD = 64;       // sniff window in chars before falling back to text
 const FENCE_HINT = "```";
+const QWEN_TOOL_HINT = "<tool_call";
 
 export class StreamToolSniffer {
     private head = "";
@@ -51,6 +52,26 @@ export class StreamToolSniffer {
         if (trimmed.startsWith("{") || trimmed.startsWith(FENCE_HINT)) {
             this.decided = "tool";
             return "";
+        }
+
+        // Qwen native: <tool_call> opener. Disambiguate progressively because
+        // streamed chunks may give us "<", "<t", "<to", ... before we know.
+        if (trimmed[0] === "<") {
+            if (trimmed.length >= QWEN_TOOL_HINT.length) {
+                if (trimmed.startsWith(QWEN_TOOL_HINT)) { this.decided = "tool"; return ""; }
+                // Diverged from <tool_call — flush as text
+                this.decided = "text";
+                const out = this.head;
+                this.head = "";
+                return out;
+            }
+            // Partial prefix still consistent with <tool_call → keep waiting
+            if (QWEN_TOOL_HINT.startsWith(trimmed)) return "";
+            // Other XML/HTML start → text
+            this.decided = "text";
+            const out = this.head;
+            this.head = "";
+            return out;
         }
 
         // Stop sniffing once we have enough evidence (or hit a newline that
