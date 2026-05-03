@@ -3,6 +3,48 @@
 > Claude Code 在每次 session 開始時讀取此檔案，在工作過程中更新任務狀態。
 > 里程碑結構由人類維護。Claude Code 負責管理任務狀態的勾選。
 
+## 當前里程碑：M-TCQ-SHIM — node-llama-tcq OpenAI-compat sidecar（2026-05-03 啟動）
+
+**目標**：在 `vendor/node-llama-tcq/` 內新增 OpenAI 相容 HTTP server（TCQ-shim），規格對齊 `buun-llama-cpp/build/bin/llama-server`，my-agent 端只改 `~/.my-agent/llamacpp.json` 的 `binaryPath`/`port`，fetch adapter 與 QueryEngine 零改動。完整設計見 `~/.claude/plans/node-llama-tcq-my-agent-my-dazzling-sprout.md`。
+
+**決策**：架構切割原則 — TCQ-shim 完全在 vendor 內、不 import my-agent；my-agent 唯一改檔為 `src/llamacppConfig/schema.ts` 加 `server.binaryKind: 'buun'|'tcq'`（預設 `buun` 向下相容）。Endpoint 規格層**一次到位**對齊 buun（路由表 + payload schema + 錯誤格式全集），未支援者回 501 標準錯誤；里程碑差別在「行為深度」與 fork-only 加值。Dev iteration 一律 `bun run dev`，不需先 npm run build。
+
+### M-TCQ-SHIM-1 規格相容版
+- [ ] M-TCQ-SHIM-1-1 在 `vendor/node-llama-tcq/package.json` 加 `"dev": "bun src/cli/cli.ts"` script
+- [ ] M-TCQ-SHIM-1-2 `vendor/node-llama-tcq/src/cli/commands/ServerCommand.ts`（yargs command，flag 對齊 llama-server）
+- [ ] M-TCQ-SHIM-1-3 `vendor/node-llama-tcq/src/server/` scaffold：httpServer / openAiRouter / streaming / session / finishReason / usage / mediaResolver / visionPath / tcqPresetMap
+- [ ] M-TCQ-SHIM-1-4 路由表 100% 對齊 buun（A–H 全表，未實作走 501 標準錯誤格式）
+- [ ] M-TCQ-SHIM-1-5 行為實作：A 全集（`/v1/chat/completions`、`/v1/completions`、`/v1/embeddings`、`/v1/rerank`、`/v1/responses`、`/v1/models`、`/v1/health`）+ `/tokenize` `/detokenize` `/apply-template` `/infill` `/health` `/models` `/props` GET `/slots` GET
+- [ ] M-TCQ-SHIM-1-6 `--cache-type-k turbo4` → `applyTCQCodebooks(TURBO4_0)` 對接（`tcqPresetMap.ts`）
+- [ ] M-TCQ-SHIM-1-7 vision/audio：mtmd 路徑 + `mediaResolver` 處理 `image_url` data:/http(s):/file:
+- [ ] M-TCQ-SHIM-1-8 `reasoning_content` 切分（Qwen `<think>` 標籤）；`tool_calls` 用 prompt-time + 後處理 JSON 偵測（最低相容）
+- [ ] M-TCQ-SHIM-1-9 `vendor/node-llama-tcq/tests/server/*` 8 支：chat-basic / chat-stream / tools / vision / models / health / tcq-preset / compat-buun（vendor 獨立跑、TURBO4_0+CUDA preset）
+- [ ] M-TCQ-SHIM-1-10 my-agent 端 `src/llamacppConfig/schema.ts` 新增 `server.binaryKind: 'buun'|'tcq'`（預設 `buun`，向下相容）
+- [ ] M-TCQ-SHIM-1-11 `bun run docs:gen` 重新產生 `docs/config-*.md`（CLAUDE.md §13）
+- [ ] M-TCQ-SHIM-1-12 `scripts/llama/serve.sh` + `scripts/llama/serve.ps1` 依 `binaryKind` 分流（跨平台 — CLAUDE.md §10）
+- [ ] M-TCQ-SHIM-1-13 驗證：`bun run typecheck` + `bun test` + `./cli -p "hello"` 冒煙 + `tests/e2e/decouple-comprehensive.sh` 全綠
+- [ ] M-TCQ-SHIM-1-14 commit（繁中，分段）：`feat(node-llama-tcq): 新增 OpenAI-compat HTTP server scaffold` 等
+
+### M-TCQ-SHIM-2 管理面補完
+- [ ] M-TCQ-SHIM-2-1 `/slots/{id}` save/restore/erase（對接 watchdog Phase 3–5）
+- [ ] M-TCQ-SHIM-2-2 `/metrics`（Prometheus 基本計數：requests_total / tokens_predicted_total / tokens_evaluated_total / queue_size）
+- [ ] M-TCQ-SHIM-2-3 `/props` POST 白名單欄位
+- [ ] M-TCQ-SHIM-2-4 `/api/chat`、`/v1/messages`、`/v1/messages/count_tokens`、`/api/tags` 完整化
+- [ ] M-TCQ-SHIM-2-5 `tool_calls` 改走 GBNF grammar（`LlamaJsonSchemaGrammar`）
+
+### M-TCQ-SHIM-3 fork-only 加值（保持 OpenAI 相容）
+- [ ] M-TCQ-SHIM-3-1 `X-Spec-Type` header → `generateWithSpeculative` SpecOpts（copyspec / ngram_* / suffix / recycle / draft:<path>）
+- [ ] M-TCQ-SHIM-3-2 `X-TCQ-Preset` header → 切換 `TCQPresets.{TURBO3_TCQ, TURBO4_0, TURBO2_TCQ, ASYMMETRIC_275}`
+- [ ] M-TCQ-SHIM-3-3 沒帶 header 時行為與 buun 完全一致的回歸測試
+
+### 不在範圍 → 後續 milestone
+- M-TCQ-SHIM-4：router mode（`/models/load`、`/models/unload`）、LoRA hot-swap、多模型同時載入（VRAM 限制下優先級低 — 記憶 `project_llamacpp_single_server`）
+- 多 slot 並行（`-np > 1`）
+- watchdog Phase 3–5 整合（依賴 M-TCQ-SHIM-2 的 `/slots` 完成）
+- macOS Metal TCQ 驗證（`isTCQAvailable() === false`，需 fallback 到 f16）
+
+---
+
 ## 當前里程碑：M-DISCORD-TUI — `/discord` 整合 TUI（2026-05-03 啟動）
 
 **目標**：把 8 個 `/discord-*` 文字指令整合為單一 `/discord` Tab 式 TUI（仿 `/memory`），4 個 tab：Bindings / Whitelist / Guilds / Invite。daemon RPC 層不動，TUI 直接走既有 `mgr.discordBind()` / `mgr.discordUnbind()` / `mgr.discordAdmin()`。完整設計見 `~/.claude/plans/discord-repl-memory-cron-tui-cached-pony.md`。
@@ -3201,3 +3243,81 @@
 - 2026-05-03 08:02: Session 結束 | 進度：731/833 任務 | a13cf32 feat(daemon): /allow /deny 註冊為正式 slash command 防 fuzzy 偷走
 
 - 2026-05-03 08:35: Session 結束 | 進度：731/839 任務 | a13cf32 feat(daemon): /allow /deny 註冊為正式 slash command 防 fuzzy 偷走
+
+- 2026-05-03 08:45: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:03: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:08: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:14: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:21: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:27: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:33: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:42: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:47: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:49: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:53: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 11:31: Session 結束 | 進度：731/839 任務 | d124d57 fix(node-llama-tcq): rename to node-llama-tcq + 修正 build folder 含空格
+
+- 2026-05-03 11:58: Session 結束 | 進度：731/839 任務 | 0f1ed37 feat(node-llama-tcq): Phase B TS API + Layer 2 unit tests
+
+- 2026-05-03 12:07: Session 結束 | 進度：731/839 任務 | c44f731 fix(node-llama-tcq): cpu_get_num_math → common_cpu_get_num_math
+
+- 2026-05-03 12:17: Session 結束 | 進度：731/839 任務 | c44f731 fix(node-llama-tcq): cpu_get_num_math → common_cpu_get_num_math
+
+- 2026-05-03 12:23: Session 結束 | 進度：731/839 任務 | 0edd7c2 fix(node-llama-tcq): link target common → llama-common + 加 smoke 腳本
+
+- 2026-05-03 13:46: Session 結束 | 進度：731/839 任務 | 6c965bf bench(node-llama-tcq): Phase D 純文字 benchmark TURBO4 vs baseline
+
+- 2026-05-03 14:09: Session 結束 | 進度：731/839 任務 | 8bc1648 feat(node-llama-tcq): Phase E1-E3 libmtmd binding 骨架
+
+- 2026-05-03 14:26: Session 結束 | 進度：731/839 任務 | 8bc1648 feat(node-llama-tcq): Phase E1-E3 libmtmd binding 骨架
+
+- 2026-05-03 14:55: Session 結束 | 進度：731/839 任務 | 06ca98c feat(node-llama-tcq): Phase E6 vision + TCQ 端到端通過 🎉
+
+- 2026-05-03 14:57: Session 結束 | 進度：731/839 任務 | 06ca98c feat(node-llama-tcq): Phase E6 vision + TCQ 端到端通過 🎉
+
+- 2026-05-03 15:01: Session 結束 | 進度：731/839 任務 | 06ca98c feat(node-llama-tcq): Phase E6 vision + TCQ 端到端通過 🎉
+
+- 2026-05-03 15:37: Session 結束 | 進度：731/839 任務 | d6f92c8 feat(llamacpp-tcq): embedded adapter 接 LlamaMtmdContext vision 路徑
+
+- 2026-05-03 15:48: Session 結束 | 進度：731/839 任務 | d6f92c8 feat(llamacpp-tcq): embedded adapter 接 LlamaMtmdContext vision 路徑
+
+- 2026-05-03 15:55: Session 結束 | 進度：731/839 任務 | d6f92c8 feat(llamacpp-tcq): embedded adapter 接 LlamaMtmdContext vision 路徑
+
+- 2026-05-03 16:08: Session 結束 | 進度：731/839 任務 | 4f34c7d feat(node-llama-tcq): Phase F2 vision streaming — mtmdGenerateStep
+
+- 2026-05-03 16:17: Session 結束 | 進度：731/839 任務 | 2518e0e feat(node-llama-tcq): Phase H1+H2 audio binding
+
+- 2026-05-03 16:35: Session 結束 | 進度：731/839 任務 | 94c1a3d test(node-llama-tcq): 三 modality TURBO4+CUDA+streaming 全通過 🎉
+
+- 2026-05-03 16:43: Session 結束 | 進度：731/839 任務 | 94c1a3d test(node-llama-tcq): 三 modality TURBO4+CUDA+streaming 全通過 🎉
+
+- 2026-05-03 17:13: Session 結束 | 進度：731/839 任務 | b37a894 feat(llamacpp-tcq): Phase H4 embedded adapter audio routing
+
+- 2026-05-03 17:15: Session 結束 | 進度：731/839 任務 | b37a894 feat(llamacpp-tcq): Phase H4 embedded adapter audio routing
+
+- 2026-05-03 17:41: Session 結束 | 進度：731/839 任務 | d90fc59 feat(node-llama-tcq): Phase G2 純文字 speculative decoding（待 build 驗證）
+
+- 2026-05-03 18:51: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 18:57: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 19:14: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 19:32: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 19:40: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 19:43: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 19:45: Session 結束 | 進度：731/861 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化

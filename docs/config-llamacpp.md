@@ -51,6 +51,7 @@
 | `modelPath` | `string` | `'models/Qwen3.5-9B-Q4_K_M.gguf'` | — | --model 路徑（相對 repo root 或絕對路徑） |
 | `alias` | `string` | `'qwen3.5-9b'` | — | --alias，讓 OpenAI 相容客戶端用這名字呼叫模型 |
 | `binaryPath` | `string` | `'buun-llama-cpp/build/bin/Release/llama-server.exe'` | — | llama-server binary 位置（相對 repo root 或絕對路徑） |
+| `binaryKind` | `enum` | `'buun'` | — | Server 實作種類： - `'buun'`（預設）：執行 binaryPath 指定的 buun-llama-cpp llama-server 原生 binary - `'tcq'`：改執行 `bun vendor/node-llama-tcq/src/cli/cli.ts serve`（TCQ-shim sidecar）， binaryPath 此時被忽略；TCQ-shim 規格與 buun llama-server 對齊（M-TCQ-SHIM） 切換不影響 baseUrl / model / OpenAI 相容性。 預設保持 `buun` → 升級無破壞。 |
 | `extraArgs` | `array<string>` | `[ '--flash-attn', 'on', '--cache-type-k', 'turbo4', '--cache-type-v', 'turbo4...` | — | 要額外帶的 flag（例 --jinja、--slots、--cache-reuse 1） |
 | `vision` | `LlamaCppServerVisionSchema` | `{}` | — | Vision 相關設定（M-VISION）：僅 shell 端使用。 有 mmprojPath 才會對 llama-server 加 `--mmproj`。 |
 

@@ -22,12 +22,37 @@ resolve_path() {
   fi
 }
 
-SERVER="$(resolve_path "$LLAMA_BINARY")"
 MODEL="$(resolve_path "$LLAMA_MODEL_PATH")"
+[[ -f "$MODEL" ]] || { echo "[x] 找不到模型 $MODEL，請先執行 bash scripts/llama/setup.sh" >&2; exit 1; }
 
-# --- 前置檢查 -----------------------------------------------------------
+# M-TCQ-SHIM：依 binaryKind 分流
+if [[ "${LLAMA_BINARY_KIND:-buun}" == "tcq" ]]; then
+  # TCQ-shim：直接 bun run 跑 vendor/node-llama-tcq 的 ServerCommand（不需先 build）
+  command -v bun >/dev/null 2>&1 || { echo "[x] 找不到 bun，TCQ-shim 需要 bun runtime" >&2; exit 1; }
+  SHIM_ENTRY="$ROOT_DIR/vendor/node-llama-tcq/src/cli/cli.ts"
+  [[ -f "$SHIM_ENTRY" ]] || { echo "[x] 找不到 $SHIM_ENTRY" >&2; exit 1; }
+
+  echo "[*] 啟動 TCQ-shim（vendor/node-llama-tcq）"
+  echo "    model    = $(basename "$MODEL")"
+  echo "    endpoint = http://$LLAMA_HOST:$LLAMA_PORT/v1"
+  echo "    ctx      = $LLAMA_CTX    ngl = $LLAMA_NGL    alias = $LLAMA_ALIAS"
+  echo "    extra    = ${LLAMA_EXTRA_ARGS_SHELL}"
+  echo ""
+
+  # extraArgs 的 --cache-type-k turbo4 / --flash-attn / --jinja / --mmproj 都已對齊 ServerCommand 的 flag
+  eval "exec bun \"\$SHIM_ENTRY\" serve \
+    --model \"\$MODEL\" \
+    --host \"\$LLAMA_HOST\" --port \"\$LLAMA_PORT\" \
+    --n-gpu-layers \"\$LLAMA_NGL\" \
+    --ctx-size \"\$LLAMA_CTX\" \
+    --alias \"\$LLAMA_ALIAS\" \
+    $LLAMA_EXTRA_ARGS_SHELL"
+  exit
+fi
+
+# --- buun-llama-cpp 原生 binary（預設路徑） -----------------------------
+SERVER="$(resolve_path "$LLAMA_BINARY")"
 [[ -x "$SERVER" ]] || { echo "[x] 找不到 $SERVER，請先執行 bash scripts/llama/setup.sh" >&2; exit 1; }
-[[ -f "$MODEL"  ]] || { echo "[x] 找不到模型 $MODEL，請先執行 bash scripts/llama/setup.sh" >&2; exit 1; }
 
 echo "[*] 啟動 llama-server"
 echo "    model   = $(basename "$MODEL")"
