@@ -165,6 +165,14 @@ export interface SpeculativeOpts {
 
     // Recycle
     recycleK?: number;
+
+    // Drafter model（DFLASH / DRAFT / EAGLE3 用）— Phase G3
+    /** Drafter GGUF 檔案絕對路徑 */
+    drafterModelPath?: string;
+    /** Drafter GPU 層數（-1 = use default） */
+    drafterNGpuLayers?: number;
+    /** Drafter context size（0 = derive from target） */
+    drafterContextSize?: number;
 }
 
 export type AddonMtmdContext = {

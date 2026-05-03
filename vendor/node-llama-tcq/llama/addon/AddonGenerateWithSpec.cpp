@@ -76,9 +76,38 @@ public:
 
         samplerWrap->rebuildChainIfNeeded();
 
-        // Init speculative state（model-free 類型 ctx_dft = nullptr）
-        common_speculative* spec = common_speculative_init(specParams, ctx, nullptr);
+        // type == NONE：跑 baseline plain sample-decode loop（不啟 spec）
+        if (specParams.type == COMMON_SPECULATIVE_TYPE_NONE) {
+            run_baseline(ctx, vocab, n_vocab);
+            return;
+        }
+
+        // 若 type 需要 drafter（DRAFT / EAGLE3 / DFLASH），先建 ctx_dft
+        // model-free 類型 ctx_dft = nullptr
+        llama_context* ctx_dft = nullptr;
+        const bool needs_drafter =
+            specParams.type == COMMON_SPECULATIVE_TYPE_DRAFT ||
+            specParams.type == COMMON_SPECULATIVE_TYPE_EAGLE3 ||
+            specParams.type == COMMON_SPECULATIVE_TYPE_DFLASH;
+        if (needs_drafter) {
+            const bool has_path =
+                !specParams.mparams_dft.path.empty() ||
+                !specParams.draft.mparams.path.empty();
+            if (!has_path) {
+                SetError("speculative type requires drafterModelPath");
+                return;
+            }
+            ctx_dft = common_speculative_create_ctx_dft(specParams, specParams.dflash_max_slots);
+            if (!ctx_dft) {
+                SetError("common_speculative_create_ctx_dft failed (check drafter model path & compatibility)");
+                return;
+            }
+        }
+
+        // Init speculative state
+        common_speculative* spec = common_speculative_init(specParams, ctx, ctx_dft);
         if (!spec) {
+            if (ctx_dft) llama_free(ctx_dft);
             SetError("common_speculative_init failed (check spec type & params)");
             return;
         }
@@ -175,6 +204,36 @@ public:
         cleanup:
         llama_batch_free(batch);
         common_speculative_free(spec);
+        if (ctx_dft) llama_free(ctx_dft);
+    }
+
+    // Baseline 路徑：type == NONE → 一次 sample 一個 token、餵回去
+    void run_baseline(llama_context* ctx, const llama_vocab* vocab, int32_t n_vocab) {
+        llama_batch batch = llama_batch_init(1, 0, 1);
+        llama_token tok;
+        // 若 caller 沒給 prompt，先從現有 logits sample 第一個 token
+        if (prompt.empty()) {
+            tok = sample_logits_at_slot(ctx, samplerWrap, -1, n_vocab);
+            if (tok < 0) { SetError("baseline initial sampler returned no token"); llama_batch_free(batch); return; }
+            generated.push_back(tok);
+            llama_sampler_accept(samplerWrap->chain, tok);
+            if (llama_vocab_is_eog(vocab, tok)) { llama_batch_free(batch); return; }
+        } else {
+            tok = prompt.back();
+        }
+        while ((int32_t)generated.size() < maxTokens) {
+            common_batch_clear(batch);
+            common_batch_add(batch, tok, nPast, {seqId}, true);
+            int rc = llama_decode(ctx, batch);
+            if (rc != 0) { SetError("baseline llama_decode rc=" + std::to_string(rc)); break; }
+            ++nPast;
+            tok = sample_logits_at_slot(ctx, samplerWrap, -1, n_vocab);
+            if (tok < 0) { SetError("baseline sampler returned no token"); break; }
+            generated.push_back(tok);
+            llama_sampler_accept(samplerWrap->chain, tok);
+            if (llama_vocab_is_eog(vocab, tok)) break;
+        }
+        llama_batch_free(batch);
     }
 
     void OnOK() override {
@@ -232,6 +291,22 @@ static common_params_speculative build_spec_params_from_opts(Napi::Env env, Napi
 
     // CopySpec
     if (opts.Has("copyspecGamma")) p.copyspec_gamma = opts.Get("copyspecGamma").ToNumber().Int32Value();
+
+    // Drafter model（DFLASH / DRAFT / EAGLE3 用）
+    // - DFLASH 讀 mparams_dft.path
+    // - DRAFT  讀 draft.mparams.path
+    // 同時設兩處讓 buun 自己挑
+    if (opts.Has("drafterModelPath")) {
+        std::string dpath = opts.Get("drafterModelPath").ToString().Utf8Value();
+        p.mparams_dft.path = dpath;
+        p.draft.mparams.path = dpath;
+    }
+    if (opts.Has("drafterNGpuLayers")) {
+        p.draft.n_gpu_layers = opts.Get("drafterNGpuLayers").ToNumber().Int32Value();
+    }
+    if (opts.Has("drafterContextSize")) {
+        p.draft.n_ctx = opts.Get("drafterContextSize").ToNumber().Int32Value();
+    }
 
     // Suffix tree
     if (opts.Has("suffixMaxDepth")) p.suffix_max_depth = opts.Get("suffixMaxDepth").ToNumber().Int32Value();

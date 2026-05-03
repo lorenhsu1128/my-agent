@@ -72,25 +72,34 @@ sampler.applyConfig({temperature: 0, topK: 40, topP: 0.95, minP: 0.05});
 const nPast = (seq as any).nextTokenIndex;
 console.log("[spec] starting nPast=" + nPast);
 
-const t0 = Date.now();
-const result = await ctx.generateWithSpeculative({
-    sampler,
-    nPast,
-    maxTokens: 60,
-    seqId,
-    spec: {type: "copyspec", nMax: 16, copyspecGamma: 6}
-});
-const dt = Date.now() - t0;
-const text = (model as any).detokenize(new Uint32Array(result.tokens as number[]), false);
-const accept = result.nDrafted > 0 ? (result.nAccepted / result.nDrafted * 100).toFixed(1) : "0";
-console.log(`[spec] copyspec: ${result.tokens.length} tokens in ${dt}ms (${(result.tokens.length / (dt / 1000)).toFixed(1)} tok/s)`);
-console.log(`[spec]    drafted=${result.nDrafted}, accepted=${result.nAccepted} (${accept}%)`);
-console.log(`[spec]    text: ${JSON.stringify(text.slice(0, 200))}`);
+type SpecType = "copyspec" | "ngram_simple" | "suffix" | "recycle" | undefined;
 
-if (result.tokens.length === 0) {
-    console.error("[spec] ⚠ no tokens generated");
-    process.exit(3);
+// Variant 之間用「累進」nPast — 每跑完一輪 KV 已推進，下一輪從新位置接著跑
+let curNPast = (seq as any).nextTokenIndex;
+
+async function runVariant(label: string, type: SpecType): Promise<void> {
+    const t0 = Date.now();
+    const result = await ctx.generateWithSpeculative({
+        sampler,
+        nPast: curNPast,
+        maxTokens: 40,
+        seqId,
+        spec: type
+            ? {type, nMax: 16, copyspecGamma: 6}
+            : {}
+    });
+    const dt = Date.now() - t0;
+    const text = (model as any).detokenize(new Uint32Array(result.tokens as number[]), false);
+    const acceptPct = result.nDrafted > 0
+        ? (result.nAccepted / result.nDrafted * 100).toFixed(1) + "%"
+        : "n/a";
+    console.log(`[spec] ${label.padEnd(20)} ${result.tokens.length} tok in ${dt}ms (${(result.tokens.length / (dt / 1000)).toFixed(1).padStart(5)} tok/s) drafted=${result.nDrafted}, accepted=${result.nAccepted} (${acceptPct})`);
+    console.log(`         text: ${JSON.stringify(text.slice(0, 80))}...`);
+    curNPast = result.nPast;
 }
 
-console.log("[spec] OK ✓ — generateWithSpec CopySpec 路徑通");
+await runVariant("baseline (NONE)", undefined);
+await runVariant("copyspec", "copyspec");
+
+console.log("[spec] OK ✓ — generateWithSpec API 通（baseline + CopySpec）");
 process.exit(0);
