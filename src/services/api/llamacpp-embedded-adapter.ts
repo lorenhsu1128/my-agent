@@ -268,10 +268,9 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
         const wantsVision = hasVisionContent(body.messages);
         const visionAvailable = state.mtmdCtx != null;
 
-        const generateReply = async (): Promise<string> => {
-            if (wantsVision && visionAvailable) {
-                return await runVisionPath(state, body);
-            }
+        // 非 streaming：等完整 reply 再回 JSON
+        const generateReplyBlocking = async (): Promise<string> => {
+            if (wantsVision && visionAvailable) return await runVisionPath(state, body);
             const userMsg = lastUserMessage(body.messages);
             return await state.session.prompt(userMsg, {
                 maxTokens: body.max_tokens ?? 256,
@@ -279,8 +278,21 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
             });
         };
 
+        // Streaming：逐 token push SSE chunk（onTextChunk callback）
+        const generateReplyStreaming = async (
+            onChunk: (text: string) => void
+        ): Promise<string> => {
+            if (wantsVision && visionAvailable) return await runVisionPath(state, body, onChunk);
+            const userMsg = lastUserMessage(body.messages);
+            return await state.session.prompt(userMsg, {
+                maxTokens: body.max_tokens ?? 256,
+                temperature: body.temperature,
+                onTextChunk: onChunk
+            });
+        };
+
         if (!body.stream) {
-            const reply = await generateReply();
+            const reply = await generateReplyBlocking();
             return new Response(JSON.stringify({
                 id: "embedded-" + Date.now(),
                 object: "chat.completion",
@@ -296,10 +308,13 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
 
         const stream = new ReadableStream({
             async start(controller) {
+                const enc = new TextEncoder();
                 try {
-                    const reply = await generateReply();
-                    controller.enqueue(new TextEncoder().encode(makeSseChunk(reply, modelLabel)));
-                    controller.enqueue(new TextEncoder().encode(makeSseFinal(modelLabel)));
+                    await generateReplyStreaming((delta) => {
+                        if (delta.length === 0) return;
+                        controller.enqueue(enc.encode(makeSseChunk(delta, modelLabel)));
+                    });
+                    controller.enqueue(enc.encode(makeSseFinal(modelLabel)));
                     controller.close();
                 } catch (err) {
                     controller.error(err);
@@ -313,7 +328,13 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
         });
     };
 
-    async function runVisionPath(state: EmbeddedAdapterState, body: OpenAIChatRequest): Promise<string> {
+    async function runVisionPath(
+        state: EmbeddedAdapterState,
+        body: OpenAIChatRequest,
+        onChunk?: (text: string) => void
+    ): Promise<string> {
+        // F1 階段 vision 仍是 batch — 整段 reply 算完一次餵 onChunk。
+        // F2 改 mtmdCtx.generate 接 onTextChunk 後可逐 token push。
         const m = await loadModule();
         const marker = state.mtmdCtx.defaultMarker;
         const {prompt, imagePaths, tempFiles} = extractVisionInput(body.messages, marker);
@@ -340,6 +361,7 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
                     state.context, sampler, newNPast, body.max_tokens ?? 256,
                     {seqId: seq.sequenceId ?? 0}
                 );
+                if (onChunk && result.text.length > 0) onChunk(result.text);
                 return result.text;
             } finally {
                 sampler.dispose();

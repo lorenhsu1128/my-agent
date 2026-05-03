@@ -109,13 +109,24 @@ describe('createLlamaCppEmbeddedFetch', () => {
     expect(json.choices[0]!.message.content).toBe('mock reply')
   })
 
-  test('streaming request 吐 SSE chunk + [DONE]', async () => {
+  test('streaming request 逐 chunk 吐 SSE + [DONE]（onTextChunk 多次呼叫）', async () => {
     const mockState = {
       config: {enabled: true, modelPath: 'fake.gguf'},
       llama: null,
       model: null,
       context: null,
-      session: {prompt: async (_msg: string) => 'streamed'},
+      mtmdCtx: null,
+      session: {
+        prompt: async (
+          _msg: string,
+          opts?: {onTextChunk?: (s: string) => void},
+        ) => {
+          // 模擬真實 LlamaChatSession 逐 token 推 onTextChunk
+          const pieces = ['He', 'llo', ' world']
+          for (const p of pieces) opts?.onTextChunk?.(p)
+          return pieces.join('')
+        },
+      },
     }
 
     const fetchFn = createLlamaCppEmbeddedFetch({
@@ -142,9 +153,15 @@ describe('createLlamaCppEmbeddedFetch', () => {
       if (done) break
       txt += new TextDecoder().decode(value)
     }
-    expect(txt).toContain('data: ')
-    expect(txt).toContain('"streamed"')
+    // 逐 chunk 都應該 emit；至少看到三段 delta 內容
+    expect(txt).toContain('"He"')
+    expect(txt).toContain('"llo"')
+    expect(txt).toContain('" world"')
     expect(txt).toContain('[DONE]')
+
+    // 應有 ≥3 個 data: chunk（每個 token 一個 + final DONE）
+    const dataChunks = txt.match(/data: /g) ?? []
+    expect(dataChunks.length).toBeGreaterThanOrEqual(3)
   })
 
   test('多訊息只取最後 user', async () => {
