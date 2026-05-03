@@ -31,6 +31,16 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# node-llama-tcq patch: 強制 MSVC 用 UTF-8 解析來源，避免 C4819/C2065
+# (Windows 預設 codepage 950 BIG5 把繁中註解切壞，後接識別子被視為新 token)
+# 只對 C/CXX 套用；CUDA 透過 -Xcompiler 轉給 host MSVC，nvcc 自己不認 /utf-8
+if (MSVC)
+    add_compile_options(
+        "$<$<COMPILE_LANGUAGE:C,CXX>:/utf-8>"
+        "$<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/utf-8>"
+    )
+endif()
+
 if (MSVC)
     if (GGML_STATIC)
         add_link_options(-static)
