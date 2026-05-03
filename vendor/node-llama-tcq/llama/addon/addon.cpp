@@ -5,6 +5,7 @@
 #include "AddonGrammarEvaluationState.h"
 #include "AddonSampler.h"
 #include "AddonContext.h"
+#include "AddonMtmd.h"
 #include "globals/addonLog.h"
 #include "globals/addonProgress.h"
 #include "globals/getGpuInfo.h"
@@ -319,6 +320,15 @@ Napi::Object registerCallback(Napi::Env env, Napi::Object exports) {
     AddonContext::init(exports);
     AddonContextSequenceCheckpoint::init(exports);
     AddonSampler::init(exports);
+
+    // node-llama-tcq Phase E：libmtmd binding
+    AddonMtmdContext::init(env, exports);
+    AddonMtmdBitmap::init(env, exports);
+    AddonMtmdChunks::init(env, exports);
+    exports.Set("mtmdTokenize", Napi::Function::New(env, AddonMtmdTokenize));
+    exports.Set("mtmdEvalChunks", Napi::Function::New(env, AddonMtmdEvalChunks));
+    exports.Set("mtmdBitmapFromFile", Napi::Function::New(env, AddonMtmdBitmapFromFile));
+    exports.Set("mtmdBitmapFromBuffer", Napi::Function::New(env, AddonMtmdBitmapFromBuffer));
 
     llama_log_set(addonLlamaCppLogCallback, nullptr);
 

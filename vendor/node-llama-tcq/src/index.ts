@@ -350,3 +350,13 @@ export {
     type TCQPreset,
     type TCQPresetName
 } from "./tcq/index.js";
+
+// node-llama-tcq Phase E: libmtmd vision/audio binding
+export {
+    LlamaMtmdContext,
+    MtmdChunks,
+    type LlamaMtmdContextOptions,
+    type MtmdImageInput,
+    type MtmdTokenizeOptions,
+    type MtmdEvalOptions
+} from "./evaluator/LlamaMtmdContext.js";

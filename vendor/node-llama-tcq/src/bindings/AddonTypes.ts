@@ -95,7 +95,49 @@ export type BindingModule = {
     init(): Promise<void>,
     setNuma(numa?: LlamaNuma): void,
     loadBackends(forceLoadLibrariesSearchPath?: string): void,
-    dispose(): Promise<void>
+    dispose(): Promise<void>,
+
+    // node-llama-tcq Phase E：libmtmd binding
+    MtmdContext: {
+        new (model: AddonModel, mmprojPath: string, opts?: {useGpu?: boolean, nThreads?: number}): AddonMtmdContext
+    },
+    MtmdBitmap: {
+        new (): AddonMtmdBitmap  // 通常不直接 new；用 mtmdBitmapFromFile / mtmdBitmapFromBuffer
+    },
+    MtmdChunks: {
+        new (): AddonMtmdChunks
+    },
+    mtmdTokenize(
+        ctx: AddonMtmdContext, chunks: AddonMtmdChunks, prompt: string,
+        bitmaps: AddonMtmdBitmap[], opts?: {addSpecial?: boolean, parseSpecial?: boolean}
+    ): number,
+    mtmdEvalChunks(
+        mtmdCtx: AddonMtmdContext, llamaCtx: AddonContext, chunks: AddonMtmdChunks,
+        nPast: number, opts?: {seqId?: number, nBatch?: number, logitsLast?: boolean}
+    ): Promise<number>,
+    mtmdBitmapFromFile(ctx: AddonMtmdContext, path: string): AddonMtmdBitmap,
+    mtmdBitmapFromBuffer(buffer: Uint8Array, width: number, height: number): AddonMtmdBitmap
+};
+
+export type AddonMtmdContext = {
+    /** 內部 init Promise — 必須 await 後 ctx 才就緒 */
+    _initPromise: Promise<void>,
+    supportsVision(): boolean,
+    supportsAudio(): boolean,
+    defaultMarker(): string,
+    dispose(): void
+};
+
+export type AddonMtmdBitmap = {
+    width(): number,
+    height(): number,
+    dispose(): void
+};
+
+export type AddonMtmdChunks = {
+    count(): number,
+    totalTokens(): number,
+    dispose(): void
 };
 
 export type AddonModel = {

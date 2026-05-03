@@ -97,6 +97,22 @@ include_directories("./llama.cpp/common")
 # This is needed to use methods in "llama-grammar.h" and "unicode.h"
 target_include_directories(llama PUBLIC "./llama.cpp/src")
 
+# node-llama-tcq Phase E：包含 libmtmd（vision/audio multimodal）。
+# llama.cpp/tools/mtmd 的 CMakeLists 用到 LLAMA_INSTALL_VERSION，
+# 該變數由上面 add_subdirectory("llama.cpp") 設好。
+option(NLT_BUILD_MTMD "Build libmtmd into addon" ON)
+if (NLT_BUILD_MTMD)
+    # mtmd/CMakeLists.txt 用 LLAMA_INSTALL_VERSION 設 SOVERSION，在
+    # 非 standalone build 下這個變數沒定義，導致 set_target_properties
+    # 接到「VERSION  SOVERSION 0」變成 incorrect arg count。
+    if (NOT DEFINED LLAMA_INSTALL_VERSION)
+        set(LLAMA_INSTALL_VERSION "0.0.0")
+    endif()
+    add_subdirectory("llama.cpp/tools/mtmd" mtmd_build)
+    include_directories("./llama.cpp/tools/mtmd")
+    include_directories("./llama.cpp/vendor")  # stb_image.h
+endif()
+
 unset(GPU_INFO_HEADERS)
 unset(GPU_INFO_SOURCES)
 unset(GPU_INFO_EXTRA_LIBS)
@@ -136,6 +152,9 @@ target_link_libraries(${PROJECT_NAME} ${CMAKE_JS_LIB})
 target_link_libraries(${PROJECT_NAME} "llama")
 # node-llama-tcq patch: buun-llama-cpp 把 common 改名為 llama-common
 target_link_libraries(${PROJECT_NAME} "llama-common")
+if (NLT_BUILD_MTMD)
+    target_link_libraries(${PROJECT_NAME} "mtmd")
+endif()
 
 if (DEFINED GPU_INFO_EXTRA_LIBS)
     target_link_libraries(${PROJECT_NAME} ${GPU_INFO_EXTRA_LIBS})
