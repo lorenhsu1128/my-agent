@@ -4,24 +4,40 @@
  * 平行於 llamacpp-fetch-adapter.ts，提供同一介面（fetch-shaped function）。
  * 既有 ADR-005 / ADR-010 規定不修改的檔案完全不動。
  *
- * Phase C MVP 範圍：
+ * Phase C/E：純文字 + vision binding（mmproj）兩條路徑共存
  *  - 提供 createLlamaCppEmbeddedFetch(config) 回傳 fetch-shaped function
  *  - lazy import node-llama-tcq 避免無 binding 時 my-agent 啟動失敗
  *  - 單例 LlamaModel + LlamaContext 重用
- *  - 把 OpenAI Chat Completion request 跑進 node-llama-tcq，emit OpenAI SSE 格式回應
- *  - 既有 translateOpenAIStreamToAnthropic 可繼續使用
+ *  - vision：detect OpenAI image_url content → mtmd tokenize/eval/generate
+ *  - 純文字：走 LlamaChatSession.prompt（Phase C 既有）
+ *  - 都吐 OpenAI ChatCompletion JSON / SSE，銜接 translateOpenAIStreamToAnthropic
  *
- * 不在 Phase C 範圍：
- *  - vision / mmproj（Phase E）
+ * 仍不在範圍：
  *  - 多 sequence 並行
- *  - tool call leak detection（已在 fetch-adapter 處理，本 adapter 直接吐 raw text）
+ *  - tool call leak detection（fetch-adapter 處理，本 adapter 純文字）
+ *  - 真正 token-by-token streaming（先一次吐單一 chunk）
  */
 
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import type {EmbeddedRoutingConfig} from "../../utils/model/embeddedRouting.js";
+
+interface OpenAIImageUrl {
+    type: "image_url";
+    image_url: {url: string};
+}
+
+interface OpenAITextPart {
+    type: "text";
+    text: string;
+}
+
+type OpenAIContentPart = OpenAITextPart | OpenAIImageUrl | {type: string; text?: string};
 
 interface OpenAIChatRequest {
     model?: string;
-    messages: Array<{role: string; content: string | Array<{type: string; text?: string}>}>;
+    messages: Array<{role: string; content: string | OpenAIContentPart[]}>;
     stream?: boolean;
     max_tokens?: number;
     temperature?: number;
@@ -32,6 +48,7 @@ interface OpenAIChatRequest {
 interface NodeLlamaTcqModule {
     getLlama: typeof import("node-llama-tcq").getLlama;
     LlamaChatSession: typeof import("node-llama-tcq").LlamaChatSession;
+    LlamaMtmdContext: typeof import("node-llama-tcq").LlamaMtmdContext;
     applyTCQCodebooks: typeof import("node-llama-tcq").applyTCQCodebooks;
     isTCQAvailable: typeof import("node-llama-tcq").isTCQAvailable;
     GgmlType: typeof import("node-llama-tcq").GgmlType;
@@ -54,6 +71,8 @@ export interface EmbeddedAdapterState {
     model: any;
     context: any;
     session: any;
+    /** 若 config.mmprojPath 有值，會載入。null 代表純文字模式 */
+    mtmdCtx: any | null;
 }
 
 async function ensureState(config: EmbeddedRoutingConfig): Promise<EmbeddedAdapterState> {
@@ -90,7 +109,16 @@ async function ensureState(config: EmbeddedRoutingConfig): Promise<EmbeddedAdapt
 
     const session = new m.LlamaChatSession({contextSequence: context.getSequence()});
 
-    return {config, llama: _llamaCache, model, context, session};
+    let mtmdCtx: any = null;
+    if (config.mmprojPath) {
+        mtmdCtx = await m.LlamaMtmdContext.loadMmproj(model, {
+            mmprojPath: config.mmprojPath,
+            useGpu: true,
+            nThreads: 4
+        });
+    }
+
+    return {config, llama: _llamaCache, model, context, session, mtmdCtx};
 }
 
 function resolveKvCacheType(
@@ -114,10 +142,82 @@ function lastUserMessage(messages: OpenAIChatRequest["messages"]): string {
         const m = messages[i];
         if (m && m.role === "user") {
             if (typeof m.content === "string") return m.content;
-            return m.content.map(p => p.text ?? "").join("");
+            return m.content.map(p => ("text" in p ? p.text ?? "" : "")).join("");
         }
     }
     return "";
+}
+
+/**
+ * 從 last user message 萃取 image inputs（OpenAI vision 格式：
+ *   {type: "image_url", image_url: {url: "data:image/png;base64,..." | "file:..." | "http..."}}
+ * data URL 解 base64 後寫到 temp file，回傳檔案路徑陣列；
+ * file URL 直接回傳路徑；http URL 暫不支援（拋錯）。
+ *
+ * 同時組出 prompt 文字 — 每張圖前插一個 mtmd marker。
+ */
+function extractVisionInput(
+    messages: OpenAIChatRequest["messages"],
+    marker: string
+): {prompt: string; imagePaths: string[]; tempFiles: string[]} {
+    const imagePaths: string[] = [];
+    const tempFiles: string[] = [];
+
+    let lastUser: OpenAIChatRequest["messages"][number] | undefined;
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const mm = messages[i];
+        if (mm && mm.role === "user") {
+            lastUser = mm;
+            break;
+        }
+    }
+    if (!lastUser) return {prompt: "", imagePaths: [], tempFiles: []};
+
+    if (typeof lastUser.content === "string") {
+        return {prompt: lastUser.content, imagePaths: [], tempFiles: []};
+    }
+
+    const textParts: string[] = [];
+    for (const part of lastUser.content) {
+        if (part.type === "image_url" && "image_url" in part && part.image_url?.url) {
+            const url = part.image_url.url;
+            if (url.startsWith("data:")) {
+                const m = /^data:[^;]+;base64,(.+)$/.exec(url);
+                if (!m) throw new Error("invalid data: URL");
+                const buf = Buffer.from(m[1]!, "base64");
+                const ext = url.includes("image/png") ? ".png"
+                    : url.includes("image/jpeg") || url.includes("image/jpg") ? ".jpg"
+                        : ".bin";
+                const tmpPath = path.join(os.tmpdir(), `nltcq-img-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+                fs.writeFileSync(tmpPath, buf);
+                tempFiles.push(tmpPath);
+                imagePaths.push(tmpPath);
+            } else if (url.startsWith("file://")) {
+                imagePaths.push(url.slice(7));
+            } else if (url.startsWith("/") || /^[A-Za-z]:[\\/]/.test(url)) {
+                imagePaths.push(url);
+            } else {
+                throw new Error(`unsupported image URL scheme: ${url.slice(0, 30)}...`);
+            }
+            textParts.push(marker);
+        } else if (part.type === "text" && "text" in part) {
+            textParts.push(part.text ?? "");
+        }
+    }
+
+    return {
+        prompt: textParts.join("\n"),
+        imagePaths,
+        tempFiles
+    };
+}
+
+function hasVisionContent(messages: OpenAIChatRequest["messages"]): boolean {
+    for (const m of messages) {
+        if (typeof m.content === "string") continue;
+        if (m.content.some(p => p.type === "image_url")) return true;
+    }
+    return false;
 }
 
 /**
@@ -163,14 +263,24 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
         );
 
         const state = await ensure(opts.config);
-        const userMsg = lastUserMessage(body.messages);
         const modelLabel = body.model ?? "embedded";
 
-        if (!body.stream) {
-            const reply = await state.session.prompt(userMsg, {
+        const wantsVision = hasVisionContent(body.messages);
+        const visionAvailable = state.mtmdCtx != null;
+
+        const generateReply = async (): Promise<string> => {
+            if (wantsVision && visionAvailable) {
+                return await runVisionPath(state, body);
+            }
+            const userMsg = lastUserMessage(body.messages);
+            return await state.session.prompt(userMsg, {
                 maxTokens: body.max_tokens ?? 256,
                 temperature: body.temperature
             });
+        };
+
+        if (!body.stream) {
+            const reply = await generateReply();
             return new Response(JSON.stringify({
                 id: "embedded-" + Date.now(),
                 object: "chat.completion",
@@ -184,16 +294,10 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
             }), {status: 200, headers: {"content-type": "application/json"}});
         }
 
-        // Streaming: 收集所有 token 後一次吐
-        // Phase C MVP：先不做 token-by-token streaming，吐單一 chunk + done
-        // Phase D 再升級為真正 streaming
         const stream = new ReadableStream({
             async start(controller) {
                 try {
-                    const reply: string = await state.session.prompt(userMsg, {
-                        maxTokens: body.max_tokens ?? 256,
-                        temperature: body.temperature
-                    });
+                    const reply = await generateReply();
                     controller.enqueue(new TextEncoder().encode(makeSseChunk(reply, modelLabel)));
                     controller.enqueue(new TextEncoder().encode(makeSseFinal(modelLabel)));
                     controller.close();
@@ -208,6 +312,52 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
             headers: {"content-type": "text/event-stream", "cache-control": "no-cache"}
         });
     };
+
+    async function runVisionPath(state: EmbeddedAdapterState, body: OpenAIChatRequest): Promise<string> {
+        const m = await loadModule();
+        const marker = state.mtmdCtx.defaultMarker;
+        const {prompt, imagePaths, tempFiles} = extractVisionInput(body.messages, marker);
+        try {
+            const chunks = await state.mtmdCtx.tokenize({
+                text: prompt,
+                images: imagePaths.map(p => ({type: "file", data: p}))
+            });
+            const seq = state.context.getSequence();
+            const newNPast = await state.mtmdCtx.evalChunks(state.context, chunks, 0, {
+                seqId: seq.sequenceId ?? 0
+            });
+
+            const bindings = (state.model as any)._llama._bindings;
+            const sampler = new bindings.AddonSampler((state.model as any)._model);
+            sampler.applyConfig({
+                temperature: body.temperature ?? 0,
+                topK: 40,
+                topP: body.top_p ?? 0.95,
+                minP: 0.05
+            });
+            try {
+                const result = await state.mtmdCtx.generate(
+                    state.context, sampler, newNPast, body.max_tokens ?? 256,
+                    {seqId: seq.sequenceId ?? 0}
+                );
+                return result.text;
+            } finally {
+                sampler.dispose();
+                chunks.dispose();
+            }
+        } finally {
+            for (const f of tempFiles) {
+                try { fs.unlinkSync(f); } catch { /* ignore */ }
+            }
+        }
+
+        // unreachable; satisfies linter
+        // eslint-disable-next-line no-unreachable
+        return _unreachable(m);
+    }
+
+    // 防 lint
+    function _unreachable(_m: NodeLlamaTcqModule): string { return ""; }
 
     return fetchFn as typeof globalThis.fetch;
 }

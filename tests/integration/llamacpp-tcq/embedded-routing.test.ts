@@ -154,6 +154,7 @@ describe('createLlamaCppEmbeddedFetch', () => {
       llama: null,
       model: null,
       context: null,
+      mtmdCtx: null,
       session: {
         prompt: async (msg: string) => {
           captured = msg
@@ -181,5 +182,110 @@ describe('createLlamaCppEmbeddedFetch', () => {
     })
 
     expect(captured).toBe('last user')
+  })
+
+  test('vision content 走 mtmd 路徑（mtmdCtx 存在時）', async () => {
+    let mtmdCalled = false
+    let chatCalled = false
+    let capturedImages: string[] = []
+    let capturedPrompt = ''
+
+    const mockState = {
+      config: {enabled: true, modelPath: 'fake.gguf'},
+      llama: null,
+      model: {_llama: {_bindings: {AddonSampler: class {
+        applyConfig() {} dispose() {}
+      }}}, _model: null},
+      context: {getSequence: () => ({sequenceId: 0})},
+      session: {
+        prompt: async () => {
+          chatCalled = true
+          return 'should-not-call'
+        },
+      },
+      mtmdCtx: {
+        defaultMarker: '<__media__>',
+        tokenize: async (opts: {text: string; images?: Array<{type: string; data: string}>}) => {
+          mtmdCalled = true
+          capturedPrompt = opts.text
+          capturedImages = (opts.images ?? []).map(i => i.data)
+          return {dispose: () => undefined}
+        },
+        evalChunks: async () => 100,
+        generate: async () => ({tokens: [], nPast: 100, text: 'mock vision reply'}),
+      },
+    }
+
+    const fetchFn = createLlamaCppEmbeddedFetch({
+      config: {enabled: true, modelPath: 'fake.gguf', mmprojPath: 'fake-mmproj.gguf', gpu: 'cuda'},
+      overrideEnsureState: async () => mockState as never,
+    })
+
+    const res = await fetchFn('http://embedded/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {type: 'text', text: 'What is this?'},
+              {type: 'image_url', image_url: {url: 'file:///tmp/test.png'}},
+            ],
+          },
+        ],
+        stream: false,
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as {choices: Array<{message: {content: string}}>}
+    expect(json.choices[0]!.message.content).toBe('mock vision reply')
+    expect(mtmdCalled).toBe(true)
+    expect(chatCalled).toBe(false)
+    expect(capturedImages).toEqual(['/tmp/test.png'])
+    expect(capturedPrompt).toContain('<__media__>')
+    expect(capturedPrompt).toContain('What is this?')
+  })
+
+  test('純文字 content（即使含 image_url 但無 mtmdCtx）走 chat 路徑', async () => {
+    let chatCalled = false
+
+    const mockState = {
+      config: {enabled: true, modelPath: 'fake.gguf'},
+      llama: null,
+      model: null,
+      context: null,
+      mtmdCtx: null, // 無 mmproj 載入
+      session: {
+        prompt: async () => {
+          chatCalled = true
+          return 'text-only fallback'
+        },
+      },
+    }
+
+    const fetchFn = createLlamaCppEmbeddedFetch({
+      config: {enabled: true, modelPath: 'fake.gguf', gpu: 'cuda'},
+      overrideEnsureState: async () => mockState as never,
+    })
+
+    const res = await fetchFn('http://embedded/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {type: 'text', text: 'describe this'},
+              {type: 'image_url', image_url: {url: 'file:///tmp/test.png'}},
+            ],
+          },
+        ],
+        stream: false,
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(chatCalled).toBe(true)
   })
 })
