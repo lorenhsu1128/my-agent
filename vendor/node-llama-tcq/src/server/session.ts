@@ -25,7 +25,11 @@ export type SessionInitOptions = {
     /** "on" | "off" | "auto" — server-level default; per-request reasoning_effort can override */
     reasoning?: "on" | "off" | "auto",
     /** -1 unlimited, 0 disable, N>0 cap — server-level default */
-    reasoningBudget?: number
+    reasoningBudget?: number,
+    /** Message appended to content when budget is exhausted without visible answer */
+    reasoningBudgetMessage?: string,
+    /** none | deepseek (default) | deepseek-legacy — how to expose <think> in response */
+    reasoningFormat?: "none" | "deepseek" | "deepseek-legacy"
 };
 
 export type ServerSession = {

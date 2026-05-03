@@ -33,7 +33,9 @@ type ServerCommandArgs = {
     webuiDir?: string,
     debug: boolean,
     reasoning: "on" | "off" | "auto",
-    reasoningBudget: number
+    reasoningBudget: number,
+    reasoningBudgetMessage?: string,
+    reasoningFormat: "none" | "deepseek" | "deepseek-legacy"
 };
 
 export const ServerCommand: CommandModule<object, ServerCommandArgs> = {
@@ -188,6 +190,18 @@ export const ServerCommand: CommandModule<object, ServerCommandArgs> = {
                 type: "number",
                 default: -1,
                 description: "Token budget for thinking: -1 unlimited, 0 immediate end, N>0 cap. Mirrors llama-server --reasoning-budget."
+            })
+            .option("reasoningBudgetMessage", {
+                alias: ["reasoning-budget-message"],
+                type: "string",
+                description: "Message appended to assistant content when reasoning budget is exhausted (think loop ran out without producing visible answer). Mirrors llama-server --reasoning-budget-message."
+            })
+            .option("reasoningFormat", {
+                alias: ["reasoning-format"],
+                type: "string",
+                choices: ["none", "deepseek", "deepseek-legacy"] as const,
+                default: "deepseek" as const,
+                description: "How reasoning is exposed in response: none = leave <think> in content, deepseek = split into reasoning_content (default), deepseek-legacy = split + keep <think> tags in content. Mirrors llama-server --reasoning-format."
             });
     },
     async handler(args) {
@@ -229,7 +243,9 @@ export const ServerCommand: CommandModule<object, ServerCommandArgs> = {
             webuiDir: args.webuiDir,
             debug: args.debug,
             reasoning: args.reasoning,
-            reasoningBudget: args.reasoningBudget
+            reasoningBudget: args.reasoningBudget,
+            reasoningBudgetMessage: args.reasoningBudgetMessage,
+            reasoningFormat: args.reasoningFormat
         });
 
         // Keep process alive until SIGINT/SIGTERM

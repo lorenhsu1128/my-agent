@@ -18,7 +18,9 @@ export type ShimServerOptions = SessionInitOptions & {
     enableTools: boolean,
     webuiDir?: string,
     reasoning?: "on" | "off" | "auto",
-    reasoningBudget?: number
+    reasoningBudget?: number,
+    reasoningBudgetMessage?: string,
+    reasoningFormat?: "none" | "deepseek" | "deepseek-legacy"
 };
 
 export type ShimServerHandle = {
@@ -42,7 +44,9 @@ export async function startTcqShimServer(opts: ShimServerOptions): Promise<ShimS
         noMmap: opts.noMmap,
         debug: opts.debug,
         reasoning: opts.reasoning,
-        reasoningBudget: opts.reasoningBudget
+        reasoningBudget: opts.reasoningBudget,
+        reasoningBudgetMessage: opts.reasoningBudgetMessage,
+        reasoningFormat: opts.reasoningFormat
     });
 
     const routerOpts: RouterOptions = {

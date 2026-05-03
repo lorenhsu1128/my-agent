@@ -12,6 +12,7 @@ import {toOpenAIFinishReason, ShimStopReason} from "./finishReason.js";
 import {splitReasoning, StreamReasoningSplitter} from "./reasoningSplit.js";
 import {extractToolCalls, buildToolPromptSuffix} from "./toolCallExtract.js";
 import {StreamToolSniffer} from "./streamToolSniffer.js";
+import {bundleResponse} from "./segmentExtract.js";
 import {
     isQwenModel,
     buildQwenToolsSystemBlock,
@@ -151,49 +152,183 @@ function stripResponsePrefix(text: string, prefix: string | undefined): string {
 }
 
 /**
- * Decide reasoning behavior for this request.
+ * Resolved reasoning behavior for one request.
  *
- * Precedence: per-request OpenAI body fields > server defaults.
- * - body.reasoning_effort: low|medium|high — maps to 256/1024/4096 thoughtTokens
- * - body.chat_template_kwargs.enable_thinking (informal): false → off
- * - server --reasoning off → forces responsePrefix "</think>\n\n" so model skips CoT
- * - server --reasoning-budget N → applies as default thoughtTokens cap
- *
- * Returns:
- *   - responsePrefix: optional string injected at start of assistant turn
- *   - thoughtTokens: optional cap for budgets.thoughtTokens (undefined = engine default)
+ * - off: skip CoT entirely (responsePrefix `</think>\n\n` inserted)
+ * - thoughtTokens: engine-level hard cap on think tokens
+ * - reasoningFormat: how `<think>` appears in the response payload
+ * - budgetMessage: text to append when post-gen we detect budget exhausted
+ *                  with no visible answer (T3 behavior remediation)
+ * - explicitBudget: true if caller (or server) gave a non-default budget;
+ *                   used to decide whether to apply auto-cap heuristic
  */
-function resolveReasoning(
-    session: ServerSession,
-    body: OpenAIChatRequest
-): {responsePrefix?: string, thoughtTokens?: number} {
+type ResolvedReasoning = {
+    responsePrefix?: string,
+    thoughtTokens?: number,
+    reasoningFormat: "none" | "deepseek" | "deepseek-legacy",
+    budgetMessage?: string,
+    explicitBudget: boolean
+};
+
+/**
+ * Precedence (per-request > server > sensible defaults):
+ * - body.chat_template_kwargs.enable_thinking: false → off
+ * - body.reasoning_effort: low|medium|high → thoughtTokens 256/1024/4096
+ * - body.reasoning_budget (number) → explicit thoughtTokens cap
+ * - body.reasoning_budget_message (string) → budgetMessage override
+ * - body.reasoning_format → "none"|"deepseek"|"deepseek-legacy"
+ * - server --reasoning off → forces responsePrefix
+ * - server --reasoning-budget N (>=0) → server default cap
+ * - server --reasoning-budget-message → server default budget message
+ * - server --reasoning-format → server default format (deepseek if unset)
+ *
+ * **Auto-cap heuristic** (M-TCQ-SHIM-2 reasoning 控制深化):
+ *   If reasoning is on/auto AND no explicit budget given AND request max_tokens
+ *   is small (<= 16384), cap thoughtTokens at floor(max_tokens × 0.6) so the
+ *   model leaves room for a visible answer. Reproduces T3 fix without changing
+ *   default behavior for callers who set max_tokens generously.
+ */
+function resolveReasoning(session: ServerSession, body: OpenAIChatRequest): ResolvedReasoning {
     const serverMode = session.options.reasoning ?? "auto";
     const serverBudget = session.options.reasoningBudget;
+    const serverBudgetMessage = session.options.reasoningBudgetMessage;
+    const serverFormat = session.options.reasoningFormat ?? "deepseek";
 
-    // Per-request override: chat_template_kwargs.enable_thinking (jinja-style key)
     const ctk = (body as any).chat_template_kwargs;
-    let perReqOff = false;
-    if (ctk != null && typeof ctk === "object" && ctk.enable_thinking === false) perReqOff = true;
+    const perReqOff = ctk != null && typeof ctk === "object" && ctk.enable_thinking === false;
 
-    // Per-request OpenAI reasoning_effort
     const effort = body.reasoning_effort;
     let perReqBudget: number | undefined;
     if (effort === "low") perReqBudget = 256;
     else if (effort === "medium") perReqBudget = 1024;
     else if (effort === "high") perReqBudget = 4096;
 
-    const off = perReqOff || serverMode === "off";
-    if (off) {
-        // </think>\n\n responsePrefix tells model "thinking already done", emits visible answer immediately.
-        return {responsePrefix: "</think>\n\n", thoughtTokens: 0};
+    const explicitPerReqBudget = (body as any).reasoning_budget;
+    if (typeof explicitPerReqBudget === "number" && explicitPerReqBudget >= 0) {
+        perReqBudget = explicitPerReqBudget;
+    }
+
+    const reasoningFormat = ((body as any).reasoning_format ?? serverFormat) as ResolvedReasoning["reasoningFormat"];
+    const budgetMessage = (body as any).reasoning_budget_message ?? serverBudgetMessage;
+
+    if (perReqOff || serverMode === "off") {
+        return {
+            responsePrefix: "</think>\n\n",
+            thoughtTokens: 0,
+            reasoningFormat,
+            budgetMessage,
+            explicitBudget: true
+        };
     }
 
     let thoughtTokens: number | undefined;
-    if (perReqBudget != null) thoughtTokens = perReqBudget;
-    else if (typeof serverBudget === "number" && serverBudget >= 0) thoughtTokens = serverBudget;
-    // serverBudget < 0 (default -1 unlimited) → leave undefined → engine default (75% ctx)
+    let explicitBudget = false;
+    if (perReqBudget != null) {
+        thoughtTokens = perReqBudget;
+        explicitBudget = true;
+    } else if (typeof serverBudget === "number" && serverBudget >= 0) {
+        thoughtTokens = serverBudget;
+        explicitBudget = true;
+    }
 
-    return {thoughtTokens};
+    // Auto-cap when no explicit budget AND max_tokens is small
+    if (!explicitBudget && typeof body.max_tokens === "number" && body.max_tokens > 0 && body.max_tokens <= 16384) {
+        thoughtTokens = Math.floor(body.max_tokens * 0.6);
+    }
+
+    return {responsePrefix: undefined, thoughtTokens, reasoningFormat, budgetMessage, explicitBudget};
+}
+
+/**
+ * Apply the configured `reasoning_format` to a raw response text (used when the
+ * chat wrapper didn't expose thought segments — fallback to inline <think> regex).
+ */
+function formatReasoning(
+    rawText: string,
+    format: ResolvedReasoning["reasoningFormat"]
+): {content: string, reasoning: string | null} {
+    if (format === "none") {
+        return {content: rawText, reasoning: null};
+    }
+    const split = splitReasoning(rawText);
+    if (format === "deepseek-legacy") {
+        const legacyContent = split.reasoning != null
+            ? `<think>${split.reasoning}</think>${split.content ? "\n\n" + split.content : ""}`
+            : split.content;
+        return {content: legacyContent, reasoning: split.reasoning};
+    }
+    return {content: split.content, reasoning: split.reasoning};
+}
+
+/**
+ * Like formatReasoning, but for the case where the chat wrapper already split
+ * thought from visible (no need to regex parse). Just assemble per format.
+ */
+function assembleFormattedFromSegments(
+    visibleText: string,
+    reasoningText: string,
+    format: ResolvedReasoning["reasoningFormat"]
+): {content: string, reasoning: string | null} {
+    const reasoning = reasoningText.length > 0 ? reasoningText : null;
+    if (format === "none") {
+        const content = reasoning != null
+            ? `<think>${reasoning}</think>\n\n${visibleText}`
+            : visibleText;
+        return {content, reasoning: null};
+    }
+    if (format === "deepseek-legacy") {
+        const content = reasoning != null
+            ? `<think>${reasoning}</think>${visibleText ? "\n\n" + visibleText : ""}`
+            : visibleText;
+        return {content, reasoning};
+    }
+    return {content: visibleText, reasoning};
+}
+
+/**
+ * Detect "ran out of tokens before producing a clean answer" — typical T3 case
+ * where Qwen3.5 thinking models fill the entire `max_tokens` budget exploring
+ * the problem and never close `</think>` to emit a visible final answer.
+ *
+ * **Why we can't rely on `<think>` detection alone**: node-llama-tcq's
+ * Qwen chat wrapper post-processes responseText and may strip `<think>` tags
+ * even when the model never emitted `</think>` (truncated mid-think). We end
+ * up with a long content dump that *looks* like normal output but is actually
+ * unfinished reasoning.
+ *
+ * **Trigger conditions (any of)**:
+ *   - stopReason=maxTokens AND visible content is empty/whitespace → classic
+ *     "wrapper stripped everything" case
+ *   - stopReason=maxTokens AND no closing punctuation in last 40 chars
+ *     (heuristic: model was probably mid-sentence when cut)
+ *
+ * Caller can disable by leaving `--reasoning-budget-message` unset.
+ */
+function maybeApplyBudgetExhaustionMessage(
+    visibleContent: string,
+    stopReason: ShimStopReason,
+    resolved: ResolvedReasoning,
+    thoughtTruncated: boolean = false
+): string {
+    if (resolved.budgetMessage == null || resolved.budgetMessage === "") return visibleContent;
+
+    // Strong signal from chat wrapper: thought segment was open at end → model
+    // ran out of budget mid-think regardless of stopReason value.
+    if (thoughtTruncated) {
+        if (visibleContent.trim().length === 0) return resolved.budgetMessage;
+        return `${visibleContent}\n\n${resolved.budgetMessage}`;
+    }
+
+    if (stopReason !== "maxTokens") return visibleContent;
+
+    const trimmed = visibleContent.trim();
+    if (trimmed.length === 0) return resolved.budgetMessage;
+
+    // Heuristic: trailing 40 chars don't end with sentence-final punctuation → mid-cut
+    const tail = trimmed.slice(-40);
+    const endsCleanly = /[.!?。！？]\s*[)\]"'’”]?\s*$/.test(tail);
+    if (endsCleanly) return visibleContent;
+    return `${visibleContent}\n\n${resolved.budgetMessage}`;
 }
 
 async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<void> {
@@ -213,11 +348,33 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
     });
     stopReason = mapStopReason((meta as any).stopReason);
 
-    const cleanText = stripResponsePrefix(meta.responseText, reasoning.responsePrefix);
-    const split = splitReasoning(cleanText);
-    const {content, toolCalls} = extractToolCallsForFormat(split.content, declaredTools, opts.useQwenFormat);
+    // Use the chat wrapper's segmented response (knows Qwen3.5 thought / Gemma /
+    // Llama3 etc.) instead of regex-splitting responseText. Falls back to text
+    // split when wrapper didn't segment.
+    const bundle = bundleResponse(meta.response);
+    const rawVisibleText = stripResponsePrefix(bundle.visibleText, reasoning.responsePrefix);
+    const rawReasoningText = bundle.reasoningText;
+
+    // For non-Qwen models that emit `<think>` inline (no segments), splitter still helps.
+    const haveSegments = bundle.thoughtSegments > 0;
+    const formatted = haveSegments
+        ? assembleFormattedFromSegments(rawVisibleText, rawReasoningText, reasoning.reasoningFormat)
+        : formatReasoning(rawVisibleText, reasoning.reasoningFormat);
+
+    const {content: extractedContent, toolCalls} = extractToolCallsForFormat(
+        formatted.content, declaredTools, opts.useQwenFormat
+    );
+    const visibleContent = maybeApplyBudgetExhaustionMessage(
+        extractedContent,
+        stopReason,
+        reasoning,
+        bundle.thoughtTruncated
+    );
     const promptTokens = countPromptTokens(opts.session, lastUserPrompt);
-    const completionTokens = countTokens(opts.session, cleanText);
+    const completionTokens = countTokens(opts.session, rawVisibleText + rawReasoningText);
+    if (opts.session.options.debug) {
+        console.error(`[TCQ-shim:chat] segments=${bundle.thoughtSegments} thoughtTrunc=${bundle.thoughtTruncated} visLen=${rawVisibleText.length} reaLen=${rawReasoningText.length}`);
+    }
     if (opts.session.options.debug) {
         console.error(`[TCQ-shim:chat] respLen=${meta.responseText?.length ?? 0} stopReason=${(meta as any).stopReason} pTok=${promptTokens} cTok=${completionTokens}`);
     }
@@ -231,8 +388,8 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
             index: 0,
             message: {
                 role: "assistant",
-                content: toolCalls.length > 0 ? null : content,
-                reasoning_content: split.reasoning,
+                content: toolCalls.length > 0 ? null : visibleContent,
+                reasoning_content: formatted.reasoning ?? null,
                 ...(toolCalls.length > 0 ? {tool_calls: toolCalls} : {})
             },
             finish_reason: toOpenAIFinishReason(stopReason, toolCalls.length > 0)
@@ -250,6 +407,12 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
     const sniffer = new StreamToolSniffer(declaredTools);
     const reasoning = resolveReasoning(session, body);
     let totalRaw = "";
+    let visibleContentEmitted = "";  // accumulated `delta.content` characters (for budget-msg detection)
+    // reasoning_format=none → don't split <think> out of content stream
+    // deepseek (default) and deepseek-legacy both route reasoning through splitter
+    // (legacy mode's "keep <think> in content" flavor only applies to non-streaming JSON;
+    //  documented limitation for now).
+    const useReasoningSplitter = reasoning.reasoningFormat !== "none";
 
     // Initial role chunk (OpenAI convention)
     sse.send(makeChunk(id, created, model, {role: "assistant"}, null));
@@ -285,11 +448,17 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
                         prefixToStrip = "";
                     }
                 }
-                totalRaw += text; // always accumulate raw for end-of-stream tool extract
-                // Sniffer suppresses content while it looks like a tool-call JSON
+                totalRaw += text;
                 const visible = sniffer.feed(text);
                 if (visible.length === 0) return;
+                if (!useReasoningSplitter) {
+                    // format=none: emit as content directly
+                    visibleContentEmitted += visible;
+                    sse.send(makeChunk(id, created, model, {content: visible}, null));
+                    return;
+                }
                 const part = splitter.feed(visible);
+                if (part.content) visibleContentEmitted += part.content;
                 if (part.content || part.reasoning) {
                     sse.send(makeChunk(id, created, model, {
                         ...(part.content ? {content: part.content} : {}),
@@ -302,21 +471,37 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
         // Flush sniffer head if undecided / decided text
         const sniffTail = sniffer.flush();
         if (sniffTail.length > 0) {
-            const part = splitter.feed(sniffTail);
-            if (part.content || part.reasoning) {
+            if (!useReasoningSplitter) {
+                visibleContentEmitted += sniffTail;
+                sse.send(makeChunk(id, created, model, {content: sniffTail}, null));
+            } else {
+                const part = splitter.feed(sniffTail);
+                if (part.content) visibleContentEmitted += part.content;
+                if (part.content || part.reasoning) {
+                    sse.send(makeChunk(id, created, model, {
+                        ...(part.content ? {content: part.content} : {}),
+                        ...(part.reasoning ? {reasoning_content: part.reasoning} : {})
+                    }, null));
+                }
+            }
+        }
+
+        if (useReasoningSplitter) {
+            const tail = splitter.flush();
+            if (tail.content) visibleContentEmitted += tail.content;
+            if (tail.content || tail.reasoning) {
                 sse.send(makeChunk(id, created, model, {
-                    ...(part.content ? {content: part.content} : {}),
-                    ...(part.reasoning ? {reasoning_content: part.reasoning} : {})
+                    ...(tail.content ? {content: tail.content} : {}),
+                    ...(tail.reasoning ? {reasoning_content: tail.reasoning} : {})
                 }, null));
             }
         }
 
-        const tail = splitter.flush();
-        if (tail.content || tail.reasoning) {
-            sse.send(makeChunk(id, created, model, {
-                ...(tail.content ? {content: tail.content} : {}),
-                ...(tail.reasoning ? {reasoning_content: tail.reasoning} : {})
-            }, null));
+        // Budget exhausted? Emit fallback content message before final chunk.
+        const stopReasonForBudget = mapStopReason((meta as any).stopReason);
+        const budgetMsg = maybeApplyBudgetExhaustionMessage("", stopReasonForBudget, reasoning);
+        if (visibleContentEmitted.trim().length === 0 && budgetMsg.length > 0) {
+            sse.send(makeChunk(id, created, model, {content: budgetMsg}, null));
         }
 
         // Tool extraction is whole-text only in Phase 1 — emit as single chunk after stream.
