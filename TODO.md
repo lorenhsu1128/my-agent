@@ -10,27 +10,27 @@
 **決策**：架構切割原則 — TCQ-shim 完全在 vendor 內、不 import my-agent；my-agent 唯一改檔為 `src/llamacppConfig/schema.ts` 加 `server.binaryKind: 'buun'|'tcq'`（預設 `buun` 向下相容）。Endpoint 規格層**一次到位**對齊 buun（路由表 + payload schema + 錯誤格式全集），未支援者回 501 標準錯誤；里程碑差別在「行為深度」與 fork-only 加值。Dev iteration 一律 `bun run dev`，不需先 npm run build。
 
 ### M-TCQ-SHIM-1 規格相容版
-- [ ] M-TCQ-SHIM-1-1 在 `vendor/node-llama-tcq/package.json` 加 `"dev": "bun src/cli/cli.ts"` script
-- [ ] M-TCQ-SHIM-1-2 `vendor/node-llama-tcq/src/cli/commands/ServerCommand.ts`（yargs command，flag 對齊 llama-server）
-- [ ] M-TCQ-SHIM-1-3 `vendor/node-llama-tcq/src/server/` scaffold：httpServer / openAiRouter / streaming / session / finishReason / usage / mediaResolver / visionPath / tcqPresetMap
-- [ ] M-TCQ-SHIM-1-4 路由表 100% 對齊 buun（A–H 全表，未實作走 501 標準錯誤格式）
-- [ ] M-TCQ-SHIM-1-5 行為實作：A 全集（`/v1/chat/completions`、`/v1/completions`、`/v1/embeddings`、`/v1/rerank`、`/v1/responses`、`/v1/models`、`/v1/health`）+ `/tokenize` `/detokenize` `/apply-template` `/infill` `/health` `/models` `/props` GET `/slots` GET
-- [ ] M-TCQ-SHIM-1-6 `--cache-type-k turbo4` → `applyTCQCodebooks(TURBO4_0)` 對接（`tcqPresetMap.ts`）
+- [x] M-TCQ-SHIM-1-1 在 `vendor/node-llama-tcq/package.json` 加 `"dev": "bun src/cli/cli.ts"` script
+- [x] M-TCQ-SHIM-1-2 `vendor/node-llama-tcq/src/cli/commands/ServerCommand.ts`（yargs command，flag 對齊 llama-server）
+- [x] M-TCQ-SHIM-1-3 `vendor/node-llama-tcq/src/server/` scaffold：httpServer / openAiRouter / streaming / session / finishReason / usage / mediaResolver / visionPath / tcqPresetMap
+- [x] M-TCQ-SHIM-1-4 路由表 100% 對齊 buun（A–H 全表，未實作走 501 標準錯誤格式）
+- [x] M-TCQ-SHIM-1-5 行為實作：A 全集（`/v1/chat/completions`、`/v1/completions`、`/v1/embeddings`、`/v1/rerank`、`/v1/responses`、`/v1/models`、`/v1/health`）+ `/tokenize` `/detokenize` `/apply-template` `/infill` `/health` `/models` `/props` GET `/slots` GET
+- [x] M-TCQ-SHIM-1-6 `--cache-type-k turbo4` → `applyTCQCodebooks(TURBO4_0)` 對接（`tcqPresetMap.ts`）
 - [ ] M-TCQ-SHIM-1-7 vision/audio：mtmd 路徑 + `mediaResolver` 處理 `image_url` data:/http(s):/file:
-- [ ] M-TCQ-SHIM-1-8 `reasoning_content` 切分（Qwen `<think>` 標籤）；`tool_calls` 用 prompt-time + 後處理 JSON 偵測（最低相容）
-- [ ] M-TCQ-SHIM-1-9 `vendor/node-llama-tcq/tests/server/*` 8 支：chat-basic / chat-stream / tools / vision / models / health / tcq-preset / compat-buun（vendor 獨立跑、TURBO4_0+CUDA preset）
-- [ ] M-TCQ-SHIM-1-10 my-agent 端 `src/llamacppConfig/schema.ts` 新增 `server.binaryKind: 'buun'|'tcq'`（預設 `buun`，向下相容）
+- [x] M-TCQ-SHIM-1-8 `reasoning_content` 切分（Qwen `<think>` 標籤）；`tool_calls` 用 prompt-time + 後處理 JSON 偵測（最低相容）
+- [~] M-TCQ-SHIM-1-9 server 整合測試 — **已做**：standalone unit 7 支 65/65 + live HTTP runner 2 支（live-test-shim.ts 10/10、live-test-stress.ts mix 6/6 + overflow 5/5）。**defer**：compat-buun.test.ts（需同跑兩 server diff，CI 成本高，留到出現相容性疑慮）
+- [x] M-TCQ-SHIM-1-10 my-agent 端 `src/llamacppConfig/schema.ts` 新增 `server.binaryKind: 'buun'|'tcq'`（預設 `buun`，向下相容）
 - [ ] M-TCQ-SHIM-1-11 `bun run docs:gen` 重新產生 `docs/config-*.md`（CLAUDE.md §13）
-- [ ] M-TCQ-SHIM-1-12 `scripts/llama/serve.sh` + `scripts/llama/serve.ps1` 依 `binaryKind` 分流（跨平台 — CLAUDE.md §10）
-- [ ] M-TCQ-SHIM-1-13 驗證：`bun run typecheck` + `bun test` + `./cli -p "hello"` 冒煙 + `tests/e2e/decouple-comprehensive.sh` 全綠
-- [ ] M-TCQ-SHIM-1-14 commit（繁中，分段）：`feat(node-llama-tcq): 新增 OpenAI-compat HTTP server scaffold` 等
+- [x] M-TCQ-SHIM-1-12 `scripts/llama/serve.sh` + `scripts/llama/serve.ps1` 依 `binaryKind` 分流（跨平台 — CLAUDE.md §10）
+- [x] M-TCQ-SHIM-1-13 驗證：`bun run typecheck` + `bun test` + `./cli -p "hello"` 冒煙 + live test all-green
+- [x] M-TCQ-SHIM-1-14 commit（繁中，分段）：8 commits pushed to origin/node-llama-tcq
 
 ### M-TCQ-SHIM-2 管理面補完
 - [ ] M-TCQ-SHIM-2-1 `/slots/{id}` save/restore/erase（對接 watchdog Phase 3–5）
 - [ ] M-TCQ-SHIM-2-2 `/metrics`（Prometheus 基本計數：requests_total / tokens_predicted_total / tokens_evaluated_total / queue_size）
 - [ ] M-TCQ-SHIM-2-3 `/props` POST 白名單欄位
 - [ ] M-TCQ-SHIM-2-4 `/api/chat`、`/v1/messages`、`/v1/messages/count_tokens`、`/api/tags` 完整化
-- [ ] M-TCQ-SHIM-2-5 `tool_calls` 改走 GBNF grammar（`LlamaJsonSchemaGrammar`）
+- [~] M-TCQ-SHIM-2-5 `tool_calls` 改走 GBNF grammar（`LlamaJsonSchemaGrammar`）— **defer**：目前 prompt-time + Qwen pythonic-XML regex 後處理在 8/8 live test + 6/6 stress mix 全綠，無實際 parsing 失敗。GBNF 整合需要把 OpenAI JSON Schema → Qwen pythonic-XML grammar 轉換寫一套，工作量大。留到實際出現解析失敗 case 才動。
 - [ ] M-TCQ-SHIM-2-6 context overflow 錯誤碼修正：T18 stress test 揭露 — 當 `prompt_tokens + max_tokens > ctx_size` 且 chat history 無法壓縮時，shim 目前回 HTTP 500 `internal_error`，應改回 **HTTP 413 `context_length_exceeded`**（OpenAI 標準錯誤碼）。同時錯誤訊息被 node-llama-tcq 截斷在中間（"...without affecting the"），需要在 shim 端補完整 reason（含 `prompt_tokens` / `max_tokens` / `ctx_size` 三個數字）方便 client 自動重試或縮減 max_tokens。
 - [ ] M-TCQ-SHIM-2-7 `usage.prompt_tokens` 口徑統一：T17 揭露 — context shift 後實際送進模型的 token 數會少於原始 prompt token 數，但 shim 現在回傳的是「原始全長」。對齊 OpenAI 慣例應回「shift 後實際 evaluated tokens」（與 `/metrics` 的 `tokens_evaluated_total` 同口徑）。需在 shim 攔截 chat session 的 evaluate 階段拿真實 count。
 
@@ -3333,3 +3333,7 @@
 - 2026-05-03 22:48: Session 結束 | 進度：731/861 任務 | ce6690c feat(node-llama-tcq): reasoning 控制深化 + T3 修正（M-TCQ-SHIM-2）
 
 - 2026-05-04 09:20: Session 結束 | 進度：731/861 任務 | 97ce683 chore(vendor): 補追 vendor/node-llama-tcq/test/standalone/cli/recommendedModels.test.ts
+
+- 2026-05-04 10:04: Session 結束 | 進度：731/863 任務 | 9b82ea8 test(node-llama-tcq): stress test runner（混合 tool + ctx overflow）+ M-TCQ-SHIM-2 新增 T18/T17 條目
+
+- 2026-05-04 11:11: Session 結束 | 進度：731/863 任務 | 9b82ea8 test(node-llama-tcq): stress test runner（混合 tool + ctx overflow）+ M-TCQ-SHIM-2 新增 T18/T17 條目

@@ -6,7 +6,8 @@ import type {ChatHistoryItem} from "../types.js";
 import type {ServerSession} from "./session.js";
 import {SseWriter} from "./streaming.js";
 import {OpenAIChatChunk, OpenAIChatRequest, OpenAIChatCompletion, OpenAIMessage} from "./types.js";
-import {makeError} from "./errors.js";
+import {makeError, isContextOverflowError, makeContextLengthExceededError} from "./errors.js";
+import {recordChatTokens, incChatError, inflightStart, inflightEnd} from "./metrics.js";
 import {makeUsage} from "./usage.js";
 import {toOpenAIFinishReason, ShimStopReason} from "./finishReason.js";
 import {splitReasoning, StreamReasoningSplitter} from "./reasoningSplit.js";
@@ -67,12 +68,26 @@ export async function handleChatCompletions(
         console.error(`[TCQ-shim:chat] tool-format=${useQwenFormat ? "qwen-native" : "json-fallback"} alias=${primaryAlias}`);
     }
 
+    // M-TCQ-SHIM-2-6/2-7：先算完整 prompt token 數，做 context-overflow 預檢
+    // 並在 usage.prompt_tokens 用到（非 stream 走參數傳入，stream 走 closure）
+    const promptTokens = countFullPromptTokens(session, systemPrompt, history, lastUserPrompt);
+    const ctxSize = session.options.contextSize;
+    const effectiveMax = body.max_tokens ?? 0;
+    if (promptTokens + effectiveMax > ctxSize) {
+        incChatError("overflow");
+        sendJson(res, 413, makeContextLengthExceededError({
+            promptTokens, maxTokens: body.max_tokens, ctxSize
+        }));
+        return;
+    }
+
     const id = `chatcmpl-${nanoid(16)}`;
     const created = Math.floor(Date.now() / 1000);
     const model = primaryAlias;
     const stream = body.stream === true;
 
-    await withLock(session.inferenceLockScope, async () => {
+    inflightStart();
+    try { await withLock(session.inferenceLockScope, async () => {
         // Reset sequence to clear cache from previous request — stateless OpenAI semantics.
         await session.sequence.clearHistory();
 
@@ -93,16 +108,18 @@ export async function handleChatCompletions(
             await runStreaming({
                 req, res, body, chatSession, lastUserPrompt,
                 systemPrompt, history, session, useQwenFormat,
-                id, created, model, declaredTools: body.tools ?? []
+                id, created, model, declaredTools: body.tools ?? [],
+                promptTokens
             });
         } else {
             await runNonStreaming({
                 res, body, chatSession, lastUserPrompt,
                 systemPrompt, history, session, useQwenFormat,
-                id, created, model, declaredTools: body.tools ?? []
+                id, created, model, declaredTools: body.tools ?? [],
+                promptTokens
             });
         }
-    });
+    }); } finally { inflightEnd(); }
 }
 
 type RunCtx = {
@@ -116,7 +133,9 @@ type RunCtx = {
     id: string,
     created: number,
     model: string,
-    declaredTools: NonNullable<OpenAIChatRequest["tools"]>
+    declaredTools: NonNullable<OpenAIChatRequest["tools"]>,
+    /** Pre-computed full prompt token count (system + history + last + tools) */
+    promptTokens: number
 };
 
 function extractToolCallsForFormat(
@@ -136,9 +155,34 @@ function countTokens(session: ServerSession, text: string | undefined): number {
     catch { return 0; }
 }
 
-function countPromptTokens(session: ServerSession, lastUserPrompt: string): number {
-    // Approximate — covers user turn only. Real chat-template overhead is on top.
-    return countTokens(session, lastUserPrompt);
+/**
+ * Sum tokens across every prompt component the model will see:
+ * system + each history turn (rendered) + last user/tool turn.
+ * Chat-template overhead (special tokens, role markers) is approximated by a
+ * small per-turn fudge factor — enough for usage.prompt_tokens to align with
+ * OpenAI semantics ("everything sent in"), not just the last user message.
+ *
+ * (M-TCQ-SHIM-2-7) — pre-fix this only counted lastUserPrompt, which under-
+ * reported by 2–10× on multi-turn / tool-heavy requests.
+ */
+function countFullPromptTokens(
+    session: ServerSession,
+    systemPrompt: string,
+    history: ChatHistoryItem[],
+    lastUserPrompt: string
+): number {
+    let total = 0;
+    if (systemPrompt) total += countTokens(session, systemPrompt) + 4;
+    for (const item of history) {
+        if (item.type === "user") total += countTokens(session, item.text) + 4;
+        else if (item.type === "model") {
+            for (const piece of item.response) {
+                if (typeof piece === "string") total += countTokens(session, piece) + 4;
+            }
+        }
+    }
+    total += countTokens(session, lastUserPrompt) + 4;
+    return total;
 }
 
 /** Strip the responsePrefix we injected (e.g. "</think>\n\n") from start of model output, if present. */
@@ -336,16 +380,32 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
     const reasoning = resolveReasoning(opts.session, body);
 
     let stopReason: ShimStopReason = undefined;
-    const meta = await chatSession.promptWithMeta(lastUserPrompt, {
-        maxTokens: body.max_tokens,
-        temperature: body.temperature,
-        topP: body.top_p,
-        topK: body.top_k,
-        seed: body.seed,
-        customStopTriggers: normalizeStop(body.stop),
-        ...(reasoning.responsePrefix ? {responsePrefix: reasoning.responsePrefix} : {}),
-        ...(reasoning.thoughtTokens != null ? {budgets: {thoughtTokens: reasoning.thoughtTokens}} : {})
-    });
+    let meta: Awaited<ReturnType<typeof chatSession.promptWithMeta>>;
+    try {
+        meta = await chatSession.promptWithMeta(lastUserPrompt, {
+            maxTokens: body.max_tokens,
+            temperature: body.temperature,
+            topP: body.top_p,
+            topK: body.top_k,
+            seed: body.seed,
+            customStopTriggers: normalizeStop(body.stop),
+            ...(reasoning.responsePrefix ? {responsePrefix: reasoning.responsePrefix} : {}),
+            ...(reasoning.thoughtTokens != null ? {budgets: {thoughtTokens: reasoning.thoughtTokens}} : {})
+        });
+    } catch (err) {
+        // Fallback when our preflight token estimate underestimated due to
+        // chat-template overhead and the engine still couldn't compress history.
+        if (isContextOverflowError(err)) {
+            sendJson(res, 413, makeContextLengthExceededError({
+                promptTokens: opts.promptTokens,
+                maxTokens: body.max_tokens,
+                ctxSize: opts.session.options.contextSize,
+                underlying: err
+            }));
+            return;
+        }
+        throw err;
+    }
     stopReason = mapStopReason((meta as any).stopReason);
 
     // Use the chat wrapper's segmented response (knows Qwen3.5 thought / Gemma /
@@ -370,7 +430,7 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
         reasoning,
         bundle.thoughtTruncated
     );
-    const promptTokens = countPromptTokens(opts.session, lastUserPrompt);
+    const promptTokens = opts.promptTokens;
     const completionTokens = countTokens(opts.session, rawVisibleText + rawReasoningText);
     if (opts.session.options.debug) {
         console.error(`[TCQ-shim:chat] segments=${bundle.thoughtSegments} thoughtTrunc=${bundle.thoughtTruncated} visLen=${rawVisibleText.length} reaLen=${rawReasoningText.length}`);
@@ -397,6 +457,7 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
         usage: makeUsage(promptTokens, completionTokens)
     };
 
+    recordChatTokens(promptTokens, completionTokens);
     sendJson(res, 200, completion);
 }
 
@@ -525,14 +586,26 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
         }
 
         const stopReason = mapStopReason((meta as any).stopReason);
+        const completionTokens = countTokens(session, totalRaw);
         const finalChunk = makeChunk(id, created, model, {}, toOpenAIFinishReason(stopReason, toolCalls.length > 0));
-        finalChunk.usage = makeUsage(
-            countPromptTokens(session, lastUserPrompt),
-            countTokens(session, totalRaw)
-        );
+        finalChunk.usage = makeUsage(opts.promptTokens, completionTokens);
+        recordChatTokens(opts.promptTokens, completionTokens);
         sse.send(finalChunk);
         sse.done();
     } catch (err) {
+        if (isContextOverflowError(err)) {
+            incChatError("overflow");
+            // SSE already opened with HTTP 200 — best we can do is emit a
+            // structured error event that mirrors the 413 JSON body.
+            sse.error(new Error(makeContextLengthExceededError({
+                promptTokens: opts.promptTokens,
+                maxTokens: body.max_tokens,
+                ctxSize: session.options.contextSize,
+                underlying: err
+            }).error.message));
+            return;
+        }
+        incChatError("other");
         sse.error(err);
     }
 }

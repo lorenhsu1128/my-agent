@@ -7,8 +7,9 @@ import {makeError, NOT_IMPLEMENTED_501} from "./errors.js";
 import {
     listModels, listOllamaTags, healthBody, propsBody, slotsBody,
     handleTokenize, handleDetokenize, handleApplyTemplate, handleCountTokens,
-    metricsBody, sendMetrics
+    metricsBody, sendMetrics, handlePropsPost
 } from "./miscEndpoints.js";
+import {incRequests} from "./metrics.js";
 
 export type RouterOptions = {
     aliases: string[],
@@ -34,6 +35,7 @@ export async function dispatch(
     counters: Counters
 ): Promise<void> {
     counters.requests++;
+    incRequests();
     const url = new URL(req.url ?? "/", "http://localhost");
     const pathname = url.pathname;
     const method = (req.method ?? "GET").toUpperCase();
@@ -144,7 +146,7 @@ export async function dispatch(
             return sendJson(res, 501, NOT_IMPLEMENTED_501(pathname, "lora_hot_swap_not_supported"));
 
         case "/props":
-            return sendJson(res, 200, propsBody(session, primaryAlias));
+            return handlePropsPost(res, body, session, primaryAlias);
 
         case "/models/load":
         case "/models/unload":
