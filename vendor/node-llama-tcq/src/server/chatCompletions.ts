@@ -22,6 +22,7 @@ import {
     parseQwenToolCalls
 } from "./qwenToolFormat.js";
 import {flattenContent, extractMediaParts} from "./visionPath.js";
+import {handleChatWithVision} from "./visionInference.js";
 import {sendJson} from "./httpHelpers.js";
 
 const SHIM_OBJECT_NON_STREAM = "chat.completion" as const;
@@ -53,13 +54,8 @@ export async function handleChatCompletions(
         return;
     }
     if (mediaParts.length > 0) {
-        sendJson(res, 501, makeError(
-            "vision_phase_pending",
-            "Vision/audio inference path is scaffolded but not yet wired in M-TCQ-SHIM-1. " +
-            "Track in M-TCQ-SHIM-1-7.",
-            "not_implemented"
-        ));
-        return;
+        // M-TCQ-SHIM-1-7：路由到 vision inference path（mtmd tokenize/eval/generate）
+        return handleChatWithVision(req, res, body, session, primaryAlias);
     }
 
     const useQwenFormat = isQwenModel(primaryAlias);

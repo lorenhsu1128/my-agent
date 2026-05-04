@@ -38,6 +38,7 @@ export type ServerSession = {
     llama: Llama,
     model: LlamaModel,
     context: LlamaContext,
+    /** Mutable: vision path may dispose+recreate to fully reset KV cache (libmtmd state cleanup workaround). */
     sequence: LlamaContextSequence,
     mtmdCtx: LlamaMtmdContext | null,
     /** Sentinel object passed as withLock scope — TCQ-shim is single-slot. */

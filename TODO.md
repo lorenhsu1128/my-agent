@@ -16,7 +16,7 @@
 - [x] M-TCQ-SHIM-1-4 路由表 100% 對齊 buun（A–H 全表，未實作走 501 標準錯誤格式）
 - [x] M-TCQ-SHIM-1-5 行為實作：A 全集（`/v1/chat/completions`、`/v1/completions`、`/v1/embeddings`、`/v1/rerank`、`/v1/responses`、`/v1/models`、`/v1/health`）+ `/tokenize` `/detokenize` `/apply-template` `/infill` `/health` `/models` `/props` GET `/slots` GET
 - [x] M-TCQ-SHIM-1-6 `--cache-type-k turbo4` → `applyTCQCodebooks(TURBO4_0)` 對接（`tcqPresetMap.ts`）
-- [ ] M-TCQ-SHIM-1-7 vision/audio：mtmd 路徑 + `mediaResolver` 處理 `image_url` data:/http(s):/file:
+- [x] M-TCQ-SHIM-1-7 vision/audio：mtmd 路徑 + `mediaResolver` 處理 `image_url` data:/http(s):/file:（live test 4/4 全綠：file:// + data:base64 + bare path + multi-text-part 都通過）
 - [x] M-TCQ-SHIM-1-8 `reasoning_content` 切分（Qwen `<think>` 標籤）；`tool_calls` 用 prompt-time + 後處理 JSON 偵測（最低相容）
 - [~] M-TCQ-SHIM-1-9 server 整合測試 — **已做**：standalone unit 7 支 65/65 + live HTTP runner 2 支（live-test-shim.ts 10/10、live-test-stress.ts mix 6/6 + overflow 5/5）。**defer**：compat-buun.test.ts（需同跑兩 server diff，CI 成本高，留到出現相容性疑慮）
 - [x] M-TCQ-SHIM-1-10 my-agent 端 `src/llamacppConfig/schema.ts` 新增 `server.binaryKind: 'buun'|'tcq'`（預設 `buun`，向下相容）
@@ -26,13 +26,13 @@
 - [x] M-TCQ-SHIM-1-14 commit（繁中，分段）：8 commits pushed to origin/node-llama-tcq
 
 ### M-TCQ-SHIM-2 管理面補完
-- [ ] M-TCQ-SHIM-2-1 `/slots/{id}` save/restore/erase（對接 watchdog Phase 3–5）
-- [ ] M-TCQ-SHIM-2-2 `/metrics`（Prometheus 基本計數：requests_total / tokens_predicted_total / tokens_evaluated_total / queue_size）
-- [ ] M-TCQ-SHIM-2-3 `/props` POST 白名單欄位
-- [ ] M-TCQ-SHIM-2-4 `/api/chat`、`/v1/messages`、`/v1/messages/count_tokens`、`/api/tags` 完整化
+- [x] M-TCQ-SHIM-2-1 `/slots/{id}` save/restore/erase（--slot-save-path 旗標 gate；filename 安全檢查）
+- [x] M-TCQ-SHIM-2-2 `/metrics`（Prometheus：requests_total / tokens_evaluated/predicted_total / chat_completions / chat_errors / context_overflow / inflight + 推導 queue_size）
+- [x] M-TCQ-SHIM-2-3 `/props` POST 白名單欄位（8 個白名單欄位，未列回 400 unknown_field）
+- [x] M-TCQ-SHIM-2-4 `/api/chat`、`/v1/messages`、`/v1/messages/count_tokens`、`/api/tags` 完整化（CapturingResponse 重用 chat 主路徑；streaming 暫 501）
 - [~] M-TCQ-SHIM-2-5 `tool_calls` 改走 GBNF grammar（`LlamaJsonSchemaGrammar`）— **defer**：目前 prompt-time + Qwen pythonic-XML regex 後處理在 8/8 live test + 6/6 stress mix 全綠，無實際 parsing 失敗。GBNF 整合需要把 OpenAI JSON Schema → Qwen pythonic-XML grammar 轉換寫一套，工作量大。留到實際出現解析失敗 case 才動。
-- [ ] M-TCQ-SHIM-2-6 context overflow 錯誤碼修正：T18 stress test 揭露 — 當 `prompt_tokens + max_tokens > ctx_size` 且 chat history 無法壓縮時，shim 目前回 HTTP 500 `internal_error`，應改回 **HTTP 413 `context_length_exceeded`**（OpenAI 標準錯誤碼）。同時錯誤訊息被 node-llama-tcq 截斷在中間（"...without affecting the"），需要在 shim 端補完整 reason（含 `prompt_tokens` / `max_tokens` / `ctx_size` 三個數字）方便 client 自動重試或縮減 max_tokens。
-- [ ] M-TCQ-SHIM-2-7 `usage.prompt_tokens` 口徑統一：T17 揭露 — context shift 後實際送進模型的 token 數會少於原始 prompt token 數，但 shim 現在回傳的是「原始全長」。對齊 OpenAI 慣例應回「shift 後實際 evaluated tokens」（與 `/metrics` 的 `tokens_evaluated_total` 同口徑）。需在 shim 攔截 chat session 的 evaluate 階段拿真實 count。
+- [x] M-TCQ-SHIM-2-6 context overflow 500→413 + OpenAI 標準 code=context_length_exceeded + 完整 reason（prompt/max/ctx 三個數字 + underlying engine msg）；非 stream 預檢 413、stream 走 SSE error event
+- [x] M-TCQ-SHIM-2-7 完整 prompt 計數：tokenize systemPrompt + 每段 history rendered + lastUserPrompt（含 4-tok per-turn template 估算），取代舊的「只算 lastUser」（多輪會少報 2–10 倍）
 
 ### M-TCQ-SHIM-3 fork-only 加值（保持 OpenAI 相容）
 - [ ] M-TCQ-SHIM-3-1 `X-Spec-Type` header → `generateWithSpeculative` SpecOpts（copyspec / ngram_* / suffix / recycle / draft:<path>）
