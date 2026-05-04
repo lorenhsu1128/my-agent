@@ -35,7 +35,8 @@ type ServerCommandArgs = {
     reasoning: "on" | "off" | "auto",
     reasoningBudget: number,
     reasoningBudgetMessage?: string,
-    reasoningFormat: "none" | "deepseek" | "deepseek-legacy"
+    reasoningFormat: "none" | "deepseek" | "deepseek-legacy",
+    slotSavePath?: string
 };
 
 export const ServerCommand: CommandModule<object, ServerCommandArgs> = {
@@ -202,6 +203,11 @@ export const ServerCommand: CommandModule<object, ServerCommandArgs> = {
                 choices: ["none", "deepseek", "deepseek-legacy"] as const,
                 default: "deepseek" as const,
                 description: "How reasoning is exposed in response: none = leave <think> in content, deepseek = split into reasoning_content (default), deepseek-legacy = split + keep <think> tags in content. Mirrors llama-server --reasoning-format."
+            })
+            .option("slotSavePath", {
+                alias: ["slot-save-path"],
+                type: "string",
+                description: "Directory where /slots/{id}?action=save state files are written (and read for restore). Required to enable POST /slots/{id} endpoints. Mirrors llama-server --slot-save-path."
             });
     },
     async handler(args) {
@@ -245,7 +251,8 @@ export const ServerCommand: CommandModule<object, ServerCommandArgs> = {
             reasoning: args.reasoning,
             reasoningBudget: args.reasoningBudget,
             reasoningBudgetMessage: args.reasoningBudgetMessage,
-            reasoningFormat: args.reasoningFormat
+            reasoningFormat: args.reasoningFormat,
+            slotSavePath: args.slotSavePath
         });
 
         // Keep process alive until SIGINT/SIGTERM

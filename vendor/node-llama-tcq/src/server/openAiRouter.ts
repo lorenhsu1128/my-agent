@@ -10,6 +10,8 @@ import {
     metricsBody, sendMetrics, handlePropsPost
 } from "./miscEndpoints.js";
 import {incRequests} from "./metrics.js";
+import {handleSlotAction} from "./slotsEndpoint.js";
+import {handleOllamaChat, handleAnthropicMessages, handleAnthropicCountTokens} from "./compatAdapters.js";
 
 export type RouterOptions = {
     aliases: string[],
@@ -122,13 +124,13 @@ export async function dispatch(
             return sendJson(res, 501, NOT_IMPLEMENTED_501(pathname, "responses_phase_pending"));
 
         case "/v1/messages":
-            return sendJson(res, 501, NOT_IMPLEMENTED_501(pathname, "anthropic_messages_phase_pending"));
+            return handleAnthropicMessages(req, res, body, session, primaryAlias);
 
         case "/v1/messages/count_tokens":
-            return handleCountTokens(res, body, session);
+            return handleAnthropicCountTokens(res, body, session);
 
         case "/api/chat":
-            return sendJson(res, 501, NOT_IMPLEMENTED_501(pathname, "ollama_chat_phase_pending"));
+            return handleOllamaChat(req, res, body, session, primaryAlias);
 
         case "/tokenize":
             return handleTokenize(res, body, session);
@@ -161,10 +163,11 @@ export async function dispatch(
             return sendJson(res, 501, NOT_IMPLEMENTED_501(pathname, "tools_endpoint_not_implemented"));
 
         default: {
-            // /slots/{id}?action=...
+            // /slots/{id}?action=save|restore|erase
             const slotMatch = pathname.match(/^\/slots\/(\d+)$/);
             if (slotMatch != null) {
-                return sendJson(res, 501, NOT_IMPLEMENTED_501(pathname, "slot_save_restore_phase_pending"));
+                const action = url.searchParams.get("action") ?? "";
+                return handleSlotAction(res, body, session, slotMatch[1]!, action);
             }
             return notFound(res, pathname);
         }

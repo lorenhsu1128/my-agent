@@ -29,7 +29,9 @@ export type SessionInitOptions = {
     /** Message appended to content when budget is exhausted without visible answer */
     reasoningBudgetMessage?: string,
     /** none | deepseek (default) | deepseek-legacy — how to expose <think> in response */
-    reasoningFormat?: "none" | "deepseek" | "deepseek-legacy"
+    reasoningFormat?: "none" | "deepseek" | "deepseek-legacy",
+    /** Directory for /slots/{id}?action=save state files. Unset = save/restore disabled. */
+    slotSavePath?: string
 };
 
 export type ServerSession = {
