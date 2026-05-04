@@ -14,7 +14,7 @@
 import type {ServerResponse, IncomingMessage} from "node:http";
 import {nanoid} from "nanoid";
 import {withLock} from "lifecycle-utils";
-import type {ServerSession} from "./session.js";
+import {type ServerSession, resetSessionSequence} from "./session.js";
 import type {OpenAIChatRequest, OpenAIChatCompletion, OpenAIChatChunk, OpenAIMessage} from "./types.js";
 import {sendJson} from "./httpHelpers.js";
 import {makeError} from "./errors.js";
@@ -92,11 +92,9 @@ export async function handleChatWithVision(
             // Vision pipeline 在 libmtmd 內部對 sequence 的 KV slot 持有 native
             // 引用，clearHistory() 只清 JS 端 _contextTokens / _nextTokenIndex，
             // 對 vision tokens 不夠乾淨 → 第二次 evalChunks 會撞 rc=-1。
-            // 解法：dispose 舊 sequence、拿一個 fresh 的回來，寫回 session 讓
-            // 後續 text/vision request 都用新的（沒污染）。Context 預設只給 1
-            // 個 sequence，所以不能 leak — 必須先 dispose 再 getSequence。
-            session.sequence.dispose();
-            session.sequence = session.context.getSequence();
+            // 解法：用 resetSessionSequence 拿全新 sequence（內含等 reclaim
+            // drain，避免 race「No sequences left」）。
+            await resetSessionSequence(session);
             const visionSeq = session.sequence;
             try {
             // Tokenize text + media → MtmdChunks

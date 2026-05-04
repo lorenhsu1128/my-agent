@@ -3,7 +3,7 @@ import {withLock} from "lifecycle-utils";
 import type {IncomingMessage, ServerResponse} from "node:http";
 import {LlamaChatSession} from "../evaluator/LlamaChatSession/LlamaChatSession.js";
 import type {ChatHistoryItem} from "../types.js";
-import type {ServerSession} from "./session.js";
+import {type ServerSession, resetSessionSequence} from "./session.js";
 import {SseWriter} from "./streaming.js";
 import {OpenAIChatChunk, OpenAIChatRequest, OpenAIChatCompletion, OpenAIMessage} from "./types.js";
 import {makeError, isContextOverflowError, makeContextLengthExceededError} from "./errors.js";
@@ -84,8 +84,11 @@ export async function handleChatCompletions(
 
     inflightStart();
     try { await withLock(session.inferenceLockScope, async () => {
-        // Reset sequence to clear cache from previous request — stateless OpenAI semantics.
-        await session.sequence.clearHistory();
+        // Hard reset：dispose 舊 sequence + 拿新的。純 clearHistory 在 vision
+        // 後會留下 libmtmd 的 KV 殘留，導致下個 chat 收到 "Eval has failed"。
+        // 一律 dispose+recreate 是最穩的；resetSessionSequence 內含 await
+        // reclaim 以避免「No sequences left」race（單 slot context）。
+        await resetSessionSequence(session);
 
         const chatSession = new LlamaChatSession({
             contextSequence: session.sequence,

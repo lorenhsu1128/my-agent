@@ -121,6 +121,27 @@ export function getSessionSync(): ServerSession {
     return _session;
 }
 
+/**
+ * Dispose the current session.sequence and allocate a fresh one in its place.
+ *
+ * Why this needs the wait dance: LlamaContextSequence.dispose() is *sync* but
+ * the slot is reclaimed asynchronously inside `_reclaimUnusedSequenceId` →
+ * `void withLock([context, "context"], …)`. Calling getSequence() immediately
+ * after dispose() races the reclaim and throws "No sequences left" since
+ * `_popSequenceId()` only sees the free pool *after* the lock drains.
+ *
+ * Workaround: piggyback on the same context lock — `await withLock(…)` queues
+ * behind the reclaim and resolves after it completes, guaranteeing the slot
+ * is back in the pool before getSequence() runs.
+ */
+export async function resetSessionSequence(session: ServerSession): Promise<void> {
+    const ctx = session.context;
+    session.sequence.dispose();
+    // Drain the reclaim by entering the same lock the reclaim uses
+    await withLock([ctx as object, "context"], async () => { /* drain */ });
+    session.sequence = ctx.getSequence();
+}
+
 export async function disposeSession(): Promise<void> {
     if (_session == null) return;
     try { await _session.context.dispose(); } catch { /* */ }
