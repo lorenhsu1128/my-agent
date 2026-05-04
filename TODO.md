@@ -3321,3 +3321,13 @@
 - 2026-05-03 19:43: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
 
 - 2026-05-03 19:45: Session 結束 | 進度：731/861 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 20:27: Session 結束 | 進度：731/861 任務 | 59e0575 feat(llamacpp): server.binaryKind 開關接入 TCQ-shim sidecar (M-TCQ-SHIM-1)
+
+- 2026-05-03 20:38: Session 結束 | 進度：731/861 任務 | 1e08b24 feat(node-llama-tcq): TCQ-shim OpenAI-compat HTTP server scaffold (M-TCQ-SHIM-1)
+
+- 2026-05-03 21:46: Session 結束 | 進度：731/861 任務 | 080333e feat(node-llama-tcq): Qwen3.5 native pythonic-XML tool format (M-TCQ-SHIM-1)
+
+- 2026-05-03 22:48: Session 結束 | 進度：731/861 任務 | ce6690c feat(node-llama-tcq): reasoning 控制深化 + T3 修正（M-TCQ-SHIM-2）
+
+- 2026-05-04 09:20: Session 結束 | 進度：731/861 任務 | 97ce683 chore(vendor): 補追 vendor/node-llama-tcq/test/standalone/cli/recommendedModels.test.ts
