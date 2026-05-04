@@ -21,8 +21,15 @@ async function chat(name: string, body: Json, opts: {expectTool?: boolean} = {})
     const toolCalls = choice?.message?.tool_calls ?? null;
     const finish = choice?.finish_reason ?? "?";
     const usage = json?.usage ?? {};
+    const pTok = Number(usage.prompt_tokens ?? 0);
+    const cTok = Number(usage.completion_tokens ?? 0);
+    // 非串流無法分離 prompt-eval / generation 時間，所以 pRate 是 prompt_tokens / total_time
+    // (上限速度，實際 prompt eval 多半比這個快)；cRate 同理為下限速度。
+    const sec = dt / 1000;
+    const pRate = sec > 0 ? (pTok / sec).toFixed(1) : "?";
+    const cRate = sec > 0 ? (cTok / sec).toFixed(1) : "?";
     console.log(`\n===== ${name} =====`);
-    console.log(`time=${dt}ms finish=${finish} content=${content.length}ch reasoning=${reasoning.length}ch tokens(p=${usage.prompt_tokens ?? "?"} c=${usage.completion_tokens ?? "?"})`);
+    console.log(`time=${dt}ms finish=${finish} content=${content.length}ch reasoning=${reasoning.length}ch tokens(p=${pTok} c=${cTok}) p_rate=${pRate}t/s c_rate=${cRate}t/s [非串流：總時間平均]`);
     if (content) console.log(`-- content[0..200]:\n${content.slice(0, 200)}`);
     if (reasoning) console.log(`-- reasoning[0..160]:\n${reasoning.slice(0, 160)}`);
     if (toolCalls) console.log(`-- tool_calls: ${JSON.stringify(toolCalls)}`);
@@ -41,6 +48,8 @@ async function streamChat(name: string, body: Json, opts: {expectTool?: boolean}
     const reader = res.body!.getReader();
     const decoder = new TextDecoder("utf-8");
     let buf = "", chunks = 0, contentDelta = "", reasoningDelta = "", toolDeltas = 0, done = false;
+    let ttftMs: number | null = null; // time to first token (任何類型 delta)
+    let lastUsage: any = null;
     while (true) {
         const {done: d, value} = await reader.read();
         if (d) break;
@@ -56,16 +65,29 @@ async function streamChat(name: string, body: Json, opts: {expectTool?: boolean}
                 try {
                     const j = JSON.parse(data);
                     const d2 = j?.choices?.[0]?.delta ?? {};
+                    const sawDelta = (typeof d2.content === "string" && d2.content !== "")
+                        || (typeof d2.reasoning_content === "string" && d2.reasoning_content !== "")
+                        || (Array.isArray(d2.tool_calls) && d2.tool_calls.length > 0);
+                    if (sawDelta && ttftMs == null) ttftMs = Date.now() - t0;
                     if (typeof d2.content === "string") contentDelta += d2.content;
                     if (typeof d2.reasoning_content === "string") reasoningDelta += d2.reasoning_content;
                     if (Array.isArray(d2.tool_calls)) toolDeltas += d2.tool_calls.length;
+                    if (j?.usage) lastUsage = j.usage;
                 } catch { /* skip */ }
             }
         }
     }
     const dt = Date.now() - t0;
+    const pTok = Number(lastUsage?.prompt_tokens ?? 0);
+    const cTok = Number(lastUsage?.completion_tokens ?? 0);
+    const promptSec = (ttftMs ?? dt) / 1000;
+    const genSec = (dt - (ttftMs ?? dt)) / 1000;
+    // 串流可分離：TTFT ≈ prompt eval 時間；TTFT 之後才是 generation
+    const pRate = promptSec > 0 ? (pTok / promptSec).toFixed(1) : "?";
+    const cRate = genSec > 0 ? (cTok / genSec).toFixed(1) : "?";
     console.log(`\n===== ${name} (stream) =====`);
-    console.log(`time=${dt}ms chunks=${chunks} done=${done} content=${contentDelta.length}ch reasoning=${reasoningDelta.length}ch tool_deltas=${toolDeltas}`);
+    console.log(`time=${dt}ms ttft=${ttftMs ?? "?"}ms chunks=${chunks} done=${done} content=${contentDelta.length}ch reasoning=${reasoningDelta.length}ch tool_deltas=${toolDeltas}`);
+    console.log(`tokens(p=${pTok} c=${cTok}) p_rate=${pRate}t/s [TTFT 內] c_rate=${cRate}t/s [TTFT 後]`);
     if (contentDelta) console.log(`-- content[0..200]:\n${contentDelta.slice(0, 200)}`);
     if (reasoningDelta) console.log(`-- reasoning[0..160]:\n${reasoningDelta.slice(0, 160)}`);
     const ok = opts.expectTool ? toolDeltas > 0 : contentDelta.length > 0;

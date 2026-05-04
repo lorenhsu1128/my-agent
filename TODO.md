@@ -31,6 +31,8 @@
 - [ ] M-TCQ-SHIM-2-3 `/props` POST 白名單欄位
 - [ ] M-TCQ-SHIM-2-4 `/api/chat`、`/v1/messages`、`/v1/messages/count_tokens`、`/api/tags` 完整化
 - [ ] M-TCQ-SHIM-2-5 `tool_calls` 改走 GBNF grammar（`LlamaJsonSchemaGrammar`）
+- [ ] M-TCQ-SHIM-2-6 context overflow 錯誤碼修正：T18 stress test 揭露 — 當 `prompt_tokens + max_tokens > ctx_size` 且 chat history 無法壓縮時，shim 目前回 HTTP 500 `internal_error`，應改回 **HTTP 413 `context_length_exceeded`**（OpenAI 標準錯誤碼）。同時錯誤訊息被 node-llama-tcq 截斷在中間（"...without affecting the"），需要在 shim 端補完整 reason（含 `prompt_tokens` / `max_tokens` / `ctx_size` 三個數字）方便 client 自動重試或縮減 max_tokens。
+- [ ] M-TCQ-SHIM-2-7 `usage.prompt_tokens` 口徑統一：T17 揭露 — context shift 後實際送進模型的 token 數會少於原始 prompt token 數，但 shim 現在回傳的是「原始全長」。對齊 OpenAI 慣例應回「shift 後實際 evaluated tokens」（與 `/metrics` 的 `tokens_evaluated_total` 同口徑）。需在 shim 攔截 chat session 的 evaluate 階段拿真實 count。
 
 ### M-TCQ-SHIM-3 fork-only 加值（保持 OpenAI 相容）
 - [ ] M-TCQ-SHIM-3-1 `X-Spec-Type` header → `generateWithSpeculative` SpecOpts（copyspec / ngram_* / suffix / recycle / draft:<path>）
