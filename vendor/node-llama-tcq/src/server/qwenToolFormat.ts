@@ -113,6 +113,23 @@ export function renderQwenToolResponse(content: string): string {
     return `<tool_response>\n${content}\n</tool_response>`;
 }
 
+/**
+ * Compact schema reminder for re-injecting tool schemas near the generation point.
+ * Mitigation for Q4 量化 attention recency bias：當 chat 走到 chain-of-tool step 2
+ * （上一輪 tool_response 剛出現）時，模型 priors 偏向「沿用最近看過的 keys」而非
+ * 從 system 段 retrieve schema，導致呼下一個 tool 時 args schema 錯填（缺必填、
+ * 多虛構欄位）。把同樣的 <tools> 區塊放到 lastUser 尾端，schema 會落在模型 attention
+ * 的近端視窗。比 buildQwenToolsSystemBlock 短（無 IMPORTANT 區塊）— 系統段已有完整
+ * 版本，這裡只重 inject schema JSON，省 prompt token。
+ */
+export function buildQwenToolsReminder(tools: OpenAIToolDef[]): string {
+    if (tools.length === 0) return "";
+    const lines: string[] = ["# Available functions (reminder):", "<tools>"];
+    for (const t of tools) lines.push(JSON.stringify(t.function));
+    lines.push("</tools>");
+    return lines.join("\n");
+}
+
 const TOOL_CALL_RE = /<tool_call>\s*<function=([^>]+)>([\s\S]*?)<\/function>\s*<\/tool_call>/g;
 const PARAM_RE = /<parameter=([^>]+)>([\s\S]*?)<\/parameter>/g;
 

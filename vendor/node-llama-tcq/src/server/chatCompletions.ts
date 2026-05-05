@@ -16,6 +16,7 @@ import {StreamToolSniffer} from "./streamToolSniffer.js";
 import {bundleResponse} from "./segmentExtract.js";
 import {
     isQwenModel,
+    buildQwenToolsReminder,
     buildQwenToolsSystemBlock,
     renderQwenToolCall,
     renderQwenToolResponse,
@@ -697,6 +698,18 @@ function packMessages(messages: OpenAIMessage[], tools: OpenAIChatRequest["tools
 
     if (tools && tools.length > 0) {
         systemParts.push(useQwenFormat ? buildQwenToolsSystemBlock(tools) : buildToolPromptSuffix(tools));
+    }
+
+    // Mitigation：history 含 tool message 且 tools 已宣告 + 走 Qwen 格式時，於 lastUser
+    // 尾端 append schema reminder。緩解 Q4 量化 attention recency bias —— 細節見
+    // qwenToolFormat.buildQwenToolsReminder 註解。觸發條件刻意寬：只要曾經出現 tool
+    // turn，模型下一輪就可能受最近 tool_response keys 干擾，跟 lastUserIdx 是 user 還
+    // 是 tool 都有關。
+    if (useQwenFormat && tools && tools.length > 0) {
+        const hasTool = messages.some((m) => m.role === "tool");
+        if (hasTool && lastUser) {
+            lastUser = `${lastUser}\n\n${buildQwenToolsReminder(tools)}`;
+        }
     }
 
     return {
