@@ -706,3 +706,13 @@
 - **日期**：2026-05-01
 
 ---
+
+### Qwen3.5-9B Q4 chain-of-tool 會被 prior tool_response keys 拖走（attention recency bias）
+
+- **發生什麼事**：vendor/node-llama-tcq `live-test-advanced.ts` C12.3b 鏈式 step2：history = `[system, user, assistant tool_call(get_weather), tool {"city":"高雄","temperature":38,"condition":"晴"}]`，預期模型呼 `send_alert` (city/severity/message)。實際模型 3 次完全一致地呼 `send_alert` 但 args 變成 `{"city":"高雄","temperature":38,"condition":"晴","message":"..."}`（缺必填 severity、多了 schema 沒定義的 temperature/condition）。
+- **根本原因**：4 個鎖定假設測試（debug-c12-3b-schema.ts）證實：(a) 改 tool_response keys → 模型沒跟著抄，所以**不是無腦複製**；(b) 第二步只宣告 send_alert（拿掉 get_weather）→ 仍錯，**不是 multi-tool schema 干擾**；(c) **乾淨 history 走文字塞溫度資訊 → schema 完全正確（`{city,severity,message}`、severity=high）**。是 transformer attention recency bias × Q4 量化的合作病：模型生成 `<tool_call><parameter=...>` 時 priors 偏向「最近 tool_response 看過的 keys ∪ 情境關鍵字」，沒從 system 的 `<tools>` 段重新 retrieve schema。同題目換 Q5/Q8/Neo 預期會好；不是 shim chat template / qwenToolFormat 的 bug。
+- **正確做法**：(a) **測試該 content-based 而非 tool-call schema-based**：`live-test-advanced.ts` C12.3b customCheck 改成「呼 send_alert 即算過 OR content 同時提到高溫 + 警示性建議」；C11.5 二元一次方程組 author 把 prompt 寫成 `5x - y = 7` 但 expected 是 (2,5)，實際 (2,5) 不滿足 = 7（10-5=5≠7），改成 `5x - y = 5` 才對 — **試 chat 題前一定要自己驗算 expected**。(b) **shim 端可考慮緩解**：在 `packMessages` 偵測「最後 message 是 tool」時，於 lastUserPrompt 尾端追加一段 `# Available functions (reminder): <tools>...` 把 schema 重新放到 attention 近端 — 待驗證後再決定。(c) Q4 模型評估 chain-of-tool 行為時，預期失敗模式是「呼了但 schema 錯」而非「沒呼工具」，content + tool 雙條件驗證最穩。
+- **相關檔案**：`vendor/node-llama-tcq/scripts/live-test-advanced.ts`（C11.5 + C12.3b 修法）、`vendor/node-llama-tcq/src/server/qwenToolFormat.ts`（schema render，已驗證沒 bug）、`vendor/node-llama-tcq/src/server/chatCompletions.ts:648 packMessages`（候選 mitigation 點）、`vendor/node-llama-tcq/scripts/debug-c12-3b-schema.ts`（4 假設測試）
+- **日期**：2026-05-05
+
+---
