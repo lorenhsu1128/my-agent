@@ -91,6 +91,19 @@ export async function handleChatCompletions(
     // 函式內局部建（取到 lock 之後才綁），都在 client 已斷時無效。
     const abort = new AbortController();
     req.on("close", () => abort.abort());
+    res.on("close", () => abort.abort());
+
+    // (B) Server-side wall-clock safety timeout — 兜底防呆，cover「fetch
+    // AbortController 客戶端 abort 但 TCP 沒關」的情況（Bun fetch / undici
+    // 不一定發 FIN/RST，server 永遠看不到 close）。env 可調，預設 5 分鐘。
+    const serverTimeoutMs = Number(process.env.TCQ_SERVER_REQUEST_TIMEOUT_MS) || 300_000;
+    const serverTimer = setTimeout(() => {
+        if (!abort.signal.aborted) {
+            // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
+            console.warn(`[TCQ-shim] request id=${id} exceeded ${serverTimeoutMs}ms wall-clock — forcing abort`);
+            abort.abort();
+        }
+    }, serverTimeoutMs);
 
     inflightStart();
     try { await withLock(session.inferenceLockScope, async () => {
@@ -121,17 +134,17 @@ export async function handleChatCompletions(
                 req, res, body, chatSession, lastUserPrompt,
                 systemPrompt, history, session, useQwenFormat,
                 id, created, model, declaredTools: body.tools ?? [],
-                promptTokens, abortSignal: abort.signal
+                promptTokens, abort
             });
         } else {
             await runNonStreaming({
                 res, body, chatSession, lastUserPrompt,
                 systemPrompt, history, session, useQwenFormat,
                 id, created, model, declaredTools: body.tools ?? [],
-                promptTokens, abortSignal: abort.signal
+                promptTokens, abort
             });
         }
-    }); } finally { inflightEnd(); }
+    }); } finally { clearTimeout(serverTimer); inflightEnd(); }
 }
 
 type RunCtx = {
@@ -148,8 +161,9 @@ type RunCtx = {
     declaredTools: NonNullable<OpenAIChatRequest["tools"]>,
     /** Pre-computed full prompt token count (system + history + last + tools) */
     promptTokens: number,
-    /** Shared abort signal — handler 進入點建一次，cover 整個 request lifecycle */
-    abortSignal: AbortSignal
+    /** Shared abort controller — handler 進入點建一次，cover 整個 request lifecycle。
+     *  傳 controller 而非僅 signal 是為了讓 keepalive ping 失敗時能主動 abort()。 */
+    abort: AbortController
 };
 
 function extractToolCallsForFormat(
@@ -390,7 +404,8 @@ function maybeApplyBudgetExhaustionMessage(
 }
 
 async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<void> {
-    const {res, body, chatSession, lastUserPrompt, id, created, model, declaredTools, abortSignal} = opts;
+    const {res, body, chatSession, lastUserPrompt, id, created, model, declaredTools, abort} = opts;
+    const abortSignal = abort.signal;
     const reasoning = resolveReasoning(opts.session, body);
 
     let stopReason: ShimStopReason = undefined;
@@ -481,7 +496,8 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
 }
 
 async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerResponse}): Promise<void> {
-    const {res, body, chatSession, lastUserPrompt, session, id, created, model, declaredTools, abortSignal} = opts;
+    const {res, body, chatSession, lastUserPrompt, session, id, created, model, declaredTools, abort} = opts;
+    const abortSignal = abort.signal;
     const sse = new SseWriter(res);
     const splitter = new StreamReasoningSplitter();
     const sniffer = new StreamToolSniffer(declaredTools);
@@ -497,7 +513,31 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
     // Initial role chunk (OpenAI convention)
     sse.send(makeChunk(id, created, model, {role: "assistant"}, null));
 
-    // 共用 handler 進入點建立的 abortSignal（req.on('close') 已綁）
+    // (A) Streaming keepalive ping — 每 KEEPALIVE_INTERVAL_MS 寫一行 SSE comment（spec
+    // 規定 client 必須忽略以 ":" 開頭的行）。寫失敗（EPIPE/ECONNRESET）或 res 被 destroy
+    // 時主動 abort，cover「fetch AbortController 客戶端 abort 但 TCP 沒關」這條（Bun
+    // / undici 可能不發 FIN）— req.on('close') 永不觸發，但實際上 client 不再讀，
+    // 久了 server 寫的 chunks 會塞滿 TCP send buffer 然後 write 開始 throw／res 變
+    // destroyed，這時被偵測到。
+    const KEEPALIVE_INTERVAL_MS = Number(process.env.TCQ_STREAM_KEEPALIVE_MS) || 10_000;
+    const keepalive = setInterval(() => {
+        if (abortSignal.aborted) return;
+        try {
+            if (res.destroyed || res.writableEnded) {
+                // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
+                console.warn(`[TCQ-shim] stream id=${id} res destroyed/ended — aborting`);
+                abort.abort();
+                return;
+            }
+            const ok = res.write(": keep-alive\n\n");
+            if (!ok && (res.destroyed || res.writableEnded)) abort.abort();
+        } catch (e) {
+            // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
+            console.warn(`[TCQ-shim] stream id=${id} keepalive write failed: ${(e as Error).message} — aborting`);
+            abort.abort();
+        }
+    }, KEEPALIVE_INTERVAL_MS);
+    abortSignal.addEventListener("abort", () => clearInterval(keepalive));
 
     let prefixToStrip = reasoning.responsePrefix ?? "";
     try {
@@ -627,6 +667,8 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
         }
         incChatError("other");
         sse.error(err);
+    } finally {
+        clearInterval(keepalive);
     }
 }
 
