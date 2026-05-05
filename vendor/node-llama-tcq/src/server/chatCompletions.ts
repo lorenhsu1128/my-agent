@@ -83,8 +83,20 @@ export async function handleChatCompletions(
     const model = primaryAlias;
     const stream = body.stream === true;
 
+    // Single shared abort controller for the whole request lifecycle.
+    // Triggered by client TCP close（瀏覽器/curl/fetch abort）— 跟著傳到
+    // promptWithMeta 的 signal，下層 LlamaChatSession 會 stopOnAbortSignal
+    // 中止 generation，立刻釋放 inferenceLockScope，避免後續 request hang。
+    // pre-fix bug：runNonStreaming 完全沒接 signal，runStreaming 也只在
+    // 函式內局部建（取到 lock 之後才綁），都在 client 已斷時無效。
+    const abort = new AbortController();
+    req.on("close", () => abort.abort());
+
     inflightStart();
     try { await withLock(session.inferenceLockScope, async () => {
+        // 取到 lock 後若 client 已斷就直接 return，不浪費 prefill。
+        if (abort.signal.aborted) return;
+
         // Hard reset：dispose 舊 sequence + 拿新的。純 clearHistory 在 vision
         // 後會留下 libmtmd 的 KV 殘留，導致下個 chat 收到 "Eval has failed"。
         // 一律 dispose+recreate 是最穩的；resetSessionSequence 內含 await
@@ -109,14 +121,14 @@ export async function handleChatCompletions(
                 req, res, body, chatSession, lastUserPrompt,
                 systemPrompt, history, session, useQwenFormat,
                 id, created, model, declaredTools: body.tools ?? [],
-                promptTokens
+                promptTokens, abortSignal: abort.signal
             });
         } else {
             await runNonStreaming({
                 res, body, chatSession, lastUserPrompt,
                 systemPrompt, history, session, useQwenFormat,
                 id, created, model, declaredTools: body.tools ?? [],
-                promptTokens
+                promptTokens, abortSignal: abort.signal
             });
         }
     }); } finally { inflightEnd(); }
@@ -135,7 +147,9 @@ type RunCtx = {
     model: string,
     declaredTools: NonNullable<OpenAIChatRequest["tools"]>,
     /** Pre-computed full prompt token count (system + history + last + tools) */
-    promptTokens: number
+    promptTokens: number,
+    /** Shared abort signal — handler 進入點建一次，cover 整個 request lifecycle */
+    abortSignal: AbortSignal
 };
 
 function extractToolCallsForFormat(
@@ -376,7 +390,7 @@ function maybeApplyBudgetExhaustionMessage(
 }
 
 async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<void> {
-    const {res, body, chatSession, lastUserPrompt, id, created, model, declaredTools} = opts;
+    const {res, body, chatSession, lastUserPrompt, id, created, model, declaredTools, abortSignal} = opts;
     const reasoning = resolveReasoning(opts.session, body);
 
     let stopReason: ShimStopReason = undefined;
@@ -389,10 +403,14 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
             topK: body.top_k,
             seed: body.seed,
             customStopTriggers: normalizeStop(body.stop),
+            signal: abortSignal,
+            stopOnAbortSignal: true,
             ...(reasoning.responsePrefix ? {responsePrefix: reasoning.responsePrefix} : {}),
             ...(reasoning.thoughtTokens != null ? {budgets: {thoughtTokens: reasoning.thoughtTokens}} : {})
         });
     } catch (err) {
+        // Client 已斷：靜默 return，沒人在收 5xx，繼續寫 res 反而 EPIPE。
+        if (abortSignal.aborted) return;
         // Fallback when our preflight token estimate underestimated due to
         // chat-template overhead and the engine still couldn't compress history.
         if (isContextOverflowError(err)) {
@@ -406,6 +424,7 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
         }
         throw err;
     }
+    if (abortSignal.aborted) return;
     stopReason = mapStopReason((meta as any).stopReason);
 
     // Use the chat wrapper's segmented response (knows Qwen3.5 thought / Gemma /
@@ -462,7 +481,7 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
 }
 
 async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerResponse}): Promise<void> {
-    const {req, res, body, chatSession, lastUserPrompt, session, id, created, model, declaredTools} = opts;
+    const {res, body, chatSession, lastUserPrompt, session, id, created, model, declaredTools, abortSignal} = opts;
     const sse = new SseWriter(res);
     const splitter = new StreamReasoningSplitter();
     const sniffer = new StreamToolSniffer(declaredTools);
@@ -478,8 +497,7 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
     // Initial role chunk (OpenAI convention)
     sse.send(makeChunk(id, created, model, {role: "assistant"}, null));
 
-    const abort = new AbortController();
-    req.on("close", () => abort.abort());
+    // 共用 handler 進入點建立的 abortSignal（req.on('close') 已綁）
 
     let prefixToStrip = reasoning.responsePrefix ?? "";
     try {
@@ -490,7 +508,7 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
             topK: body.top_k,
             seed: body.seed,
             customStopTriggers: normalizeStop(body.stop),
-            signal: abort.signal,
+            signal: abortSignal,
             stopOnAbortSignal: true,
             ...(reasoning.responsePrefix ? {responsePrefix: reasoning.responsePrefix} : {}),
             ...(reasoning.thoughtTokens != null ? {budgets: {thoughtTokens: reasoning.thoughtTokens}} : {}),
@@ -593,6 +611,8 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
         sse.send(finalChunk);
         sse.done();
     } catch (err) {
+        // Client 已斷：靜默 return，不寫 sse.error（EPIPE）也不算 server error。
+        if (abortSignal.aborted) return;
         if (isContextOverflowError(err)) {
             incChatError("overflow");
             // SSE already opened with HTTP 200 — best we can do is emit a

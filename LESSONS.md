@@ -716,3 +716,13 @@
 - **日期**：2026-05-05
 
 ---
+
+### TCQ-shim runNonStreaming 完全沒接 abort signal → client 斷線後 lock 死鎖
+
+- **發生什麼事**：my-agent ↔ shim 高強度測試（10 case）期間 cli-dev 被 `timeout 600` 強殺後，shim `/metrics` 顯示 `tcq_shim_inflight=9 llamacpp_queue_size=8`，`/slots` `is_processing: false`，後續 `/v1/chat/completions` 全部 hang，`/v1/models` 跟 `/health` 仍即時回。殺 shim 重啟才恢復。重現方式：`curl --max-time 1` 對非 streaming endpoint 連發。
+- **根本原因**：`vendor/node-llama-tcq/src/server/chatCompletions.ts:378` 的 `runNonStreaming` 完全沒接 abort signal，`runStreaming` 雖有但只在函式內局部建（line 481–482）。client TCP 斷線後 server 端 generation 不會中止、繼續跑到 `max_tokens` 才釋放 `withLock(session.inferenceLockScope)`。20 個並發 abort request 全堆在 lock queue。`inflightStart` 在 `withLock` 之外（line 86），所以 inflight gauge 把 queue 內等待的 request 也計入 → `inflight=9` 不是計數 leak、是真實 queue 排隊。lifecycle-utils 的 `withLock` 本身 finally 會釋放，不是 lock 機制壞。
+- **正確做法**：handler 進入點建一個 `AbortController`，`req.on("close", () => abort.abort())` 一次，把 `abort.signal` 經 `RunCtx.abortSignal` 傳給 `runStreaming` / `runNonStreaming` 兩條 path，再傳給 `chatSession.promptWithMeta` 的 `signal: abortSignal, stopOnAbortSignal: true`。`withLock` callback 開頭加 `if (abort.signal.aborted) return;` 避免幫已斷線 client 做 prefill。catch 路徑加 `if (abortSignal.aborted) return;` 避免對斷線 client 寫 5xx 觸發 EPIPE / 把 client abort 誤計為 server error。**測試**：`scripts/stress-abort.ts` 6 案（單 stream / 單 non-stream / 5 並發 / 20 並發 / 20 mix），每案 200ms abort，drain 預算 15s–180s。post-fix 全 ~5s drain，pre-fix 同樣場景 5s drain budget 後 inflight 不為 0。注意 `stopOnAbortSignal` 不是瞬間生效 — Qwen3.5-9B Q4 在這台機器上 abort 到實際停約 5s（batch boundary check），但比沒 abort 的「跑完 max_tokens」（~10–40s 視 max_tokens）快很多，後續請求不會無限期 block。
+- **相關檔案**：`vendor/node-llama-tcq/src/server/chatCompletions.ts:86–122`（handler 共用 abort）、line 140–155（`RunCtx` 加 `abortSignal`）、line 378–410 + 615（`runNonStreaming` 加 signal + abort-aware catch）、line 464–530 + 615（`runStreaming` 改用共用 signal + abort-aware catch）、`vendor/node-llama-tcq/scripts/stress-abort.ts`（新測試）
+- **日期**：2026-05-05
+
+---
