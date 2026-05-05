@@ -726,3 +726,12 @@
 - **日期**：2026-05-05
 
 ---
+
+### TCQ-shim 專屬 adapter mode：跳過 XML/bare-pythonic leak fallback
+
+- **發生什麼事**：my-agent 連 TCQ-shim 時 stderr 持續出現 `[llamacpp-adapter] XML tool-call leaked into content stream (recovered N call(s))`，每個 chain-of-tool 場景觸發。原因是 vanilla `llamacpp-fetch-adapter.ts:1322 / 1366` 的 leak fallback 為 vanilla buun-llama-cpp 設計（server 端不 parse Qwen XML），但 TCQ-shim 已在 `vendor/node-llama-tcq/src/server/qwenToolFormat.ts:131 parseQwenToolCalls` 把 Qwen pythonic-XML 轉成 OpenAI `tool_calls[]` 並從 content 抽掉。共用 vanilla adapter 又補一份 → 同一個 tool 被 my-agent 執行兩次（M-series 期間 M2/M3/M5/M8/M10 部分案例觀察到雙重 tool_use blocks）。
+- **正確做法**：`createLlamaCppFetch` 從 `LlamaCppConfig.binaryKind` 推導 `mode: 'vanilla' | 'tcq'`，傳給 `translateOpenAIStreamToAnthropic` / `translateChatCompletionToAnthropic` / `streamWithRetryOnEmptyTool`。`mode === 'tcq'` 時跳過 XML leak (`<tool_call>`) + bare-pythonic leak (`<function=`) fallback。reasoning-only fallback、retry-nudge、watchdog、context-overflow 翻譯保留（這些是模型行為層級，跟 server 無關）。`getLlamaCppConfig()` 從 `cfg.server.binaryKind` 帶出 `binaryKind` 給 `LlamaCppConfig`。新增 `src/services/api/tcq-shim-fetch-adapter.ts` 薄包裝（強制 binaryKind='tcq'）+ `src/services/api/llamacpp-shared/{sse-iter,context-overflow,index}.ts`（共用工具 + barrel）。startup 時 stderr 印 `[llamacpp] adapter mode=tcq-shim baseUrl=...` 讓使用者知道走哪條。**測試**：`tests/integration/llamacpp/tcq-shim-adapter.test.ts` 8/8 + 全套 16 檔 231/231 綠。E2E：shim log 從修法前每 chain-of-tool 一次 leak warn，修法後 0 次；M-series M7（code-reasoning 大檔分析）從 4845ch → 42603ch（vanilla 雙重 tool_use 早期截斷被修掉了）。trade-off：M2（thinking 中模型偶吐部分 XML 但 shim 沒 parse 完）失去 leak fallback 救援 → 1ch 退化；非 fix 引起的退步而是「band-aid 拿掉後該 case 暴露模型本身缺陷」。
+- **相關檔案**：`src/services/api/llamacpp-fetch-adapter.ts:1688 LlamaCppConfig.binaryKind` + `:980 / :815` mode 參數、`src/services/api/tcq-shim-fetch-adapter.ts`（新）、`src/services/api/llamacpp-shared/{sse-iter,context-overflow,index}.ts`（新）、`src/utils/model/providers.ts:92 getLlamaCppConfig` 帶出 binaryKind、`tests/integration/llamacpp/tcq-shim-adapter.test.ts`（新）
+- **日期**：2026-05-05
+
+---
