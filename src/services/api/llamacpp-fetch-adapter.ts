@@ -878,7 +878,7 @@ export function translateChatCompletionToAnthropic(
   // XML 可能漏在 content 或 reasoning_content（qwen 偶爾把 tool_call 寫進 thinking）
   const xmlCorpus = (typeof textContent === 'string' ? textContent : '') +
     '\n' + (typeof reasoning === 'string' ? reasoning : '')
-  if (mode === 'vanilla' && noStructuredCalls && xmlCorpus.includes('<tool_call>')) {
+  if (noStructuredCalls && xmlCorpus.includes('<tool_call>')) {
     const parsed = parseLeakedXmlToolCalls(xmlCorpus)
     if (parsed.toolCalls.length > 0) {
       // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
@@ -897,7 +897,7 @@ export function translateChatCompletionToAnthropic(
       }
       xmlSynthesized = true
     }
-  } else if (mode === 'vanilla' && noStructuredCalls && xmlCorpus.includes('<function=')) {
+  } else if (noStructuredCalls && xmlCorpus.includes('<function=')) {
     // bare pythonic 變體：無 <tool_call> 包外層、可能無收尾標籤
     const parsed = parseLeakedBarePythonicToolCalls(xmlCorpus)
     if (parsed.toolCalls.length > 0) {
@@ -1321,11 +1321,11 @@ export async function* translateOpenAIStreamToAnthropic(
   // XML 可能漏在 content（accumulatedText）或 reasoning_content
   // （accumulatedThinking）— qwen 偶爾把整段 tool_call 寫進 thinking。
   const xmlCorpus = accumulatedText + '\n' + accumulatedThinking
-  // mode='tcq' → 跳過 XML / bare-pythonic leak fallback。TCQ-shim 在 server 端
-  // 已 parse 過 Qwen pythonic-XML 並轉成結構化 tool_calls[]，這裡再 fallback
-  // 會把同一個 call 重複算進 tool_use blocks → my-agent 重複執行 tool。
+  // leak fallback 對 vanilla / tcq 都跑：`!emittedToolCall` 已是「server 沒給結
+  // 構化 tool_calls」的閘 — TCQ-shim 漏判 partial XML 時仍救援；shim 有 parse
+  // 出 tool_calls 時 emittedToolCall=true 自動跳過，不會雙重執行。
+  // mode 參數保留供日後細分行為 / telemetry 使用。
   if (
-    mode === 'vanilla' &&
     !watchdogAborted &&
     !emittedToolCall &&
     xmlCorpus.includes('<tool_call>')
@@ -1368,7 +1368,6 @@ export async function* translateOpenAIStreamToAnthropic(
       emittedToolCall = true
     }
   } else if (
-    mode === 'vanilla' &&
     !watchdogAborted &&
     !emittedToolCall &&
     xmlCorpus.includes('<function=')

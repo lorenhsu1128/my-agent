@@ -735,3 +735,14 @@
 - **日期**：2026-05-05
 
 ---
+
+### TCQ adapter mode='tcq' 過度限制 leak fallback — 用既有 emittedToolCall 閘做正確切分
+
+- **發生什麼事**：`05fd4b2` 加 `mode === 'vanilla' &&` 閘把 streaming / non-streaming 4 處 leak fallback 都關掉。E2E M-series 觀察到 M2 從 4688ch → 1ch 退化。模型在 thinking 吐 partial XML、shim `parseQwenToolCalls` regex 要求完整 `<tool_call>...<function=>...</function>...</tool_call>` 包外層、partial 不 match → tool_calls[] 空、content 也空 → adapter 跳過 fallback → 輸出空。
+- **根本原因**：「重複執行」的擔憂前提錯了。leak fallback 既有條件 `!emittedToolCall` 已經是「server 沒給結構化 tool_calls」的閘 — shim 有 parse → emittedToolCall=true → fallback 自動跳過；shim 漏判 → emittedToolCall=false → fallback 救援。我的 mode 閘是疊加，把救援場景**也**關掉了。
+- **正確做法**：刪除 `src/services/api/llamacpp-fetch-adapter.ts` 4 處 `mode === 'vanilla' &&` 閘（streaming line 1328 / 1369、non-streaming line 879 / 898）。`mode` 參數簽名保留供日後細分行為 / telemetry，但 leak fallback 不再依賴 mode。**驗證**：M-series 從 5/10 → 7/10：M2 1ch → 51994ch、M4 timeout → 955ch、M10 timeout → 417ch、M3 329ch → 4635ch；M7 從 42603ch 退到 5048ch（接受、仍 pass）。tcq-shim-adapter.test.ts 第 2 case 改成「shim 漏判 → tcq / vanilla 都救援」（之前的「tcq 不補」契約是錯的）。bun test 16 檔 231/231 維持綠。
+- **教訓**：閘條件**疊加**前先看既有條件涵蓋什麼。`!emittedToolCall` 已經分得乾淨，再加 mode 反而把正確行為關掉。
+- **相關檔案**：`src/services/api/llamacpp-fetch-adapter.ts:1327 / :1366 / :879 / :898`、`tests/integration/llamacpp/tcq-shim-adapter.test.ts`
+- **日期**：2026-05-05
+
+---

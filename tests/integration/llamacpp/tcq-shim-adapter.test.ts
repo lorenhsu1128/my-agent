@@ -94,7 +94,13 @@ describe('tcq mode: stream translator skips XML leak fallback', () => {
     expect(vanillaUseCount).toBe(1)
   })
 
-  test('只有 content XML、無結構化 tool_calls：vanilla 補一份、tcq 不補', async () => {
+  test('shim 漏判 XML（無結構化 tool_calls）：vanilla / tcq 都救援補 tool_use', async () => {
+    // tcq mode 不該因為「跳過 fallback」而漏接 shim parser 邊界 case：
+    // - shim parseQwenToolCalls regex 要求完整 <tool_call>...</tool_call> 包外層，
+    //   partial / 截斷形不 match → tool_calls[] 空
+    // - adapter 端用更寬鬆的 parseLeakedXmlToolCalls 兜底
+    // 兩個 mode 都應該救援，差別只在「shim 已 parse 好 tool_calls 時 tcq 不重複」
+    // （見上一個 test）。
     const events = [
       { choices: [{ delta: { role: 'assistant' } }] },
       {
@@ -113,8 +119,9 @@ describe('tcq mode: stream translator skips XML leak fallback', () => {
     const tcqRaw = await collect(
       translateOpenAIStreamToAnthropic(makeSse(events), 'qwen3.5-9b', 'msg_y', 'turn', 'tcq'),
     )
-    expect(tcqRaw).not.toContain('toolu_xmlfallback_')
-    expect((tcqRaw.match(/"type":"tool_use"/g) ?? []).length).toBe(0)
+    // tcq 也救援
+    expect(tcqRaw).toContain('toolu_xmlfallback_')
+    expect((tcqRaw.match(/"type":"tool_use"/g) ?? []).length).toBe(1)
 
     const vanillaRaw = await collect(
       translateOpenAIStreamToAnthropic(
