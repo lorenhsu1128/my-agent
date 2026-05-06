@@ -39,7 +39,25 @@
 - [ ] M-TCQ-SHIM-3-2 `X-TCQ-Preset` header → 切換 `TCQPresets.{TURBO3_TCQ, TURBO4_0, TURBO2_TCQ, ASYMMETRIC_275}`
 - [ ] M-TCQ-SHIM-3-3 沒帶 header 時行為與 buun 完全一致的回歸測試
 
-### 不在範圍 → 後續 milestone
+### M-TCQ-SHIM-FIXUP — live-test-realistic 24/28 後續修補（2026-05-06 啟動）
+
+**背景**：256k + TURBO4 + tools + reasoning=on 跑 `live-test-realistic.ts` 28 case 通過 24（85.7%），4 個 fail 全在 [tool] 類。debug 後確認 3 個獨立問題（其餘是測試斷言過嚴）。詳見 LESSONS.md 同日條目。
+
+**進度**：FIXUP-1/2 完成 → 25/28 (89.3%)；vision 路徑全綠、`tool_choice` named-function 從 FAIL → PASS（debug-c13-mitigations.ts M1 驗證）。
+
+- [x] M-TCQ-SHIM-FIXUP-1 `tool_choice` 接上 decoder — `qwenToolFormat.ts buildQwenToolChoicePrefix` + `chatCompletions.ts composeResponsePrefix` 把 reasoning 前綴與 tool_choice 強制前綴疊加；reasoning 部分仍剝離、tool 前綴留在輸出讓 `parseQwenToolCalls` 看得到完整 block。限縮 `useQwenFormat && tools.length > 0`。GBNF 路線繼續 defer（同 M-TCQ-SHIM-2-5）。**驗證**：debug-c13-mitigations.ts M1 `{name:"edit_file"}` FAIL → PASS（完整 args）；M2 `required` 從 read_file → edit_file（args 仍空 → FIXUP-3）。
+- [x] M-TCQ-SHIM-FIXUP-2 vision path 注入 tools block — `visionInference.ts buildVisionPrompt` 接 `{useQwenFormat, tools, toolChoicePrefix}`，sys 段尾接 `buildQwenToolsSystemBlock(tools)`；`renderMessageWithMarkers` 在 Qwen 路徑下 render `assistant.tool_calls`（`renderQwenToolCall`）與 `role:tool`（`renderQwenToolResponse`）；最後 `<|im_start|>assistant\n` 接 `toolChoicePrefix`；`runVisionNonStreaming` / `runVisionStreaming` 對輸出跑 `parseQwenToolCalls` 抽 tool_calls（注入的 prefix 不在 result.text 裡，抽前要 prepend 才能匹配）。**驗證**：live-test-realistic C4.2 vision 後 tool_call FAIL → PASS（tools=[calculator]）。
+- [ ] M-TCQ-SHIM-FIXUP-3 parser 寬鬆化 — `vendor/node-llama-tcq/src/server/qwenToolFormat.ts:148 parseQwenToolCalls` 加 fallback：當 `<tool_call><function=X>` block 內 `<parameter=...>` 0 match 時，改抓直接 `<key>val</key>` 格式（Q4 退化變種，debug-c13-mitigations.ts M4 觀察到）。寫 unit test 涵蓋兩種變種。
+- [ ] M-TCQ-SHIM-FIXUP-4 測試斷言放寬 — `live-test-realistic.ts` C1.4 / C2.2 / C4.2 改成「emit tool call OR 文字答案正確（regex 比對 `57` / `Sunny` 等）」。C1.3 維持嚴格（真 bug）。
+- [ ] M-TCQ-SHIM-FIXUP-5 重跑 `live-test-realistic.ts` 期望 ≥ 27/28（C1.3 應由 FIXUP-1 + FIXUP-3 救回；C4.2 由 FIXUP-2 + FIXUP-4 救回）。
+- [ ] M-TCQ-SHIM-FIXUP-6 commit（繁中、分段）：`fix(node-llama-tcq): tool_choice 接上 decoder` / `fix(node-llama-tcq): vision path 注入 tools block` / `fix(node-llama-tcq): parser 容忍 Q4 退化的 <key>val</key> 變種` / `test(node-llama-tcq): live-test-realistic 斷言放寬 + 重跑`
+
+#### 不在範圍 → 後續 milestone
+- GBNF grammar 強制 tool 格式（M-TCQ-SHIM-2-5 仍 defer，待 prefix-token 方案 ROI 驗證後再評估）
+- Q4 量化 attention recency bias 從根本解（會牽涉 model swap 或 model-side fine-tune，超出 shim 範疇）
+- text path 自身是否也有類似 vision path 的 history role 漏 render（待先驗 vision 修完後對比）
+
+### 不在範圍 → 後續 milestone（M-TCQ-SHIM 整體）
 - M-TCQ-SHIM-4：router mode（`/models/load`、`/models/unload`）、LoRA hot-swap、多模型同時載入（VRAM 限制下優先級低 — 記憶 `project_llamacpp_single_server`）
 - 多 slot 並行（`-np > 1`）
 - watchdog Phase 3–5 整合（依賴 M-TCQ-SHIM-2 的 `/slots` 完成）
@@ -3337,3 +3355,15 @@
 - 2026-05-04 10:04: Session 結束 | 進度：731/863 任務 | 9b82ea8 test(node-llama-tcq): stress test runner（混合 tool + ctx overflow）+ M-TCQ-SHIM-2 新增 T18/T17 條目
 
 - 2026-05-04 11:11: Session 結束 | 進度：731/863 任務 | 9b82ea8 test(node-llama-tcq): stress test runner（混合 tool + ctx overflow）+ M-TCQ-SHIM-2 新增 T18/T17 條目
+
+- 2026-05-06 15:51: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 16:19: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 16:41: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 17:00: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 17:11: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 17:13: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
