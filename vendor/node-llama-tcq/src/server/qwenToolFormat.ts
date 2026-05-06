@@ -164,6 +164,14 @@ export function buildQwenToolsReminder(tools: OpenAIToolDef[]): string {
 
 const TOOL_CALL_RE = /<tool_call>\s*<function=([^>]+)>([\s\S]*?)<\/function>\s*<\/tool_call>/g;
 const PARAM_RE = /<parameter=([^>]+)>([\s\S]*?)<\/parameter>/g;
+/**
+ * M-TCQ-SHIM-FIXUP-3：Q4 量化下模型偶爾把 `<parameter=key>val</parameter>` 退化成
+ * 直接的 `<key>val</key>` 變種（debug-c13-mitigations.ts M4 觀察到）。當嚴格 PARAM_RE
+ * 0 match 但 inner block 看起來有資料時，回退到這個寬鬆 regex —— 但**只接受**
+ * declared tool 的 properties 白名單裡的 key 名稱（避免亂抓 `<think>`、`<code>`、
+ * `<tool_response>` 之類的非參數 tag）。
+ */
+const LOOSE_PARAM_RE = /<([a-zA-Z_][\w-]*)>([\s\S]*?)<\/\1>/g;
 
 export type QwenExtractResult = {
     content: string,
@@ -177,8 +185,16 @@ export type QwenExtractResult = {
  * Coercion: integer / float / boolean / nested JSON values are auto-typed; bare
  * strings stay strings. Unknown tool names are filtered out.
  */
+/** M-TCQ-SHIM-FIXUP-3：取出某個 tool 的 properties key 白名單（用於寬鬆解析）。 */
+function getToolParamKeys(tool: OpenAIToolDef): Set<string> {
+    const params = tool.function.parameters as any;
+    const props = (params != null && typeof params === "object") ? params.properties : null;
+    if (props == null || typeof props !== "object") return new Set();
+    return new Set(Object.keys(props));
+}
+
 export function parseQwenToolCalls(text: string, declaredTools: OpenAIToolDef[]): QwenExtractResult {
-    const names = new Set(declaredTools.map((t) => t.function.name));
+    const toolByName = new Map(declaredTools.map((t) => [t.function.name, t]));
     const calls: OpenAIToolCall[] = [];
     let stripped = text;
 
@@ -186,12 +202,26 @@ export function parseQwenToolCalls(text: string, declaredTools: OpenAIToolDef[])
     for (const m of matches) {
         const name = (m[1] ?? "").trim();
         const inner = m[2] ?? "";
-        if (!names.has(name)) continue;
+        const tool = toolByName.get(name);
+        if (tool == null) continue;
         const args: Record<string, unknown> = {};
         for (const p of inner.matchAll(PARAM_RE)) {
             const k = (p[1] ?? "").trim();
             const raw = (p[2] ?? "").trim();
             args[k] = coerceParamValue(raw);
+        }
+        // M-TCQ-SHIM-FIXUP-3：嚴格 0 match → 寬鬆（白名單限定 declared properties）。
+        // 同時保留嚴格優先 — 嚴格抓得到任何一個就不啟用寬鬆，避免兩種格式並存時誤抓。
+        if (Object.keys(args).length === 0) {
+            const allowedKeys = getToolParamKeys(tool);
+            if (allowedKeys.size > 0) {
+                for (const p of inner.matchAll(LOOSE_PARAM_RE)) {
+                    const k = (p[1] ?? "").trim();
+                    if (!allowedKeys.has(k)) continue;
+                    const raw = (p[2] ?? "").trim();
+                    args[k] = coerceParamValue(raw);
+                }
+            }
         }
         calls.push({
             id: `call_${nanoid(10)}`,
