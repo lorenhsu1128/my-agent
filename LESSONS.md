@@ -746,3 +746,19 @@
 - **日期**：2026-05-05
 
 ---
+
+### Qwen3.5-9B Q4 完全無視 prompt 的「最多 N 個工具」指令 — agent maxTurns 必須客戶端硬做
+
+- **發生什麼事**：T-series 10 case 工具鏈梯度測試（`toolchain-results/REPORT.md`）。把 M1 / M5 兩個 unbounded prompt 加上「**請最多用 8 個（或 6 個）工具呼叫內回答**」前綴，T9 / T10 仍 timeout 450s。**T9 實際 38 turns、T10 實際 32 turns** — 模型完全無視 maxN。
+- **根本原因**：instruction-following 對 maxN 這類「自我約束數值」任務在 Q4 量化下完全失效。模型沒有可靠的 internal counter，每次決定下一步時不知道已經呼了幾次工具。在開放式探索任務上，模型停在「我再多查一個就夠了」的決策不停輪迴。
+- **正確做法**：要修「agent loop 不收斂」必須**客戶端硬性 maxTurns**（SDK option 或 wrapper 層）+ 「達到 cap 時強制 emit 目前累積結果」。Prompt-level 提示不可靠，**不能當作正確性保證**。`src/QueryEngine.ts` 在 ADR-005 deny list 不能改，要在 SDK options 或外圍 wrapper 做。
+- **附帶教訓 1：A / B 兩類 agent loop 失敗模式必須分開處理**：
+  - **A 類 unbounded tool spam**：turns ≥ 30 呼工具呼到 timeout（M1 / M5 / T9 / T10）→ maxTurns 解
+  - **B 類 thinking-stuck loop**：turns 2–3 後卡 thinking 不出來（T5 / T7）→ reasoning-budget cap 解
+  - 兩個解不重疊，不能用同一個機制
+- **附帶教訓 2：工具鏈「開放度」本身不是收斂主因**：T8（最開放：「徹底分析所有錯誤處理路徑」）3 turns 11202ch 通過，反而 T5（看似較侷限：「找引用最多的 import」）卡死。**收斂取決於目標是否可量化窮舉**，不是 prompt 開不開放。
+- **附帶教訓 3：T3 / T6 反映另一個獨立 bug**：模型完成 multiple turns 後 final text block 1 byte（newline）。`reasoning-only fallback` 條件 `!emittedText` 需放寬為 `accumulatedText.trim().length < N`。
+- **相關檔案**：`toolchain-results/REPORT.md`（完整測試報告 + 10 prompts + 環境配置）、`run-toolchain-stress.sh`（測試 runner）、`src/services/api/llamacpp-fetch-adapter.ts:1421+ reasoning-only fallback`（待改 T3 / T6）
+- **日期**：2026-05-06
+
+---
