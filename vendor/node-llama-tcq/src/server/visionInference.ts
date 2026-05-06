@@ -25,7 +25,17 @@ import {splitReasoning, StreamReasoningSplitter} from "./reasoningSplit.js";
 import {makeUsage} from "./usage.js";
 import {recordChatTokens, incChatError, inflightStart, inflightEnd} from "./metrics.js";
 import {isContextOverflowError, makeContextLengthExceededError} from "./errors.js";
+import {toOpenAIFinishReason} from "./finishReason.js";
 import type {MtmdMediaInput} from "../evaluator/LlamaMtmdContext.js";
+import {
+    isQwenModel,
+    buildQwenToolsSystemBlock,
+    buildQwenToolChoicePrefix,
+    parseQwenToolCalls,
+    renderQwenToolCall,
+    renderQwenToolResponse
+} from "./qwenToolFormat.js";
+import type {OpenAIToolDef} from "./types.js";
 
 const SHIM_OBJECT_NON_STREAM = "chat.completion" as const;
 const SHIM_OBJECT_STREAM = "chat.completion.chunk" as const;
@@ -52,8 +62,19 @@ export async function handleChatWithVision(
         return;
     }
 
+    // M-TCQ-SHIM-FIXUP-2：Qwen 路徑下注入 tools system block + render tool_calls / tool_response。
+    // 限縮在 useQwenFormat && tools 非空 — 非 Qwen 模型走原本純文字 vision 路徑不受影響。
+    const useQwenFormat = isQwenModel(primaryAlias);
+    const declaredTools: OpenAIToolDef[] = (body.tools ?? []) as OpenAIToolDef[];
+    const toolChoicePrefix = (useQwenFormat && declaredTools.length > 0)
+        ? buildQwenToolChoicePrefix((body as any).tool_choice)
+        : undefined;
+
     // Build prompt: system + history + last-user with <__media__> markers replacing image positions.
-    const {systemPrompt, conversationText, mediaInOrder} = buildVisionPrompt(body.messages, mediaParts, mtmdCtx.defaultMarker);
+    const {systemPrompt, conversationText, mediaInOrder} = buildVisionPrompt(
+        body.messages, mediaParts, mtmdCtx.defaultMarker,
+        {useQwenFormat, tools: declaredTools, toolChoicePrefix}
+    );
     if (mediaInOrder.length === 0) {
         sendJson(res, 500, makeError("internal_error", "Vision prompt build dropped all media; no markers in prompt", "server_error"));
         return;
@@ -164,12 +185,14 @@ export async function handleChatWithVision(
                 if (stream) {
                     await runVisionStreaming({
                         req, res, session, visionSeq, sampler, nPast, maxTokens,
-                        id, created, model: primaryAlias, promptTokens, body
+                        id, created, model: primaryAlias, promptTokens, body,
+                        useQwenFormat, declaredTools, toolChoicePrefix
                     });
                 } else {
                     await runVisionNonStreaming({
                         res, session, visionSeq, sampler, nPast, maxTokens,
-                        id, created, model: primaryAlias, promptTokens
+                        id, created, model: primaryAlias, promptTokens,
+                        useQwenFormat, declaredTools, toolChoicePrefix
                     });
                 }
             } finally {
@@ -195,7 +218,12 @@ type VisionRunCtx = {
     id: string,
     created: number,
     model: string,
-    promptTokens: number
+    promptTokens: number,
+    /** M-TCQ-SHIM-FIXUP-2：Qwen 路徑啟用 → 結尾跑 parseQwenToolCalls 抽 tool_calls */
+    useQwenFormat: boolean,
+    declaredTools: OpenAIToolDef[],
+    /** prompt 已注入的 tool_choice 前綴 — parseQwenToolCalls 看 totalRaw 時要 prepend 才能匹配 */
+    toolChoicePrefix: string | undefined
 };
 
 async function runVisionNonStreaming(opts: VisionRunCtx & {res: ServerResponse}): Promise<void> {
@@ -206,6 +234,25 @@ async function runVisionNonStreaming(opts: VisionRunCtx & {res: ServerResponse})
     const split = splitReasoning(result.text);
     const completionTokens = result.tokens.length;
 
+    // M-TCQ-SHIM-FIXUP-2：Qwen 路徑下抽 tool_calls。toolChoicePrefix 已被 evaluate 進 nPast，
+    // 不會出現在 result.text 開頭 — 抽之前要 prepend 才能讓 regex 匹配到完整 block。
+    let toolCalls: ReturnType<typeof parseQwenToolCalls>["toolCalls"] = [];
+    let visibleContent = split.content;
+    if (opts.useQwenFormat && opts.declaredTools.length > 0) {
+        const textForExtract = (opts.toolChoicePrefix ?? "") + split.content;
+        const parsed = parseQwenToolCalls(textForExtract, opts.declaredTools);
+        toolCalls = parsed.toolCalls;
+        if (toolCalls.length > 0) {
+            // parsed.content 是把 tool_call block 從 textForExtract 抽掉後的剩餘文字
+            // — 若被注入的 prefix 還黏在開頭就再剝掉一次（最多剝一次）。
+            visibleContent = parsed.content;
+            if (opts.toolChoicePrefix && visibleContent.startsWith(opts.toolChoicePrefix)) {
+                visibleContent = visibleContent.slice(opts.toolChoicePrefix.length);
+            }
+        }
+    }
+
+    const stopReason = completionTokens >= opts.maxTokens ? "maxTokens" as const : undefined;
     const completion: OpenAIChatCompletion = {
         id: opts.id,
         object: SHIM_OBJECT_NON_STREAM,
@@ -215,10 +262,11 @@ async function runVisionNonStreaming(opts: VisionRunCtx & {res: ServerResponse})
             index: 0,
             message: {
                 role: "assistant",
-                content: split.content,
-                reasoning_content: split.reasoning ?? null
+                content: toolCalls.length > 0 ? null : visibleContent,
+                reasoning_content: split.reasoning ?? null,
+                ...(toolCalls.length > 0 ? {tool_calls: toolCalls} : {})
             },
-            finish_reason: completionTokens >= opts.maxTokens ? "length" : "stop"
+            finish_reason: toOpenAIFinishReason(stopReason, toolCalls.length > 0)
         }],
         usage: makeUsage(opts.promptTokens, completionTokens)
     };
@@ -260,9 +308,30 @@ async function runVisionStreaming(opts: VisionRunCtx & {req: IncomingMessage, re
             }, null));
         }
 
+        // M-TCQ-SHIM-FIXUP-2：Qwen 路徑下 stream 結尾抽 tool_calls。toolChoicePrefix 不在
+        // totalRaw 開頭（已 evaluate 進 nPast），抽之前 prepend 才能 regex 匹配。
+        let toolCalls: ReturnType<typeof parseQwenToolCalls>["toolCalls"] = [];
+        if (opts.useQwenFormat && opts.declaredTools.length > 0) {
+            const fullSplit = splitReasoning(totalRaw);
+            const textForExtract = (opts.toolChoicePrefix ?? "") + fullSplit.content;
+            toolCalls = parseQwenToolCalls(textForExtract, opts.declaredTools).toolCalls;
+        }
+        if (toolCalls.length > 0) {
+            for (let i = 0; i < toolCalls.length; i++) {
+                const tc = toolCalls[i]!;
+                sse.send(makeChunk(opts.id, opts.created, opts.model, {
+                    tool_calls: [{
+                        index: i, id: tc.id, type: "function",
+                        function: {name: tc.function.name, arguments: tc.function.arguments}
+                    }]
+                }, null));
+            }
+        }
+
+        const stopReason = completionTokens >= opts.maxTokens ? "maxTokens" as const : undefined;
         const finalChunk = makeChunk(
             opts.id, opts.created, opts.model, {},
-            completionTokens >= opts.maxTokens ? "length" : "stop"
+            toOpenAIFinishReason(stopReason, toolCalls.length > 0)
         );
         finalChunk.usage = makeUsage(opts.promptTokens, completionTokens);
         recordChatTokens(opts.promptTokens, completionTokens);
@@ -293,23 +362,35 @@ function makeChunk(id: string, created: number, model: string, delta: any, finis
 function buildVisionPrompt(
     messages: OpenAIMessage[],
     mediaParts: MediaInput[],
-    marker: string
+    marker: string,
+    qwenOpts: {useQwenFormat: boolean, tools: OpenAIToolDef[], toolChoicePrefix: string | undefined}
 ): {systemPrompt: string, conversationText: string, mediaInOrder: MediaInput[]} {
     const sys: string[] = [];
     const segments: string[] = [];
     const mediaInOrder: MediaInput[] = [];
+    const {useQwenFormat, tools, toolChoicePrefix} = qwenOpts;
 
+    // M-TCQ-SHIM-FIXUP-2：先收完所有 system 訊息再決定要不要把 tools system block 接在後面，
+    // 跟 chatCompletions.ts packMessages 的順序一致（system 主體在前、tools 區塊在後）。
     for (const m of messages) {
         if (m.role === "system") {
             sys.push(typeof m.content === "string" ? m.content : flattenContent(m.content));
             continue;
         }
-        const role = m.role;
-        const text = renderMessageWithMarkers(m, marker, mediaInOrder);
-        segments.push(`<|im_start|>${role}\n${text}<|im_end|>`);
+        const rendered = renderMessageWithMarkers(m, marker, mediaInOrder, useQwenFormat);
+        // assistant tool_calls / tool role 在 useQwenFormat 路徑下都改用 assistant 標籤包裝
+        // （tool_response 視為 assistant 對話的一部分輸入給模型，跟 packMessages 將 role:tool
+        // 包成 user-side 不同 — 視覺路徑沒走 chat wrapper，這裡直接用 ChatML 角色 assistant
+        // 比較安全，模型已經在 Qwen 系統訊息中看到 <tool_response> 格式說明）。
+        const role = (useQwenFormat && m.role === "tool") ? "user" : m.role;
+        segments.push(`<|im_start|>${role}\n${rendered}<|im_end|>`);
     }
-    // 推理時要在最後留 assistant\n 引導模型開始生成
-    segments.push(`<|im_start|>assistant\n`);
+    if (useQwenFormat && tools.length > 0) {
+        sys.push(buildQwenToolsSystemBlock(tools));
+    }
+    // 推理時要在最後留 assistant\n 引導模型開始生成；tool_choice 強制 prefix 直接接在後面
+    // — vision path 不走 chatSession.responsePrefix，這裡是唯一注入點。
+    segments.push(`<|im_start|>assistant\n${toolChoicePrefix ?? ""}`);
 
     return {
         systemPrompt: sys.join("\n\n"),
@@ -318,7 +399,19 @@ function buildVisionPrompt(
     };
 }
 
-function renderMessageWithMarkers(m: OpenAIMessage, marker: string, mediaOut: MediaInput[]): string {
+function renderMessageWithMarkers(m: OpenAIMessage, marker: string, mediaOut: MediaInput[], useQwenFormat: boolean): string {
+    // M-TCQ-SHIM-FIXUP-2：Qwen 路徑下處理 assistant.tool_calls 與 role:tool。
+    if (useQwenFormat) {
+        if (m.role === "assistant" && Array.isArray((m as any).tool_calls) && (m as any).tool_calls.length > 0) {
+            const tcText = ((m as any).tool_calls as any[]).map((tc) => renderQwenToolCall(tc)).join("\n");
+            const baseText = typeof m.content === "string" ? m.content : (m.content == null ? "" : flattenContent(m.content));
+            return [baseText, tcText].filter(Boolean).join("\n");
+        }
+        if (m.role === "tool") {
+            const text = typeof m.content === "string" ? m.content : (m.content == null ? "" : flattenContent(m.content));
+            return renderQwenToolResponse(text);
+        }
+    }
     if (typeof m.content === "string" || m.content == null) return m.content ?? "";
     const parts: string[] = [];
     for (const p of m.content) {
