@@ -43,14 +43,14 @@
 
 **背景**：256k + TURBO4 + tools + reasoning=on 跑 `live-test-realistic.ts` 28 case 通過 24（85.7%），4 個 fail 全在 [tool] 類。debug 後確認 3 個獨立問題（其餘是測試斷言過嚴）。詳見 LESSONS.md 同日條目。
 
-**進度**：FIXUP-1/2 完成 → 25/28 (89.3%)；vision 路徑全綠、`tool_choice` named-function 從 FAIL → PASS（debug-c13-mitigations.ts M1 驗證）。
+**進度**：FIXUP-1/2/3/4 完成 → **26/28 (92.9%)**；vision / chat / stream 三類 100% 綠。剩 2 個 fail 都在 C1 chain（C1.3 真 bug — Q4 退化空 args、parser 救不了；C1.4 long-conv flake），都不在 FIXUP-1~4 範圍。
 
 - [x] M-TCQ-SHIM-FIXUP-1 `tool_choice` 接上 decoder — `qwenToolFormat.ts buildQwenToolChoicePrefix` + `chatCompletions.ts composeResponsePrefix` 把 reasoning 前綴與 tool_choice 強制前綴疊加；reasoning 部分仍剝離、tool 前綴留在輸出讓 `parseQwenToolCalls` 看得到完整 block。限縮 `useQwenFormat && tools.length > 0`。GBNF 路線繼續 defer（同 M-TCQ-SHIM-2-5）。**驗證**：debug-c13-mitigations.ts M1 `{name:"edit_file"}` FAIL → PASS（完整 args）；M2 `required` 從 read_file → edit_file（args 仍空 → FIXUP-3）。
 - [x] M-TCQ-SHIM-FIXUP-2 vision path 注入 tools block — `visionInference.ts buildVisionPrompt` 接 `{useQwenFormat, tools, toolChoicePrefix}`，sys 段尾接 `buildQwenToolsSystemBlock(tools)`；`renderMessageWithMarkers` 在 Qwen 路徑下 render `assistant.tool_calls`（`renderQwenToolCall`）與 `role:tool`（`renderQwenToolResponse`）；最後 `<|im_start|>assistant\n` 接 `toolChoicePrefix`；`runVisionNonStreaming` / `runVisionStreaming` 對輸出跑 `parseQwenToolCalls` 抽 tool_calls（注入的 prefix 不在 result.text 裡，抽前要 prepend 才能匹配）。**驗證**：live-test-realistic C4.2 vision 後 tool_call FAIL → PASS（tools=[calculator]）。
-- [ ] M-TCQ-SHIM-FIXUP-3 parser 寬鬆化 — `vendor/node-llama-tcq/src/server/qwenToolFormat.ts:148 parseQwenToolCalls` 加 fallback：當 `<tool_call><function=X>` block 內 `<parameter=...>` 0 match 時，改抓直接 `<key>val</key>` 格式（Q4 退化變種，debug-c13-mitigations.ts M4 觀察到）。寫 unit test 涵蓋兩種變種。
-- [ ] M-TCQ-SHIM-FIXUP-4 測試斷言放寬 — `live-test-realistic.ts` C1.4 / C2.2 / C4.2 改成「emit tool call OR 文字答案正確（regex 比對 `57` / `Sunny` 等）」。C1.3 維持嚴格（真 bug）。
-- [ ] M-TCQ-SHIM-FIXUP-5 重跑 `live-test-realistic.ts` 期望 ≥ 27/28（C1.3 應由 FIXUP-1 + FIXUP-3 救回；C4.2 由 FIXUP-2 + FIXUP-4 救回）。
-- [ ] M-TCQ-SHIM-FIXUP-6 commit（繁中、分段）：`fix(node-llama-tcq): tool_choice 接上 decoder` / `fix(node-llama-tcq): vision path 注入 tools block` / `fix(node-llama-tcq): parser 容忍 Q4 退化的 <key>val</key> 變種` / `test(node-llama-tcq): live-test-realistic 斷言放寬 + 重跑`
+- [x] M-TCQ-SHIM-FIXUP-3 parser 寬鬆化 — `qwenToolFormat.ts parseQwenToolCalls` 加 fallback：嚴格 `<parameter=...>` 0 match 時退到 `<key>val</key>`，並用 declared tool 的 `parameters.properties` 當白名單（避免亂抓 `<think>` / `<random_tag>`）。嚴格優先 — 兩種格式並存時不混抓。**驗證**：`scripts/verify-fixup3-loose-parser.ts` 7/7 fixture 全綠（嚴格控制 / M4 寬鬆變種 / 白名單 mitigate / 嚴格優先 / 數值 coerce / C1.3 空 inner / 多 tool_call）。在 live-test-realistic 上沒新通過（C1.3 / C1.4 都不在 FIXUP-3 救援範圍 — 前者 inner 全空、後者沒 emit `<tool_call>`），但對未來 M4-style 退化是防護網。
+- [x] M-TCQ-SHIM-FIXUP-4 測試斷言放寬 — `live-test-realistic.ts chat()` `expectTool` 加結構化型別 `{tool?, textMatch?}`（boolean / string 行為保留）。**只放寬 C2.2**（snippet 已含完整答案、模型直接摘要符合 OpenAI / Anthropic goal-directed tool calling 指引），C1.3 / C1.4 / C9.1 維持嚴格（前二者作為 Q4 退化訊號、後者是強制 tool 真 bug 驗證）。**驗證**：C2.2 FAIL → PASS（text~/low.*medium.*high/）。
+- [x] M-TCQ-SHIM-FIXUP-5 重跑 `live-test-realistic.ts` — 26/28 (92.9%)。低於原訂目標 27/28 — 因 FIXUP-3 對 C1.3 / C1.4 真實退化形式無效（C1.3 inner 全空、C1.4 沒 emit `<tool_call>`），這兩個剩餘 fail 不在 parser 層可解決範圍，需另外手段（縮 tool list / 換量化 / 客戶端 retry）。
+- [x] M-TCQ-SHIM-FIXUP-6 commit（繁中、分段）：`feat(node-llama-tcq): tool_choice 接 decoder（prefix-token，FIXUP-1）` / `feat(node-llama-tcq): vision path 注入 tools + render tool history（FIXUP-2）` / `fix(node-llama-tcq): parser 寬鬆化容忍 Q4 退化變種（FIXUP-3）` / `test(node-llama-tcq): live-test-realistic 斷言放寬（FIXUP-4）` / docs。
 
 #### 不在範圍 → 後續 milestone
 - GBNF grammar 強制 tool 格式（M-TCQ-SHIM-2-5 仍 defer，待 prefix-token 方案 ROI 驗證後再評估）
