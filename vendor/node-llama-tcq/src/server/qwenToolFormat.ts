@@ -114,6 +114,38 @@ export function renderQwenToolResponse(content: string): string {
 }
 
 /**
+ * M-TCQ-SHIM-FIXUP-1：把 OpenAI tool_choice 翻成 Qwen pythonic-XML 起手前綴。
+ * 限定 Qwen 路徑（非 Qwen 的 JSON-fallback 走另一條 GBNF/regex，不在這裡處理）。
+ *
+ * 對應行為（與 OpenAI spec 一致）：
+ *   - undefined / "auto" / "none" → 回 undefined（不強制；"none" 由上層另行決定是否完全跳過 tools 區塊）
+ *   - "required" → `<tool_call>\n<function=`（強制要呼叫某個 tool，但讓模型自選 function name）
+ *   - {type:"function", function:{name:"X"}} → `<tool_call>\n<function=X>\n`（強制呼叫 X，模型只能補 `<parameter=...>` 與收尾）
+ *
+ * 設計選擇 — 為什麼用 prefix-token 而不是 GBNF：
+ *   GBNF 路線需要把 OpenAI JSON Schema → Qwen pythonic-XML grammar 轉換（M-TCQ-SHIM-2-5
+ *   已 defer）。Prefix-token 方案只是把 assistant 回覆的開頭幾個字硬塞給 decoder，
+ *   後續 sampling 走原本邏輯。對「強制呼叫」這個需求 100% 夠用，工作量低。
+ *
+ * 注意：呼叫端要把這段前綴**不剝離**（與 reasoning 的 `</think>\n\n` 前綴不同），
+ * parseQwenToolCalls 才看得到完整的 `<tool_call>...</tool_call>` block。
+ */
+export function buildQwenToolChoicePrefix(toolChoice: unknown): string | undefined {
+    if (toolChoice == null) return undefined;
+    if (typeof toolChoice === "string") {
+        if (toolChoice === "required") return "<tool_call>\n<function=";
+        return undefined;
+    }
+    if (typeof toolChoice === "object") {
+        const tc = toolChoice as {type?: unknown, function?: {name?: unknown}};
+        if (tc.type === "function" && tc.function != null && typeof tc.function.name === "string" && tc.function.name.length > 0) {
+            return `<tool_call>\n<function=${tc.function.name}>\n`;
+        }
+    }
+    return undefined;
+}
+
+/**
  * Compact schema reminder for re-injecting tool schemas near the generation point.
  * Mitigation for Q4 量化 attention recency bias：當 chat 走到 chain-of-tool step 2
  * （上一輪 tool_response 剛出現）時，模型 priors 偏向「沿用最近看過的 keys」而非

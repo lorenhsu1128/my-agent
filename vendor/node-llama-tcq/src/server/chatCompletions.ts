@@ -20,7 +20,8 @@ import {
     buildQwenToolsSystemBlock,
     renderQwenToolCall,
     renderQwenToolResponse,
-    parseQwenToolCalls
+    parseQwenToolCalls,
+    buildQwenToolChoicePrefix
 } from "./qwenToolFormat.js";
 import {flattenContent, extractMediaParts} from "./visionPath.js";
 import {handleChatWithVision} from "./visionInference.js";
@@ -211,6 +212,33 @@ function countFullPromptTokens(
     }
     total += countTokens(session, lastUserPrompt) + 4;
     return total;
+}
+
+/**
+ * M-TCQ-SHIM-FIXUP-1：把 reasoning 前綴與 Qwen tool_choice 強制前綴組合成一個 engine
+ * responsePrefix，但只剝離 reasoning 的部分（tool_choice 前綴必須留在輸出裡，
+ * parseQwenToolCalls 才看得到 `<tool_call>...</tool_call>` 完整 block）。
+ *
+ * 限縮：tool_choice 前綴只在 useQwenFormat=true 時才產生；非 Qwen 路徑（JSON-fallback）
+ * 完全不受影響。
+ */
+function composeResponsePrefix(
+    reasoning: ResolvedReasoning,
+    body: OpenAIChatRequest,
+    useQwenFormat: boolean,
+    declaredTools: NonNullable<OpenAIChatRequest["tools"]>
+): {engineResponsePrefix: string | undefined, stripPrefix: string | undefined} {
+    const reasoningPrefix = reasoning.responsePrefix ?? "";
+    const toolPrefix = (useQwenFormat && declaredTools.length > 0)
+        ? (buildQwenToolChoicePrefix((body as any).tool_choice) ?? "")
+        : "";
+    if (reasoningPrefix === "" && toolPrefix === "") {
+        return {engineResponsePrefix: undefined, stripPrefix: undefined};
+    }
+    return {
+        engineResponsePrefix: reasoningPrefix + toolPrefix,
+        stripPrefix: reasoningPrefix === "" ? undefined : reasoningPrefix
+    };
 }
 
 /** Strip the responsePrefix we injected (e.g. "</think>\n\n") from start of model output, if present. */
@@ -407,6 +435,7 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
     const {res, body, chatSession, lastUserPrompt, id, created, model, declaredTools, abort} = opts;
     const abortSignal = abort.signal;
     const reasoning = resolveReasoning(opts.session, body);
+    const {engineResponsePrefix, stripPrefix} = composeResponsePrefix(reasoning, body, opts.useQwenFormat, declaredTools);
 
     let stopReason: ShimStopReason = undefined;
     let meta: Awaited<ReturnType<typeof chatSession.promptWithMeta>>;
@@ -420,7 +449,7 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
             customStopTriggers: normalizeStop(body.stop),
             signal: abortSignal,
             stopOnAbortSignal: true,
-            ...(reasoning.responsePrefix ? {responsePrefix: reasoning.responsePrefix} : {}),
+            ...(engineResponsePrefix ? {responsePrefix: engineResponsePrefix} : {}),
             ...(reasoning.thoughtTokens != null ? {budgets: {thoughtTokens: reasoning.thoughtTokens}} : {})
         });
     } catch (err) {
@@ -446,7 +475,7 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
     // Llama3 etc.) instead of regex-splitting responseText. Falls back to text
     // split when wrapper didn't segment.
     const bundle = bundleResponse(meta.response);
-    const rawVisibleText = stripResponsePrefix(bundle.visibleText, reasoning.responsePrefix);
+    const rawVisibleText = stripResponsePrefix(bundle.visibleText, stripPrefix);
     const rawReasoningText = bundle.reasoningText;
 
     // For non-Qwen models that emit `<think>` inline (no segments), splitter still helps.
@@ -502,6 +531,7 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
     const splitter = new StreamReasoningSplitter();
     const sniffer = new StreamToolSniffer(declaredTools);
     const reasoning = resolveReasoning(session, body);
+    const {engineResponsePrefix, stripPrefix} = composeResponsePrefix(reasoning, body, opts.useQwenFormat, declaredTools);
     let totalRaw = "";
     let visibleContentEmitted = "";  // accumulated `delta.content` characters (for budget-msg detection)
     // reasoning_format=none → don't split <think> out of content stream
@@ -539,7 +569,7 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
     }, KEEPALIVE_INTERVAL_MS);
     abortSignal.addEventListener("abort", () => clearInterval(keepalive));
 
-    let prefixToStrip = reasoning.responsePrefix ?? "";
+    let prefixToStrip = stripPrefix ?? "";
     try {
         const meta = await chatSession.promptWithMeta(lastUserPrompt, {
             maxTokens: body.max_tokens,
@@ -550,7 +580,7 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
             customStopTriggers: normalizeStop(body.stop),
             signal: abortSignal,
             stopOnAbortSignal: true,
-            ...(reasoning.responsePrefix ? {responsePrefix: reasoning.responsePrefix} : {}),
+            ...(engineResponsePrefix ? {responsePrefix: engineResponsePrefix} : {}),
             ...(reasoning.thoughtTokens != null ? {budgets: {thoughtTokens: reasoning.thoughtTokens}} : {}),
             onTextChunk(rawText: string) {
                 let text = rawText;
