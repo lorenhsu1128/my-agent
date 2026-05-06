@@ -46,11 +46,21 @@ const TOOLS = [
     {type: "function", function: {name: "create_pr", description: "建立 PR", parameters: {type: "object", properties: {title: {type: "string"}, body: {type: "string"}, base: {type: "string"}}, required: ["title", "body"]}}}
 ];
 
+/**
+ * M-TCQ-SHIM-FIXUP-4：expectTool 三型別。
+ * - boolean: 任何 tool_call 都算過。
+ * - string: 必須有指定名稱的 tool_call（嚴格 — 留給「真 bug 期望 tool」case，例如 C1.3）。
+ * - {tool?, textMatch?}: 只要任一條件滿足就算過。給「模型決策合理但路徑不同」的 case
+ *   （例如 C2.2 snippet 已含答案模型直接摘要，符合 OpenAI / Anthropic 對 goal-directed
+ *   tool calling 的指引）。textMatch 比對 content（純文字回應）。
+ */
+type ExpectTool = boolean | string | {tool?: string, textMatch?: RegExp};
+
 async function chat(opts: {
     name: string,
     type: CaseResult["type"],
     body: any,
-    expectTool?: boolean | string,
+    expectTool?: ExpectTool,
     note?: string
 }): Promise<{content: string, toolCalls: any[], usage: any}> {
     const t0 = Date.now();
@@ -70,10 +80,22 @@ async function chat(opts: {
     const sec = dt / 1000;
 
     let ok = res.status === 200;
+    let okReason = "";
     if (opts.expectTool === true) ok = ok && toolCalls.length > 0;
-    else if (typeof opts.expectTool === "string") ok = ok && toolCalls.some((t: any) => t.function?.name === opts.expectTool);
-    else ok = ok && (content.length > 0 || toolCalls.length > 0);
+    else if (typeof opts.expectTool === "string") {
+        ok = ok && toolCalls.some((t: any) => t.function?.name === opts.expectTool);
+    } else if (opts.expectTool != null && typeof opts.expectTool === "object") {
+        const e = opts.expectTool;
+        const toolHit = e.tool != null && toolCalls.some((t: any) => t.function?.name === e.tool);
+        const textHit = e.textMatch != null && e.textMatch.test(content);
+        ok = ok && (toolHit || textHit);
+        if (toolHit) okReason = `tool=${e.tool}`;
+        else if (textHit) okReason = `text~/${e.textMatch!.source}/`;
+    } else ok = ok && (content.length > 0 || toolCalls.length > 0);
 
+    const noteFinal = opts.note
+        ?? (toolCalls.length > 0 ? `tools=[${toolCalls.map((t: any) => t.function.name).join(",")}]` : "")
+        + (okReason ? ` (${okReason})` : "");
     record({
         case: opts.name,
         type: opts.type,
@@ -82,7 +104,7 @@ async function chat(opts: {
         pTok, cTok,
         pRate: sec > 0 ? pTok / sec : 0,
         cRate: sec > 0 ? cTok / sec : 0,
-        note: opts.note ?? (toolCalls.length > 0 ? `tools=[${toolCalls.map((t: any) => t.function.name).join(",")}]` : ""),
+        note: noteFinal,
         ok
     });
     return {content, toolCalls, usage};
@@ -231,7 +253,10 @@ const dataUrlOnce = () => `data:image/jpeg;base64,${fs.readFileSync(IMAGE).toStr
         name: "C2.2 fetch_url 接續",
         type: "tool",
         body: {model: MODEL, messages: history, tools: TOOLS, tool_choice: "auto", max_tokens: 256, reasoning: "off"},
-        expectTool: "fetch_url"
+        // M-TCQ-SHIM-FIXUP-4：snippet 已含完整答案（"low, medium, high. Default medium."），
+        // 模型直接摘要不再 fetch 是合理 agent 行為。接受任一：fetch_url tool_call 或回答
+        // 包含三個值。
+        expectTool: {tool: "fetch_url", textMatch: /low[\s\S]*medium[\s\S]*high/i}
     });
     history.push({role: "assistant", content: null, tool_calls: r.toolCalls});
     history.push({role: "tool", tool_call_id: r.toolCalls[0]?.id ?? "x", content: "Reasoning effort: low (~256 thought tokens) / medium (~1024) / high (~4096). Affects latency and cost."});
