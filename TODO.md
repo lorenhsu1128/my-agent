@@ -20,7 +20,7 @@
 - [x] M-TCQ-SHIM-1-8 `reasoning_content` 切分（Qwen `<think>` 標籤）；`tool_calls` 用 prompt-time + 後處理 JSON 偵測（最低相容）
 - [~] M-TCQ-SHIM-1-9 server 整合測試 — **已做**：standalone unit 7 支 65/65 + live HTTP runner 2 支（live-test-shim.ts 10/10、live-test-stress.ts mix 6/6 + overflow 5/5）。**defer**：compat-buun.test.ts（需同跑兩 server diff，CI 成本高，留到出現相容性疑慮）
 - [x] M-TCQ-SHIM-1-10 my-agent 端 `src/llamacppConfig/schema.ts` 新增 `server.binaryKind: 'buun'|'tcq'`（預設 `buun`，向下相容）
-- [ ] M-TCQ-SHIM-1-11 `bun run docs:gen` 重新產生 `docs/config-*.md`（CLAUDE.md §13）
+- [x] M-TCQ-SHIM-1-11 `bun run docs:gen` 重新產生 `docs/config-*.md`（CLAUDE.md §13）
 - [x] M-TCQ-SHIM-1-12 `scripts/llama/serve.sh` + `scripts/llama/serve.ps1` 依 `binaryKind` 分流（跨平台 — CLAUDE.md §10）
 - [x] M-TCQ-SHIM-1-13 驗證：`bun run typecheck` + `bun test` + `./cli -p "hello"` 冒煙 + live test all-green
 - [x] M-TCQ-SHIM-1-14 commit（繁中，分段）：8 commits pushed to origin/node-llama-tcq
@@ -3396,3 +3396,5 @@
 - 2026-05-07 09:57: Session 結束 | 進度：757/870 任務 | 21cd721 docs+test: M-TCQ-SHIM-FIXUP-8 完成 + v3 D12 斷言放寬
 
 - 2026-05-07 10:13: Session 結束 | 進度：757/870 任務 | 01f1340 docs: M-TCQ-SHIM-FIXUP 全套通過 — v3 my-agent 端到端 10/12 收尾
+
+- 2026-05-07 10:18: Session 結束 | 進度：772/870 任務 | 9f6346e docs(todo): 補打勾 M-DISCORD-TUI / M-MEMRECALL-CMD（早就做完只是 TODO 沒同步）
