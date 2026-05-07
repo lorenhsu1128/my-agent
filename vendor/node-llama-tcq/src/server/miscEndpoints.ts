@@ -31,12 +31,26 @@ export function healthBody(): unknown {
 
 export function propsBody(session: ServerSession, primaryAlias: string): unknown {
     const o = session.options;
+    const sd = o.samplerDefaults ?? {};
     return {
         n_ctx: o.contextSize,
         model_path: o.modelPath,
         model_alias: primaryAlias,
         chat_template: "",
         n_slots: 1,
+        // 對齊 buun llama-server 的 GET /props default_generation_settings — 列出 server-side
+        // sampler defaults，client 拿來當 UI 預設值。Body fields per request 仍可覆蓋（見
+        // samplerCoalesce.ts）。未設則欄位省略（不帶 0），避免誤導為「已 disable」。
+        default_generation_settings: {
+            ...(sd.temperature != null ? {temperature: sd.temperature} : {}),
+            ...(sd.topP != null ? {top_p: sd.topP} : {}),
+            ...(sd.topK != null ? {top_k: sd.topK} : {}),
+            ...(sd.minP != null ? {min_p: sd.minP} : {}),
+            ...(sd.repeatPenalty != null ? {repeat_penalty: sd.repeatPenalty} : {}),
+            ...(sd.presencePenalty != null ? {presence_penalty: sd.presencePenalty} : {}),
+            ...(sd.frequencyPenalty != null ? {frequency_penalty: sd.frequencyPenalty} : {}),
+            ...(sd.repeatLastN != null ? {repeat_last_n: sd.repeatLastN} : {})
+        },
         // TCQ-shim extras for observability
         cache_type_k: session.cacheTypeKLabel,
         cache_type_v: session.cacheTypeVLabel,

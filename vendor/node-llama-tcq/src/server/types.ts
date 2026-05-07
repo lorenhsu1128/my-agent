@@ -41,6 +41,13 @@ export type OpenAIChatRequest = {
     temperature?: number,
     top_p?: number,
     top_k?: number,
+    min_p?: number,
+    presence_penalty?: number,
+    frequency_penalty?: number,
+    /** llama.cpp/Qwen-style multiplicative repeat penalty (1.0 = disabled). Either alias accepted. */
+    repeat_penalty?: number,
+    repetition_penalty?: number,
+    repeat_last_n?: number,
     seed?: number,
     stream?: boolean,
     stop?: string | string[],

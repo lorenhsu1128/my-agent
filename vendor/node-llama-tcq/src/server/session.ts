@@ -31,7 +31,21 @@ export type SessionInitOptions = {
     /** none | deepseek (default) | deepseek-legacy — how to expose <think> in response */
     reasoningFormat?: "none" | "deepseek" | "deepseek-legacy",
     /** Directory for /slots/{id}?action=save state files. Unset = save/restore disabled. */
-    slotSavePath?: string
+    slotSavePath?: string,
+    /**
+     * Server-side default sampler params. Per-request body fields override individually
+     * (見 samplerCoalesce.ts)。Mirrors buun llama-server `--temp / --top-p / ...` CLI flags.
+     */
+    samplerDefaults?: {
+        temperature?: number,
+        topP?: number,
+        topK?: number,
+        minP?: number,
+        repeatPenalty?: number,
+        presencePenalty?: number,
+        frequencyPenalty?: number,
+        repeatLastN?: number
+    }
 };
 
 export type ServerSession = {

@@ -26,6 +26,7 @@ import {
 import {flattenContent, extractMediaParts} from "./visionPath.js";
 import {handleChatWithVision} from "./visionInference.js";
 import {sendJson} from "./httpHelpers.js";
+import {buildRepeatPenalty} from "./samplerCoalesce.js";
 
 const SHIM_OBJECT_NON_STREAM = "chat.completion" as const;
 const SHIM_OBJECT_STREAM = "chat.completion.chunk" as const;
@@ -483,12 +484,16 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
     let stopReason: ShimStopReason = undefined;
     let meta: Awaited<ReturnType<typeof chatSession.promptWithMeta>>;
     try {
+        const sd = opts.session.options.samplerDefaults;
+        const repeatPenaltyOpts = buildRepeatPenalty(body, sd);
         meta = await chatSession.promptWithMeta(lastUserPrompt, {
             maxTokens: body.max_tokens,
-            temperature: body.temperature,
-            topP: body.top_p,
-            topK: body.top_k,
+            temperature: body.temperature ?? sd?.temperature,
+            topP: body.top_p ?? sd?.topP,
+            topK: body.top_k ?? sd?.topK,
+            minP: body.min_p ?? sd?.minP,
             seed: body.seed,
+            ...(repeatPenaltyOpts ? {repeatPenalty: repeatPenaltyOpts} : {}),
             customStopTriggers: normalizeStop(body.stop),
             signal: abortSignal,
             stopOnAbortSignal: true,
@@ -614,12 +619,16 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
 
     let prefixToStrip = stripPrefix ?? "";
     try {
+        const sd = session.options.samplerDefaults;
+        const repeatPenaltyOpts = buildRepeatPenalty(body, sd);
         const meta = await chatSession.promptWithMeta(lastUserPrompt, {
             maxTokens: body.max_tokens,
-            temperature: body.temperature,
-            topP: body.top_p,
-            topK: body.top_k,
+            temperature: body.temperature ?? sd?.temperature,
+            topP: body.top_p ?? sd?.topP,
+            topK: body.top_k ?? sd?.topK,
+            minP: body.min_p ?? sd?.minP,
             seed: body.seed,
+            ...(repeatPenaltyOpts ? {repeatPenalty: repeatPenaltyOpts} : {}),
             customStopTriggers: normalizeStop(body.stop),
             signal: abortSignal,
             stopOnAbortSignal: true,

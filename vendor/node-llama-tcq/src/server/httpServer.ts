@@ -48,7 +48,8 @@ export async function startTcqShimServer(opts: ShimServerOptions): Promise<ShimS
         reasoningBudget: opts.reasoningBudget,
         reasoningBudgetMessage: opts.reasoningBudgetMessage,
         reasoningFormat: opts.reasoningFormat,
-        slotSavePath: opts.slotSavePath
+        slotSavePath: opts.slotSavePath,
+        samplerDefaults: opts.samplerDefaults
     });
 
     const routerOpts: RouterOptions = {
