@@ -73,21 +73,21 @@
 **決策**：優先序 `request body > my-agent preset > shim CLI default > engine 內建`；POST /props 維持 noop ack（熱更新留下個 milestone）；preset 自帶 `appliesTo: string[]` glob，預設 4 組標 `qwen*` 不誤套其他模型；caller 端不接 slash command/heuristic（顯式 `metadata.taskType` 為主）。
 
 #### Part A：TCQ-shim sampler defaults
-- [ ] M-TCQ-SHIM-SAMPLER-A1 ServerCommand.ts 新 CLI flag：`--temp/--top-p/--top-k/--min-p/--repeat-penalty/--presence-penalty/--frequency-penalty/--repeat-last-n` + 對應 `TCQ_*` env
-- [ ] M-TCQ-SHIM-SAMPLER-A2 SessionInitOptions 加 `samplerDefaults` 欄位，handler → startTcqShimServer → ensureSession 串接
-- [ ] M-TCQ-SHIM-SAMPLER-A3 chatCompletions.ts non-stream + stream 兩處 promptWithMeta 改 coalesce（body ?? sd）；新檔 samplerCoalesce.ts 處理 repeatPenalty 組裝
-- [ ] M-TCQ-SHIM-SAMPLER-A4 OpenAIChatRequest 型別加 `min_p / presence_penalty / frequency_penalty / repeat_penalty / repetition_penalty`（兩個 alias 都接）
-- [ ] M-TCQ-SHIM-SAMPLER-A5 GET /props 回傳加 `default_generation_settings`
-- [ ] M-TCQ-SHIM-SAMPLER-A6 README-tcq.md 補 CLI flag 表
-- [ ] M-TCQ-SHIM-SAMPLER-A7 新 `scripts/smoke-sampler-defaults.ts` 驗證 CLI default + body override 行為
+- [x] M-TCQ-SHIM-SAMPLER-A1 ServerCommand.ts 新 CLI flag：`--temp/--top-p/--top-k/--min-p/--repeat-penalty/--presence-penalty/--frequency-penalty/--repeat-last-n` + 對應 `TCQ_*` env
+- [x] M-TCQ-SHIM-SAMPLER-A2 SessionInitOptions 加 `samplerDefaults` 欄位，handler → startTcqShimServer → ensureSession 串接
+- [x] M-TCQ-SHIM-SAMPLER-A3 chatCompletions.ts non-stream + stream 兩處 promptWithMeta 改 coalesce（body ?? sd）；新檔 samplerCoalesce.ts 處理 repeatPenalty 組裝
+- [x] M-TCQ-SHIM-SAMPLER-A4 OpenAIChatRequest 型別加 `min_p / presence_penalty / frequency_penalty / repeat_penalty / repetition_penalty`（兩個 alias 都接）
+- [x] M-TCQ-SHIM-SAMPLER-A5 GET /props 回傳加 `default_generation_settings`
+- [~] M-TCQ-SHIM-SAMPLER-A6 README-tcq.md 補 CLI flag 表 — defer：CLI flag 自帶 description（`bun run dev serve --help` 可查），README 表格留待下次集中更新
+- [~] M-TCQ-SHIM-SAMPLER-A7 新 `scripts/smoke-sampler-defaults.ts` — defer：需起真 GPU server，留作後續 e2e 驗證；功能已用 unit + 整合測試 33/33 覆蓋
 
 #### Part B：my-agent preset 注入
-- [ ] M-TCQ-SHIM-SAMPLER-B1 `src/llamacppConfig/schema.ts` 加 `samplingPresets`（dict<name, {appliesTo, params}>）+ `defaultSamplingPreset`，預設 4 組 Qwen preset 標 `appliesTo: ['qwen*', '*qwen*']`
-- [ ] M-TCQ-SHIM-SAMPLER-B2 新 `src/llamacppConfig/applySamplingPreset.ts` 純函式（含 matchesPattern glob helper）
-- [ ] M-TCQ-SHIM-SAMPLER-B3 `src/services/api/llamacpp-fetch-adapter.ts buildOpenAIRequest()` 注入：metadata.taskType → preset → family gate → 只填 body 缺欄位
-- [ ] M-TCQ-SHIM-SAMPLER-B4 新 `tests/integration/llamacpp-sampling-preset.test.ts` 7 個 case（含非 Qwen 模型不套用 / glob 比對）
-- [ ] M-TCQ-SHIM-SAMPLER-B5 `bun run docs:gen` + 新 `docs/sampling-presets.md` 使用指南
-- [ ] M-TCQ-SHIM-SAMPLER-B6 typecheck + 整合測試 + ./cli 冒煙 + shim smoke + commit
+- [x] M-TCQ-SHIM-SAMPLER-B1 `src/llamacppConfig/schema.ts` 加 `samplingPresets`（dict<name, {appliesTo, params}>）+ `defaultSamplingPreset`，預設 4 組 Qwen preset 標 `appliesTo: ['qwen*', '*qwen*']`
+- [x] M-TCQ-SHIM-SAMPLER-B2 新 `src/llamacppConfig/applySamplingPreset.ts` 純函式（含 matchesPattern glob helper）
+- [x] M-TCQ-SHIM-SAMPLER-B3 `src/services/api/llamacpp-fetch-adapter.ts buildOpenAIRequest()` 注入：metadata.taskType → preset → family gate → 只填 body 缺欄位
+- [x] M-TCQ-SHIM-SAMPLER-B4 新 `tests/integration/llamacpp/sampling-preset.test.ts` 18 個 case（schema / matchesPattern / 注入 / 顯式覆蓋 / unknown warn / fallback / family gate non-Qwen / 自訂 preset / 端到端）
+- [x] M-TCQ-SHIM-SAMPLER-B5 `bun run docs:gen` + 新 `docs/sampling-presets.md` 使用指南
+- [x] M-TCQ-SHIM-SAMPLER-B6 typecheck + 整合測試 33/33 + `./cli -p` 冒煙 zero regression + commit（shim GPU smoke 同 A7 defer）
 
 #### 不在範圍 → 後續 milestone
 - POST /props 真的熱更新 sampler defaults（race condition / 中斷既有 inflight 請求要設計）
