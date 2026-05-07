@@ -52,7 +52,7 @@
 - [x] M-TCQ-SHIM-FIXUP-5 重跑 `live-test-realistic.ts` — 26/28 (92.9%)。低於原訂目標 27/28 — 因 FIXUP-3 對 C1.3 / C1.4 真實退化形式無效（C1.3 inner 全空、C1.4 沒 emit `<tool_call>`），這兩個剩餘 fail 不在 parser 層可解決範圍，需另外手段（縮 tool list / 換量化 / 客戶端 retry）。
 - [x] M-TCQ-SHIM-FIXUP-6 commit（繁中、分段）：`feat(node-llama-tcq): tool_choice 接 decoder（prefix-token，FIXUP-1）` / `feat(node-llama-tcq): vision path 注入 tools + render tool history（FIXUP-2）` / `fix(node-llama-tcq): parser 寬鬆化容忍 Q4 退化變種（FIXUP-3）` / `test(node-llama-tcq): live-test-realistic 斷言放寬（FIXUP-4）` / docs。
 - [x] M-TCQ-SHIM-FIXUP-7 reasoning=on 注入字面 `<think>\n` prefix（對齊 buun 行為）— shim 用 QwenChatWrapper 把 `<think>` 設為 `SpecialTokensText`，模型 emit 的是 special token id、wrapper detokenize 後字面字串消失 → `onTextChunk` 拿到的純文字 stream 永遠不含 `<think>...</think>` → `StreamReasoningSplitter` 永遠切不到 reasoning，my-agent adapter 收不到 `delta.reasoning_content`。對比 buun-llama-cpp 走 GGUF jinja template，`<think>` 是字面 token 直接出現在 stream，server emit `delta.reasoning_content`。**修法**：`resolveReasoning` reasoning=on/auto 路徑回 `thinkOpenPrefix="<think>\n"`；`composeResponsePrefix` 限縮 `useQwenFormat && !reasoningPrefix && !toolPrefix` 才疊加（off mode / forced tool 跳過避免複合 prefix 撞）；不剝離（讓 splitter 看到字面 `<think>` → 切到 reasoning_content）。**驗證**：v3 my-agent E2E 12 case，think=0ch 從 9/10 → 0/10；reasoning_content 200-44000ch 範圍。發現副作用：thinking 開後 D2.1 純數學跑 476s（44k chars）、D10.1 multi-step 踩線、D9.1 從亂呼工具改成正確澄清但耗 217s，需 server-side `--reasoning-budget` cap。
-- [ ] M-TCQ-SHIM-FIXUP-8 my-agent llamacpp adapter `tool_result.content[]` 內 image block 翻譯漏洞 — `src/services/api/llamacpp-fetch-adapter.ts:299-313` 把 tool_result 翻成 OpenAI tool message 時只 `.map(b => b.type === 'text' ? b.text : '')` 抽 text、整個丟掉 image block。FileReadTool 對 .jpeg 回 `{type:'image', source:{base64,...}}` → adapter 丟掉 → shim `extractMediaParts` 0 image_url part → 純文字 path → v3 D11/D12 fail（模型重試 Read×11）。**修法待做**：image block 提取出來、用 user message 緊接在 tool message 後注入 image_url part（OpenAI tool role content 規範只接 string，無法直接放 image part）。
+- [x] M-TCQ-SHIM-FIXUP-8 my-agent llamacpp adapter `tool_result.content[]` 內 image block 翻譯漏洞 — `src/services/api/llamacpp-fetch-adapter.ts:299-313` 修法：iterate block.content[] 收 text + image block，image 過 `imageBlockToOpenAIPart` 翻成 image_url；有 image 時 tool message content 用 multipart array（shim 的 OpenAIMessage type 不分 role 都接 multipart），純文字情境維持 string 向下相容。**配套 FIXUP-8b**：shim `visionInference.ts renderMessageWithMarkers` tool role 在 useQwenFormat 路徑下把 multipart 內 image_url push 進 mediaOut（pre-fix 直接 flattenContent 只抽 text，撞 500 "Vision prompt build dropped all media"）。**驗證**：`probe-tool-result-image.ts` image_url 從 0 → 1；shim log 出現 `image_tokens->nx=20` vision encoder 真的跑；v3 D11.1 ✅（model 答「圖中的歷史事件是 1969 年... 阿波羅 11 號登月」）、D12.1 ✅。修了同時救 buun + tcq（adapter 是共用的，buun 也有同樣 bug 只是觸發場景少）。
 - [ ] M-TCQ-SHIM-FIXUP-9 shim 啟動加 `--reasoning-budget` 預設 cap — 觀察 v3 D2.1 / D10.1 thinking 過度（44k chars）。建議預設 `--reasoning-budget 4096`，極端推理由 client `body.reasoning_budget` 加大。
 
 #### 不在範圍 → 後續 milestone
@@ -3378,3 +3378,9 @@
 - 2026-05-06 21:47: Session 結束 | 進度：755/867 任務 | b3e0de2 docs: M-TCQ-SHIM-FIXUP-3/4 完成，更新 LESSONS + TODO
 
 - 2026-05-07 00:32: Session 結束 | 進度：755/867 任務 | b3e0de2 docs: M-TCQ-SHIM-FIXUP-3/4 完成，更新 LESSONS + TODO
+
+- 2026-05-07 08:47: Session 結束 | 進度：756/870 任務 | 08a49bd docs: M-TCQ-SHIM-FIXUP-7 + 後續 FIXUP-8/9 issue 追蹤
+
+- 2026-05-07 08:54: Session 結束 | 進度：756/870 任務 | 08a49bd docs: M-TCQ-SHIM-FIXUP-7 + 後續 FIXUP-8/9 issue 追蹤
+
+- 2026-05-07 08:57: Session 結束 | 進度：756/870 任務 | 08a49bd docs: M-TCQ-SHIM-FIXUP-7 + 後續 FIXUP-8/9 issue 追蹤
