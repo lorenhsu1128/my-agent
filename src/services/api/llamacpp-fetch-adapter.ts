@@ -298,19 +298,46 @@ export function translateMessagesToOpenAI(
       for (const block of msg.content) {
         if (block.type === 'tool_result') {
           // Anthropic tool_result → OpenAI role:'tool' message
+          // M-TCQ-SHIM-FIXUP-8：tool_result.content[] 內的 image block 也要翻譯成
+          // image_url part，否則 FileReadTool 對 .jpeg / screenshot 等回傳的 image
+          // 會在這裡被吃掉（pre-fix 只 .map 抽 text、image 變空字串），shim/buun-server
+          // 端的 vision path 永遠看不到圖、模型瞎猜或瘋狂 retry Read（v3 D11/D12 真因）。
           let resultText = ''
+          const toolImageParts: OpenAIContentPart[] = []
           if (typeof block.content === 'string') {
             resultText = block.content
           } else if (Array.isArray(block.content)) {
-            resultText = block.content
-              .map(b => (b.type === 'text' ? b.text ?? '' : ''))
-              .join('')
+            for (const b of block.content) {
+              if (b.type === 'text' && typeof b.text === 'string') {
+                resultText += b.text
+              } else if (b.type === 'image' && vision) {
+                const part = imageBlockToOpenAIPart(b)
+                if (part) toolImageParts.push(part)
+              }
+            }
           }
-          out.push({
-            role: 'tool',
-            tool_call_id: block.tool_use_id ?? '',
-            content: resultText,
-          })
+          if (toolImageParts.length > 0) {
+            // OpenAI 嚴格 spec 規定 tool message content 只接 string，但 shim 的
+            // OpenAIMessage type （types.ts:18）不分 role 都接 multipart array，且
+            // extractMediaParts 會掃所有 messages 的 parts 不分 role。多放一個 text
+            // part 確保純文字 fallback 也有東西可讀（resultText 為空時用 placeholder）。
+            const parts: OpenAIContentPart[] = [...toolImageParts]
+            parts.push({
+              type: 'text',
+              text: resultText || '[Tool returned image]',
+            })
+            out.push({
+              role: 'tool',
+              tool_call_id: block.tool_use_id ?? '',
+              content: parts,
+            })
+          } else {
+            out.push({
+              role: 'tool',
+              tool_call_id: block.tool_use_id ?? '',
+              content: resultText,
+            })
+          }
         } else if (block.type === 'text' && typeof block.text === 'string') {
           textParts.push(block.text)
         } else if (block.type === 'image') {

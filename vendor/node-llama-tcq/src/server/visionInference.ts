@@ -408,7 +408,28 @@ function renderMessageWithMarkers(m: OpenAIMessage, marker: string, mediaOut: Me
             return [baseText, tcText].filter(Boolean).join("\n");
         }
         if (m.role === "tool") {
-            const text = typeof m.content === "string" ? m.content : (m.content == null ? "" : flattenContent(m.content));
+            // M-TCQ-SHIM-FIXUP-8b：tool role content 為 multipart array 時要 iterate parts，
+            // 把 image_url 跟 audio 部分 push 進 mediaOut（並嵌入 marker），純文字部分照常
+            // flatten。pre-fix 直接 flattenContent 只抽 text、media 整個被吃掉，配套 FIXUP-8
+            // adapter 改動（tool_result 內 image block 翻成 image_url）後，這裡漏抽就會
+            // 撞 "Vision prompt build dropped all media; no markers in prompt" 500 error。
+            let text = "";
+            if (typeof m.content === "string" || m.content == null) {
+                text = m.content ?? "";
+            } else {
+                const parts: string[] = [];
+                for (const p of m.content) {
+                    if (p.type === "text") parts.push(p.text);
+                    else if (p.type === "image_url") { parts.push(marker); mediaOut.push({type: "image", url: p.image_url.url}); }
+                    else if (p.type === "input_audio") {
+                        parts.push(marker);
+                        const mime = p.input_audio.format === "mp3" ? "audio/mpeg" : `audio/${p.input_audio.format ?? "wav"}`;
+                        mediaOut.push({type: "audio", url: `data:${mime};base64,${p.input_audio.data}`});
+                    }
+                    else if (p.type === "audio_url") { parts.push(marker); mediaOut.push({type: "audio", url: p.audio_url.url}); }
+                }
+                text = parts.join("\n");
+            }
             return renderQwenToolResponse(text);
         }
     }
