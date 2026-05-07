@@ -790,3 +790,36 @@
   - **教訓**（補充 2）：**剩餘的 C1.3 / C1.4 不是 parser 層可解的問題**。C1.3 模型 emit `<tool_call><function=read_file></function></tool_call>` 完全空 inner — 這是模型決策層級的退化（10 tools + Q4 + 6-turn tool history → attention 散，連必填 path 都填不出）；C1.4 模型沒 emit `<tool_call>` 走純文字 — 這是模型「判斷不需要呼工具」的決策。要根治需要的是縮 tool list / 換更高量化 (Q5/Q6) / 客戶端 maxTurns + retry，**parser 層改 100 行也救不到**。
 
 ---
+
+### node-llama-tcq shim 與 buun-llama-cpp 的 reasoning_content 差異 — `<think>` 是 special token vs 字面文字
+
+- **發生什麼事**：寫 live-test-realistic-v2（全 stream + reasoning=on）量測時加了「`reasoning_content` 累積 chars」欄位，發現 10 個 case 全是 `r=0t`（除 D6.1 副作用 19ch）。my-agent 的 ChatUI 上面對應就是看不到 thinking block，但用 buun-llama-cpp 接同個 my-agent 完全 OK。
+- **根本原因（決定性對比）**：兩條 chat template 路徑完全不同：
+  - **buun**：用 GGUF 內嵌 jinja template（`--jinja` flag）。`<think>` 在 template 是**字面文字字串**，model emit 字面 token、SSE stream 字面字串出現、buun-llama-server 的 `chat-parser` 解析後寫進 `delta.reasoning_content`。my-agent `llamacpp-fetch-adapter.ts:1169` 直接收 `reasoning_content` 沒問題。
+  - **shim**：用 node-llama-cpp 的 `QwenChatWrapper`（`vendor/.../QwenChatWrapper.ts:109-112`），`<think>\n` 跟 `\n</think>` 都是 `LlamaText(new SpecialTokensText(...))` — 模型用 special token id 而非字面字串、wrapper detokenize 後字面字串**完全消失**。`onTextChunk` callback 的 doc 寫得很清楚：「Includes only the main response without any text segments (like thoughts).」shim `chatCompletions.ts runStreaming` 用 `onTextChunk`，thoughts 整個 segment 沒從 stream 路徑流出。`StreamReasoningSplitter` 用字面 `text.indexOf("<think>")` 永遠找不到。
+  - **唯一例外**：D6.1 prompt「分析 QwenChatWrapper.ts thoughts 處理」要求 model 讀 source code、模型 echo 了 source code 中的字面 `<think>` 字串 → splitter 偶然切到 19ch reasoning。**這個副作用反證 splitter 邏輯是對的**，只是字面字串永遠不來。
+- **驗證對比實驗**（`scripts/probe-onresponsechunk.ts` + `scripts/probe-think-prefix.ts`）：
+  1. 直接 import wrapper 用 `onResponseChunk` 收 segments：`thought ch=0 main ch=1147` — wrapper 確實沒切到 thought segment（model 自己沒 emit special token）。
+  2. 強制 `responsePrefix="<think>\n"` 字串注入：model 接著用**字面文字繼續寫** thinking，輸出 `"<think>\nThinking Process:\n\n1. **Analyze..."` — 證明 string 介面把 prefix 當字面文字、不解 special token。
+- **正確修法（FIXUP-5）**：限縮 `useQwenFormat` 路徑：`resolveReasoning` reasoning=on/auto 路徑回傳新欄位 `thinkOpenPrefix="<think>\n"`；`composeResponsePrefix` 在 `useQwenFormat && reasoningPrefix === "" && toolPrefix === ""` 時把 thinkOpenPrefix 疊進 `engineResponsePrefix`，但**不剝離**（`stripPrefix` 只剝 reasoning off mode 的 `</think>\n\n`）。模型看到字面 `<think>\n` → 接著用字面文字繼續寫 thinking → emit 字面 `</think>` 收尾 → `onTextChunk` 看到字面 `<think>...</think>` → 現有 `StreamReasoningSplitter` 自然 work，行為與 buun 對齊。
+- **跟 toolPrefix / off mode 互斥**：`composeResponsePrefix` 加 `toolPrefix === ""` gate 避免 `<think>\n<tool_call>...` 這種奇怪複合 prefix（forced tool 場景用戶已選擇放棄 thinking）。`reasoningPrefix === ""` gate 避免跟 off mode 的 `</think>\n\n` 撞（off mode 主導，thinking 不啟動）。
+- **驗證**（`live-test-realistic-v3-myagent.ts` 透過 my-agent CLI 端到端，連 shim:8081）：
+  - **think=0 從 9/10 → 0/10**（除 vision 兩個 fail case 因另一個 bug）
+  - reasoning_content 落在 117-44361 chars 範圍（D2.1 純數學推理 emit 44361ch / 11k token thinking）
+  - D6.1 從 ❌（思考內容混進 content 沒對到 textMatch）→ ✅（thinking 路由乾淨後 final result 文字命中）
+  - my-agent UI 上 thinking block 從消失 → 顯示
+- **副作用發現**（同樣的 v3 跑出來看到的）：
+  - **thinking 開後模型行為更深度推理**：D9.1 「修一下那個 bug」之前 ❌（5 turns 亂呼 Bash×3+Read 試圖找 bug）→ 現在 ✅（1 turn 正確澄清）但耗 217s thinking。
+  - **過度思考案例**：D2.1 純數學跑 476s（44k chars thinking 才答出「無解」）；D10.1 multi-step 踩線 timeout。
+  - **兩個衍生 fix 待做**：
+    1. shim 啟動加 `--reasoning-budget` cap（建議 4096 預設）控過度思考（M-TCQ-SHIM-FIXUP-9）
+    2. my-agent `llamacpp-fetch-adapter.ts:299-313` `tool_result.content[]` 翻譯只抽 text 丟掉 image block — FileReadTool 對 .jpeg 回傳的 image block 整個被吃掉，shim 走純文字 path、模型看不到圖（v3 D11/D12 vision case fail 真因，與 shim 無關）（M-TCQ-SHIM-FIXUP-8）
+- **教訓**：
+  1. **chat template 路線**（jinja vs wrapper）決定一切，差別不在 server 而在「模型輸出的字面字串裡有沒有 `<think>` token」。寫類 OpenAI server 接 thinking 模型必須先確認這條。
+  2. **`onTextChunk` 文件直接寫 main response only** — 拆 reasoning 要用 `onResponseChunk` 看 segment，但前提是 wrapper 真的觸發了 thought segment。Qwen3.5 在 reasoning=on 不主動觸發 thought（要靠 prompt 引導 / 字面 prefix）。
+  3. **「driver 端字串 prefix 注入」是字面文字注入**（不解析 special token）— 這是錯置 unintended 但**剛好變成對的修法**：模型看字面 `<think>` 接字面 thinking、buun 也是這樣 work 的。
+  4. **`live-test-realistic-v2` r=0t 全表是早該注意的訊號**，但因為 v1 baseline 斷言只看 content 長度 OK，這 bug 蓋了好幾個版本沒抓到。**任何 reasoning 模型測試都該加「reasoning_content 非空」斷言**。
+- **相關檔案**：`vendor/node-llama-tcq/src/server/chatCompletions.ts:265-271`（`thinkOpenPrefix` 加進 `ResolvedReasoning`）、`:359-369`（`resolveReasoning` 設值）、`:233-263`（`composeResponsePrefix` 疊加 + 互斥 gate）、`vendor/node-llama-tcq/src/chatWrappers/QwenChatWrapper.ts:109-112`（`SpecialTokensText` 是 root cause）、`vendor/node-llama-tcq/src/evaluator/LlamaChat/LlamaChat.ts:142-171`（`onTextChunk` vs `onResponseChunk` doc）、`vendor/node-llama-tcq/scripts/probe-onresponsechunk.ts` + `probe-think-prefix.ts`（驗證 probe）、`vendor/node-llama-tcq/scripts/live-test-realistic-v3-myagent.ts`（my-agent E2E test）、`src/services/api/llamacpp-fetch-adapter.ts:1169`（buun reasoning_content 接收點）、`:299-313`（待修的 image tool_result bug）
+- **日期**：2026-05-06 → 2026-05-07
+
+---

@@ -51,6 +51,9 @@
 - [x] M-TCQ-SHIM-FIXUP-4 測試斷言放寬 — `live-test-realistic.ts chat()` `expectTool` 加結構化型別 `{tool?, textMatch?}`（boolean / string 行為保留）。**只放寬 C2.2**（snippet 已含完整答案、模型直接摘要符合 OpenAI / Anthropic goal-directed tool calling 指引），C1.3 / C1.4 / C9.1 維持嚴格（前二者作為 Q4 退化訊號、後者是強制 tool 真 bug 驗證）。**驗證**：C2.2 FAIL → PASS（text~/low.*medium.*high/）。
 - [x] M-TCQ-SHIM-FIXUP-5 重跑 `live-test-realistic.ts` — 26/28 (92.9%)。低於原訂目標 27/28 — 因 FIXUP-3 對 C1.3 / C1.4 真實退化形式無效（C1.3 inner 全空、C1.4 沒 emit `<tool_call>`），這兩個剩餘 fail 不在 parser 層可解決範圍，需另外手段（縮 tool list / 換量化 / 客戶端 retry）。
 - [x] M-TCQ-SHIM-FIXUP-6 commit（繁中、分段）：`feat(node-llama-tcq): tool_choice 接 decoder（prefix-token，FIXUP-1）` / `feat(node-llama-tcq): vision path 注入 tools + render tool history（FIXUP-2）` / `fix(node-llama-tcq): parser 寬鬆化容忍 Q4 退化變種（FIXUP-3）` / `test(node-llama-tcq): live-test-realistic 斷言放寬（FIXUP-4）` / docs。
+- [x] M-TCQ-SHIM-FIXUP-7 reasoning=on 注入字面 `<think>\n` prefix（對齊 buun 行為）— shim 用 QwenChatWrapper 把 `<think>` 設為 `SpecialTokensText`，模型 emit 的是 special token id、wrapper detokenize 後字面字串消失 → `onTextChunk` 拿到的純文字 stream 永遠不含 `<think>...</think>` → `StreamReasoningSplitter` 永遠切不到 reasoning，my-agent adapter 收不到 `delta.reasoning_content`。對比 buun-llama-cpp 走 GGUF jinja template，`<think>` 是字面 token 直接出現在 stream，server emit `delta.reasoning_content`。**修法**：`resolveReasoning` reasoning=on/auto 路徑回 `thinkOpenPrefix="<think>\n"`；`composeResponsePrefix` 限縮 `useQwenFormat && !reasoningPrefix && !toolPrefix` 才疊加（off mode / forced tool 跳過避免複合 prefix 撞）；不剝離（讓 splitter 看到字面 `<think>` → 切到 reasoning_content）。**驗證**：v3 my-agent E2E 12 case，think=0ch 從 9/10 → 0/10；reasoning_content 200-44000ch 範圍。發現副作用：thinking 開後 D2.1 純數學跑 476s（44k chars）、D10.1 multi-step 踩線、D9.1 從亂呼工具改成正確澄清但耗 217s，需 server-side `--reasoning-budget` cap。
+- [ ] M-TCQ-SHIM-FIXUP-8 my-agent llamacpp adapter `tool_result.content[]` 內 image block 翻譯漏洞 — `src/services/api/llamacpp-fetch-adapter.ts:299-313` 把 tool_result 翻成 OpenAI tool message 時只 `.map(b => b.type === 'text' ? b.text : '')` 抽 text、整個丟掉 image block。FileReadTool 對 .jpeg 回 `{type:'image', source:{base64,...}}` → adapter 丟掉 → shim `extractMediaParts` 0 image_url part → 純文字 path → v3 D11/D12 fail（模型重試 Read×11）。**修法待做**：image block 提取出來、用 user message 緊接在 tool message 後注入 image_url part（OpenAI tool role content 規範只接 string，無法直接放 image part）。
+- [ ] M-TCQ-SHIM-FIXUP-9 shim 啟動加 `--reasoning-budget` 預設 cap — 觀察 v3 D2.1 / D10.1 thinking 過度（44k chars）。建議預設 `--reasoning-budget 4096`，極端推理由 client `body.reasoning_budget` 加大。
 
 #### 不在範圍 → 後續 milestone
 - GBNF grammar 強制 tool 格式（M-TCQ-SHIM-2-5 仍 defer，待 prefix-token 方案 ROI 驗證後再評估）
@@ -3367,3 +3370,11 @@
 - 2026-05-06 17:11: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
 
 - 2026-05-06 17:13: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 20:55: Session 結束 | 進度：755/867 任務 | b3e0de2 docs: M-TCQ-SHIM-FIXUP-3/4 完成，更新 LESSONS + TODO
+
+- 2026-05-06 21:22: Session 結束 | 進度：755/867 任務 | b3e0de2 docs: M-TCQ-SHIM-FIXUP-3/4 完成，更新 LESSONS + TODO
+
+- 2026-05-06 21:47: Session 結束 | 進度：755/867 任務 | b3e0de2 docs: M-TCQ-SHIM-FIXUP-3/4 完成，更新 LESSONS + TODO
+
+- 2026-05-07 00:32: Session 結束 | 進度：755/867 任務 | b3e0de2 docs: M-TCQ-SHIM-FIXUP-3/4 完成，更新 LESSONS + TODO
