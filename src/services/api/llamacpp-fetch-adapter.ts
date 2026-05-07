@@ -103,6 +103,12 @@ interface OpenAIRequestBody {
   max_tokens?: number
   temperature?: number
   top_p?: number
+  // M-TCQ-SHIM-SAMPLER：preset 注入後可能填入這些欄位（shim 端 chatCompletions 已對應 forward）
+  top_k?: number
+  min_p?: number
+  presence_penalty?: number
+  frequency_penalty?: number
+  repetition_penalty?: number
   stream?: boolean
   tools?: Array<{
     type: 'function'
@@ -624,6 +630,14 @@ export function translateRequestToOpenAI(
     callSite?: import('../../llamacppConfig/schema.js').LlamaCppCallSite
     /** 同上，可直接傳已 resolve 的 watchdog 設定（避免重讀 snapshot；測試友善） */
     watchdogCfg?: import('../../llamacppConfig/schema.js').LlamaCppWatchdogConfig
+    /**
+     * M-TCQ-SHIM-SAMPLER：直接傳 sampling preset 設定（測試友善；省掉重讀 config snapshot）。
+     * 未提供時 lazy-load `getLlamaCppConfigSnapshot()` 取最新 hot-reloaded 結果。
+     */
+    samplingPresetCfg?: Pick<
+      import('../../llamacppConfig/schema.js').LlamaCppConfig,
+      'samplingPresets' | 'defaultSamplingPreset'
+    >
   } = {},
 ): OpenAIRequestBody {
   const systemPrompt = flattenSystemPrompt(anthropic.system)
@@ -683,7 +697,26 @@ export function translateRequestToOpenAI(
     delete body.tools
     delete body.tool_choice
   }
-  return body
+
+  // M-TCQ-SHIM-SAMPLER：依 metadata.taskType 注入 sampling preset。
+  // - Family gate：preset.appliesTo glob 對 model id 比對，沒命中靜默跳過（正常路徑）
+  // - 注入只填 body 缺欄位（caller 顯式 > preset）
+  // - 未知 taskType key 印 warn 不 fail
+  // taskType 取自 Anthropic SDK 的 metadata（free-form Record<string, string>）
+  const taskTypeRaw = (anthropic as { metadata?: Record<string, unknown> | null }).metadata?.taskType
+  const taskType = typeof taskTypeRaw === 'string' && taskTypeRaw !== '' ? taskTypeRaw : undefined
+  const samplingCfg =
+    options.samplingPresetCfg ??
+    (() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const loader = require('../../llamacppConfig/loader.js') as typeof import('../../llamacppConfig/loader.js')
+      const snap = loader.getLlamaCppConfigSnapshot()
+      return { samplingPresets: snap.samplingPresets, defaultSamplingPreset: snap.defaultSamplingPreset }
+    })()
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { applySamplingPreset } = require('../../llamacppConfig/applySamplingPreset.js') as typeof import('../../llamacppConfig/applySamplingPreset.js')
+  const injected = applySamplingPreset(body as unknown as Record<string, unknown>, samplingCfg, taskType)
+  return injected as unknown as OpenAIRequestBody
 }
 
 /**

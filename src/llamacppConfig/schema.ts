@@ -153,6 +153,39 @@ export const LlamaCppRoutingSchema = z.object({
   vision: RoutingTargetEnum.default('local'),
 })
 
+/**
+ * M-TCQ-SHIM-SAMPLER：sampling preset 庫。
+ *
+ * caller 在 Anthropic request 帶 `metadata.taskType: 'thinking-coding'` 即觸發；
+ * 沒帶就 fallback `defaultSamplingPreset`；仍無則不注入（走 shim CLI default 或 engine 內建）。
+ *
+ * Family gate：每個 preset 自帶 `appliesTo` glob 陣列，只在 request 的 model id
+ * 命中任一 pattern 時才注入。預設 4 組 Qwen 推薦 preset 都標 `qwen*` —
+ * 不會誤套 Claude / Llama / GPT-OSS 等其他模型（避免 Qwen 特化值污染）。
+ *
+ * 優先序：request body > preset > shim CLI default > engine 內建。
+ * 注入規則：preset 只填 body 還沒帶的欄位（caller 顯式覆蓋永遠贏）。
+ */
+export const SamplingParamsSchema = z.object({
+  temperature: z.number().optional(),
+  top_p: z.number().optional(),
+  top_k: z.number().int().optional(),
+  min_p: z.number().optional(),
+  presence_penalty: z.number().optional(),
+  frequency_penalty: z.number().optional(),
+  /** llama.cpp/Qwen-style 乘法 repeat penalty（1.0 = disabled） */
+  repetition_penalty: z.number().optional(),
+}).strict()
+
+export const SamplingPresetSchema = z.object({
+  /**
+   * Glob 模式陣列，比對目前 request 的 model id（支援 `*` 萬用）。
+   * 預設 `['*']` 全套。Qwen 內建 4 組標 `['qwen*', '*qwen*']` 限定。
+   */
+  appliesTo: z.array(z.string()).default(['*']),
+  params: SamplingParamsSchema,
+}).strict()
+
 export const LlamaCppVisionSchema = z.object({
   /**
    * 是否啟用 vision 翻譯（M-VISION）。
@@ -209,6 +242,37 @@ export const LlamaCppConfigSchema = z.object({
    * 改了下個 turn 立刻生效（沿用 mtime hot-reload）。
    */
   routing: LlamaCppRoutingSchema.default({}),
+  /**
+   * Sampling preset 庫（M-TCQ-SHIM-SAMPLER）。
+   * Key 自由命名，預設帶 Qwen3.5 官方推薦 4 組（thinking-general / thinking-coding /
+   * instruct-general / instruct-reasoning）。家族 gate 透過 preset.appliesTo 控制。
+   *
+   * 觸發：Anthropic request `metadata.taskType` → 對應 preset；不帶 metadata 則用
+   * `defaultSamplingPreset`（若有設）。Body 顯式欄位永遠優先。
+   */
+  samplingPresets: z.record(z.string(), SamplingPresetSchema).default({
+    'thinking-general': {
+      appliesTo: ['qwen*', '*qwen*'],
+      params: { temperature: 1.0, top_p: 0.95, top_k: 20, min_p: 0.0, presence_penalty: 1.5, repetition_penalty: 1.0 },
+    },
+    'thinking-coding': {
+      appliesTo: ['qwen*', '*qwen*'],
+      params: { temperature: 0.6, top_p: 0.95, top_k: 20, min_p: 0.0, presence_penalty: 0.0, repetition_penalty: 1.0 },
+    },
+    'instruct-general': {
+      appliesTo: ['qwen*', '*qwen*'],
+      params: { temperature: 0.7, top_p: 0.8, top_k: 20, min_p: 0.0, presence_penalty: 1.5, repetition_penalty: 1.0 },
+    },
+    'instruct-reasoning': {
+      appliesTo: ['qwen*', '*qwen*'],
+      params: { temperature: 1.0, top_p: 0.95, top_k: 20, min_p: 0.0, presence_penalty: 1.5, repetition_penalty: 1.0 },
+    },
+  }),
+  /**
+   * 沒帶 metadata.taskType 時的 fallback preset key（仍會經過 family gate）。
+   * 留空 = 不 fallback（不注入）。
+   */
+  defaultSamplingPreset: z.string().optional(),
 })
 
 export type LlamaCppConfig = z.infer<typeof LlamaCppConfigSchema>
@@ -229,6 +293,8 @@ export type LlamaCppCallSite =
 export type LlamaCppRemoteConfig = z.infer<typeof LlamaCppRemoteSchema>
 export type LlamaCppRoutingConfig = z.infer<typeof LlamaCppRoutingSchema>
 export type LlamaCppRoutingTargetEnum = z.infer<typeof RoutingTargetEnum>
+export type SamplingParams = z.infer<typeof SamplingParamsSchema>
+export type SamplingPreset = z.infer<typeof SamplingPresetSchema>
 
 /** 完整預設值（所有欄位）。供 seed 寫檔 + fallback 使用。 */
 export const DEFAULT_LLAMACPP_CONFIG: LlamaCppConfig =

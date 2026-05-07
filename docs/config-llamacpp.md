@@ -129,5 +129,7 @@
 | `watchdog` | `LlamaCppWatchdogSchema` | `{}` | `LLAMACPP_WATCHDOG_ENABLE`<br>`LLAMACPP_WATCHDOG_DISABLE` | Watchdog 設定（M-LLAMACPP-WATCHDOG）。三層 client-side 守門防 llama.cpp 失控生成（reasoning loop 等）。預設全關不影響既有行為。 |
 | `remote` | `LlamaCppRemoteSchema` | `{}` | — | Remote endpoint（M-LLAMACPP-REMOTE）。預設 enabled=false 不影響既有行為。 啟用後配合 routing 表把指定 callsite 指向遠端機器。 |
 | `routing` | `LlamaCppRoutingSchema` | `{}` | — | Per-callsite routing（M-LLAMACPP-REMOTE）。缺欄位 = 'local'。 改了下個 turn 立刻生效（沿用 mtime hot-reload）。 |
+| `samplingPresets` | `record` | `{ 'thinking-general': { appliesTo: ['qwen*', '*qwen*'], params: { temperature...` | — | Sampling preset 庫（M-TCQ-SHIM-SAMPLER）。 Key 自由命名，預設帶 Qwen3.5 官方推薦 4 組（thinking-general / thinking-coding / instruct-general / instruct-reasoning）。家族 gate 透過 preset.appliesTo 控制。 觸發：Anthropic request `metadata.taskType` → 對應 preset；不帶 metadata 則用 `defaultSamplingPreset`（若有設）。Body 顯式欄位永遠優先。 |
+| `defaultSamplingPreset` | `string` _(optional)_ | _(undefined)_ | — | 沒帶 metadata.taskType 時的 fallback preset key（仍會經過 family gate）。 留空 = 不 fallback（不注入）。 |
 
 <!-- AUTO-GENERATED-END -->
