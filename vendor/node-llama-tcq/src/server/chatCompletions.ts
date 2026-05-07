@@ -228,15 +228,31 @@ function composeResponsePrefix(
     useQwenFormat: boolean,
     declaredTools: NonNullable<OpenAIChatRequest["tools"]>
 ): {engineResponsePrefix: string | undefined, stripPrefix: string | undefined} {
-    const reasoningPrefix = reasoning.responsePrefix ?? "";
+    const reasoningPrefix = reasoning.responsePrefix ?? "";    // 剝離（off mode 的 </think>\n\n）
     const toolPrefix = (useQwenFormat && declaredTools.length > 0)
         ? (buildQwenToolChoicePrefix((body as any).tool_choice) ?? "")
         : "";
-    if (reasoningPrefix === "" && toolPrefix === "") {
+
+    // M-TCQ-SHIM-FIXUP-5：限縮 useQwenFormat 才注入 `<think>\n`；非 Qwen 路徑（OpenAI-compat
+    // JSON-fallback）不動。reasoning=off 時 reasoningPrefix=`</think>\n\n` 已主導，跳過
+    // think open。tool_choice=required/named 時 toolPrefix 已強制，跳過 think open（避免
+    // 模型在 `<think>\n<tool_call>` 的奇怪複合 prefix 下混亂；強制 tool 場景用戶已選擇放棄
+    // thinking）。
+    const thinkOpenPrefix = (
+        useQwenFormat
+        && reasoning.thinkOpenPrefix != null
+        && reasoningPrefix === ""
+        && toolPrefix === ""
+    ) ? reasoning.thinkOpenPrefix : "";
+
+    if (reasoningPrefix === "" && toolPrefix === "" && thinkOpenPrefix === "") {
         return {engineResponsePrefix: undefined, stripPrefix: undefined};
     }
     return {
-        engineResponsePrefix: reasoningPrefix + toolPrefix,
+        // 順序：reasoningPrefix（off 用）+ thinkOpenPrefix（on 用）+ toolPrefix（強制 tool）。
+        // off + tool = 跳 thinking 直接強制 tool；on + 沒 tool = 開 thinking；on + 有 tool = 跳 thinking 強制 tool。
+        engineResponsePrefix: reasoningPrefix + thinkOpenPrefix + toolPrefix,
+        // 只剝 reasoningPrefix（off mode）；thinkOpenPrefix 留給 splitter；toolPrefix 留給 parseQwenToolCalls。
         stripPrefix: reasoningPrefix === "" ? undefined : reasoningPrefix
     };
 }
@@ -264,6 +280,23 @@ function stripResponsePrefix(text: string, prefix: string | undefined): string {
  */
 type ResolvedReasoning = {
     responsePrefix?: string,
+    /**
+     * M-TCQ-SHIM-FIXUP-5：reasoning="on"/"auto" 模式下的 thinking 啟動旗標。
+     *
+     * 為什麼需要：QwenChatWrapper 把 `<think>` 設為 SpecialTokensText —— 模型 emit 的是
+     * special token id 而非字面字串，wrapper detokenize 後字面 `<think>` 從 stream 中消失。
+     * `onTextChunk` 只給 main response 段，thoughts 整個被 wrapper 收進 segment、不流到
+     * streaming 路徑。對比 buun-llama-cpp 走 GGUF jinja template，`<think>` 是字面 token
+     * 直接在 stream 裡 emit，server 端解析後寫進 `delta.reasoning_content`，my-agent
+     * adapter 才接得到。
+     *
+     * 修法：useQwenFormat 路徑下，reasoning=on/auto 時把字面 `<think>\n` 注入為
+     * responsePrefix（用 string 介面 → wrapper 把它當「字面文字」放進 main response，
+     * 模型接著用字面文字繼續寫 thinking、最後 emit 字面 `</think>` 收尾）。stream 中
+     * 字面 `<think>...</think>` 出現後，現有 `StreamReasoningSplitter` 就能切到
+     * reasoning_content，行為與 buun 一致。
+     */
+    thinkOpenPrefix?: string,
     thoughtTokens?: number,
     reasoningFormat: "none" | "deepseek" | "deepseek-legacy",
     budgetMessage?: string,
@@ -336,7 +369,17 @@ function resolveReasoning(session: ServerSession, body: OpenAIChatRequest): Reso
         thoughtTokens = Math.floor(body.max_tokens * 0.6);
     }
 
-    return {responsePrefix: undefined, thoughtTokens, reasoningFormat, budgetMessage, explicitBudget};
+    // M-TCQ-SHIM-FIXUP-5：reasoning=on/auto 路徑回 thinkOpenPrefix=`<think>\n`。
+    // composeResponsePrefix 會在 useQwenFormat 路徑下把它疊進 engine responsePrefix
+    // 但**不剝離**，讓 StreamReasoningSplitter 看到字面 `<think>` 後切到 reasoning_content。
+    return {
+        responsePrefix: undefined,
+        thinkOpenPrefix: "<think>\n",
+        thoughtTokens,
+        reasoningFormat,
+        budgetMessage,
+        explicitBudget
+    };
 }
 
 /**
