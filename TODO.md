@@ -75,12 +75,12 @@
 **決策**：8 個舊指令完全移除（含檔案刪除），使用者一律從 `/discord` 進入。TUI 列表的 disk read 不走 cached snapshot（直接 readFile + parseJsonc），避免 REPL process cache 污染。
 
 ### 任務
-- [ ] M-DISCORD-TUI-1 新增 `src/commands/discord/`：index / discord.tsx / DiscordManager.tsx / discordManagerLogic.ts / DiscordBindWizard.tsx
-- [ ] M-DISCORD-TUI-2 `src/commands.ts` 移除 8 個 `discordXxxCommand` import 與 entries，註冊 `discordCommand`
-- [ ] M-DISCORD-TUI-3 刪除 `src/commands/discord{Bind,Unbind,BindOtherChannel,UnbindOtherChannel,WhitelistAdd,WhitelistRemove,Invite,Guilds}.ts`
-- [ ] M-DISCORD-TUI-4 `tests/unit/commands/discordManagerLogic.test.ts` 單元測試（list 處理、cwd 標星、binding/project 對應）
-- [ ] M-DISCORD-TUI-5 `bun run typecheck` + `bun run build:dev` + `./cli-dev` 冒煙（`/help` 確認舊指令消失、`/discord` 4 tab 正常）
-- [ ] M-DISCORD-TUI-6 commit（繁中）：`feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）`
+- [x] M-DISCORD-TUI-1 新增 `src/commands/discord/`：index / discord.tsx / DiscordManager.tsx / discordManagerLogic.ts / DiscordBindWizard.tsx
+- [x] M-DISCORD-TUI-2 `src/commands.ts` 移除 8 個 `discordXxxCommand` import 與 entries，註冊 `discordCommand`
+- [x] M-DISCORD-TUI-3 刪除 `src/commands/discord{Bind,Unbind,BindOtherChannel,UnbindOtherChannel,WhitelistAdd,WhitelistRemove,Invite,Guilds}.ts`
+- [x] M-DISCORD-TUI-4 `tests/unit/commands/discordManagerLogic.test.ts` 單元測試（list 處理、cwd 標星、binding/project 對應）
+- [x] M-DISCORD-TUI-5 `bun run typecheck` + `bun run build:dev` + `./cli-dev` 冒煙（`/help` 確認舊指令消失、`/discord` 4 tab 正常）
+- [x] M-DISCORD-TUI-6 commit（繁中）：`feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）`
 
 ### 不在範圍 → 後續 milestone
 - Web admin 對應的 Discord 頁面
@@ -96,15 +96,15 @@
 **決策**：獨立 `/memory-recall` 命令（不擴充 `/memory`），TUI 風格 + 鍵位完全參考 `/memory`，edit/delete 直接 import `memoryMutations.ts` 既有 API；Web 沿用既有 accordion 設計加新 section。Settings 加新群組 `memoryRecall.{maxFiles, fallbackMaxFiles}`，session recall log 用 module-level Map（process exit 自然消失）。
 
 ### 任務
-- [ ] M-MEMRECALL-CMD-1 settings schema：`src/utils/settings/types.ts` 加 `memoryRecall` 群組（maxFiles / fallbackMaxFiles）
-- [ ] M-MEMRECALL-CMD-2 sessionRecallLog：`src/memdir/sessionRecallLog.ts` 新模組，Map<sessionId, Map<absPath, RecallLogEntry>>
-- [ ] M-MEMRECALL-CMD-3 findRelevantMemories：read settings + recordRecall（去掉 hardcoded `FALLBACK_MAX_FILES` 與 selector cap=5）
-- [ ] M-MEMRECALL-CMD-4 TUI 命令：`src/commands/memory-recall/{index.ts, memory-recall.tsx, MemoryRecallManager.tsx, memoryRecallLogic.ts}` + commands.ts 註冊
-- [ ] M-MEMRECALL-CMD-5 REST + WS：`src/web/restRoutes.ts` 加 4 endpoints + 2 個 WS frame（settings 同步 / session-log 即時更新）
-- [ ] M-MEMRECALL-CMD-6 Web 右欄：`web/src/components/rightPanel/tabs/MemoryRecallTab.tsx` + ContextPanel SECTIONS 註冊（accordion）
-- [ ] M-MEMRECALL-CMD-7 測試：5 個 test 檔 ≥30 cases（settings-roundtrip / session-log / find-relevant / rest-endpoints / tui-logic）
-- [ ] M-MEMRECALL-CMD-8 typecheck + bun test 全綠 + `./cli-dev` 跑 `/memory-recall` 手測
-- [ ] M-MEMRECALL-CMD-9 commit：5 段（schema / find-relevant / TUI / REST+Web / 測試）
+- [x] M-MEMRECALL-CMD-1 settings schema：`src/utils/settings/types.ts` 加 `memoryRecall` 群組（maxFiles / fallbackMaxFiles）
+- [x] M-MEMRECALL-CMD-2 sessionRecallLog：`src/memdir/sessionRecallLog.ts` 新模組，Map<sessionId, Map<absPath, RecallLogEntry>>
+- [x] M-MEMRECALL-CMD-3 findRelevantMemories：read settings + recordRecall（去掉 hardcoded `FALLBACK_MAX_FILES` 與 selector cap=5）
+- [x] M-MEMRECALL-CMD-4 TUI 命令：`src/commands/memory-recall/{index.ts, memory-recall.tsx, MemoryRecallManager.tsx, memoryRecallLogic.ts}` + commands.ts 註冊
+- [x] M-MEMRECALL-CMD-5 REST + WS：`src/web/restRoutes.ts` 加 4 endpoints + 2 個 WS frame（settings 同步 / session-log 即時更新）
+- [x] M-MEMRECALL-CMD-6 Web 右欄：`web/src/components/rightPanel/tabs/MemoryRecallTab.tsx` + ContextPanel SECTIONS 註冊（accordion）
+- [x] M-MEMRECALL-CMD-7 測試：5 個 test 檔 ≥30 cases（settings-roundtrip / session-log / find-relevant / rest-endpoints / tui-logic）
+- [x] M-MEMRECALL-CMD-8 typecheck + bun test 全綠 + `./cli-dev` 跑 `/memory-recall` 手測
+- [x] M-MEMRECALL-CMD-9 commit：5 段（schema / find-relevant / TUI / REST+Web / 測試）
 
 ### 不在範圍 → 後續 milestone
 - Per-project memory dir override（`autoMemoryDirectory` 已能做）
@@ -3384,3 +3384,15 @@
 - 2026-05-07 08:54: Session 結束 | 進度：756/870 任務 | 08a49bd docs: M-TCQ-SHIM-FIXUP-7 + 後續 FIXUP-8/9 issue 追蹤
 
 - 2026-05-07 08:57: Session 結束 | 進度：756/870 任務 | 08a49bd docs: M-TCQ-SHIM-FIXUP-7 + 後續 FIXUP-8/9 issue 追蹤
+
+- 2026-05-07 09:41: Session 結束 | 進度：757/870 任務 | 21cd721 docs+test: M-TCQ-SHIM-FIXUP-8 完成 + v3 D12 斷言放寬
+
+- 2026-05-07 09:46: Session 結束 | 進度：757/870 任務 | 21cd721 docs+test: M-TCQ-SHIM-FIXUP-8 完成 + v3 D12 斷言放寬
+
+- 2026-05-07 09:49: Session 結束 | 進度：757/870 任務 | 21cd721 docs+test: M-TCQ-SHIM-FIXUP-8 完成 + v3 D12 斷言放寬
+
+- 2026-05-07 09:52: Session 結束 | 進度：757/870 任務 | 21cd721 docs+test: M-TCQ-SHIM-FIXUP-8 完成 + v3 D12 斷言放寬
+
+- 2026-05-07 09:57: Session 結束 | 進度：757/870 任務 | 21cd721 docs+test: M-TCQ-SHIM-FIXUP-8 完成 + v3 D12 斷言放寬
+
+- 2026-05-07 10:13: Session 結束 | 進度：757/870 任務 | 01f1340 docs: M-TCQ-SHIM-FIXUP 全套通過 — v3 my-agent 端到端 10/12 收尾
