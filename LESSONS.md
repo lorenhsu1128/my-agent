@@ -823,3 +823,33 @@
 - **日期**：2026-05-06 → 2026-05-07
 
 ---
+
+### M-TCQ-SHIM-FIXUP 全套（FIXUP-1 ~ 8b）端到端通過 — v3 my-agent 真實使用情境 10/12
+
+- **發生什麼事**：本輪 milestone 結束時跑 v3 (live-test-realistic-v3-myagent.ts) 12 case — 透過 my-agent CLI 端到端連 shim:8081，全 stream + reasoning=on + 256k ctx。FIXUP-1/2/3/4/5/7/8/8b 全部到位後通過 10/12（83.3%），剩 2 fail（D2.1 / D8.1）都是 model agentic 行為層、與 infra 無關。
+- **這輪 milestone 解的 bug 全清單**：
+  1. **FIXUP-1** — `tool_choice` 在 shim 完全未實作 → 加 prefix-token 路線（限縮 useQwenFormat）
+  2. **FIXUP-2** — vision path 不注入 tools block → 雙路徑同步（packMessages / buildVisionPrompt）
+  3. **FIXUP-3** — Q4 量化下模型偶爾用 `<key>val</key>` 而非 `<parameter=key>val</parameter>` → parser 寬鬆化 + 白名單 mitigate
+  4. **FIXUP-4** — 測試斷言過嚴（C2.2 模型直接摘要符合 goal-directed tool calling 指引）→ 結構化斷言放寬
+  5. **FIXUP-5/7** — reasoning=on 模式 thinking 從 stream 完全消失（QwenChatWrapper SpecialTokensText 設計使然）→ 注入字面 `<think>\n` prefix 觸發模型用字面文字繼續寫，與 buun jinja template 行為對齊
+  6. **FIXUP-8** — adapter `tool_result.content[]` 內 image block 翻譯漏掉（FileReadTool 對 .jpeg 回的 image block 整個被吃成空字串）→ iterate parts 收 image_url、tool message 用 multipart array
+  7. **FIXUP-8b** — shim `visionInference.renderMessageWithMarkers` tool role 配套修，避免撞 500 "Vision prompt build dropped all media"
+- **驗證 metrics**（v3 final 10/12）：
+  - **vision pipeline**：D11/D12 從 ❌（adapter 吞掉 image）→ ✅（model 答「圖中的歷史事件是 1969 年... 阿波羅 11 號登月」、shim log 出現 `image_tokens->nx=20` vision encoder activity）
+  - **reasoning_content**：think=0 case 從 v3 baseline 9/10 → FIXUP-7 後 0/12（純文字 case 全有 130-2152ch reasoning_content 流到 my-agent UI）
+  - **tool chain**：D4 Grep×3 + Read、D5 Glob×3 + Bash + Read（6 turns）、D10 Bash + Read×2 + Glob×2（6 turns）全完成
+  - **token 規模**：input 從 16K（單輪）到 151K（multi-step 多 turn 累積），256k ctx 才夠 — 128k 會爆
+- **2 個剩餘 fail 與 infra 無關**：
+  - **D2.1 純數學**「100 以內恰好 4 質因數」答案應為「無」(2×3×5×7=210>100)。Q4 model 在 reasoning_budget auto-cap (`max_tokens × 0.6`) 下 thinking 只展開 973ch 就被截斷、給錯答案。對比 reasoning_budget 不限時 model 用 44k chars 推到正確結論。**Q4 model 推理深度需求 vs runtime cap 的本質權衡**。
+  - **D8.1 訂機票拒絕** — model thinking 83ch 後給「請提供更多資訊」之類部分配合的回應而非明確拒絕，textMatch `/(無法|不能|抱歉)/` 沒命中。同樣是 thinking 不足的副作用。
+- **教訓**：
+  1. **adapter bug 跨 server 共用** — FIXUP-8 修了同時救 buun 跟 shim（adapter 是共用的，buun 也有同樣 bug 只是觸發場景少 — 「請 model 主動用 Read 工具看 .jpeg」在真實互動中罕見，**使用者體感是「答案不準」而非「明顯紅燈」**）。寫 adapter 翻譯邏輯時要對「**所有 role 的 multipart content**」一致處理，特殊 case 容易留洞。
+  2. **adapter / server 配套修才會通** — FIXUP-8 修完打 my-agent CLI 直接撞 shim 500 "Vision prompt build dropped all media"。pre-fix 不會撞是因為 image 從來沒到那個分支；fix 開了 valve 後才暴露 server 端對應路徑也漏抽。「修一邊就要驗一邊」是基本紀律 — 跨 process 的 contract 兩端都要 round-trip 驗。
+  3. **stream-json output Windows 編碼陷阱** — bun 編譯 binary `cli` 在 Windows 下 stdout 對中文有 mojibake（`\udcXX` surrogate escape），**TS 直跑（`bun ./src/entrypoints/cli.tsx`）沒問題**。腳本化測試要走 TS 直跑、或加 chcp 65001 環境準備。
+  4. **reasoning_budget auto-cap 是雙刃刀** — 解了 thinking 過度（D2 從 476s → 27s），但 Q4 推理深度本來就受限，cap 太嚴會讓某些題目從「答對但慢」退化成「答錯但快」（D2.1 / D8.1 的本質）。FIXUP-9 細調 cap 預設要平衡 latency vs correctness。
+  5. **「reasoning_content 非空」是必加斷言** — v1 baseline 只測 content 長度導致 FIXUP-7 bug 蓋了好幾個版本。任何 reasoning model 的 integration test **必須驗 reasoning_content 真的有東西**。
+- **相關檔案**：FIXUP 系列原始碼 `vendor/node-llama-tcq/src/server/{chatCompletions.ts, qwenToolFormat.ts, visionInference.ts}` + `src/services/api/llamacpp-fetch-adapter.ts:299-340`；測試 `vendor/node-llama-tcq/scripts/{live-test-realistic-v2.ts, live-test-realistic-v3-myagent.ts}` + `probe-tool-result-image.ts`、`probe-stdout-encoding.ts`、`probe-think-prefix.ts`、`probe-onresponsechunk.ts`、`verify-fixup3-loose-parser.ts`；測試結果 `vendor/node-llama-tcq/live-test-realistic-v3-myagent-final.log`
+- **日期**：2026-05-07
+
+---
