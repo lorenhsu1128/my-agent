@@ -66,6 +66,36 @@
 - watchdog Phase 3–5 整合（依賴 M-TCQ-SHIM-2 的 `/slots` 完成）
 - macOS Metal TCQ 驗證（`isTCQAvailable() === false`，需 fallback 到 f16）
 
+### M-TCQ-SHIM-SAMPLER — sampling 控制兩端完整化（2026-05-07 啟動）
+
+**目標**：補齊 sampling 參數鏈路 — TCQ-shim 加 CLI flag/env 設 server-side default（對齊 buun llama-server flag 命名）；my-agent 加自由命名 preset 庫（預設帶 Qwen3.5 推薦 4 組），透過 `metadata.taskType` 觸發注入，並用 `appliesTo` glob family-gate 確保 Qwen 推薦值不污染 Claude/Llama 等其他模型。完整設計見 `~/.claude/plans/shim-default-cli-steady-sundae.md`。
+
+**決策**：優先序 `request body > my-agent preset > shim CLI default > engine 內建`；POST /props 維持 noop ack（熱更新留下個 milestone）；preset 自帶 `appliesTo: string[]` glob，預設 4 組標 `qwen*` 不誤套其他模型；caller 端不接 slash command/heuristic（顯式 `metadata.taskType` 為主）。
+
+#### Part A：TCQ-shim sampler defaults
+- [ ] M-TCQ-SHIM-SAMPLER-A1 ServerCommand.ts 新 CLI flag：`--temp/--top-p/--top-k/--min-p/--repeat-penalty/--presence-penalty/--frequency-penalty/--repeat-last-n` + 對應 `TCQ_*` env
+- [ ] M-TCQ-SHIM-SAMPLER-A2 SessionInitOptions 加 `samplerDefaults` 欄位，handler → startTcqShimServer → ensureSession 串接
+- [ ] M-TCQ-SHIM-SAMPLER-A3 chatCompletions.ts non-stream + stream 兩處 promptWithMeta 改 coalesce（body ?? sd）；新檔 samplerCoalesce.ts 處理 repeatPenalty 組裝
+- [ ] M-TCQ-SHIM-SAMPLER-A4 OpenAIChatRequest 型別加 `min_p / presence_penalty / frequency_penalty / repeat_penalty / repetition_penalty`（兩個 alias 都接）
+- [ ] M-TCQ-SHIM-SAMPLER-A5 GET /props 回傳加 `default_generation_settings`
+- [ ] M-TCQ-SHIM-SAMPLER-A6 README-tcq.md 補 CLI flag 表
+- [ ] M-TCQ-SHIM-SAMPLER-A7 新 `scripts/smoke-sampler-defaults.ts` 驗證 CLI default + body override 行為
+
+#### Part B：my-agent preset 注入
+- [ ] M-TCQ-SHIM-SAMPLER-B1 `src/llamacppConfig/schema.ts` 加 `samplingPresets`（dict<name, {appliesTo, params}>）+ `defaultSamplingPreset`，預設 4 組 Qwen preset 標 `appliesTo: ['qwen*', '*qwen*']`
+- [ ] M-TCQ-SHIM-SAMPLER-B2 新 `src/llamacppConfig/applySamplingPreset.ts` 純函式（含 matchesPattern glob helper）
+- [ ] M-TCQ-SHIM-SAMPLER-B3 `src/services/api/llamacpp-fetch-adapter.ts buildOpenAIRequest()` 注入：metadata.taskType → preset → family gate → 只填 body 缺欄位
+- [ ] M-TCQ-SHIM-SAMPLER-B4 新 `tests/integration/llamacpp-sampling-preset.test.ts` 7 個 case（含非 Qwen 模型不套用 / glob 比對）
+- [ ] M-TCQ-SHIM-SAMPLER-B5 `bun run docs:gen` + 新 `docs/sampling-presets.md` 使用指南
+- [ ] M-TCQ-SHIM-SAMPLER-B6 typecheck + 整合測試 + ./cli 冒煙 + shim smoke + commit
+
+#### 不在範圍 → 後續 milestone
+- POST /props 真的熱更新 sampler defaults（race condition / 中斷既有 inflight 請求要設計）
+- caller 端 prompt-content / tool-presence heuristic 自動判 taskType
+- slash command（/code、/chat 等）綁定 preset
+- XTC sampler / DRY repeat penalty forward
+- strict mode：未知 taskType 改 fail-hard 而非 warn
+
 ---
 
 ## 當前里程碑：M-DISCORD-TUI — `/discord` 整合 TUI（2026-05-03 啟動）
@@ -3398,3 +3428,15 @@
 - 2026-05-07 10:13: Session 結束 | 進度：757/870 任務 | 01f1340 docs: M-TCQ-SHIM-FIXUP 全套通過 — v3 my-agent 端到端 10/12 收尾
 
 - 2026-05-07 10:18: Session 結束 | 進度：772/870 任務 | 9f6346e docs(todo): 補打勾 M-DISCORD-TUI / M-MEMRECALL-CMD（早就做完只是 TODO 沒同步）
+
+- 2026-05-07 10:31: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 10:35: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 10:48: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 10:51: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 11:00: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 11:03: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
