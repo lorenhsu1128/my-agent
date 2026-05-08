@@ -253,10 +253,12 @@ async function runVisionNonStreaming(opts: VisionRunCtx & {res: ServerResponse})
     // 不會出現在 result.text 開頭 — 抽之前要 prepend 才能讓 regex 匹配到完整 block。
     let toolCalls: ReturnType<typeof parseQwenToolCalls>["toolCalls"] = [];
     let visibleContent = split.content;
+    let visionLeak: ToolCallLeakReport | null = null;
     if (opts.useQwenFormat && opts.declaredTools.length > 0) {
         const textForExtract = (opts.toolChoicePrefix ?? "") + split.content;
         const parsed = parseQwenToolCalls(textForExtract, opts.declaredTools);
         toolCalls = parsed.toolCalls;
+        visionLeak = parsed.leak;
         if (parsed.leak != null) warnVisionToolLeak(parsed.leak, parsed.toolCalls.length);
         if (toolCalls.length > 0) {
             // parsed.content 是把 tool_call block 從 textForExtract 抽掉後的剩餘文字
@@ -284,7 +286,8 @@ async function runVisionNonStreaming(opts: VisionRunCtx & {res: ServerResponse})
             },
             finish_reason: toOpenAIFinishReason(stopReason, toolCalls.length > 0)
         }],
-        usage: makeUsage(opts.promptTokens, completionTokens)
+        usage: makeUsage(opts.promptTokens, completionTokens),
+        ...(visionLeak != null ? {_qwen_tool_leak: {markers: visionLeak.markers, recovered: toolCalls.length, contentLength: visionLeak.contentLength, snippet: visionLeak.snippet}} : {})
     };
     recordChatTokens(opts.promptTokens, completionTokens);
     sendJson(opts.res, 200, completion);
@@ -327,11 +330,13 @@ async function runVisionStreaming(opts: VisionRunCtx & {req: IncomingMessage, re
         // M-TCQ-SHIM-FIXUP-2：Qwen 路徑下 stream 結尾抽 tool_calls。toolChoicePrefix 不在
         // totalRaw 開頭（已 evaluate 進 nPast），抽之前 prepend 才能 regex 匹配。
         let toolCalls: ReturnType<typeof parseQwenToolCalls>["toolCalls"] = [];
+        let streamLeak: ToolCallLeakReport | null = null;
         if (opts.useQwenFormat && opts.declaredTools.length > 0) {
             const fullSplit = splitReasoning(totalRaw);
             const textForExtract = (opts.toolChoicePrefix ?? "") + fullSplit.content;
             const parsed = parseQwenToolCalls(textForExtract, opts.declaredTools);
             toolCalls = parsed.toolCalls;
+            streamLeak = parsed.leak;
             if (parsed.leak != null) warnVisionToolLeak(parsed.leak, parsed.toolCalls.length);
         }
         if (toolCalls.length > 0) {
@@ -352,6 +357,14 @@ async function runVisionStreaming(opts: VisionRunCtx & {req: IncomingMessage, re
             toOpenAIFinishReason(stopReason, toolCalls.length > 0)
         );
         finalChunk.usage = makeUsage(opts.promptTokens, completionTokens);
+        if (streamLeak != null) {
+            finalChunk._qwen_tool_leak = {
+                markers: streamLeak.markers,
+                recovered: toolCalls.length,
+                contentLength: streamLeak.contentLength,
+                snippet: streamLeak.snippet
+            };
+        }
         recordChatTokens(opts.promptTokens, completionTokens);
         sse.send(finalChunk);
         sse.done();

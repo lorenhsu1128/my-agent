@@ -108,7 +108,7 @@
 
 - [ ] M-LOCAL-MODEL-ROBUSTNESS-B1 ⚠️ shim 端 tool-loop 失控保護 — 加 max-tool-calls-per-request 上限（建議 20）+ 累計 max-tokens 上限；觸發後 fail with 明確錯誤。觀察：B2「修 missing await」27 tools 594s、E1「找 callers」16k chars Grep loop
 - [x] M-LOCAL-MODEL-ROBUSTNESS-B2 ⚠️ Windows process-tree kill helper — `src/utils/proc/killTree.ts` + vendor 獨立版 `vendor/node-llama-tcq/scripts/_lib/killTree.ts`（Windows `taskkill /F /T /PID`、POSIX 先試 process group 再 fallback pid）；8 個 live-test driver 切換完成，spawn 同步補 `detached: process.platform !== "win32"`
-- [x] M-LOCAL-MODEL-ROBUSTNESS-B3 ⚠️ shim Qwen pythonic-XML tool format 漏出修補 — `qwenToolFormat.ts` 加 `detectToolCallLeak()` + `parseQwenToolCalls` 回傳 `leak` 欄位（8 種 marker：tool_call/function/parameter open+close、tools_block、tool_response）；`chatCompletions.ts` + `visionInference.ts` 接入 1s rate-limit warn log（env `QWEN_TOOL_LEAK_WARN=0` 可關）+ marker 累計 stats。GBNF 強制 grammar 留 O3 做
+- [x] M-LOCAL-MODEL-ROBUSTNESS-B3 ⚠️ shim Qwen pythonic-XML tool format 漏出修補 — `qwenToolFormat.ts` 加 `detectToolCallLeak()` + `parseQwenToolCalls` 回傳 `leak` 欄位（8 種 marker）；`chatCompletions.ts` + `visionInference.ts` 接入 shim warn log（env `QWEN_TOOL_LEAK_WARN=0` 可關）。**B3-A 處理策略**：shim response 多帶 vendor extension `_qwen_tool_leak`（non-stream + stream final chunk + vision 2 path），my-agent `llamacpp-fetch-adapter.ts` 讀到後印 `[llamacpp/qwen-tool-leak]`（env `LLAMACPP_LOG_QWEN_LEAK=0` 可關）— 純資訊揭露不改行為。E2E 驗證：shim warn + my-agent warn 對應觸發。GBNF 強制 grammar / 自動 sanitize / retry 留 O3+ 做
 - [x] M-LOCAL-MODEL-ROBUSTNESS-B4 mkdirSync recursive:true 在 bun Windows 偶發 EEXIST throw — B3 E2E 路上連續撞到，順手修：`vendor/.../utils/bunWindowsMkdirShim.ts` process-wide monkey-patch fs.mkdir/mkdirSync/promises.mkdir（只 win32+bun，EEXIST 且確認是 dir 才吃）；`compileLLamaCpp.ts` 的 fs-extra mkdirp / fs.move 換成 try-catch + native fs.rename（fs-extra graceful-fs 在 bun-Windows clone 後 mkdir 不認 recursive）；`live-test-leak-detection.ts` ensureFixtures try-catch
 - [ ] M-LOCAL-MODEL-ROBUSTNESS-B5 shim CLI flag 跟 serve.sh extraArgs 對齊 — shim 補 `-ub` / `-np` / `--no-mmap` 等 yargs alias；或修 serve.sh 的 tcq 分支用長旗形式。觀察：用 `LLAMA_BINARY_KIND=tcq bash scripts/llama/serve.sh` 直接 fail
 - [ ] M-LOCAL-MODEL-ROBUSTNESS-B6 cli vs cli-dev vs `bun ./src/entrypoints/cli.tsx` 行為差異標示 — build 時印 commit hash + 版本戳到 binary，cli 啟動時印於 startup line；docs 加說明。觀察：驗證注入鏈路時誤用 `./cli` 看不到新源碼
@@ -3575,3 +3575,7 @@
 - 2026-05-08 21:28: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
 
 - 2026-05-08 21:36: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-09 01:04: Session 結束 | 進度：788/893 任務 | 12cd714 feat(robustness): B3 Qwen tool-format leak detector + B4 bun-Windows mkdir shim
+
+- 2026-05-09 01:15: Session 結束 | 進度：788/893 任務 | 12cd714 feat(robustness): B3 Qwen tool-format leak detector + B4 bun-Windows mkdir shim

@@ -81,7 +81,23 @@ export type OpenAIChatCompletion = {
     created: number,
     model: string,
     choices: OpenAIChatChoice[],
-    usage: OpenAIUsage
+    usage: OpenAIUsage,
+    /**
+     * B3-A：tool-format XML 漏出標記。Qwen 路徑下 parser 抽完 tool_calls 後 content
+     * 仍有 marker 殘骸時帶上，呼叫端可選擇 retry / 警示 / 忽略。null（或省略）= 沒漏。
+     * 非 OpenAI 標準欄位 — 用 underscore prefix 表示 vendor extension。
+     */
+    _qwen_tool_leak?: QwenToolLeakInfo | null
+};
+
+export type QwenToolLeakInfo = {
+    markers: string[],
+    /** parser 成功抽出的 tool_calls 數量（同 choices[0].message.tool_calls.length）。0 + markers 多 = parsing 失敗 / 全漏出。 */
+    recovered: number,
+    /** 殘留 content 全長 */
+    contentLength: number,
+    /** 第一個 marker 周邊片段（debug 用） */
+    snippet: string
 };
 
 export type OpenAIChatChunk = {
@@ -104,7 +120,9 @@ export type OpenAIChatChunk = {
         },
         finish_reason: string | null
     }>,
-    usage?: OpenAIUsage
+    usage?: OpenAIUsage,
+    /** B3-A：最終 chunk 才會帶（非 OpenAI 標準欄位）。同 OpenAIChatCompletion._qwen_tool_leak。 */
+    _qwen_tool_leak?: QwenToolLeakInfo | null
 };
 
 export type StandardErrorBody = {

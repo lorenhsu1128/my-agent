@@ -240,7 +240,14 @@ async function runCase(c: Case): Promise<CaseResult> {
             } catch { /* non-JSON */ }
         }
     });
-    child.stderr.on("data", () => {/* swallow — shim warn 在 shim 端的 log，不混進這裡 */});
+    // 驗證 B3-A：my-agent fetch-adapter 印的 [llamacpp/qwen-tool-leak] 走 stderr，
+    // 轉發給 driver stderr 讓 log 看得到（shim 端 warn 在 shim console，不進這 log）
+    child.stderr.on("data", (chunk: Buffer) => {
+        const s = chunk.toString("utf8");
+        if (s.includes("qwen-tool-leak") || s.includes("qwen_tool_leak")) {
+            process.stderr.write(`  [child-stderr] ${s.trim()}\n`);
+        }
+    });
 
     await new Promise<void>((resolve) => child.on("close", () => resolve()));
     clearTimeout(timer);

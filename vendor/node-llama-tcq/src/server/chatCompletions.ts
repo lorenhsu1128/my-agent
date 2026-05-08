@@ -172,11 +172,11 @@ function extractToolCallsForFormat(
     text: string,
     declaredTools: OpenAIChatRequest["tools"],
     useQwenFormat: boolean
-): {content: string, toolCalls: ReturnType<typeof extractToolCalls>["toolCalls"]} {
+): {content: string, toolCalls: ReturnType<typeof extractToolCalls>["toolCalls"], leak?: import("./qwenToolFormat.js").ToolCallLeakReport | null} {
     if (useQwenFormat) {
         const r = parseQwenToolCalls(text, declaredTools ?? []);
         if (r.leak != null) warnToolCallLeak(r.leak, r.toolCalls.length);
-        return {content: r.content, toolCalls: r.toolCalls};
+        return {content: r.content, toolCalls: r.toolCalls, leak: r.leak};
     }
     return extractToolCalls(text, declaredTools ?? []);
 }
@@ -551,7 +551,7 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
         ? assembleFormattedFromSegments(rawVisibleText, rawReasoningText, reasoning.reasoningFormat)
         : formatReasoning(rawVisibleText, reasoning.reasoningFormat);
 
-    const {content: extractedContent, toolCalls} = extractToolCallsForFormat(
+    const {content: extractedContent, toolCalls, leak} = extractToolCallsForFormat(
         formatted.content, declaredTools, opts.useQwenFormat
     );
     const visibleContent = maybeApplyBudgetExhaustionMessage(
@@ -584,7 +584,8 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
             },
             finish_reason: toOpenAIFinishReason(stopReason, toolCalls.length > 0)
         }],
-        usage: makeUsage(promptTokens, completionTokens)
+        usage: makeUsage(promptTokens, completionTokens),
+        ...(leak != null ? {_qwen_tool_leak: {markers: leak.markers, recovered: toolCalls.length, contentLength: leak.contentLength, snippet: leak.snippet}} : {})
     };
 
     recordChatTokens(promptTokens, completionTokens);
@@ -726,7 +727,7 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
 
         // Tool extraction is whole-text only in Phase 1 — emit as single chunk after stream.
         const fullSplit = splitReasoning(totalRaw);
-        const {toolCalls} = extractToolCallsForFormat(fullSplit.content, declaredTools, opts.useQwenFormat);
+        const {toolCalls, leak} = extractToolCallsForFormat(fullSplit.content, declaredTools, opts.useQwenFormat);
         if (toolCalls.length > 0) {
             for (let i = 0; i < toolCalls.length; i++) {
                 const tc = toolCalls[i]!;
@@ -748,6 +749,14 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
         const completionTokens = countTokens(session, totalRaw);
         const finalChunk = makeChunk(id, created, model, {}, toOpenAIFinishReason(stopReason, toolCalls.length > 0));
         finalChunk.usage = makeUsage(opts.promptTokens, completionTokens);
+        if (leak != null) {
+            finalChunk._qwen_tool_leak = {
+                markers: leak.markers,
+                recovered: toolCalls.length,
+                contentLength: leak.contentLength,
+                snippet: leak.snippet
+            };
+        }
         recordChatTokens(opts.promptTokens, completionTokens);
         sse.send(finalChunk);
         sse.done();

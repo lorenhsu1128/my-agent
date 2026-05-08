@@ -153,6 +153,16 @@ interface OpenAIChatCompletion {
       cached_tokens?: number
     }
   }
+  // B3-A：TCQ-shim vendor extension。Qwen 路徑下偵測到 tool-format XML 漏出時帶
+  // 上；non-Qwen 模型 / 沒漏出時欄位省略。my-agent 端只 log，不據此調整行為。
+  _qwen_tool_leak?: QwenToolLeakInfo | null
+}
+
+interface QwenToolLeakInfo {
+  markers: string[]
+  recovered: number
+  contentLength: number
+  snippet: string
 }
 
 interface OpenAIStreamChunk {
@@ -184,6 +194,24 @@ interface OpenAIStreamChunk {
       cached_tokens?: number
     }
   }
+  /** B3-A：stream 最終 chunk 才帶。 */
+  _qwen_tool_leak?: QwenToolLeakInfo | null
+}
+
+// ── B3-A：Qwen tool-format leak warn helper ─────────────────────────────
+// 1s rate-limit + 累計 stats（同 process 多次 leak 用 stats=… 累加），避免洗版。
+let lastQwenLeakLogAt = 0
+const qwenLeakStats: Record<string, number> = {}
+function logQwenToolLeak(info: QwenToolLeakInfo, kind: 'non-stream' | 'stream'): void {
+  if (process.env.LLAMACPP_LOG_QWEN_LEAK === '0') return
+  for (const m of info.markers) qwenLeakStats[m] = (qwenLeakStats[m] ?? 0) + 1
+  const now = Date.now()
+  if (now - lastQwenLeakLogAt < 1000) return
+  lastQwenLeakLogAt = now
+  const stats = Object.entries(qwenLeakStats).map(([k, v]) => `${k}=${v}`).join(' ')
+  console.warn(
+    `[llamacpp/qwen-tool-leak ${kind}] markers=[${info.markers.join(',')}] recovered=${info.recovered} contentLen=${info.contentLength} stats=[${stats}]\n  snippet: ${info.snippet.replace(/\n/g, '\\n')}`,
+  )
 }
 
 // ── 映射表 & helpers ─────────────────────────────────────────────────────
@@ -881,6 +909,9 @@ export function translateChatCompletionToAnthropic(
   const choice = openai.choices[0]
   const content: AnthropicContentBlock[] = []
 
+  // B3-A：shim 端偵測到 Qwen tool-format XML 漏出時印 warn（env LLAMACPP_LOG_QWEN_LEAK=0 可關）
+  if (openai._qwen_tool_leak != null) logQwenToolLeak(openai._qwen_tool_leak, 'non-stream')
+
   const reasoning = choice.message.reasoning_content
   if (typeof reasoning === 'string' && reasoning.length > 0) {
     content.push({ type: 'thinking', thinking: reasoning })
@@ -1329,6 +1360,8 @@ export async function* translateOpenAIStreamToAnthropic(
           chunk.usage.prompt_tokens_details.cached_tokens
       }
     }
+    // B3-A：shim 在最終 chunk 帶 _qwen_tool_leak（vendor extension）→ warn log
+    if (chunk._qwen_tool_leak != null) logQwenToolLeak(chunk._qwen_tool_leak, 'stream')
   }
 
   // 收尾
