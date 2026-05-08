@@ -78,7 +78,14 @@ export async function compileLlamaCpp(buildOptions: BuildOptions, compileOptions
     else if (ignoreWorkarounds.includes("reduceParallelBuildThreads"))
         parallelBuildThreads = reduceParallelBuildThreads(parallelBuildThreads);
 
-    await fs.mkdirp(llamaLocalBuildBinsDirectory);
+    // M-LOCAL-MODEL-ROBUSTNESS-B4：bun on Windows 對 mkdirp 已存在 dir 會 throw EEXIST，
+    // 而非 silently no-op。fs-extra 規格 mkdirp 應該是 idempotent，但 bun 行為偏離。
+    // 目錄已存在不算錯，吃掉 EEXIST；其他錯（permission / path invalid）照拋。
+    try {
+        await fs.mkdirp(llamaLocalBuildBinsDirectory);
+    } catch (e) {
+        if ((e as NodeJS.ErrnoException)?.code !== "EEXIST") throw e;
+    }
     try {
         await withLockfile({
             resourcePath: outDirectory
@@ -488,16 +495,18 @@ async function applyResultDirFixes(resultDirPath: string, tempDirPath: string) {
 
     if (await fs.pathExists(releaseDirPath)) {
         await fs.remove(tempDirPath);
-        await fs.move(releaseDirPath, tempDirPath);
+        // M-LOCAL-MODEL-ROBUSTNESS-B4：fs.move 內部 mkdirp(destParent) 在 bun-Windows
+        // 對已存在 dir throw EEXIST。同 volume 下直接用 fs.rename 跳過 mkdirp 步驟。
+        await fs.rename(releaseDirPath, tempDirPath);
 
         const itemNames = await fs.readdir(tempDirPath);
 
         await Promise.all(
-            itemNames.map((itemName) => (
-                fs.move(path.join(tempDirPath, itemName), path.join(resultDirPath, itemName), {
-                    overwrite: true
-                })
-            ))
+            itemNames.map(async (itemName) => {
+                const dest = path.join(resultDirPath, itemName);
+                if (await fs.pathExists(dest)) await fs.remove(dest);
+                await fs.rename(path.join(tempDirPath, itemName), dest);
+            })
         );
 
         await fs.remove(tempDirPath);

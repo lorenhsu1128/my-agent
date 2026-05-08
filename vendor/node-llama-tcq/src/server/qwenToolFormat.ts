@@ -175,8 +175,78 @@ const LOOSE_PARAM_RE = /<([a-zA-Z_][\w-]*)>([\s\S]*?)<\/\1>/g;
 
 export type QwenExtractResult = {
     content: string,
-    toolCalls: OpenAIToolCall[]
+    toolCalls: OpenAIToolCall[],
+    /** B3：parseQwenToolCalls 完成後 content 仍含的 XML 標記（漏出 / 殘留）。null = 沒漏。 */
+    leak: ToolCallLeakReport | null
 };
+
+/**
+ * B3：tool-format XML 漏出偵測結果。
+ *
+ * 漏出情境（觀察自 sampling preset E2E）：
+ *   - `<tool_call>` 開了沒收（unclosed） → 整段被當文字
+ *   - 模型把 `<parameter=k>v</parameter>` 退化成 `<k>v</k>` 但 declared tool 沒這 key
+ *   - `<tool_call>` 出現在 prose（解釋自身語法時）— deliberate-but-still-bad
+ *   - `<tools>` / `<tool_response>` 區塊漏到 user-visible 內容
+ *
+ * 此 report 純為觀測：parser 不會替使用者「修補」，因為已有 LOOSE_PARAM_RE
+ * 那層補救；漏出代表那層沒救起來，呼叫端要不要 retry / 警示 由更上層決定。
+ */
+export type ToolCallLeakReport = {
+    /** 命中的 marker 種類（去重；按出現順序） */
+    markers: ToolCallLeakMarker[],
+    /** 第一個 marker 周圍 ±60 字 context，方便 log 對應原文 */
+    snippet: string,
+    /** content 全長（snippet 是切片） */
+    contentLength: number
+};
+
+export type ToolCallLeakMarker =
+    | "tool_call_open"
+    | "tool_call_close"
+    | "function_open"
+    | "function_close"
+    | "parameter_open"
+    | "parameter_close"
+    | "tools_block"
+    | "tool_response";
+
+const LEAK_PATTERNS: ReadonlyArray<{kind: ToolCallLeakMarker, re: RegExp}> = [
+    {kind: "tool_call_open", re: /<tool_call\b[^>]*>/},
+    {kind: "tool_call_close", re: /<\/tool_call>/},
+    {kind: "function_open", re: /<function=[^>]+>/},
+    {kind: "function_close", re: /<\/function>/},
+    {kind: "parameter_open", re: /<parameter=[^>]+>/},
+    {kind: "parameter_close", re: /<\/parameter>/},
+    {kind: "tools_block", re: /<\/?tools>/},
+    {kind: "tool_response", re: /<\/?tool_response>/}
+];
+
+/**
+ * B3：掃描 parseQwenToolCalls 留下的 content 是否含 tool-format XML 殘骸。
+ * 命中任一即視為漏出，回 ToolCallLeakReport；無漏 = null（呼叫端 if 判斷簡潔）。
+ *
+ * 不消耗大量 CPU：每個 pattern 一次 RegExp.exec（非全域），早 break 用第一個命中當 anchor。
+ */
+export function detectToolCallLeak(content: string): ToolCallLeakReport | null {
+    if (content.length === 0) return null;
+    const hits: {kind: ToolCallLeakMarker, index: number}[] = [];
+    for (const {kind, re} of LEAK_PATTERNS) {
+        const m = re.exec(content);
+        if (m != null) hits.push({kind, index: m.index});
+    }
+    if (hits.length === 0) return null;
+    hits.sort((a, b) => a.index - b.index);
+    const anchor = hits[0]!;
+    const start = Math.max(0, anchor.index - 60);
+    const end = Math.min(content.length, anchor.index + 120);
+    const snippet = (start > 0 ? "…" : "") + content.slice(start, end) + (end < content.length ? "…" : "");
+    return {
+        markers: [...new Set(hits.map((h) => h.kind))],
+        snippet,
+        contentLength: content.length
+    };
+}
 
 /**
  * Parse all <tool_call> blocks from a model response. Returns the leftover
@@ -230,7 +300,8 @@ export function parseQwenToolCalls(text: string, declaredTools: OpenAIToolDef[])
         });
         stripped = stripped.replace(m[0], "");
     }
-    return {content: stripped.trim(), toolCalls: calls};
+    const finalContent = stripped.trim();
+    return {content: finalContent, toolCalls: calls, leak: detectToolCallLeak(finalContent)};
 }
 
 function coerceParamValue(raw: string): unknown {

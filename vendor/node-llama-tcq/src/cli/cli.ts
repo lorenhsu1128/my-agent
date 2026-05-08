@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 
+// M-LOCAL-MODEL-ROBUSTNESS-B4：bun on Windows 對 mkdir(...{recursive:true}) 已存在
+// dir 仍會 throw EEXIST（node spec 應 silent no-op）。fs-extra mkdirp / ensureDir、
+// proper-lockfile、cmake-js wrapper 等多處受影響，逐點 try/catch 不可行。
+// 在 process 進入點 monkey-patch 一次：把 mkdir 對「目錄已存在」的 EEXIST
+// 自動 swallow，其他錯誤照丟。只在 win32 + bun 啟用，避免污染 node 生產路徑。
+import "../utils/bunWindowsMkdirShim.js";
+
 import {fileURLToPath} from "url";
 import path from "path";
 import yargs from "yargs";

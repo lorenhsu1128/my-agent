@@ -174,9 +174,28 @@ function extractToolCallsForFormat(
     useQwenFormat: boolean
 ): {content: string, toolCalls: ReturnType<typeof extractToolCalls>["toolCalls"]} {
     if (useQwenFormat) {
-        return parseQwenToolCalls(text, declaredTools ?? []);
+        const r = parseQwenToolCalls(text, declaredTools ?? []);
+        if (r.leak != null) warnToolCallLeak(r.leak, r.toolCalls.length);
+        return {content: r.content, toolCalls: r.toolCalls};
     }
     return extractToolCalls(text, declaredTools ?? []);
+}
+
+/**
+ * B3：把 tool-format XML 漏出印到 stderr。env `QWEN_TOOL_LEAK_WARN=0` 可關。
+ * 每隔 1 秒最多印一次（同 process 的 burst 漏出避免洗版），但 stats 會累計。
+ */
+let lastLeakWarnAt = 0;
+const leakStats: Record<string, number> = {};
+function warnToolCallLeak(leak: import("./qwenToolFormat.js").ToolCallLeakReport, recoveredCalls: number): void {
+    if (process.env.QWEN_TOOL_LEAK_WARN === "0") return;
+    for (const m of leak.markers) leakStats[m] = (leakStats[m] ?? 0) + 1;
+    const now = Date.now();
+    if (now - lastLeakWarnAt < 1000) return;
+    lastLeakWarnAt = now;
+    const markers = leak.markers.join(",");
+    const stats = Object.entries(leakStats).map(([k, v]) => `${k}=${v}`).join(" ");
+    console.warn(`[qwen-tool-leak] markers=[${markers}] recovered=${recoveredCalls} contentLen=${leak.contentLength} stats=[${stats}]\n  snippet: ${leak.snippet.replace(/\n/g, "\\n")}`);
 }
 
 function countTokens(session: ServerSession, text: string | undefined): number {

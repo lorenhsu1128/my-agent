@@ -33,8 +33,23 @@ import {
     buildQwenToolChoicePrefix,
     parseQwenToolCalls,
     renderQwenToolCall,
-    renderQwenToolResponse
+    renderQwenToolResponse,
+    type ToolCallLeakReport
 } from "./qwenToolFormat.js";
+
+// B3：vision 路徑同樣印 leak warn（rate-limit 1s／burst）。
+let lastVisionLeakWarnAt = 0;
+const visionLeakStats: Record<string, number> = {};
+function warnVisionToolLeak(leak: ToolCallLeakReport, recoveredCalls: number): void {
+    if (process.env.QWEN_TOOL_LEAK_WARN === "0") return;
+    for (const m of leak.markers) visionLeakStats[m] = (visionLeakStats[m] ?? 0) + 1;
+    const now = Date.now();
+    if (now - lastVisionLeakWarnAt < 1000) return;
+    lastVisionLeakWarnAt = now;
+    const markers = leak.markers.join(",");
+    const stats = Object.entries(visionLeakStats).map(([k, v]) => `${k}=${v}`).join(" ");
+    console.warn(`[qwen-tool-leak vision] markers=[${markers}] recovered=${recoveredCalls} contentLen=${leak.contentLength} stats=[${stats}]\n  snippet: ${leak.snippet.replace(/\n/g, "\\n")}`);
+}
 import type {OpenAIToolDef} from "./types.js";
 
 const SHIM_OBJECT_NON_STREAM = "chat.completion" as const;
@@ -242,6 +257,7 @@ async function runVisionNonStreaming(opts: VisionRunCtx & {res: ServerResponse})
         const textForExtract = (opts.toolChoicePrefix ?? "") + split.content;
         const parsed = parseQwenToolCalls(textForExtract, opts.declaredTools);
         toolCalls = parsed.toolCalls;
+        if (parsed.leak != null) warnVisionToolLeak(parsed.leak, parsed.toolCalls.length);
         if (toolCalls.length > 0) {
             // parsed.content 是把 tool_call block 從 textForExtract 抽掉後的剩餘文字
             // — 若被注入的 prefix 還黏在開頭就再剝掉一次（最多剝一次）。
@@ -314,7 +330,9 @@ async function runVisionStreaming(opts: VisionRunCtx & {req: IncomingMessage, re
         if (opts.useQwenFormat && opts.declaredTools.length > 0) {
             const fullSplit = splitReasoning(totalRaw);
             const textForExtract = (opts.toolChoicePrefix ?? "") + fullSplit.content;
-            toolCalls = parseQwenToolCalls(textForExtract, opts.declaredTools).toolCalls;
+            const parsed = parseQwenToolCalls(textForExtract, opts.declaredTools);
+            toolCalls = parsed.toolCalls;
+            if (parsed.leak != null) warnVisionToolLeak(parsed.leak, parsed.toolCalls.length);
         }
         if (toolCalls.length > 0) {
             for (let i = 0; i < toolCalls.length; i++) {
