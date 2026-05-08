@@ -107,12 +107,12 @@
 ### Bugs（依嚴重度）
 
 - [ ] M-LOCAL-MODEL-ROBUSTNESS-B1 ⚠️ shim 端 tool-loop 失控保護 — 加 max-tool-calls-per-request 上限（建議 20）+ 累計 max-tokens 上限；觸發後 fail with 明確錯誤。觀察：B2「修 missing await」27 tools 594s、E1「找 callers」16k chars Grep loop
-- [ ] M-LOCAL-MODEL-ROBUSTNESS-B2 ⚠️ Windows process-tree kill helper — 寫 `src/utils/proc/killTree.ts` 跨平台殺 process tree（Windows 用 `taskkill /F /T /PID`、Unix 用 process group SIGKILL）；test framework 切換用此 helper。觀察：runCase SIGKILL 在 Windows 對 bun 子進程不可靠
+- [x] M-LOCAL-MODEL-ROBUSTNESS-B2 ⚠️ Windows process-tree kill helper — `src/utils/proc/killTree.ts` + vendor 獨立版 `vendor/node-llama-tcq/scripts/_lib/killTree.ts`（Windows `taskkill /F /T /PID`、POSIX 先試 process group 再 fallback pid）；8 個 live-test driver 切換完成，spawn 同步補 `detached: process.platform !== "win32"`
 - [ ] M-LOCAL-MODEL-ROBUSTNESS-B3 ⚠️ shim Qwen pythonic-XML tool format 漏出修補 — 重啟 M-TCQ-SHIM-2-5 GBNF 強制 grammar；至少先加 detection + warn log。觀察：E1 case `<tool_call>` XML 區塊不閉合漏到 result text
 - [ ] M-LOCAL-MODEL-ROBUSTNESS-B4 mkdirSync recursive:true 在 bun Windows 偶發 EEXIST throw — 寫 `safeMkdirSync` helper 包 try/catch；批次替換現有 stress script 的 mkdirSync 呼叫
 - [ ] M-LOCAL-MODEL-ROBUSTNESS-B5 shim CLI flag 跟 serve.sh extraArgs 對齊 — shim 補 `-ub` / `-np` / `--no-mmap` 等 yargs alias；或修 serve.sh 的 tcq 分支用長旗形式。觀察：用 `LLAMA_BINARY_KIND=tcq bash scripts/llama/serve.sh` 直接 fail
 - [ ] M-LOCAL-MODEL-ROBUSTNESS-B6 cli vs cli-dev vs `bun ./src/entrypoints/cli.tsx` 行為差異標示 — build 時印 commit hash + 版本戳到 binary，cli 啟動時印於 startup line；docs 加說明。觀察：驗證注入鏈路時誤用 `./cli` 看不到新源碼
-- [ ] M-LOCAL-MODEL-ROBUSTNESS-B7 test framework regex 放寬 + 完整 result dump — 提供 helper：每個 case 預設 dump 完整 result text 到 markdown / 多 OR 條件 regex；參考 diagnostic script 設計。觀察：24-case / diagnostic 多個「真錯」實為 regex match 太嚴
+- [x] M-LOCAL-MODEL-ROBUSTNESS-B7 test framework regex 放寬 + 完整 result dump — `vendor/node-llama-tcq/scripts/_lib/testCaseHelpers.ts` 提供 `anyOf(...regex)` + `dumpResult({...})`（寫 `stress-results/dumps/<runId>/<case>.md`，env `DUMP_RESULTS=0` 可關）；live-test-coding-deep 已串入並順便保存 thinking text
 
 ### Optimizations（依 ROI）
 

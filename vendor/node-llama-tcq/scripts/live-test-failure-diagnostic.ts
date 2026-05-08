@@ -11,6 +11,7 @@
 import {spawn} from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import {killTree} from "./_lib/killTree";
 
 const REPO_ROOT = path.resolve(__dirname, "../../..");
 const CLI = "bun";
@@ -157,11 +158,11 @@ async function runDiagnostic(c: Case): Promise<Result> {
         "-p", c.prompt,
     ];
 
-    const child = spawn(CLI, args, {cwd: REPO_ROOT, env: {...process.env}, stdio: ["ignore", "pipe", "pipe"]});
+    const child = spawn(CLI, args, {cwd: REPO_ROOT, env: {...process.env}, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"});
     let timedOut = false;
     const timer = setTimeout(() => {
         timedOut = true;
-        try { child.kill("SIGKILL"); } catch {}
+        void killTree(child.pid);
     }, c.timeoutMs);
 
     // 收集當前 tool_use 的 input args（以 content_block_start 開頭、_delta 累積、_stop 結束）

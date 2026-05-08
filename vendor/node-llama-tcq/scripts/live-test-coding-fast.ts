@@ -4,6 +4,7 @@
 
 import {spawn} from "node:child_process";
 import path from "node:path";
+import {killTree} from "./_lib/killTree";
 
 const REPO_ROOT = path.resolve(__dirname, "../../..");
 const CLI = "bun";
@@ -40,10 +41,10 @@ async function runCase(opts: {name: string, type: CaseType, prompt: string, expe
     const args = [...CLI_ARGS_PREFIX, "--print", "--output-format", "stream-json", "--include-partial-messages",
         "--verbose", "--allow-dangerously-skip-permissions",
         "--model", MODEL, "--no-session-persistence", "-p", opts.prompt];
-    const child = spawn(CLI, args, {cwd: REPO_ROOT, env: {...process.env}, stdio: ["ignore", "pipe", "pipe"]});
+    const child = spawn(CLI, args, {cwd: REPO_ROOT, env: {...process.env}, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"});
     let timedOut = false;
     const timeoutMs = opts.timeoutMs ?? 120_000;
-    const timer = setTimeout(() => { timedOut = true; try { child.kill("SIGKILL"); } catch {} }, timeoutMs);
+    const timer = setTimeout(() => { timedOut = true; void killTree(child.pid); }, timeoutMs);
     child.stdout.on("data", (chunk: Buffer) => {
         buf += chunk.toString("utf8");
         let nl;

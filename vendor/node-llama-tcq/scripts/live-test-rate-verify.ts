@@ -11,6 +11,7 @@
 import {spawn} from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import {killTree} from "./_lib/killTree";
 
 const REPO_ROOT = path.resolve(__dirname, "../../..");
 const CLI = "bun";
@@ -76,9 +77,9 @@ async function runOnce(c: Case, rep: number): Promise<Result> {
         "--no-session-persistence",
         "-p", c.prompt,
     ];
-    const child = spawn(CLI, args, {cwd: REPO_ROOT, env: {...process.env}, stdio: ["ignore", "pipe", "pipe"]});
+    const child = spawn(CLI, args, {cwd: REPO_ROOT, env: {...process.env}, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"});
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; try { child.kill("SIGKILL"); } catch {} }, c.timeoutMs);
+    const timer = setTimeout(() => { timedOut = true; void killTree(child.pid); }, c.timeoutMs);
     child.stdout.on("data", (chunk: Buffer) => {
         buf += chunk.toString("utf8");
         let nl;

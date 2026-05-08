@@ -21,6 +21,7 @@
 
 import {spawn} from "node:child_process";
 import path from "node:path";
+import {killTree} from "./_lib/killTree";
 
 const REPO_ROOT = path.resolve(__dirname, "../../..");
 // 改走 `bun ./src/entrypoints/cli.tsx` 直跑 TS 源碼 — `cli` / `cli-dev` 是編譯
@@ -105,14 +106,15 @@ async function runCase(opts: {
     const child = spawn(CLI, args, {
         cwd: REPO_ROOT,
         env: {...process.env},
-        stdio: ["ignore", "pipe", "pipe"]
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: process.platform !== "win32"
     });
 
     let timedOut = false;
     const timeoutMs = opts.timeoutMs ?? 360_000;   // 預設 6 分鐘 / case
     const timer = setTimeout(() => {
         timedOut = true;
-        try { child.kill("SIGKILL"); } catch { /* */ }
+        void killTree(child.pid);
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {

@@ -17,8 +17,11 @@
 
 import {spawn} from "node:child_process";
 import path from "node:path";
+import {killTree} from "./_lib/killTree";
+import {dumpResult, makeRunId} from "./_lib/testCaseHelpers";
 
 const REPO_ROOT = path.resolve(__dirname, "../../..");
+const RUN_ID = makeRunId("coding-deep");
 const USE_PREBUILT = process.env.USE_PREBUILT_CLI === "1";
 const CLI = USE_PREBUILT ? path.join(REPO_ROOT, "cli") : "bun";
 const CLI_ARGS_PREFIX = USE_PREBUILT ? [] : [path.join(REPO_ROOT, "src", "entrypoints", "cli.tsx")];
@@ -88,6 +91,7 @@ async function runCase(opts: {
     let numTurns = 0, durationApiMs = 0, costUsd = 0;
     let resultText = "";
     let resultIsError = false;
+    let thinkingText = "";
     let buf = "";
 
     const args = [
@@ -106,14 +110,15 @@ async function runCase(opts: {
     const child = spawn(CLI, args, {
         cwd: REPO_ROOT,
         env: {...process.env},
-        stdio: ["ignore", "pipe", "pipe"]
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: process.platform !== "win32"
     });
 
     let timedOut = false;
     const timeoutMs = opts.timeoutMs ?? 360_000;
     const timer = setTimeout(() => {
         timedOut = true;
-        try { child.kill("SIGKILL"); } catch { /* */ }
+        void killTree(child.pid);
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
@@ -138,7 +143,10 @@ async function runCase(opts: {
                 if (ttftMs == null) ttftMs = Date.now() - t0;
                 const d = inner.delta;
                 if (d?.type === "text_delta" && typeof d.text === "string") textChars += d.text.length;
-                else if (d?.type === "thinking_delta" && typeof d.thinking === "string") thinkingChars += d.thinking.length;
+                else if (d?.type === "thinking_delta" && typeof d.thinking === "string") {
+                    thinkingChars += d.thinking.length;
+                    thinkingText += d.thinking;
+                }
             } else if (inner?.type === "content_block_start" && inner.content_block?.type === "tool_use") {
                 if (ttftMs == null) ttftMs = Date.now() - t0;
                 toolUses.push(inner.content_block.name);
@@ -186,6 +194,8 @@ async function runCase(opts: {
         if (toolUses.length >= e.minToolUses) okReason += `tools>=${e.minToolUses} `;
     }
 
+    const note = okReason.trim() || (resultIsError ? `ERROR: ${resultText.slice(0, 60)}` : (timedOut ? "TIMEOUT" : ""));
+
     record({
         case: opts.name, type: opts.type,
         timeMs: dt, ttftMs,
@@ -193,8 +203,32 @@ async function runCase(opts: {
         thinkingChars, textChars,
         toolUses, numTurns,
         durationApiMs, costUsd,
-        note: okReason.trim() || (resultIsError ? `ERROR: ${resultText.slice(0, 60)}` : ""),
+        note,
         ok
+    });
+
+    // B7：每個 case 預設 dump 完整結果，方便事後驗證 regex 是否真的該 fail
+    dumpResult({
+        name: opts.name,
+        type: opts.type,
+        prompt: opts.prompt,
+        resultText,
+        thinkingText,
+        toolUses,
+        ok,
+        note,
+        runId: RUN_ID,
+        metrics: {
+            timeMs: dt,
+            ttftMs: ttftMs ?? "n/a",
+            inputTokens,
+            outputTokens,
+            thinkingChars,
+            textChars,
+            numTurns,
+            durationApiMs,
+            timedOut: timedOut ? "yes" : "no"
+        }
     });
 }
 
