@@ -98,6 +98,47 @@
 
 ---
 
+## 當前里程碑：M-LOCAL-MODEL-ROBUSTNESS — 本地模型穩健性修補（2026-05-08 啟動）
+
+**目標**：根據 2026-05-08 sampling preset E2E 驗證（共 144 runs，wall-clock 5-6 hr）發現的 bug 與優化機會，集中收。完整數據與根因分析見 `docs/sampling-preset-findings-2026-05-08.md`。
+
+**決策**：分兩波 — Bugs 優先（B1-B7）、Optimization 後（O1-O5）。Bugs 中 B1/B2/B3 影響測試框架穩定性，先做。其餘按依賴與 ROI 排。
+
+### Bugs（依嚴重度）
+
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-B1 ⚠️ shim 端 tool-loop 失控保護 — 加 max-tool-calls-per-request 上限（建議 20）+ 累計 max-tokens 上限；觸發後 fail with 明確錯誤。觀察：B2「修 missing await」27 tools 594s、E1「找 callers」16k chars Grep loop
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-B2 ⚠️ Windows process-tree kill helper — 寫 `src/utils/proc/killTree.ts` 跨平台殺 process tree（Windows 用 `taskkill /F /T /PID`、Unix 用 process group SIGKILL）；test framework 切換用此 helper。觀察：runCase SIGKILL 在 Windows 對 bun 子進程不可靠
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-B3 ⚠️ shim Qwen pythonic-XML tool format 漏出修補 — 重啟 M-TCQ-SHIM-2-5 GBNF 強制 grammar；至少先加 detection + warn log。觀察：E1 case `<tool_call>` XML 區塊不閉合漏到 result text
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-B4 mkdirSync recursive:true 在 bun Windows 偶發 EEXIST throw — 寫 `safeMkdirSync` helper 包 try/catch；批次替換現有 stress script 的 mkdirSync 呼叫
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-B5 shim CLI flag 跟 serve.sh extraArgs 對齊 — shim 補 `-ub` / `-np` / `--no-mmap` 等 yargs alias；或修 serve.sh 的 tcq 分支用長旗形式。觀察：用 `LLAMA_BINARY_KIND=tcq bash scripts/llama/serve.sh` 直接 fail
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-B6 cli vs cli-dev vs `bun ./src/entrypoints/cli.tsx` 行為差異標示 — build 時印 commit hash + 版本戳到 binary，cli 啟動時印於 startup line；docs 加說明。觀察：驗證注入鏈路時誤用 `./cli` 看不到新源碼
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-B7 test framework regex 放寬 + 完整 result dump — 提供 helper：每個 case 預設 dump 完整 result text 到 markdown / 多 OR 條件 regex；參考 diagnostic script 設計。觀察：24-case / diagnostic 多個「真錯」實為 regex match 太嚴
+
+### Optimizations（依 ROI）
+
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-O1 ⭐ adapter 端 prompt sanitizer 自動轉 ``` fence — `src/services/api/llamacpp-fetch-adapter.ts` 加 family-gate prompt rewrite：Qwen 模型偵測 user message 內 ``` 區塊 → 短 code（≤150 字 / 1 行）轉 inline backtick；長 code 寫 `~/.my-agent/tmp/fixture-*.{ts,js}` 然後 prompt 改用 Read。env `LLAMACPP_PROMPT_SANITIZE_FENCE=0` 可關閉
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-O2 ⭐ caller 端 metadata.taskType heuristic — `src/llamacppConfig/inferTaskType.ts` 純函式：依 prompt 關鍵字推 taskType（修/fix/bug → thinking-coding；拒絕/含糊 → thinking-general；分析/解釋/review → thinking-coding；俳句/創作 → thinking-general）；caller 沒帶 metadata.taskType 時 adapter 自動推
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-O3 shim GBNF 強制 tool format — 接續 B3，把 OpenAI JSON Schema → Qwen pythonic-XML grammar 寫一套；參考 vendor/node-llama-tcq/src/evaluator/LlamaJsonSchemaGrammar.ts
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-O4 test framework 通用化 — 提取 `vendor/node-llama-tcq/scripts/_lib/runCaseWithTimeout.ts` 共用 helper：integrate B2 (kill tree) + B4 (safe mkdir) + B7 (dump + 寬 regex)；現有 stress script 改用 helper
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-O5 SamplingPreset 加 `appliesToPromptPattern` — schema 新增可選欄位（例：`{ avoid: ['訂機票', '我沒辦法'] }`），caller 端命中 avoid pattern 時跳過該 preset。風險：複雜度增加，視 O2 heuristic 有效性決定是否做
+
+### 驗證
+
+每項完成後：
+- B1 / B3 → 重跑 `live-test-coding-deep.ts` B2 + E1 看是否 fail-fast 而非 timeout
+- B2 → 重跑 `live-test-failure-diagnostic.ts` 看 timeout 是否準時殺乾淨子進程
+- B5 → 用 `LLAMA_BINARY_KIND=tcq bash scripts/llama/serve.sh` 應能成功啟動
+- O1 → 跑 V1 ``` fence prompt（已知 thinking-coding 0% 通過）→ 應自動 sanitize 後變 ≥ 78%
+- O2 → 跑 v3-myagent 不帶 metadata 看自動推 taskType 後 pass rate vs N=1 baseline
+
+### 不在範圍 → 後續 milestone
+
+- 對其他 Qwen 變體（32B / 72B）驗 fence 失明是否一致 — 屬模型行為驗證，不在 sanitizer 範圍
+- 整合 thinking-coding F2 拒絕率改善 — 需動 system prompt 強化「沒法做的事就拒絕」，獨立 PR
+- 跨 Anthropic API 模型驗 sanitizer 是否誤觸發 — family gate 應已隔離，需驗證
+
+---
+
 ## 當前里程碑：M-DISCORD-TUI — `/discord` 整合 TUI（2026-05-03 啟動）
 
 **目標**：把 8 個 `/discord-*` 文字指令整合為單一 `/discord` Tab 式 TUI（仿 `/memory`），4 個 tab：Bindings / Whitelist / Guilds / Invite。daemon RPC 層不動，TUI 直接走既有 `mgr.discordBind()` / `mgr.discordUnbind()` / `mgr.discordAdmin()`。完整設計見 `~/.claude/plans/discord-repl-memory-cron-tui-cached-pony.md`。
@@ -3440,3 +3481,97 @@
 - 2026-05-07 11:00: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
 
 - 2026-05-07 11:03: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 11:28: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 11:44: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 11:57: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 12:03: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 12:24: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 12:32: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 13:20: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 11:36: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 12:07: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 12:34: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 12:59: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 13:42: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 13:49: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:15: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:38: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:42: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:47: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:52: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:57: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 15:02: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 15:08: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:21: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:26: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:30: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:34: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:39: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:44: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:49: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:53: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:00: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:06: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:11: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:16: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:21: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:25: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:30: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:35: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:47: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:51: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:56: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:01: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:04: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:13: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:17: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:23: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:28: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:36: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）

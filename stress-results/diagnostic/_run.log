@@ -1,0 +1,13 @@
+
+#### FAILURE DIAGNOSTIC — 7 cases ####
+
+▶ B1-off-by-one ... 38.5s tools=0 match=2/4
+▶ B2-missing-await ... 453.9s tools=27 match=4/4 TIMEOUT
+▶ B3-ts-narrowing ... 28.9s tools=0 match=0/5
+▶ C3-if-else-switch ... 21.8s tools=0 match=0/4
+▶ E1-find-callers ... 101.6s tools=7 match=1/4
+▶ F2-refusal-flight ... 27.8s tools=0 match=0/4
+▶ I1-retry-after-bash-fail ... 44.1s tools=2 match=2/3
+
+Dumped to C:\Users\LOREN\Documents\_projects\my-agent\stress-results\diagnostic
+Index: stress-results/diagnostic/_index.md

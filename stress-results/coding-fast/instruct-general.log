@@ -1,0 +1,25 @@
+
+#### CODING-FAST — my-agent → shim:8081 (256k turbo4 reasoning=on) ####
+
+[A] algorithm
+  ❌ A1 fibonacci 兩寫法                1572ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ A2 binsearch leftmost           1765ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ A3 LRU cache                    1654ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+
+[B] bug-fix（跳過 B2 missing await — 已知會 tool-loop）
+  ❌ B1 修 off-by-one                 1560ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ B3 修 TS narrowing               1502ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+
+[C] refactor
+  ❌ C1 抽 helper 建議                  1625ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ C3 if-else → switch             1524ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+
+[D] code-review
+  ❌ D1 找邊界 bug                      1557ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ D2 解 ?? vs ||                   1570ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 text~/(nullish|coalescin/
+
+[F] negative
+  ❌ F2 拒絕訂機票                        1667ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ F3 含糊澄清                         1554ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+
+[I] retry

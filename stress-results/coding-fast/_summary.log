@@ -1,0 +1,9 @@
+[14:36:59] === preset: thinking-general ===
+[14:47:18]   thinking-general done (exit=1, 619s)
+[14:47:18] === preset: thinking-coding ===
+[15:03:25]   thinking-coding done (exit=1, 967s)
+[15:03:25] === preset: instruct-general ===
+[15:03:46]   instruct-general done (exit=1, 20s)
+[15:03:46] === preset: instruct-reasoning ===
+[15:04:44]   instruct-reasoning done (exit=1, 58s)
+Done. Total 1665s (27 min)

@@ -1,0 +1,70 @@
+
+#### CODING-DEEP (rep=1) — my-agent → shim:8081 (256k turbo4 reasoning=on stream) ####
+
+CLI: bun  MODEL: qwen3.5-9b
+
+
+[A] algorithm — 算法實作
+  ✅ A1 fibonacci 兩寫法                         42294ms ttft=32057ms  in= 16573t  out= 320t/  7.6t/s  think=208ch text=526ch turns=1 text~/(55|fib(?:Iter|Memo)\s*\/
+  ✅ A2 binsearch leftmost                    38642ms ttft=23168ms  in= 16584t  out= 471t/ 12.2t/s  think=567ch text=847ch turns=1 text~/(leftmost|binarySearch|w/
+  ✅ A3 LRU cache 結構                          67585ms ttft=36035ms  in= 16596t  out= 937t/ 13.9t/s  think=1605ch text=1616ch turns=1 text~/(class\s+LRU|Map|capacit/
+
+[B] bug-fix — 修 bug
+  ❌ B1 修 off-by-one                          21834ms ttft=15555ms  in= 16524t  out= 191t/  8.7t/s  think=260ch text=138ch turns=1 
+  ❌ B2 修 missing await                      594364ms ttft=16657ms  in=     0t  out=   0t/  n/at/s  think=370ch text=2091ch turns=0 tools=[Grep,Grep,Grep,Bash,Bash,Bash,Bash,Bash,Glob] TIMEOUT
+  ❌ B3 修 TS narrowing                        43275ms ttft=27864ms  in= 16516t  out= 461t/ 10.7t/s  think=805ch text=691ch turns=1 
+
+[C] refactor — 重構
+  ✅ C1 抽 helper 建議                           31843ms ttft=16068ms  in= 44354t  out= 272t/  8.5t/s  think=176ch text=422ch turns=2 tools=[Read] text~/(helper|\u91CD\u8907|\u6/ tool=Read
+  ✅ C2 命名建議                                  27965ms ttft=15594ms  in= 44823t  out= 160t/  5.7t/s  think=95ch text=271ch turns=2 tools=[Read] text~/(glob|match|pattern|name/ tool=Read
+  ❌ C3 if-else → switch                      21239ms ttft=16275ms  in= 16516t  out= 150t/  7.1t/s  think=458ch text=90ch turns=1 
+
+[D] code-review — 看 code 解釋
+  ✅ D1 找邊界 bug                               29857ms ttft=15997ms  in= 44881t  out= 199t/  6.7t/s  think=151ch text=309ch turns=2 tools=[Read] text~/(\u7A7A|empty|undefined|/ tool=Read
+  ✅ D2 解 ?? vs ||                            60401ms ttft=16177ms  in= 74314t  out= 287t/  4.8t/s  think=259ch text=343ch turns=2 tools=[Read] text~/(nullish|coalescing|0|nu/
+  ✅ D3 評 schema 設計                           35200ms ttft=15767ms  in= 48737t  out= 273t/  7.8t/s  think=259ch text=324ch turns=2 tools=[Read] text~/(\u5F48\u6027|flexibilit/ tool=Read
+
+[E] multi-file — 多檔鏈
+  ❌ E1 找 callers                            379447ms ttft=15947ms  in=     0t  out=   0t/  n/at/s  think=254ch text=16456ch turns=0 tools=[Grep,Grep] TIMEOUTtool=Grep
+  ✅ E2 import path 檢查                       259968ms ttft=235127ms  in= 72266t  out= 280t/  1.1t/s  think=157ch text=546ch turns=3 tools=[Grep,Read] text~/(\.ts|\.js|none|no|\u670/ tool=Grep
+  ✅ E3 schema vs docs 一致                     38930ms ttft=16714ms  in= 50897t  out= 357t/  9.2t/s  think=106ch text=909ch turns=3 tools=[Read,Read] text~/(\u4E00\u81F4|consistent/
+
+[F] negative — 邊界負向
+  ✅ F1 寫俳句                                   24257ms ttft=15610ms  in= 16545t  out= 271t/ 11.2t/s  think=561ch text=20ch turns=1 text~/[\u4E00-\u9FFF]{3,}/
+  ❌ F2 拒絕訂機票                                 23259ms ttft=19590ms  in= 16517t  out= 112t/  4.8t/s  think=245ch text=123ch turns=1 
+  ✅ F3 含糊澄清                                  21601ms ttft=16116ms  in= 16512t  out= 167t/  7.7t/s  think=449ch text=104ch turns=1 text~/(\u54EA|\u4EC0\u9EBC|\u5/
+
+[G] streaming — 長 stream
+  ✅ G1 讀大檔總結                                 31826ms ttft=16958ms  in= 49041t  out= 169t/  5.3t/s  think=102ch text=271ch turns=2 tools=[Read] text~/(parameter|sync|setting|/ tool=Read
+  ✅ G2 列 100 內質數                             31246ms ttft=19927ms  in= 16533t  out= 345t/ 11.0t/s  think=346ch text=142ch turns=1 text~/(2[,\s]+3[,\s]+5|97|1060/
+
+[H] tool-heavy — 大量 tool
+  ✅ H1 glob+read N 檔                         72202ms ttft=15600ms  in=100223t  out= 869t/ 12.0t/s  think=255ch text=2115ch turns=10 tools=[Glob,Bash,Read,Read,Read,Read,Read,Read,Read] tool=Read tools>=4
+  ✅ H2 grep + 條件 read                       311958ms ttft=15553ms  in=630976t  out=2385t/  7.6t/s  think=2277ch text=5393ch turns=24 tools=[Grep,Grep,Bash,Bash,Bash,Bash,Bash,Grep,Bash,Grep,Grep,ToolSearch,Grep,Bash,Bash,Grep,Grep,Grep,Grep,Bash,Grep,Grep,Grep] tool=Grep tools>=2
+
+[I] retry — 連續錯誤後 retry
+  ❌ I1 Bash 失敗→換策略                           10975ms  in=     0t  out=   0t/  n/at/s  think=0ch text=0ch turns=0 
+  ✅ I2 Grep 0 hit→換 pattern                  58629ms ttft=18910ms  in= 98596t  out= 436t/  7.4t/s  think=261ch text=973ch turns=4 tools=[Grep,Grep,Bash] text~/export\s+function|src\// tool=Grep tools>=2
+
+================================================================================================================================================================
+彙總（rep=1）：依 type 分組
+================================================================================================================================================================
+[algorithm    ] pass=3/3 (100.0%)  time=148521ms  in=49753t out=1728t  think=2380ch
+[bug-fix      ] pass=0/3 (0.0%)  time=659473ms  in=33040t out=652t  think=1435ch
+[refactor     ] pass=2/3 (66.7%)  time=81047ms  in=105693t out=582t  think=729ch
+[code-review  ] pass=3/3 (100.0%)  time=125458ms  in=167932t out=759t  think=669ch
+[multi-file   ] pass=2/3 (66.7%)  time=678345ms  in=123163t out=637t  think=517ch
+[negative     ] pass=2/3 (66.7%)  time=69117ms  in=49574t out=550t  think=1255ch
+[streaming    ] pass=2/2 (100.0%)  time=63072ms  in=65574t out=514t  think=448ch
+[tool-heavy   ] pass=2/2 (100.0%)  time=384160ms  in=731199t out=3254t  think=2532ch
+[retry        ] pass=1/2 (50.0%)  time=69604ms  in=98596t out=436t  think=261ch
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Overall (rep=1): 17/24 通過率 70.8%  ❌
+Failed cases:
+  - [bug-fix] B1 修 off-by-one  text=138ch tools=[] note=
+  - [bug-fix] B2 修 missing await  text=2091ch tools=[Grep,Grep,Grep,Bash,Bash,Bash,Bash,Bash,Glob] note=TIMEOUT
+  - [bug-fix] B3 修 TS narrowing  text=691ch tools=[] note=
+  - [refactor] C3 if-else → switch  text=90ch tools=[] note=
+  - [multi-file] E1 找 callers  text=16456ch tools=[Grep,Grep] note=TIMEOUTtool=Grep
+  - [negative] F2 拒絕訂機票  text=123ch tools=[] note=
+  - [retry] I1 Bash 失敗→換策略  text=0ch tools=[] note=

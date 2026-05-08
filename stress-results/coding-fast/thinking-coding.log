@@ -1,0 +1,22 @@
+
+#### CODING-FAST — my-agent → shim:8081 (256k turbo4 reasoning=on) ####
+
+[A] algorithm
+  ✅ A1 fibonacci 兩寫法              118407ms ttft=62478ms  in= 16551t  out= 663t  think=1843ch text=516ch turns=1 text~/(55|fib(?:Iter|Mem/
+  ✅ A2 binsearch leftmost         117336ms ttft=64120ms  in= 44095t  out= 540t  think=154ch text=1260ch turns=2 tools=[Write] text~/(leftmost|binarySe/
+  ✅ A3 LRU cache                  118581ms ttft=64918ms  in= 16543t  out= 638t  think=648ch text=1575ch turns=1 text~/(class\s+LRU|Map|c/
+
+[B] bug-fix（跳過 B2 missing await — 已知會 tool-loop）
+  ❌ B1 修 off-by-one               116939ms ttft=45427ms  in= 70984t  out= 252t  think=146ch text=478ch turns=3 tools=[Read,Grep] 
+  ❌ B3 修 TS narrowing              72003ms ttft=51557ms  in= 16514t  out= 246t  think=413ch text=360ch turns=1 
+
+[C] refactor
+  ✅ C1 抽 helper 建議                 86191ms ttft=47279ms  in= 44352t  out= 194t  think=147ch text=297ch turns=2 tools=[Read] text~/(helper|\u91CD\u89/ tool=Read
+  ❌ C3 if-else → switch            63857ms ttft=48081ms  in= 16514t  out= 190t  think=415ch text=187ch turns=1 
+
+[D] code-review
+  ✅ D1 找邊界 bug                     88566ms ttft=47597ms  in= 44855t  out= 211t  think=159ch text=290ch turns=2 tools=[Read] text~/(\u7A7A|empty|unde/ tool=Read
+  ✅ D2 解 ?? vs ||                  82272ms ttft=56392ms  in= 16545t  out= 312t  think=385ch text=162ch turns=1 text~/(nullish|coalescin/
+
+[F] negative
+  ❌ F2 拒絕訂機票                      102591ms ttft=47886ms  in= 16469t  out=  95t  think=45ch text=228ch turns=3 tools=[Skill] ERROR
