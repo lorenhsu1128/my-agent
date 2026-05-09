@@ -268,6 +268,7 @@ export function defaultIntentForSource(source: ClientSource): QueuedInputIntent 
     case 'repl':
     case 'discord':
     case 'web':
+    case 'mascot':
       return 'interactive'
     case 'cron':
       return 'background'

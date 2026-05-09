@@ -19,6 +19,7 @@ export type ClientSource =
   | 'web'
   | 'cron'
   | 'slash'
+  | 'mascot'
   | 'unknown'
 
 export interface ClientSocket {

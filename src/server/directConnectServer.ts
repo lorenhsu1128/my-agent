@@ -90,7 +90,8 @@ function parseSourceFromRequest(req: Request): ClientSource {
       s === 'repl' ||
       s === 'discord' ||
       s === 'cron' ||
-      s === 'slash'
+      s === 'slash' ||
+      s === 'mascot'
     ) {
       return s
     }
