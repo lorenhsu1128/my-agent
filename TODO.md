@@ -1948,6 +1948,38 @@
 
 ---
 
+## 當前里程碑：M-MASCOT — my-agent 桌寵版整合 virtual-assistant-desktop（2026-05-09 啟動）
+
+**目標**：把 my-agent 接到 `C:\Users\LOREN\Documents\_projects\virtual-assistant-desktop`（Electron + Three.js + @pixiv/three-vrm 桌寵），讓桌寵以 my-agent daemon 為大腦。整合形態、互動範圍、API 擴充程度待最終決策（plan 已起草，未拍板）。
+
+**決策（暫定）**：daemon 以 sidecar 形式被 Electron spawn；桌寵 ws session 用 `source='mascot'` 識別（已落地）；my-agent 端只擴充不改 QueryEngine（ADR-005）。架構選項 A/B/C/D 仍待選定。
+
+### M-MASCOT-0 前置（已完成）
+- [x] M-MASCOT-0-1 daemon 加 `'mascot'` client source（`src/server/clientRegistry.ts` / `directConnectServer.ts` / `inputQueue.ts`，commit 1ceda16）
+- [x] M-MASCOT-0-2 desktop 端套件管理改 Bun（virtual-assistant-desktop `bun.lock` 已建）
+
+### M-MASCOT-1 架構決策 + plan 定稿
+- [ ] M-MASCOT-1-1 確認整合形態：A 雙 repo sidecar / B Bun workspace monorepo / C my-agent 內加 desktop 模式 / D Bun workspace + sidecar（待使用者選擇）
+- [ ] M-MASCOT-1-2 確認互動範圍：chat overlay / 語音 (STT+TTS) / agent 觸發動作 / 桌面感知主動行為（多選）
+- [ ] M-MASCOT-1-3 寫定 plan 檔（`~/.claude/plans/m-mascot-*.md`）含 WS 事件契約、tool 介面、release 流程
+
+### M-MASCOT-2 核心整合（依 1 結果展開）
+- [ ] M-MASCOT-2-1 桌寵端 ws client：連 daemon、turn 事件流接到 chat UI
+- [ ] M-MASCOT-2-2 daemon WS 事件擴充（如需）：mascot-only event types（avatar.expression / avatar.animation 等）
+- [ ] M-MASCOT-2-3 自訂 tool：`play_animation` / `set_expression` / `speak`（Electron 端 IPC 接收 → VRM controller）
+- [ ] M-MASCOT-2-4 release 整合：desktop 安裝包內嵌 cli sidecar / 或外部 PATH 偵測
+
+### M-MASCOT-3 進階互動（語音 / 感知，視 1-2 範圍）
+- [ ] M-MASCOT-3-1 語音 pipeline（mic → STT → my-agent → TTS → viseme 對嘴）
+- [ ] M-MASCOT-3-2 桌面感知（active window / 選取文字 → 主動 prompt）
+
+#### 不在範圍 → 後續 milestone
+- 多 mascot 角色切換 / VRM 即時下載市集
+- 跨機器同步（雲端 session 已由 CCR 處理）
+- 行動裝置版本
+
+---
+
 ## Session 日誌
 
 > Claude Code：每次 session 結束後，在下方附加一行簡短記錄。
@@ -3625,3 +3657,23 @@
 - 2026-05-09 11:22: Session 結束 | 進度：788/893 任務 | 470aad4 docs(readme): 新增「本地模型棧」章節 + 補完文件索引
 
 - 2026-05-09 11:27: Session 結束 | 進度：788/893 任務 | e4b218f Merge pull request #1 from lorenhsu1128/node-llama-tcq
+
+- 2026-05-09 11:32: Session 結束 | 進度：788/893 任務 | e4b218f Merge pull request #1 from lorenhsu1128/node-llama-tcq
+
+- 2026-05-09 11:34: Session 結束 | 進度：788/893 任務 | d9aa809 chore: 補追文件 + stress/debug 腳本 + TODO 同步
+
+- 2026-05-09 11:39: Session 結束 | 進度：788/893 任務 | d9aa809 chore: 補追文件 + stress/debug 腳本 + TODO 同步
+
+- 2026-05-09 11:47: Session 結束 | 進度：788/893 任務 | d9aa809 chore: 補追文件 + stress/debug 腳本 + TODO 同步
+
+- 2026-05-09 12:02: Session 結束 | 進度：788/893 任務 | d9aa809 chore: 補追文件 + stress/debug 腳本 + TODO 同步
+
+- 2026-05-09 12:07: Session 結束 | 進度：788/893 任務 | d9aa809 chore: 補追文件 + stress/debug 腳本 + TODO 同步
+
+- 2026-05-09 12:10: Session 結束 | 進度：788/893 任務 | d9aa809 chore: 補追文件 + stress/debug 腳本 + TODO 同步
+
+- 2026-05-09 12:32: Session 結束 | 進度：788/893 任務 | 568daf0 docs: 新增 docs/prompt-inventory.md（全域 prompt 索引）
+
+- 2026-05-09 13:07: Session 結束 | 進度：788/893 任務 | 568daf0 docs: 新增 docs/prompt-inventory.md（全域 prompt 索引）
+
+- 2026-05-09 17:48: Session 結束 | 進度：788/893 任務 | 1ceda16 feat(daemon): support 'mascot' client source

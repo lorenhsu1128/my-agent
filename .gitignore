@@ -33,6 +33,7 @@ tests/e2e/vision-e2e-*.txt
 tests/integration/test-report-*.txt
 *-tests-report.txt
 test-report-e2e-*.txt
+vendor/node-llama-tcq/live-test-*.log
 
 # 探索用 scratch 目錄
 tmp/
