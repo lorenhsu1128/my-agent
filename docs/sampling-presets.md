@@ -72,7 +72,7 @@ Claude / Llama / GPT-OSS 等其他模型。
 
 ## 自訂 Preset
 
-在 `~/.my-agent/llamacpp.json` 加 key（與預設 dict merge — 但 zod record default 在
+在 `~/.my-agent/llamacpp.jsonc` 加 key（與預設 dict merge — 但 zod record default 在
 使用者覆蓋時整個被取代，要重列預設項目，或只覆蓋部分時純加新 key）：
 
 ```jsonc
@@ -130,3 +130,8 @@ metadata: { taskType: 'thinking-coding' }  // → temperature=0.6 蓋過 shim �
 - `vendor/node-llama-tcq/src/cli/commands/ServerCommand.ts` — shim CLI flag 定義
 - `vendor/node-llama-tcq/src/server/samplerCoalesce.ts` — shim body coalesce
 - `tests/integration/llamacpp/sampling-preset.test.ts` — 18 個 case
+
+## 延伸閱讀
+
+- `docs/sampling-preset-findings-2026-05-08.md` — 4 組 preset 在 thinking 模型上的實測通過率與失敗模式分析
+- `docs/live-test-realistic-v3-setup.md` — TCQ-shim + my-agent E2E 測試啟動參數參考

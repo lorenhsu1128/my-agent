@@ -45,13 +45,13 @@ My Agent 支援多家 LLM 服務。切換 provider 只要設環境變數，不�
 
 ```bash
 bash scripts/llama/setup.sh     # 下載 llama.cpp binary + 模型（首次）
-bash scripts/llama/serve.sh     # 啟動 llama-server（讀 llamacpp.json 設定）
+bash scripts/llama/serve.sh     # 啟動 llama-server（讀 llamacpp.jsonc 設定）
 bash scripts/llama/verify.sh    # 冒煙測試 OpenAI 相容端點
 ```
 
 完整部署細節見 `scripts/llama/README.md`。
 
-### 統一設定檔：`~/.my-agent/llamacpp.json`
+### 統一設定檔：`~/.my-agent/llamacpp.jsonc`
 
 所有 llama.cpp 相關設定集中在此，TS 與 shell 共用同一份來源：
 

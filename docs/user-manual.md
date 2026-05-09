@@ -287,7 +287,7 @@ bash scripts/llama/verify.sh    # 冒煙測試
 
 #### 統一設定檔
 
-所有設定集中於 `~/.my-agent/llamacpp.json`：
+所有設定集中於 `~/.my-agent/llamacpp.jsonc`：
 
 ```json
 {
@@ -1111,7 +1111,7 @@ bun run build --define "FEATURE('CHICAGO_MCP')"
 ```
 ~/.my-agent/
 ├── config.json                       # 一般設定
-├── llamacpp.json                     # 本地模型設定
+├── llamacpp.jsonc                    # 本地模型設定
 ├── system-prompt/                    # 自訂 system prompt
 │   └── *.md                          # 29 段可覆寫
 ├── USER.md                           # 使用者建模（全域）
@@ -1502,7 +1502,7 @@ bun test tests/integration/
 
 ### B. 設定檔案範例
 
-#### `~/.my-agent/llamacpp.json`
+#### `~/.my-agent/llamacpp.jsonc`
 
 ```json
 {
