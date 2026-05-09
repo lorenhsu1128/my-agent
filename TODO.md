@@ -3579,3 +3579,49 @@
 - 2026-05-09 01:04: Session 結束 | 進度：788/893 任務 | 12cd714 feat(robustness): B3 Qwen tool-format leak detector + B4 bun-Windows mkdir shim
 
 - 2026-05-09 01:15: Session 結束 | 進度：788/893 任務 | 12cd714 feat(robustness): B3 Qwen tool-format leak detector + B4 bun-Windows mkdir shim
+
+- 2026-05-09 06:52: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 07:01: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 07:05: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 07:08: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 07:12: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 07:19: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 07:24: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 07:32: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 07:35: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 07:39: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 07:56: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 09:51: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 09:55: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 10:06: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 10:13: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 10:24: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 10:25: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 10:28: Session 結束 | 進度：788/893 任務 | a1b85cb feat(robustness): B3-A shim response 帶 _qwen_tool_leak metadata
+
+- 2026-05-09 10:40: Session 結束 | 進度：788/893 任務 | e036181 docs: live-test-realistic-v3-myagent 啟動參數完整參考
+
+- 2026-05-09 10:43: Session 結束 | 進度：788/893 任務 | e036181 docs: live-test-realistic-v3-myagent 啟動參數完整參考
+
+- 2026-05-09 10:56: Session 結束 | 進度：788/893 任務 | 470aad4 docs(readme): 新增「本地模型棧」章節 + 補完文件索引
+
+- 2026-05-09 11:22: Session 結束 | 進度：788/893 任務 | 470aad4 docs(readme): 新增「本地模型棧」章節 + 補完文件索引
+
+- 2026-05-09 11:27: Session 結束 | 進度：788/893 任務 | e4b218f Merge pull request #1 from lorenhsu1128/node-llama-tcq
