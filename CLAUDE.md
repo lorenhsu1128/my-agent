@@ -112,6 +112,7 @@ bun test                         # 全部測試
 | **Native-TS 純 TS 取代 NAPI** | `docs/native-ts-addons.md` |
 | **REPL MoreRight panel（外部 stub）** | `docs/ui-moreright-panel.md` |
 | **System prompt 客製化** | `docs/customizing-system-prompt.md` |
+| **Prompt 全域索引**（system / sub-LLM / tools / skills / commands） | `docs/prompt-inventory.md` |
 
 ## 關鍵 ADR 摘要（活的限制）
 
