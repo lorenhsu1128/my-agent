@@ -103,6 +103,8 @@ bun test                         # 全部測試
 | **Memory / Session** | `docs/memory.md`、`docs/session-and-memory-management.md` |
 | **Cron** | `docs/cron.md`、`docs/cron-wave34.md` |
 | **llama.cpp（remote / watchdog）** | `docs/llamacpp-remote.md`、`docs/llamacpp-watchdog.md` |
+| **node-llama-tcq E2E 測試啟動參數** | `docs/live-test-realistic-v3-setup.md` |
+| **Sampling preset（Qwen 推薦值 / family gate）** | `docs/sampling-presets.md`、`docs/sampling-preset-findings-2026-05-08.md` |
 | **System prompt 客製化** | `docs/customizing-system-prompt.md` |
 
 ## 關鍵 ADR 摘要（活的限制）
