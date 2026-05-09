@@ -103,6 +103,14 @@ bun test                         # 全部測試
 | **Memory / Session** | `docs/memory.md`、`docs/session-and-memory-management.md` |
 | **Cron** | `docs/cron.md`、`docs/cron-wave34.md` |
 | **llama.cpp（remote / watchdog）** | `docs/llamacpp-remote.md`、`docs/llamacpp-watchdog.md` |
+| **node-llama-tcq E2E 測試啟動參數** | `docs/live-test-realistic-v3-setup.md` |
+| **Sampling preset（Qwen 推薦值 / family gate）** | `docs/sampling-presets.md`、`docs/sampling-preset-findings-2026-05-08.md` |
+| **Coordinator 模式（多 agent 協作）** | `docs/coordinator-mode.md` |
+| **Buddy 伴侶精靈（/buddy）** | `docs/buddy-companion.md` |
+| **CCR 遠端 session（claude assistant）** | `docs/remote-sessions.md` |
+| **CCR upstreamproxy（容器 HTTPS 代理）** | `docs/upstreamproxy-relay.md` |
+| **Native-TS 純 TS 取代 NAPI** | `docs/native-ts-addons.md` |
+| **REPL MoreRight panel（外部 stub）** | `docs/ui-moreright-panel.md` |
 | **System prompt 客製化** | `docs/customizing-system-prompt.md` |
 
 ## 關鍵 ADR 摘要（活的限制）
@@ -113,7 +121,7 @@ bun test                         # 全部測試
 - **ADR-003**：新功能不用 feature flag，直接啟用。
 - **ADR-004**：Hermes 唯讀，TypeScript 重寫。
 - **ADR-007**：`@anthropic-ai/*` 改 import 自 vendor，不要碰真的 npm 套件。
-- **ADR-010**：llama.cpp 設定唯一來源 `~/.my-agent/llamacpp.json`。
+- **ADR-010**：llama.cpp 設定唯一來源 `~/.my-agent/llamacpp.jsonc`。
 - **ADR-011**：Browser 用 puppeteer-core，不用 playwright-core。
 - **ADR-021**：llamacpp routing 失敗硬性報錯，不 silent fallback。
 

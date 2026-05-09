@@ -2,6 +2,9 @@
 
 > 對應 milestone：M-LLAMACPP-WATCHDOG（2026-04-26）
 > 命令：`/llamacpp`
+>
+> Watchdog 設定區塊的完整欄位 schema 見 `docs/config-llamacpp.md` 的 `watchdog` 段；
+> 本文聚焦在「為什麼需要 / 三層設計 / 怎麼開」。
 
 ## 為什麼需要 watchdog
 
@@ -75,7 +78,7 @@ my-agent 既有的 `AbortSignal` 只在使用者按 Esc 才觸發；**背景呼�
 
 ## 設定檔
 
-寫到 `~/.my-agent/llamacpp.json` 的 `watchdog` 區塊：
+寫到 `~/.my-agent/llamacpp.jsonc` 的 `watchdog` 區塊：
 
 ```jsonc
 {

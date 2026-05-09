@@ -3,6 +3,142 @@
 > Claude Code 在每次 session 開始時讀取此檔案，在工作過程中更新任務狀態。
 > 里程碑結構由人類維護。Claude Code 負責管理任務狀態的勾選。
 
+## 當前里程碑：M-TCQ-SHIM — node-llama-tcq OpenAI-compat sidecar（2026-05-03 啟動）
+
+**目標**：在 `vendor/node-llama-tcq/` 內新增 OpenAI 相容 HTTP server（TCQ-shim），規格對齊 `buun-llama-cpp/build/bin/llama-server`，my-agent 端只改 `~/.my-agent/llamacpp.json` 的 `binaryPath`/`port`，fetch adapter 與 QueryEngine 零改動。完整設計見 `~/.claude/plans/node-llama-tcq-my-agent-my-dazzling-sprout.md`。
+
+**決策**：架構切割原則 — TCQ-shim 完全在 vendor 內、不 import my-agent；my-agent 唯一改檔為 `src/llamacppConfig/schema.ts` 加 `server.binaryKind: 'buun'|'tcq'`（預設 `buun` 向下相容）。Endpoint 規格層**一次到位**對齊 buun（路由表 + payload schema + 錯誤格式全集），未支援者回 501 標準錯誤；里程碑差別在「行為深度」與 fork-only 加值。Dev iteration 一律 `bun run dev`，不需先 npm run build。
+
+### M-TCQ-SHIM-1 規格相容版
+- [x] M-TCQ-SHIM-1-1 在 `vendor/node-llama-tcq/package.json` 加 `"dev": "bun src/cli/cli.ts"` script
+- [x] M-TCQ-SHIM-1-2 `vendor/node-llama-tcq/src/cli/commands/ServerCommand.ts`（yargs command，flag 對齊 llama-server）
+- [x] M-TCQ-SHIM-1-3 `vendor/node-llama-tcq/src/server/` scaffold：httpServer / openAiRouter / streaming / session / finishReason / usage / mediaResolver / visionPath / tcqPresetMap
+- [x] M-TCQ-SHIM-1-4 路由表 100% 對齊 buun（A–H 全表，未實作走 501 標準錯誤格式）
+- [x] M-TCQ-SHIM-1-5 行為實作：A 全集（`/v1/chat/completions`、`/v1/completions`、`/v1/embeddings`、`/v1/rerank`、`/v1/responses`、`/v1/models`、`/v1/health`）+ `/tokenize` `/detokenize` `/apply-template` `/infill` `/health` `/models` `/props` GET `/slots` GET
+- [x] M-TCQ-SHIM-1-6 `--cache-type-k turbo4` → `applyTCQCodebooks(TURBO4_0)` 對接（`tcqPresetMap.ts`）
+- [x] M-TCQ-SHIM-1-7 vision/audio：mtmd 路徑 + `mediaResolver` 處理 `image_url` data:/http(s):/file:（live test 4/4 全綠：file:// + data:base64 + bare path + multi-text-part 都通過）
+- [x] M-TCQ-SHIM-1-8 `reasoning_content` 切分（Qwen `<think>` 標籤）；`tool_calls` 用 prompt-time + 後處理 JSON 偵測（最低相容）
+- [~] M-TCQ-SHIM-1-9 server 整合測試 — **已做**：standalone unit 7 支 65/65 + live HTTP runner 2 支（live-test-shim.ts 10/10、live-test-stress.ts mix 6/6 + overflow 5/5）。**defer**：compat-buun.test.ts（需同跑兩 server diff，CI 成本高，留到出現相容性疑慮）
+- [x] M-TCQ-SHIM-1-10 my-agent 端 `src/llamacppConfig/schema.ts` 新增 `server.binaryKind: 'buun'|'tcq'`（預設 `buun`，向下相容）
+- [x] M-TCQ-SHIM-1-11 `bun run docs:gen` 重新產生 `docs/config-*.md`（CLAUDE.md §13）
+- [x] M-TCQ-SHIM-1-12 `scripts/llama/serve.sh` + `scripts/llama/serve.ps1` 依 `binaryKind` 分流（跨平台 — CLAUDE.md §10）
+- [x] M-TCQ-SHIM-1-13 驗證：`bun run typecheck` + `bun test` + `./cli -p "hello"` 冒煙 + live test all-green
+- [x] M-TCQ-SHIM-1-14 commit（繁中，分段）：8 commits pushed to origin/node-llama-tcq
+
+### M-TCQ-SHIM-2 管理面補完
+- [x] M-TCQ-SHIM-2-1 `/slots/{id}` save/restore/erase（--slot-save-path 旗標 gate；filename 安全檢查）
+- [x] M-TCQ-SHIM-2-2 `/metrics`（Prometheus：requests_total / tokens_evaluated/predicted_total / chat_completions / chat_errors / context_overflow / inflight + 推導 queue_size）
+- [x] M-TCQ-SHIM-2-3 `/props` POST 白名單欄位（8 個白名單欄位，未列回 400 unknown_field）
+- [x] M-TCQ-SHIM-2-4 `/api/chat`、`/v1/messages`、`/v1/messages/count_tokens`、`/api/tags` 完整化（CapturingResponse 重用 chat 主路徑；streaming 暫 501）
+- [~] M-TCQ-SHIM-2-5 `tool_calls` 改走 GBNF grammar（`LlamaJsonSchemaGrammar`）— **defer**：目前 prompt-time + Qwen pythonic-XML regex 後處理在 8/8 live test + 6/6 stress mix 全綠，無實際 parsing 失敗。GBNF 整合需要把 OpenAI JSON Schema → Qwen pythonic-XML grammar 轉換寫一套，工作量大。留到實際出現解析失敗 case 才動。
+- [x] M-TCQ-SHIM-2-6 context overflow 500→413 + OpenAI 標準 code=context_length_exceeded + 完整 reason（prompt/max/ctx 三個數字 + underlying engine msg）；非 stream 預檢 413、stream 走 SSE error event
+- [x] M-TCQ-SHIM-2-7 完整 prompt 計數：tokenize systemPrompt + 每段 history rendered + lastUserPrompt（含 4-tok per-turn template 估算），取代舊的「只算 lastUser」（多輪會少報 2–10 倍）
+
+### M-TCQ-SHIM-3 fork-only 加值（保持 OpenAI 相容）
+- [ ] M-TCQ-SHIM-3-1 `X-Spec-Type` header → `generateWithSpeculative` SpecOpts（copyspec / ngram_* / suffix / recycle / draft:<path>）
+- [ ] M-TCQ-SHIM-3-2 `X-TCQ-Preset` header → 切換 `TCQPresets.{TURBO3_TCQ, TURBO4_0, TURBO2_TCQ, ASYMMETRIC_275}`
+- [ ] M-TCQ-SHIM-3-3 沒帶 header 時行為與 buun 完全一致的回歸測試
+
+### M-TCQ-SHIM-FIXUP — live-test-realistic 24/28 後續修補（2026-05-06 啟動）
+
+**背景**：256k + TURBO4 + tools + reasoning=on 跑 `live-test-realistic.ts` 28 case 通過 24（85.7%），4 個 fail 全在 [tool] 類。debug 後確認 3 個獨立問題（其餘是測試斷言過嚴）。詳見 LESSONS.md 同日條目。
+
+**進度**：FIXUP-1/2/3/4 完成 → **26/28 (92.9%)**；vision / chat / stream 三類 100% 綠。剩 2 個 fail 都在 C1 chain（C1.3 真 bug — Q4 退化空 args、parser 救不了；C1.4 long-conv flake），都不在 FIXUP-1~4 範圍。
+
+- [x] M-TCQ-SHIM-FIXUP-1 `tool_choice` 接上 decoder — `qwenToolFormat.ts buildQwenToolChoicePrefix` + `chatCompletions.ts composeResponsePrefix` 把 reasoning 前綴與 tool_choice 強制前綴疊加；reasoning 部分仍剝離、tool 前綴留在輸出讓 `parseQwenToolCalls` 看得到完整 block。限縮 `useQwenFormat && tools.length > 0`。GBNF 路線繼續 defer（同 M-TCQ-SHIM-2-5）。**驗證**：debug-c13-mitigations.ts M1 `{name:"edit_file"}` FAIL → PASS（完整 args）；M2 `required` 從 read_file → edit_file（args 仍空 → FIXUP-3）。
+- [x] M-TCQ-SHIM-FIXUP-2 vision path 注入 tools block — `visionInference.ts buildVisionPrompt` 接 `{useQwenFormat, tools, toolChoicePrefix}`，sys 段尾接 `buildQwenToolsSystemBlock(tools)`；`renderMessageWithMarkers` 在 Qwen 路徑下 render `assistant.tool_calls`（`renderQwenToolCall`）與 `role:tool`（`renderQwenToolResponse`）；最後 `<|im_start|>assistant\n` 接 `toolChoicePrefix`；`runVisionNonStreaming` / `runVisionStreaming` 對輸出跑 `parseQwenToolCalls` 抽 tool_calls（注入的 prefix 不在 result.text 裡，抽前要 prepend 才能匹配）。**驗證**：live-test-realistic C4.2 vision 後 tool_call FAIL → PASS（tools=[calculator]）。
+- [x] M-TCQ-SHIM-FIXUP-3 parser 寬鬆化 — `qwenToolFormat.ts parseQwenToolCalls` 加 fallback：嚴格 `<parameter=...>` 0 match 時退到 `<key>val</key>`，並用 declared tool 的 `parameters.properties` 當白名單（避免亂抓 `<think>` / `<random_tag>`）。嚴格優先 — 兩種格式並存時不混抓。**驗證**：`scripts/verify-fixup3-loose-parser.ts` 7/7 fixture 全綠（嚴格控制 / M4 寬鬆變種 / 白名單 mitigate / 嚴格優先 / 數值 coerce / C1.3 空 inner / 多 tool_call）。在 live-test-realistic 上沒新通過（C1.3 / C1.4 都不在 FIXUP-3 救援範圍 — 前者 inner 全空、後者沒 emit `<tool_call>`），但對未來 M4-style 退化是防護網。
+- [x] M-TCQ-SHIM-FIXUP-4 測試斷言放寬 — `live-test-realistic.ts chat()` `expectTool` 加結構化型別 `{tool?, textMatch?}`（boolean / string 行為保留）。**只放寬 C2.2**（snippet 已含完整答案、模型直接摘要符合 OpenAI / Anthropic goal-directed tool calling 指引），C1.3 / C1.4 / C9.1 維持嚴格（前二者作為 Q4 退化訊號、後者是強制 tool 真 bug 驗證）。**驗證**：C2.2 FAIL → PASS（text~/low.*medium.*high/）。
+- [x] M-TCQ-SHIM-FIXUP-5 重跑 `live-test-realistic.ts` — 26/28 (92.9%)。低於原訂目標 27/28 — 因 FIXUP-3 對 C1.3 / C1.4 真實退化形式無效（C1.3 inner 全空、C1.4 沒 emit `<tool_call>`），這兩個剩餘 fail 不在 parser 層可解決範圍，需另外手段（縮 tool list / 換量化 / 客戶端 retry）。
+- [x] M-TCQ-SHIM-FIXUP-6 commit（繁中、分段）：`feat(node-llama-tcq): tool_choice 接 decoder（prefix-token，FIXUP-1）` / `feat(node-llama-tcq): vision path 注入 tools + render tool history（FIXUP-2）` / `fix(node-llama-tcq): parser 寬鬆化容忍 Q4 退化變種（FIXUP-3）` / `test(node-llama-tcq): live-test-realistic 斷言放寬（FIXUP-4）` / docs。
+- [x] M-TCQ-SHIM-FIXUP-7 reasoning=on 注入字面 `<think>\n` prefix（對齊 buun 行為）— shim 用 QwenChatWrapper 把 `<think>` 設為 `SpecialTokensText`，模型 emit 的是 special token id、wrapper detokenize 後字面字串消失 → `onTextChunk` 拿到的純文字 stream 永遠不含 `<think>...</think>` → `StreamReasoningSplitter` 永遠切不到 reasoning，my-agent adapter 收不到 `delta.reasoning_content`。對比 buun-llama-cpp 走 GGUF jinja template，`<think>` 是字面 token 直接出現在 stream，server emit `delta.reasoning_content`。**修法**：`resolveReasoning` reasoning=on/auto 路徑回 `thinkOpenPrefix="<think>\n"`；`composeResponsePrefix` 限縮 `useQwenFormat && !reasoningPrefix && !toolPrefix` 才疊加（off mode / forced tool 跳過避免複合 prefix 撞）；不剝離（讓 splitter 看到字面 `<think>` → 切到 reasoning_content）。**驗證**：v3 my-agent E2E 12 case，think=0ch 從 9/10 → 0/10；reasoning_content 200-44000ch 範圍。發現副作用：thinking 開後 D2.1 純數學跑 476s（44k chars）、D10.1 multi-step 踩線、D9.1 從亂呼工具改成正確澄清但耗 217s，需 server-side `--reasoning-budget` cap。
+- [x] M-TCQ-SHIM-FIXUP-8 my-agent llamacpp adapter `tool_result.content[]` 內 image block 翻譯漏洞 — `src/services/api/llamacpp-fetch-adapter.ts:299-313` 修法：iterate block.content[] 收 text + image block，image 過 `imageBlockToOpenAIPart` 翻成 image_url；有 image 時 tool message content 用 multipart array（shim 的 OpenAIMessage type 不分 role 都接 multipart），純文字情境維持 string 向下相容。**配套 FIXUP-8b**：shim `visionInference.ts renderMessageWithMarkers` tool role 在 useQwenFormat 路徑下把 multipart 內 image_url push 進 mediaOut（pre-fix 直接 flattenContent 只抽 text，撞 500 "Vision prompt build dropped all media"）。**驗證**：`probe-tool-result-image.ts` image_url 從 0 → 1；shim log 出現 `image_tokens->nx=20` vision encoder 真的跑；v3 D11.1 ✅（model 答「圖中的歷史事件是 1969 年... 阿波羅 11 號登月」）、D12.1 ✅。修了同時救 buun + tcq（adapter 是共用的，buun 也有同樣 bug 只是觸發場景少）。
+- [ ] M-TCQ-SHIM-FIXUP-9 shim 啟動加 `--reasoning-budget` 預設 cap — 觀察 v3 D2.1 / D10.1 thinking 過度（44k chars）。建議預設 `--reasoning-budget 4096`，極端推理由 client `body.reasoning_budget` 加大。
+
+#### 不在範圍 → 後續 milestone
+- GBNF grammar 強制 tool 格式（M-TCQ-SHIM-2-5 仍 defer，待 prefix-token 方案 ROI 驗證後再評估）
+- Q4 量化 attention recency bias 從根本解（會牽涉 model swap 或 model-side fine-tune，超出 shim 範疇）
+- text path 自身是否也有類似 vision path 的 history role 漏 render（待先驗 vision 修完後對比）
+
+### 不在範圍 → 後續 milestone（M-TCQ-SHIM 整體）
+- M-TCQ-SHIM-4：router mode（`/models/load`、`/models/unload`）、LoRA hot-swap、多模型同時載入（VRAM 限制下優先級低 — 記憶 `project_llamacpp_single_server`）
+- 多 slot 並行（`-np > 1`）
+- watchdog Phase 3–5 整合（依賴 M-TCQ-SHIM-2 的 `/slots` 完成）
+- macOS Metal TCQ 驗證（`isTCQAvailable() === false`，需 fallback 到 f16）
+
+### M-TCQ-SHIM-SAMPLER — sampling 控制兩端完整化（2026-05-07 啟動）
+
+**目標**：補齊 sampling 參數鏈路 — TCQ-shim 加 CLI flag/env 設 server-side default（對齊 buun llama-server flag 命名）；my-agent 加自由命名 preset 庫（預設帶 Qwen3.5 推薦 4 組），透過 `metadata.taskType` 觸發注入，並用 `appliesTo` glob family-gate 確保 Qwen 推薦值不污染 Claude/Llama 等其他模型。完整設計見 `~/.claude/plans/shim-default-cli-steady-sundae.md`。
+
+**決策**：優先序 `request body > my-agent preset > shim CLI default > engine 內建`；POST /props 維持 noop ack（熱更新留下個 milestone）；preset 自帶 `appliesTo: string[]` glob，預設 4 組標 `qwen*` 不誤套其他模型；caller 端不接 slash command/heuristic（顯式 `metadata.taskType` 為主）。
+
+#### Part A：TCQ-shim sampler defaults
+- [x] M-TCQ-SHIM-SAMPLER-A1 ServerCommand.ts 新 CLI flag：`--temp/--top-p/--top-k/--min-p/--repeat-penalty/--presence-penalty/--frequency-penalty/--repeat-last-n` + 對應 `TCQ_*` env
+- [x] M-TCQ-SHIM-SAMPLER-A2 SessionInitOptions 加 `samplerDefaults` 欄位，handler → startTcqShimServer → ensureSession 串接
+- [x] M-TCQ-SHIM-SAMPLER-A3 chatCompletions.ts non-stream + stream 兩處 promptWithMeta 改 coalesce（body ?? sd）；新檔 samplerCoalesce.ts 處理 repeatPenalty 組裝
+- [x] M-TCQ-SHIM-SAMPLER-A4 OpenAIChatRequest 型別加 `min_p / presence_penalty / frequency_penalty / repeat_penalty / repetition_penalty`（兩個 alias 都接）
+- [x] M-TCQ-SHIM-SAMPLER-A5 GET /props 回傳加 `default_generation_settings`
+- [~] M-TCQ-SHIM-SAMPLER-A6 README-tcq.md 補 CLI flag 表 — defer：CLI flag 自帶 description（`bun run dev serve --help` 可查），README 表格留待下次集中更新
+- [~] M-TCQ-SHIM-SAMPLER-A7 新 `scripts/smoke-sampler-defaults.ts` — defer：需起真 GPU server，留作後續 e2e 驗證；功能已用 unit + 整合測試 33/33 覆蓋
+
+#### Part B：my-agent preset 注入
+- [x] M-TCQ-SHIM-SAMPLER-B1 `src/llamacppConfig/schema.ts` 加 `samplingPresets`（dict<name, {appliesTo, params}>）+ `defaultSamplingPreset`，預設 4 組 Qwen preset 標 `appliesTo: ['qwen*', '*qwen*']`
+- [x] M-TCQ-SHIM-SAMPLER-B2 新 `src/llamacppConfig/applySamplingPreset.ts` 純函式（含 matchesPattern glob helper）
+- [x] M-TCQ-SHIM-SAMPLER-B3 `src/services/api/llamacpp-fetch-adapter.ts buildOpenAIRequest()` 注入：metadata.taskType → preset → family gate → 只填 body 缺欄位
+- [x] M-TCQ-SHIM-SAMPLER-B4 新 `tests/integration/llamacpp/sampling-preset.test.ts` 18 個 case（schema / matchesPattern / 注入 / 顯式覆蓋 / unknown warn / fallback / family gate non-Qwen / 自訂 preset / 端到端）
+- [x] M-TCQ-SHIM-SAMPLER-B5 `bun run docs:gen` + 新 `docs/sampling-presets.md` 使用指南
+- [x] M-TCQ-SHIM-SAMPLER-B6 typecheck + 整合測試 33/33 + `./cli -p` 冒煙 zero regression + commit（shim GPU smoke 同 A7 defer）
+
+#### 不在範圍 → 後續 milestone
+- POST /props 真的熱更新 sampler defaults（race condition / 中斷既有 inflight 請求要設計）
+- caller 端 prompt-content / tool-presence heuristic 自動判 taskType
+- slash command（/code、/chat 等）綁定 preset
+- XTC sampler / DRY repeat penalty forward
+- strict mode：未知 taskType 改 fail-hard 而非 warn
+
+---
+
+## 當前里程碑：M-LOCAL-MODEL-ROBUSTNESS — 本地模型穩健性修補（2026-05-08 啟動）
+
+**目標**：根據 2026-05-08 sampling preset E2E 驗證（共 144 runs，wall-clock 5-6 hr）發現的 bug 與優化機會，集中收。完整數據與根因分析見 `docs/sampling-preset-findings-2026-05-08.md`。
+
+**決策**：分兩波 — Bugs 優先（B1-B7）、Optimization 後（O1-O5）。Bugs 中 B1/B2/B3 影響測試框架穩定性，先做。其餘按依賴與 ROI 排。
+
+### Bugs（依嚴重度）
+
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-B1 ⚠️ shim 端 tool-loop 失控保護 — 加 max-tool-calls-per-request 上限（建議 20）+ 累計 max-tokens 上限；觸發後 fail with 明確錯誤。觀察：B2「修 missing await」27 tools 594s、E1「找 callers」16k chars Grep loop
+- [x] M-LOCAL-MODEL-ROBUSTNESS-B2 ⚠️ Windows process-tree kill helper — `src/utils/proc/killTree.ts` + vendor 獨立版 `vendor/node-llama-tcq/scripts/_lib/killTree.ts`（Windows `taskkill /F /T /PID`、POSIX 先試 process group 再 fallback pid）；8 個 live-test driver 切換完成，spawn 同步補 `detached: process.platform !== "win32"`
+- [x] M-LOCAL-MODEL-ROBUSTNESS-B3 ⚠️ shim Qwen pythonic-XML tool format 漏出修補 — `qwenToolFormat.ts` 加 `detectToolCallLeak()` + `parseQwenToolCalls` 回傳 `leak` 欄位（8 種 marker）；`chatCompletions.ts` + `visionInference.ts` 接入 shim warn log（env `QWEN_TOOL_LEAK_WARN=0` 可關）。**B3-A 處理策略**：shim response 多帶 vendor extension `_qwen_tool_leak`（non-stream + stream final chunk + vision 2 path），my-agent `llamacpp-fetch-adapter.ts` 讀到後印 `[llamacpp/qwen-tool-leak]`（env `LLAMACPP_LOG_QWEN_LEAK=0` 可關）— 純資訊揭露不改行為。E2E 驗證：shim warn + my-agent warn 對應觸發。GBNF 強制 grammar / 自動 sanitize / retry 留 O3+ 做
+- [x] M-LOCAL-MODEL-ROBUSTNESS-B4 mkdirSync recursive:true 在 bun Windows 偶發 EEXIST throw — B3 E2E 路上連續撞到，順手修：`vendor/.../utils/bunWindowsMkdirShim.ts` process-wide monkey-patch fs.mkdir/mkdirSync/promises.mkdir（只 win32+bun，EEXIST 且確認是 dir 才吃）；`compileLLamaCpp.ts` 的 fs-extra mkdirp / fs.move 換成 try-catch + native fs.rename（fs-extra graceful-fs 在 bun-Windows clone 後 mkdir 不認 recursive）；`live-test-leak-detection.ts` ensureFixtures try-catch
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-B5 shim CLI flag 跟 serve.sh extraArgs 對齊 — shim 補 `-ub` / `-np` / `--no-mmap` 等 yargs alias；或修 serve.sh 的 tcq 分支用長旗形式。觀察：用 `LLAMA_BINARY_KIND=tcq bash scripts/llama/serve.sh` 直接 fail
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-B6 cli vs cli-dev vs `bun ./src/entrypoints/cli.tsx` 行為差異標示 — build 時印 commit hash + 版本戳到 binary，cli 啟動時印於 startup line；docs 加說明。觀察：驗證注入鏈路時誤用 `./cli` 看不到新源碼
+- [x] M-LOCAL-MODEL-ROBUSTNESS-B7 test framework regex 放寬 + 完整 result dump — `vendor/node-llama-tcq/scripts/_lib/testCaseHelpers.ts` 提供 `anyOf(...regex)` + `dumpResult({...})`（寫 `stress-results/dumps/<runId>/<case>.md`，env `DUMP_RESULTS=0` 可關）；live-test-coding-deep 已串入並順便保存 thinking text
+
+### Optimizations（依 ROI）
+
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-O1 ⭐ adapter 端 prompt sanitizer 自動轉 ``` fence — `src/services/api/llamacpp-fetch-adapter.ts` 加 family-gate prompt rewrite：Qwen 模型偵測 user message 內 ``` 區塊 → 短 code（≤150 字 / 1 行）轉 inline backtick；長 code 寫 `~/.my-agent/tmp/fixture-*.{ts,js}` 然後 prompt 改用 Read。env `LLAMACPP_PROMPT_SANITIZE_FENCE=0` 可關閉
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-O2 ⭐ caller 端 metadata.taskType heuristic — `src/llamacppConfig/inferTaskType.ts` 純函式：依 prompt 關鍵字推 taskType（修/fix/bug → thinking-coding；拒絕/含糊 → thinking-general；分析/解釋/review → thinking-coding；俳句/創作 → thinking-general）；caller 沒帶 metadata.taskType 時 adapter 自動推
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-O3 shim GBNF 強制 tool format — 接續 B3，把 OpenAI JSON Schema → Qwen pythonic-XML grammar 寫一套；參考 vendor/node-llama-tcq/src/evaluator/LlamaJsonSchemaGrammar.ts
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-O4 test framework 通用化 — 提取 `vendor/node-llama-tcq/scripts/_lib/runCaseWithTimeout.ts` 共用 helper：integrate B2 (kill tree) + B4 (safe mkdir) + B7 (dump + 寬 regex)；現有 stress script 改用 helper
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-O5 SamplingPreset 加 `appliesToPromptPattern` — schema 新增可選欄位（例：`{ avoid: ['訂機票', '我沒辦法'] }`），caller 端命中 avoid pattern 時跳過該 preset。風險：複雜度增加，視 O2 heuristic 有效性決定是否做
+
+### 驗證
+
+每項完成後：
+- B1 / B3 → 重跑 `live-test-coding-deep.ts` B2 + E1 看是否 fail-fast 而非 timeout
+- B2 → 重跑 `live-test-failure-diagnostic.ts` 看 timeout 是否準時殺乾淨子進程
+- B5 → 用 `LLAMA_BINARY_KIND=tcq bash scripts/llama/serve.sh` 應能成功啟動
+- O1 → 跑 V1 ``` fence prompt（已知 thinking-coding 0% 通過）→ 應自動 sanitize 後變 ≥ 78%
+- O2 → 跑 v3-myagent 不帶 metadata 看自動推 taskType 後 pass rate vs N=1 baseline
+
+### 不在範圍 → 後續 milestone
+
+- 對其他 Qwen 變體（32B / 72B）驗 fence 失明是否一致 — 屬模型行為驗證，不在 sanitizer 範圍
+- 整合 thinking-coding F2 拒絕率改善 — 需動 system prompt 強化「沒法做的事就拒絕」，獨立 PR
+- 跨 Anthropic API 模型驗 sanitizer 是否誤觸發 — family gate 應已隔離，需驗證
+
+---
+
 ## 當前里程碑：M-DISCORD-TUI — `/discord` 整合 TUI（2026-05-03 啟動）
 
 **目標**：把 8 個 `/discord-*` 文字指令整合為單一 `/discord` Tab 式 TUI（仿 `/memory`），4 個 tab：Bindings / Whitelist / Guilds / Invite。daemon RPC 層不動，TUI 直接走既有 `mgr.discordBind()` / `mgr.discordUnbind()` / `mgr.discordAdmin()`。完整設計見 `~/.claude/plans/discord-repl-memory-cron-tui-cached-pony.md`。
@@ -10,12 +146,12 @@
 **決策**：8 個舊指令完全移除（含檔案刪除），使用者一律從 `/discord` 進入。TUI 列表的 disk read 不走 cached snapshot（直接 readFile + parseJsonc），避免 REPL process cache 污染。
 
 ### 任務
-- [ ] M-DISCORD-TUI-1 新增 `src/commands/discord/`：index / discord.tsx / DiscordManager.tsx / discordManagerLogic.ts / DiscordBindWizard.tsx
-- [ ] M-DISCORD-TUI-2 `src/commands.ts` 移除 8 個 `discordXxxCommand` import 與 entries，註冊 `discordCommand`
-- [ ] M-DISCORD-TUI-3 刪除 `src/commands/discord{Bind,Unbind,BindOtherChannel,UnbindOtherChannel,WhitelistAdd,WhitelistRemove,Invite,Guilds}.ts`
-- [ ] M-DISCORD-TUI-4 `tests/unit/commands/discordManagerLogic.test.ts` 單元測試（list 處理、cwd 標星、binding/project 對應）
-- [ ] M-DISCORD-TUI-5 `bun run typecheck` + `bun run build:dev` + `./cli-dev` 冒煙（`/help` 確認舊指令消失、`/discord` 4 tab 正常）
-- [ ] M-DISCORD-TUI-6 commit（繁中）：`feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）`
+- [x] M-DISCORD-TUI-1 新增 `src/commands/discord/`：index / discord.tsx / DiscordManager.tsx / discordManagerLogic.ts / DiscordBindWizard.tsx
+- [x] M-DISCORD-TUI-2 `src/commands.ts` 移除 8 個 `discordXxxCommand` import 與 entries，註冊 `discordCommand`
+- [x] M-DISCORD-TUI-3 刪除 `src/commands/discord{Bind,Unbind,BindOtherChannel,UnbindOtherChannel,WhitelistAdd,WhitelistRemove,Invite,Guilds}.ts`
+- [x] M-DISCORD-TUI-4 `tests/unit/commands/discordManagerLogic.test.ts` 單元測試（list 處理、cwd 標星、binding/project 對應）
+- [x] M-DISCORD-TUI-5 `bun run typecheck` + `bun run build:dev` + `./cli-dev` 冒煙（`/help` 確認舊指令消失、`/discord` 4 tab 正常）
+- [x] M-DISCORD-TUI-6 commit（繁中）：`feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）`
 
 ### 不在範圍 → 後續 milestone
 - Web admin 對應的 Discord 頁面
@@ -31,15 +167,15 @@
 **決策**：獨立 `/memory-recall` 命令（不擴充 `/memory`），TUI 風格 + 鍵位完全參考 `/memory`，edit/delete 直接 import `memoryMutations.ts` 既有 API；Web 沿用既有 accordion 設計加新 section。Settings 加新群組 `memoryRecall.{maxFiles, fallbackMaxFiles}`，session recall log 用 module-level Map（process exit 自然消失）。
 
 ### 任務
-- [ ] M-MEMRECALL-CMD-1 settings schema：`src/utils/settings/types.ts` 加 `memoryRecall` 群組（maxFiles / fallbackMaxFiles）
-- [ ] M-MEMRECALL-CMD-2 sessionRecallLog：`src/memdir/sessionRecallLog.ts` 新模組，Map<sessionId, Map<absPath, RecallLogEntry>>
-- [ ] M-MEMRECALL-CMD-3 findRelevantMemories：read settings + recordRecall（去掉 hardcoded `FALLBACK_MAX_FILES` 與 selector cap=5）
-- [ ] M-MEMRECALL-CMD-4 TUI 命令：`src/commands/memory-recall/{index.ts, memory-recall.tsx, MemoryRecallManager.tsx, memoryRecallLogic.ts}` + commands.ts 註冊
-- [ ] M-MEMRECALL-CMD-5 REST + WS：`src/web/restRoutes.ts` 加 4 endpoints + 2 個 WS frame（settings 同步 / session-log 即時更新）
-- [ ] M-MEMRECALL-CMD-6 Web 右欄：`web/src/components/rightPanel/tabs/MemoryRecallTab.tsx` + ContextPanel SECTIONS 註冊（accordion）
-- [ ] M-MEMRECALL-CMD-7 測試：5 個 test 檔 ≥30 cases（settings-roundtrip / session-log / find-relevant / rest-endpoints / tui-logic）
-- [ ] M-MEMRECALL-CMD-8 typecheck + bun test 全綠 + `./cli-dev` 跑 `/memory-recall` 手測
-- [ ] M-MEMRECALL-CMD-9 commit：5 段（schema / find-relevant / TUI / REST+Web / 測試）
+- [x] M-MEMRECALL-CMD-1 settings schema：`src/utils/settings/types.ts` 加 `memoryRecall` 群組（maxFiles / fallbackMaxFiles）
+- [x] M-MEMRECALL-CMD-2 sessionRecallLog：`src/memdir/sessionRecallLog.ts` 新模組，Map<sessionId, Map<absPath, RecallLogEntry>>
+- [x] M-MEMRECALL-CMD-3 findRelevantMemories：read settings + recordRecall（去掉 hardcoded `FALLBACK_MAX_FILES` 與 selector cap=5）
+- [x] M-MEMRECALL-CMD-4 TUI 命令：`src/commands/memory-recall/{index.ts, memory-recall.tsx, MemoryRecallManager.tsx, memoryRecallLogic.ts}` + commands.ts 註冊
+- [x] M-MEMRECALL-CMD-5 REST + WS：`src/web/restRoutes.ts` 加 4 endpoints + 2 個 WS frame（settings 同步 / session-log 即時更新）
+- [x] M-MEMRECALL-CMD-6 Web 右欄：`web/src/components/rightPanel/tabs/MemoryRecallTab.tsx` + ContextPanel SECTIONS 註冊（accordion）
+- [x] M-MEMRECALL-CMD-7 測試：5 個 test 檔 ≥30 cases（settings-roundtrip / session-log / find-relevant / rest-endpoints / tui-logic）
+- [x] M-MEMRECALL-CMD-8 typecheck + bun test 全綠 + `./cli-dev` 跑 `/memory-recall` 手測
+- [x] M-MEMRECALL-CMD-9 commit：5 段（schema / find-relevant / TUI / REST+Web / 測試）
 
 ### 不在範圍 → 後續 milestone
 - Per-project memory dir override（`autoMemoryDirectory` 已能做）
@@ -3201,3 +3337,245 @@
 - 2026-05-03 08:02: Session 結束 | 進度：731/833 任務 | a13cf32 feat(daemon): /allow /deny 註冊為正式 slash command 防 fuzzy 偷走
 
 - 2026-05-03 08:35: Session 結束 | 進度：731/839 任務 | a13cf32 feat(daemon): /allow /deny 註冊為正式 slash command 防 fuzzy 偷走
+
+- 2026-05-03 08:45: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:03: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:08: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:14: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:21: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:27: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:33: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:42: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:47: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:49: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 10:53: Session 結束 | 進度：731/839 任務 | 4ba1392 feat(discord): 整合 8 個 /discord-* 為單一 /discord TUI（4-tab）
+
+- 2026-05-03 11:31: Session 結束 | 進度：731/839 任務 | d124d57 fix(node-llama-tcq): rename to node-llama-tcq + 修正 build folder 含空格
+
+- 2026-05-03 11:58: Session 結束 | 進度：731/839 任務 | 0f1ed37 feat(node-llama-tcq): Phase B TS API + Layer 2 unit tests
+
+- 2026-05-03 12:07: Session 結束 | 進度：731/839 任務 | c44f731 fix(node-llama-tcq): cpu_get_num_math → common_cpu_get_num_math
+
+- 2026-05-03 12:17: Session 結束 | 進度：731/839 任務 | c44f731 fix(node-llama-tcq): cpu_get_num_math → common_cpu_get_num_math
+
+- 2026-05-03 12:23: Session 結束 | 進度：731/839 任務 | 0edd7c2 fix(node-llama-tcq): link target common → llama-common + 加 smoke 腳本
+
+- 2026-05-03 13:46: Session 結束 | 進度：731/839 任務 | 6c965bf bench(node-llama-tcq): Phase D 純文字 benchmark TURBO4 vs baseline
+
+- 2026-05-03 14:09: Session 結束 | 進度：731/839 任務 | 8bc1648 feat(node-llama-tcq): Phase E1-E3 libmtmd binding 骨架
+
+- 2026-05-03 14:26: Session 結束 | 進度：731/839 任務 | 8bc1648 feat(node-llama-tcq): Phase E1-E3 libmtmd binding 骨架
+
+- 2026-05-03 14:55: Session 結束 | 進度：731/839 任務 | 06ca98c feat(node-llama-tcq): Phase E6 vision + TCQ 端到端通過 🎉
+
+- 2026-05-03 14:57: Session 結束 | 進度：731/839 任務 | 06ca98c feat(node-llama-tcq): Phase E6 vision + TCQ 端到端通過 🎉
+
+- 2026-05-03 15:01: Session 結束 | 進度：731/839 任務 | 06ca98c feat(node-llama-tcq): Phase E6 vision + TCQ 端到端通過 🎉
+
+- 2026-05-03 15:37: Session 結束 | 進度：731/839 任務 | d6f92c8 feat(llamacpp-tcq): embedded adapter 接 LlamaMtmdContext vision 路徑
+
+- 2026-05-03 15:48: Session 結束 | 進度：731/839 任務 | d6f92c8 feat(llamacpp-tcq): embedded adapter 接 LlamaMtmdContext vision 路徑
+
+- 2026-05-03 15:55: Session 結束 | 進度：731/839 任務 | d6f92c8 feat(llamacpp-tcq): embedded adapter 接 LlamaMtmdContext vision 路徑
+
+- 2026-05-03 16:08: Session 結束 | 進度：731/839 任務 | 4f34c7d feat(node-llama-tcq): Phase F2 vision streaming — mtmdGenerateStep
+
+- 2026-05-03 16:17: Session 結束 | 進度：731/839 任務 | 2518e0e feat(node-llama-tcq): Phase H1+H2 audio binding
+
+- 2026-05-03 16:35: Session 結束 | 進度：731/839 任務 | 94c1a3d test(node-llama-tcq): 三 modality TURBO4+CUDA+streaming 全通過 🎉
+
+- 2026-05-03 16:43: Session 結束 | 進度：731/839 任務 | 94c1a3d test(node-llama-tcq): 三 modality TURBO4+CUDA+streaming 全通過 🎉
+
+- 2026-05-03 17:13: Session 結束 | 進度：731/839 任務 | b37a894 feat(llamacpp-tcq): Phase H4 embedded adapter audio routing
+
+- 2026-05-03 17:15: Session 結束 | 進度：731/839 任務 | b37a894 feat(llamacpp-tcq): Phase H4 embedded adapter audio routing
+
+- 2026-05-03 17:41: Session 結束 | 進度：731/839 任務 | d90fc59 feat(node-llama-tcq): Phase G2 純文字 speculative decoding（待 build 驗證）
+
+- 2026-05-03 18:51: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 18:57: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 19:14: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 19:32: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 19:40: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 19:43: Session 結束 | 進度：731/839 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 19:45: Session 結束 | 進度：731/861 任務 | 7f490ee bench(node-llama-tcq): G2 speculative — model-free 五 variant 量化
+
+- 2026-05-03 20:27: Session 結束 | 進度：731/861 任務 | 59e0575 feat(llamacpp): server.binaryKind 開關接入 TCQ-shim sidecar (M-TCQ-SHIM-1)
+
+- 2026-05-03 20:38: Session 結束 | 進度：731/861 任務 | 1e08b24 feat(node-llama-tcq): TCQ-shim OpenAI-compat HTTP server scaffold (M-TCQ-SHIM-1)
+
+- 2026-05-03 21:46: Session 結束 | 進度：731/861 任務 | 080333e feat(node-llama-tcq): Qwen3.5 native pythonic-XML tool format (M-TCQ-SHIM-1)
+
+- 2026-05-03 22:48: Session 結束 | 進度：731/861 任務 | ce6690c feat(node-llama-tcq): reasoning 控制深化 + T3 修正（M-TCQ-SHIM-2）
+
+- 2026-05-04 09:20: Session 結束 | 進度：731/861 任務 | 97ce683 chore(vendor): 補追 vendor/node-llama-tcq/test/standalone/cli/recommendedModels.test.ts
+
+- 2026-05-04 10:04: Session 結束 | 進度：731/863 任務 | 9b82ea8 test(node-llama-tcq): stress test runner（混合 tool + ctx overflow）+ M-TCQ-SHIM-2 新增 T18/T17 條目
+
+- 2026-05-04 11:11: Session 結束 | 進度：731/863 任務 | 9b82ea8 test(node-llama-tcq): stress test runner（混合 tool + ctx overflow）+ M-TCQ-SHIM-2 新增 T18/T17 條目
+
+- 2026-05-06 15:51: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 16:19: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 16:41: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 17:00: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 17:11: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 17:13: Session 結束 | 進度：749/861 任務 | 5161774 docs: T-series 工具鏈梯度測試報告整進 LESSONS + dev-log
+
+- 2026-05-06 20:55: Session 結束 | 進度：755/867 任務 | b3e0de2 docs: M-TCQ-SHIM-FIXUP-3/4 完成，更新 LESSONS + TODO
+
+- 2026-05-06 21:22: Session 結束 | 進度：755/867 任務 | b3e0de2 docs: M-TCQ-SHIM-FIXUP-3/4 完成，更新 LESSONS + TODO
+
+- 2026-05-06 21:47: Session 結束 | 進度：755/867 任務 | b3e0de2 docs: M-TCQ-SHIM-FIXUP-3/4 完成，更新 LESSONS + TODO
+
+- 2026-05-07 00:32: Session 結束 | 進度：755/867 任務 | b3e0de2 docs: M-TCQ-SHIM-FIXUP-3/4 完成，更新 LESSONS + TODO
+
+- 2026-05-07 08:47: Session 結束 | 進度：756/870 任務 | 08a49bd docs: M-TCQ-SHIM-FIXUP-7 + 後續 FIXUP-8/9 issue 追蹤
+
+- 2026-05-07 08:54: Session 結束 | 進度：756/870 任務 | 08a49bd docs: M-TCQ-SHIM-FIXUP-7 + 後續 FIXUP-8/9 issue 追蹤
+
+- 2026-05-07 08:57: Session 結束 | 進度：756/870 任務 | 08a49bd docs: M-TCQ-SHIM-FIXUP-7 + 後續 FIXUP-8/9 issue 追蹤
+
+- 2026-05-07 09:41: Session 結束 | 進度：757/870 任務 | 21cd721 docs+test: M-TCQ-SHIM-FIXUP-8 完成 + v3 D12 斷言放寬
+
+- 2026-05-07 09:46: Session 結束 | 進度：757/870 任務 | 21cd721 docs+test: M-TCQ-SHIM-FIXUP-8 完成 + v3 D12 斷言放寬
+
+- 2026-05-07 09:49: Session 結束 | 進度：757/870 任務 | 21cd721 docs+test: M-TCQ-SHIM-FIXUP-8 完成 + v3 D12 斷言放寬
+
+- 2026-05-07 09:52: Session 結束 | 進度：757/870 任務 | 21cd721 docs+test: M-TCQ-SHIM-FIXUP-8 完成 + v3 D12 斷言放寬
+
+- 2026-05-07 09:57: Session 結束 | 進度：757/870 任務 | 21cd721 docs+test: M-TCQ-SHIM-FIXUP-8 完成 + v3 D12 斷言放寬
+
+- 2026-05-07 10:13: Session 結束 | 進度：757/870 任務 | 01f1340 docs: M-TCQ-SHIM-FIXUP 全套通過 — v3 my-agent 端到端 10/12 收尾
+
+- 2026-05-07 10:18: Session 結束 | 進度：772/870 任務 | 9f6346e docs(todo): 補打勾 M-DISCORD-TUI / M-MEMRECALL-CMD（早就做完只是 TODO 沒同步）
+
+- 2026-05-07 10:31: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 10:35: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 10:48: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 10:51: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 11:00: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 11:03: Session 結束 | 進度：773/870 任務 | 309a234 docs(todo): M-TCQ-SHIM-1-11 打勾（docs:gen 已驗證一致）
+
+- 2026-05-07 11:28: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 11:44: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 11:57: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 12:03: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 12:24: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 12:32: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-07 13:20: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 11:36: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 12:07: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 12:34: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 12:59: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 13:42: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 13:49: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:15: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:38: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:42: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:47: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:52: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 14:57: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 15:02: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 15:08: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:21: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:26: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:30: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:34: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:39: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:44: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:49: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 19:53: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:00: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:06: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:11: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:16: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:21: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:25: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:30: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:35: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:47: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:51: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 20:56: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:01: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:04: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:13: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:17: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:23: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:28: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-08 21:36: Session 結束 | 進度：784/881 任務 | f6f6017 docs(todo): 真正打勾 M-TCQ-SHIM-SAMPLER A1-A5 + B1-B6（A6/A7 defer 標記）
+
+- 2026-05-09 01:04: Session 結束 | 進度：788/893 任務 | 12cd714 feat(robustness): B3 Qwen tool-format leak detector + B4 bun-Windows mkdir shim
+
+- 2026-05-09 01:15: Session 結束 | 進度：788/893 任務 | 12cd714 feat(robustness): B3 Qwen tool-format leak detector + B4 bun-Windows mkdir shim

@@ -69,6 +69,10 @@ export LLAMA_MODEL_PATH="${LLAMA_MODEL_PATH:-${_cfg_model_path:-models/Jackrong_
 _cfg_binary=$(_read_cfg '.server.binaryPath')
 export LLAMA_BINARY="${LLAMA_BINARY:-${_cfg_binary:-llama/llama-server.exe}}"
 
+# server.binaryKind — 'buun'（預設） | 'tcq'（走 vendor/node-llama-tcq TCQ-shim）
+_cfg_kind=$(_read_cfg '.server.binaryKind')
+export LLAMA_BINARY_KIND="${LLAMA_BINARY_KIND:-${_cfg_kind:-buun}}"
+
 # server.extraArgs（JSON array → space-separated；呼叫端可用 eval 或直接展開）
 if [[ -f "$CONFIG_PATH" ]] && command -v jq >/dev/null 2>&1; then
   # 用 @sh 輸出安全 shell 引用；空陣列或缺欄位回空

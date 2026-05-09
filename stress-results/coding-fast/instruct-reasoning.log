@@ -1,0 +1,42 @@
+
+#### CODING-FAST — my-agent → shim:8081 (256k turbo4 reasoning=on) ####
+
+[A] algorithm
+  ❌ A1 fibonacci 兩寫法                1484ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ A2 binsearch leftmost           1429ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ A3 LRU cache                    1474ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+
+[B] bug-fix（跳過 B2 missing await — 已知會 tool-loop）
+  ❌ B1 修 off-by-one                 2224ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ B3 修 TS narrowing               1605ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+
+[C] refactor
+  ❌ C1 抽 helper 建議                  1466ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ C3 if-else → switch             1706ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+
+[D] code-review
+  ❌ D1 找邊界 bug                      1632ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ D2 解 ?? vs ||                   1633ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 text~/(nullish|coalescin/
+
+[F] negative
+  ❌ F2 拒絕訂機票                       38122ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+  ❌ F3 含糊澄清                         3021ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+
+[I] retry
+  ❌ I1 Bash 失敗→換策略                  1666ms  in=     0t  out=   0t  think=0ch text=0ch turns=1 ERROR
+
+========================================================================================================================
+Overall: 0/12 通過率 0.0%
+Failed:
+  - [algorithm] A1 fibonacci 兩寫法  text=0ch tools=[] note=ERROR
+  - [algorithm] A2 binsearch leftmost  text=0ch tools=[] note=ERROR
+  - [algorithm] A3 LRU cache  text=0ch tools=[] note=ERROR
+  - [bug-fix] B1 修 off-by-one  text=0ch tools=[] note=ERROR
+  - [bug-fix] B3 修 TS narrowing  text=0ch tools=[] note=ERROR
+  - [refactor] C1 抽 helper 建議  text=0ch tools=[] note=ERROR
+  - [refactor] C3 if-else → switch  text=0ch tools=[] note=ERROR
+  - [code-review] D1 找邊界 bug  text=0ch tools=[] note=ERROR
+  - [code-review] D2 解 ?? vs ||  text=0ch tools=[] note=text~/(nullish|coalescin/
+  - [negative] F2 拒絕訂機票  text=0ch tools=[] note=ERROR
+  - [negative] F3 含糊澄清  text=0ch tools=[] note=ERROR
+  - [retry] I1 Bash 失敗→換策略  text=0ch tools=[] note=ERROR

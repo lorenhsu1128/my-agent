@@ -51,6 +51,7 @@
 | `modelPath` | `string` | `'models/Qwen3.5-9B-Q4_K_M.gguf'` | — | --model 路徑（相對 repo root 或絕對路徑） |
 | `alias` | `string` | `'qwen3.5-9b'` | — | --alias，讓 OpenAI 相容客戶端用這名字呼叫模型 |
 | `binaryPath` | `string` | `'buun-llama-cpp/build/bin/Release/llama-server.exe'` | — | llama-server binary 位置（相對 repo root 或絕對路徑） |
+| `binaryKind` | `enum` | `'buun'` | — | Server 實作種類： - `'buun'`（預設）：執行 binaryPath 指定的 buun-llama-cpp llama-server 原生 binary - `'tcq'`：改執行 `bun vendor/node-llama-tcq/src/cli/cli.ts serve`（TCQ-shim sidecar）， binaryPath 此時被忽略；TCQ-shim 規格與 buun llama-server 對齊（M-TCQ-SHIM） 切換不影響 baseUrl / model / OpenAI 相容性。 預設保持 `buun` → 升級無破壞。 |
 | `extraArgs` | `array<string>` | `[ '--flash-attn', 'on', '--cache-type-k', 'turbo4', '--cache-type-v', 'turbo4...` | — | 要額外帶的 flag（例 --jinja、--slots、--cache-reuse 1） |
 | `vision` | `LlamaCppServerVisionSchema` | `{}` | — | Vision 相關設定（M-VISION）：僅 shell 端使用。 有 mmprojPath 才會對 llama-server 加 `--mmproj`。 |
 
@@ -128,5 +129,7 @@
 | `watchdog` | `LlamaCppWatchdogSchema` | `{}` | `LLAMACPP_WATCHDOG_ENABLE`<br>`LLAMACPP_WATCHDOG_DISABLE` | Watchdog 設定（M-LLAMACPP-WATCHDOG）。三層 client-side 守門防 llama.cpp 失控生成（reasoning loop 等）。預設全關不影響既有行為。 |
 | `remote` | `LlamaCppRemoteSchema` | `{}` | — | Remote endpoint（M-LLAMACPP-REMOTE）。預設 enabled=false 不影響既有行為。 啟用後配合 routing 表把指定 callsite 指向遠端機器。 |
 | `routing` | `LlamaCppRoutingSchema` | `{}` | — | Per-callsite routing（M-LLAMACPP-REMOTE）。缺欄位 = 'local'。 改了下個 turn 立刻生效（沿用 mtime hot-reload）。 |
+| `samplingPresets` | `record` | `{ 'thinking-general': { appliesTo: ['qwen*', '*qwen*'], params: { temperature...` | — | Sampling preset 庫（M-TCQ-SHIM-SAMPLER）。 Key 自由命名，預設帶 Qwen3.5 官方推薦 4 組（thinking-general / thinking-coding / instruct-general / instruct-reasoning）。家族 gate 透過 preset.appliesTo 控制。 觸發：Anthropic request `metadata.taskType` → 對應 preset；不帶 metadata 則用 `defaultSamplingPreset`（若有設）。Body 顯式欄位永遠優先。 |
+| `defaultSamplingPreset` | `string` _(optional)_ | _(undefined)_ | — | 沒帶 metadata.taskType 時的 fallback preset key（仍會經過 family gate）。 留空 = 不 fallback（不注入）。 |
 
 <!-- AUTO-GENERATED-END -->

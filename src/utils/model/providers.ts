@@ -91,7 +91,7 @@ export function isLlamaCppActive(): boolean {
  */
 export function getLlamaCppConfig(
   model?: string | null,
-): { baseUrl: string; model: string; vision: boolean } | null {
+): { baseUrl: string; model: string; vision: boolean; binaryKind: 'buun' | 'tcq' } | null {
   const envActivated = getAPIProvider() === 'llamacpp'
   const modelActivated = isLlamaCppModel(model)
   if (!envActivated && !modelActivated) return null
@@ -104,6 +104,9 @@ export function getLlamaCppConfig(
       (modelActivated ? (model as string) : cfg.model || DEFAULT_LLAMACPP_MODEL),
     // M-VISION: 由 `~/.my-agent/llamacpp.json` 的 `vision.enabled` 宣告
     vision: cfg.vision.enabled,
+    // M-TCQ-ADAPTER: server.binaryKind = 'tcq' 時 client 端 adapter 跳過
+    // XML/bare-pythonic leak fallback（shim 端已 parse 過 Qwen 工具）。
+    binaryKind: cfg.server.binaryKind,
   }
 }
 

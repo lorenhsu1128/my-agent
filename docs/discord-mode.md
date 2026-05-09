@@ -396,7 +396,7 @@ DM-sourced turn **不**鏡 per-project channel（DM 保密）。
 ## 9. 實務注意
 
 ### 重啟 daemon 才吃新 config
-`discord.json` / `llamacpp.json` 都是 session 啟動時凍結快照：
+`discord.jsonc` / `llamacpp.jsonc` 都是 session 啟動時凍結快照：
 ```bash
 bun run dev daemon stop
 bun run dev daemon start

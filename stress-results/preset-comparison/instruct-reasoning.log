@@ -1,0 +1,63 @@
+
+#### REALISTIC v3 — my-agent → shim:8081 端到端 (256k turbo4 reasoning=on stream) ####
+
+CLI: bun
+
+[D1] pure-knowledge — 純知識題
+  ✅ D1.1 薛丁格時間演化算符                           14765ms ttft=11960ms  in= 15939t  out= 166t/ 11.2t/s  think=153ch text=88ch turns=1 text~/(\u7B97\u7B26|operator|U/
+
+[D2] math-think — 數學推理
+  ❌ D2.1 100 以內 4 質因數的數                      19971ms ttft=17177ms  in= 15950t  out= 159t/  8.0t/s  think=101ch text=195ch turns=1 
+
+[D3] read-file — 讀檔案分析
+  ✅ D3.1 讀 qwenToolFormat.ts 列 exports       22293ms ttft=10284ms  in= 45627t  out= 359t/ 16.1t/s  think=553ch text=399ch turns=2 tools=[Read] text~/(buildQwenToolsSystemBlo/
+
+[D4] grep — 在 src 內搜尋
+  ✅ D4.1 grep reasoning_content 出現次數         17550ms ttft=10411ms  in= 41937t  out= 186t/ 10.6t/s  think=241ch text=224ch turns=2 tools=[Grep] text~/\b(\d+)\b/ tool=Grep
+
+[D5] glob-read — 多檔搜尋 + 讀取
+  ❌ D5.1 找 src/llamacppConfig 並讀 schema.ts 摘要   23154ms ttft= 9681ms  in= 68036t  out= 211t/  9.1t/s  think=181ch text=431ch turns=3 tools=[Glob,Glob] 
+
+[D6] analyze — 讀 + thinking 分析
+  ❌ D6.1 分析 QwenChatWrapper thoughts 處理      23747ms ttft=10455ms  in= 47363t  out= 380t/ 16.0t/s  think=202ch text=564ch turns=2 tools=[Read] 
+
+[D7] shell — Bash 執行
+  ✅ D7.1 git log 最近 3 筆                      25300ms ttft= 9881ms  in= 41960t  out= 201t/  7.9t/s  think=61ch text=391ch turns=2 tools=[Bash] text~/[a-f0-9]{6,}/ tool=Bash
+
+[D8] refusal — 做不到要明說
+  ❌ D8.1 訂機票                                 16568ms ttft=12220ms  in= 15923t  out= 259t/ 15.6t/s  think=251ch text=195ch turns=1 
+
+[D9] ambiguity — 含糊應澄清
+  ✅ D9.1 「修一下那個 bug」                         17710ms ttft=11607ms  in= 15915t  out= 352t/ 19.9t/s  think=625ch text=390ch turns=1 text~/(\u54EA\u500B|\u4EC0\u9E/
+
+[D10] multi-step — 多步鏈
+  ✅ D10.1 git log → 最新 commit 動的檔            25798ms ttft=10274ms  in= 42128t  out= 208t/  8.1t/s  think=135ch text=342ch turns=2 tools=[Bash] text~/[\u4E00-\u9FA5]|[a-zA-Z]/ tool=Bash
+
+[D11] vision — 讀圖描述
+  ✅ D11.1 Read NYT 登月圖 + 描述                  19142ms ttft=10593ms  in= 32264t  out= 169t/  8.8t/s  think=87ch text=259ch turns=2 tools=[Read] text~/(\u767B\u6708|\u963F\u6C/ tool=Read
+
+[D12] vision+tool — 看圖 → 工具處理
+  ✅ D12.1 看圖認年份 → Bash 算今年差距                 35952ms ttft=10241ms  in= 48885t  out= 316t/  8.8t/s  think=115ch text=483ch turns=3 tools=[Read,Bash] text~/(56|57|\u963F\u6CE2\u7F8/
+
+================================================================================================================================================================
+彙總：時間 / token rate / thinking chars（依 type 分組）
+================================================================================================================================================================
+[pure-knowledge  ] pass=1/1 (100.0%)  time=14765ms  in=15939t out=166t  think=153ch text=88ch  avg ttft=11960ms  avg turns=1.0
+[math-think      ] pass=0/1 (0.0%)  time=19971ms  in=15950t out=159t  think=101ch text=195ch  avg ttft=17177ms  avg turns=1.0
+[read-file       ] pass=1/1 (100.0%)  time=22293ms  in=45627t out=359t  think=553ch text=399ch  avg ttft=10284ms  avg turns=2.0
+[grep            ] pass=1/1 (100.0%)  time=17550ms  in=41937t out=186t  think=241ch text=224ch  avg ttft=10411ms  avg turns=2.0
+[glob-read       ] pass=0/1 (0.0%)  time=23154ms  in=68036t out=211t  think=181ch text=431ch  avg ttft=9681ms  avg turns=3.0
+[analyze         ] pass=0/1 (0.0%)  time=23747ms  in=47363t out=380t  think=202ch text=564ch  avg ttft=10455ms  avg turns=2.0
+[shell           ] pass=1/1 (100.0%)  time=25300ms  in=41960t out=201t  think=61ch text=391ch  avg ttft=9881ms  avg turns=2.0
+[refusal         ] pass=0/1 (0.0%)  time=16568ms  in=15923t out=259t  think=251ch text=195ch  avg ttft=12220ms  avg turns=1.0
+[ambiguity       ] pass=1/1 (100.0%)  time=17710ms  in=15915t out=352t  think=625ch text=390ch  avg ttft=11607ms  avg turns=1.0
+[multi-step      ] pass=1/1 (100.0%)  time=25798ms  in=42128t out=208t  think=135ch text=342ch  avg ttft=10274ms  avg turns=2.0
+[vision          ] pass=1/1 (100.0%)  time=19142ms  in=32264t out=169t  think=87ch text=259ch  avg ttft=10593ms  avg turns=2.0
+[vision+tool     ] pass=1/1 (100.0%)  time=35952ms  in=48885t out=316t  think=115ch text=483ch  avg ttft=10241ms  avg turns=3.0
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Overall: 8/12 通過率 66.7%  ❌
+Failed cases:
+  - [math-think] D2.1 100 以內 4 質因數的數  text=195ch tools=[] note=
+  - [glob-read] D5.1 找 src/llamacppConfig 並讀 schema.ts 摘要  text=431ch tools=[Glob,Glob] note=
+  - [analyze] D6.1 分析 QwenChatWrapper thoughts 處理  text=564ch tools=[Read] note=
+  - [refusal] D8.1 訂機票  text=195ch tools=[] note=

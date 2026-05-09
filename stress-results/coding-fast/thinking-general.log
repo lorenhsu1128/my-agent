@@ -1,0 +1,35 @@
+
+#### CODING-FAST — my-agent → shim:8081 (256k turbo4 reasoning=on) ####
+
+[A] algorithm
+  ✅ A1 fibonacci 兩寫法               45551ms ttft=24679ms  in= 16553t  out= 628t  think=1353ch text=553ch turns=1 text~/(55|fib(?:Iter|Mem/
+  ✅ A2 binsearch leftmost          32436ms ttft=21830ms  in= 16541t  out= 316t  think=333ch text=739ch turns=1 text~/(leftmost|binarySe/
+  ✅ A3 LRU cache                   60380ms ttft=26246ms  in= 16540t  out=1013t  think=1477ch text=1527ch turns=1 text~/(class\s+LRU|Map|c/
+
+[B] bug-fix（跳過 B2 missing await — 已知會 tool-loop）
+  ❌ B1 修 off-by-one                26048ms ttft=17543ms  in= 16524t  out= 251t  think=745ch text=126ch turns=1 
+  ❌ B3 修 TS narrowing              29173ms ttft=18994ms  in= 16518t  out= 301t  think=944ch text=369ch turns=1 
+
+[C] refactor
+  ❌ C1 抽 helper 建議                 30869ms ttft=18383ms  in= 43780t  out= 224t  think=147ch text=409ch turns=2 tools=[Read] tool=Read
+  ❌ C3 if-else → switch            28243ms ttft=17226ms  in= 16514t  out= 328t  think=913ch text=294ch turns=1 
+
+[D] code-review
+  ✅ D1 找邊界 bug                     31867ms ttft=16506ms  in= 44855t  out= 231t  think=304ch text=349ch turns=2 tools=[Read] text~/(\u7A7A|empty|unde/ tool=Read
+  ✅ D2 解 ?? vs ||                  35575ms ttft=21569ms  in= 16545t  out= 309t  think=1079ch text=122ch turns=1 text~/(nullish|coalescin/
+
+[F] negative
+  ✅ F2 拒絕訂機票                      103890ms ttft=63887ms  in= 16517t  out= 501t  think=1130ch text=368ch turns=1 text~/(\u7121\u6CD5|\u4E/
+  ✅ F3 含糊澄清                        63461ms ttft=52400ms  in= 16514t  out= 133t  think=107ch text=123ch turns=1 text~/(\u54EA|\u4EC0\u9E/
+
+[I] retry
+  ❌ I1 Bash 失敗→換策略                130703ms ttft=47470ms  in= 71017t  out= 366t  think=149ch text=768ch turns=3 tools=[Bash,Bash] tool=Bash tools>=2
+
+========================================================================================================================
+Overall: 7/12 通過率 58.3%
+Failed:
+  - [bug-fix] B1 修 off-by-one  text=126ch tools=[] note=
+  - [bug-fix] B3 修 TS narrowing  text=369ch tools=[] note=
+  - [refactor] C1 抽 helper 建議  text=409ch tools=[Read] note=tool=Read
+  - [refactor] C3 if-else → switch  text=294ch tools=[] note=
+  - [retry] I1 Bash 失敗→換策略  text=768ch tools=[Bash,Bash] note=tool=Bash tools>=2

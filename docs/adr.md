@@ -15,7 +15,7 @@
 | ADR-007 | `@anthropic-ai/*` 全部 vendor 進 `src/vendor/my-agent-ai/` | ✅ |
 | ADR-008 | System prompt 29 個 section 外部化到 `~/.my-agent/system-prompt/` | ✅ |
 | ADR-009 | llamacpp context-overflow 三路修復（`/slots` warn / error regex / finish_reason warn） | ✅ |
-| ADR-010 | llama.cpp 設定統一到 `~/.my-agent/llamacpp.json` 單一來源 | ✅ |
+| ADR-010 | llama.cpp 設定統一到 `~/.my-agent/llamacpp.jsonc` 單一來源 | ✅ |
 | ADR-011 | Browser 走 puppeteer-core，不走 playwright-core | ✅ |
 | ADR-012 | M-DAEMON Path A — in-process QueryEngine 整合（非 spawn 子程序） | ✅ |
 | ADR-013 | M-DISCORD 單 daemon 多 project；B-1 並行策略（turn mutex + chdir） | ✅ |
@@ -82,7 +82,7 @@ Qwen3.5-Neo 的 `reasoning_content` 映射為 Anthropic `thinking` content block
 
 ## ADR-010 — llama.cpp 設定單一來源（2026-04-19，M-LLAMA-CFG）
 
-本地 LLM server 設定統一到 `~/.my-agent/llamacpp.json`。新增 `src/llamacppConfig/` 模組（schema / paths / loader / seed / index），Zod schema 驗證；TS 端讀 snapshot 取 `baseUrl` / `model` / `modelAliases` / `contextSize`（env var override 仍優先）；Shell 端新增 `scripts/llama/load-config.sh`（jq 抽 env），`serve.sh` source 它。首次啟動 `setup.ts` seed 出預設 config + README。缺 jq / 缺檔 / JSON 壞 graceful fallback。
+本地 LLM server 設定統一到 `~/.my-agent/llamacpp.jsonc`（原始決策時為 `.json`，後改用 jsonc 以支援註解）。新增 `src/llamacppConfig/` 模組（schema / paths / loader / seed / index），Zod schema 驗證；TS 端讀 snapshot 取 `baseUrl` / `model` / `modelAliases` / `contextSize`（env var override 仍優先）；Shell 端新增 `scripts/llama/load-config.sh`（jq 抽 env），`serve.sh` source 它。首次啟動 `setup.ts` seed 出預設 config + README。缺 jq / 缺檔 / JSON 壞 graceful fallback。
 
 理由：原本 15 處散落（3 const、5 env var、serve.sh hard-code、`LLAMACPP_MODEL_ALIASES`）難維護；統一後 TS + shell 共用一份 source of truth。
 

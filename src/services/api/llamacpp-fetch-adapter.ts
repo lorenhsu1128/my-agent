@@ -32,6 +32,12 @@ import {
   extractGemmaToolCalls,
   type GemmaStreamEvent,
 } from './llamacpp-gemma-stream-parser.js'
+// ── 共用 SSE 工具（vanilla / tcq-shim 兩條 adapter 共用） ─────────────────
+import {
+  formatSSE,
+  iterOpenAISSELines,
+  jsonStringifyAsciiSafe,
+} from './llamacpp-shared/sse-iter.js'
 
 // ── 型別（inline，不 import SDK）────────────────────────────────────────
 
@@ -97,6 +103,12 @@ interface OpenAIRequestBody {
   max_tokens?: number
   temperature?: number
   top_p?: number
+  // M-TCQ-SHIM-SAMPLER：preset 注入後可能填入這些欄位（shim 端 chatCompletions 已對應 forward）
+  top_k?: number
+  min_p?: number
+  presence_penalty?: number
+  frequency_penalty?: number
+  repetition_penalty?: number
   stream?: boolean
   tools?: Array<{
     type: 'function'
@@ -141,6 +153,16 @@ interface OpenAIChatCompletion {
       cached_tokens?: number
     }
   }
+  // B3-A：TCQ-shim vendor extension。Qwen 路徑下偵測到 tool-format XML 漏出時帶
+  // 上；non-Qwen 模型 / 沒漏出時欄位省略。my-agent 端只 log，不據此調整行為。
+  _qwen_tool_leak?: QwenToolLeakInfo | null
+}
+
+interface QwenToolLeakInfo {
+  markers: string[]
+  recovered: number
+  contentLength: number
+  snippet: string
 }
 
 interface OpenAIStreamChunk {
@@ -172,6 +194,24 @@ interface OpenAIStreamChunk {
       cached_tokens?: number
     }
   }
+  /** B3-A：stream 最終 chunk 才帶。 */
+  _qwen_tool_leak?: QwenToolLeakInfo | null
+}
+
+// ── B3-A：Qwen tool-format leak warn helper ─────────────────────────────
+// 1s rate-limit + 累計 stats（同 process 多次 leak 用 stats=… 累加），避免洗版。
+let lastQwenLeakLogAt = 0
+const qwenLeakStats: Record<string, number> = {}
+function logQwenToolLeak(info: QwenToolLeakInfo, kind: 'non-stream' | 'stream'): void {
+  if (process.env.LLAMACPP_LOG_QWEN_LEAK === '0') return
+  for (const m of info.markers) qwenLeakStats[m] = (qwenLeakStats[m] ?? 0) + 1
+  const now = Date.now()
+  if (now - lastQwenLeakLogAt < 1000) return
+  lastQwenLeakLogAt = now
+  const stats = Object.entries(qwenLeakStats).map(([k, v]) => `${k}=${v}`).join(' ')
+  console.warn(
+    `[llamacpp/qwen-tool-leak ${kind}] markers=[${info.markers.join(',')}] recovered=${info.recovered} contentLen=${info.contentLength} stats=[${stats}]\n  snippet: ${info.snippet.replace(/\n/g, '\\n')}`,
+  )
 }
 
 // ── 映射表 & helpers ─────────────────────────────────────────────────────
@@ -292,19 +332,46 @@ export function translateMessagesToOpenAI(
       for (const block of msg.content) {
         if (block.type === 'tool_result') {
           // Anthropic tool_result → OpenAI role:'tool' message
+          // M-TCQ-SHIM-FIXUP-8：tool_result.content[] 內的 image block 也要翻譯成
+          // image_url part，否則 FileReadTool 對 .jpeg / screenshot 等回傳的 image
+          // 會在這裡被吃掉（pre-fix 只 .map 抽 text、image 變空字串），shim/buun-server
+          // 端的 vision path 永遠看不到圖、模型瞎猜或瘋狂 retry Read（v3 D11/D12 真因）。
           let resultText = ''
+          const toolImageParts: OpenAIContentPart[] = []
           if (typeof block.content === 'string') {
             resultText = block.content
           } else if (Array.isArray(block.content)) {
-            resultText = block.content
-              .map(b => (b.type === 'text' ? b.text ?? '' : ''))
-              .join('')
+            for (const b of block.content) {
+              if (b.type === 'text' && typeof b.text === 'string') {
+                resultText += b.text
+              } else if (b.type === 'image' && vision) {
+                const part = imageBlockToOpenAIPart(b)
+                if (part) toolImageParts.push(part)
+              }
+            }
           }
-          out.push({
-            role: 'tool',
-            tool_call_id: block.tool_use_id ?? '',
-            content: resultText,
-          })
+          if (toolImageParts.length > 0) {
+            // OpenAI 嚴格 spec 規定 tool message content 只接 string，但 shim 的
+            // OpenAIMessage type （types.ts:18）不分 role 都接 multipart array，且
+            // extractMediaParts 會掃所有 messages 的 parts 不分 role。多放一個 text
+            // part 確保純文字 fallback 也有東西可讀（resultText 為空時用 placeholder）。
+            const parts: OpenAIContentPart[] = [...toolImageParts]
+            parts.push({
+              type: 'text',
+              text: resultText || '[Tool returned image]',
+            })
+            out.push({
+              role: 'tool',
+              tool_call_id: block.tool_use_id ?? '',
+              content: parts,
+            })
+          } else {
+            out.push({
+              role: 'tool',
+              tool_call_id: block.tool_use_id ?? '',
+              content: resultText,
+            })
+          }
         } else if (block.type === 'text' && typeof block.text === 'string') {
           textParts.push(block.text)
         } else if (block.type === 'image') {
@@ -591,6 +658,14 @@ export function translateRequestToOpenAI(
     callSite?: import('../../llamacppConfig/schema.js').LlamaCppCallSite
     /** 同上，可直接傳已 resolve 的 watchdog 設定（避免重讀 snapshot；測試友善） */
     watchdogCfg?: import('../../llamacppConfig/schema.js').LlamaCppWatchdogConfig
+    /**
+     * M-TCQ-SHIM-SAMPLER：直接傳 sampling preset 設定（測試友善；省掉重讀 config snapshot）。
+     * 未提供時 lazy-load `getLlamaCppConfigSnapshot()` 取最新 hot-reloaded 結果。
+     */
+    samplingPresetCfg?: Pick<
+      import('../../llamacppConfig/schema.js').LlamaCppConfig,
+      'samplingPresets' | 'defaultSamplingPreset'
+    >
   } = {},
 ): OpenAIRequestBody {
   const systemPrompt = flattenSystemPrompt(anthropic.system)
@@ -650,7 +725,26 @@ export function translateRequestToOpenAI(
     delete body.tools
     delete body.tool_choice
   }
-  return body
+
+  // M-TCQ-SHIM-SAMPLER：依 metadata.taskType 注入 sampling preset。
+  // - Family gate：preset.appliesTo glob 對 model id 比對，沒命中靜默跳過（正常路徑）
+  // - 注入只填 body 缺欄位（caller 顯式 > preset）
+  // - 未知 taskType key 印 warn 不 fail
+  // taskType 取自 Anthropic SDK 的 metadata（free-form Record<string, string>）
+  const taskTypeRaw = (anthropic as { metadata?: Record<string, unknown> | null }).metadata?.taskType
+  const taskType = typeof taskTypeRaw === 'string' && taskTypeRaw !== '' ? taskTypeRaw : undefined
+  const samplingCfg =
+    options.samplingPresetCfg ??
+    (() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const loader = require('../../llamacppConfig/loader.js') as typeof import('../../llamacppConfig/loader.js')
+      const snap = loader.getLlamaCppConfigSnapshot()
+      return { samplingPresets: snap.samplingPresets, defaultSamplingPreset: snap.defaultSamplingPreset }
+    })()
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { applySamplingPreset } = require('../../llamacppConfig/applySamplingPreset.js') as typeof import('../../llamacppConfig/applySamplingPreset.js')
+  const injected = applySamplingPreset(body as unknown as Record<string, unknown>, samplingCfg, taskType)
+  return injected as unknown as OpenAIRequestBody
 }
 
 /**
@@ -806,12 +900,17 @@ export function parseLeakedBarePythonicToolCalls(text: string): {
  *   message.tool_calls        → 多個 tool_use content block（若存在）
  * 順序：thinking → tool_use（若有）→ text
  */
-function translateChatCompletionToAnthropic(
+export function translateChatCompletionToAnthropic(
   openai: OpenAIChatCompletion,
   model: string,
+  // mode='tcq' 時跳過 XML leak fallback；shim 已 parse 過 tool_calls。
+  mode: 'vanilla' | 'tcq' = 'vanilla',
 ): Record<string, unknown> {
   const choice = openai.choices[0]
   const content: AnthropicContentBlock[] = []
+
+  // B3-A：shim 端偵測到 Qwen tool-format XML 漏出時印 warn（env LLAMACPP_LOG_QWEN_LEAK=0 可關）
+  if (openai._qwen_tool_leak != null) logQwenToolLeak(openai._qwen_tool_leak, 'non-stream')
 
   const reasoning = choice.message.reasoning_content
   if (typeof reasoning === 'string' && reasoning.length > 0) {
@@ -949,55 +1048,8 @@ function translateChatCompletionToAnthropic(
  * 產生 replacement char → JSON.parse 失敗 → tool input 變成 {}。
  * 用純 ASCII 的 JSON 徹底繞過這個問題。
  */
-function jsonStringifyAsciiSafe(data: unknown): string {
-  return JSON.stringify(data).replace(
-    /[\u0080-\uffff]/g,
-    ch => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`,
-  )
-}
 
-function formatSSE(event: string, data: unknown): string {
-  return `event: ${event}\ndata: ${jsonStringifyAsciiSafe(data)}\n\n`
-}
-
-/**
- * 把 OpenAI SSE byte stream 拆成 line buffer，逐行 yield JSON 字串
- * （去掉 `data: ` 前綴，遇 `[DONE]` 停止）。
- */
-async function* iterOpenAISSELines(
-  upstream: ReadableStream<Uint8Array>,
-): AsyncGenerator<string> {
-  const reader = upstream.getReader()
-  // 不用 TextDecoder({ stream: true })！Bun 1.3.6 Windows 的 streaming
-  // TextDecoder 會在 chunk 邊界切碎 multi-byte UTF-8（例如中文 3-byte
-  // 字元）→ 產生亂碼 → JSON.parse 失敗 → tool input 變成 {}。
-  //
-  // 改成：累積 raw bytes、在 \n (0x0a, ASCII single-byte) 切行、每完整行
-  // 才 toString('utf-8')。SSE 的行分隔符 \n 是 single-byte，不可能切到
-  // multi-byte 字元中間，所以每行內的 UTF-8 一定完整。
-  let rawBuf = Buffer.alloc(0)
-  try {
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      rawBuf = Buffer.concat([rawBuf, Buffer.from(value)])
-      let idx: number
-      while ((idx = rawBuf.indexOf(0x0a)) !== -1) {
-        const lineBytes = rawBuf.subarray(0, idx)
-        rawBuf = rawBuf.subarray(idx + 1)
-        const line = lineBytes.toString('utf-8').replace(/\r$/, '')
-        if (!line.startsWith('data:')) continue
-        const payload = line.slice(5).trim()
-        if (!payload) continue
-        if (payload === '[DONE]') return
-        yield payload
-      }
-    }
-  } finally {
-    reader.releaseLock()
-  }
-}
-
+// SSE helpers moved to ./llamacpp-shared/sse-iter.ts (imported at top of file)
 // ── 串流翻譯器：OpenAI SSE → Anthropic SSE ────────────────────────────────
 
 /**
@@ -1023,6 +1075,10 @@ export async function* translateOpenAIStreamToAnthropic(
   model: string,
   msgId: string,
   callSite: import('../../llamacppConfig/schema.js').LlamaCppCallSite = 'turn',
+  // mode='tcq' 時跳過 XML / bare-pythonic leak fallback — TCQ-shim 已在 server
+  // 端做完 Qwen pythonic-XML → OpenAI tool_calls[] 轉譯，這裡再 leak parse 會雙重
+  // 計入。reasoning-only fallback 與 retry-nudge 兩條跟模型行為有關，仍保留。
+  mode: 'vanilla' | 'tcq' = 'vanilla',
 ): AsyncGenerator<string> {
   let msgStarted = false
   let nextBlockIndex = 0
@@ -1304,6 +1360,8 @@ export async function* translateOpenAIStreamToAnthropic(
           chunk.usage.prompt_tokens_details.cached_tokens
       }
     }
+    // B3-A：shim 在最終 chunk 帶 _qwen_tool_leak（vendor extension）→ warn log
+    if (chunk._qwen_tool_leak != null) logQwenToolLeak(chunk._qwen_tool_leak, 'stream')
   }
 
   // 收尾
@@ -1356,6 +1414,10 @@ export async function* translateOpenAIStreamToAnthropic(
   // XML 可能漏在 content（accumulatedText）或 reasoning_content
   // （accumulatedThinking）— qwen 偶爾把整段 tool_call 寫進 thinking。
   const xmlCorpus = accumulatedText + '\n' + accumulatedThinking
+  // leak fallback 對 vanilla / tcq 都跑：`!emittedToolCall` 已是「server 沒給結
+  // 構化 tool_calls」的閘 — TCQ-shim 漏判 partial XML 時仍救援；shim 有 parse
+  // 出 tool_calls 時 emittedToolCall=true 自動跳過，不會雙重執行。
+  // mode 參數保留供日後細分行為 / telemetry 使用。
   if (
     !watchdogAborted &&
     !emittedToolCall &&
@@ -1601,12 +1663,13 @@ export const RETRY_TOOL_NUDGE =
  * 代價：tools 存在的 streaming 請求會被完整 buffer 後才往下游 yield（失去
  * 漸進輸出的 UX）；換 correctness。不含 tools 的請求完全走原路徑。
  */
-async function* streamWithRetryOnEmptyTool(
+export async function* streamWithRetryOnEmptyTool(
   firstBody: ReadableStream<Uint8Array>,
   endpoint: string,
   openaiBody: OpenAIRequestBody,
   reportedModel: string,
   apiKey?: string,
+  mode: 'vanilla' | 'tcq' = 'vanilla',
 ): AsyncGenerator<string> {
   const state1 = {
     text: false,
@@ -1619,6 +1682,8 @@ async function* streamWithRetryOnEmptyTool(
     firstBody,
     reportedModel,
     msgId,
+    'turn',
+    mode,
   )) {
     observeSseChunk(chunk, state1)
     firstBuffer.push(chunk)
@@ -1684,6 +1749,8 @@ async function* streamWithRetryOnEmptyTool(
     retryRes.body,
     reportedModel,
     mkMsgId(),
+    'turn',
+    mode,
   )) {
     yield chunk
   }
@@ -1715,6 +1782,13 @@ export interface LlamaCppConfig {
   model: string
   /** M-VISION: 啟用 image block → OpenAI image_url 翻譯 */
   vision?: boolean
+  /**
+   * 'buun' = vanilla buun-llama-cpp（adapter 走完整 leak fallback / hermes 解析）。
+   * 'tcq'  = TCQ-shim sidecar（server 已 parse Qwen pythonic-XML → tool_calls，
+   *          adapter 跳過 leak fallback，避免重複計入 tool_use blocks）。
+   * 對應 src/llamacppConfig/schema.ts 的 server.binaryKind。
+   */
+  binaryKind?: 'buun' | 'tcq'
 }
 
 /**
@@ -1728,6 +1802,13 @@ export function setSkipPromptCacheOnce(): void { skipPromptCacheOnce = true }
 export function createLlamaCppFetch(
   config: LlamaCppConfig,
 ): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+  // M-TCQ-ADAPTER: 顯示 adapter mode（讓使用者知道走哪條路；改 jsonc binaryKind 即切換）
+  if (process.env.LLAMA_DEBUG || config.binaryKind === 'tcq') {
+    // biome-ignore lint/suspicious/noConsole: one-shot startup notice
+    console.error(
+      `[llamacpp] adapter mode=${config.binaryKind === 'tcq' ? 'tcq-shim' : 'vanilla'} baseUrl=${config.baseUrl}`,
+    )
+  }
   return async (
     input: RequestInfo | URL,
     init?: RequestInit,
@@ -2038,6 +2119,7 @@ export function createLlamaCppFetch(
         (Array.isArray(anthropicBody.tools) && anthropicBody.tools.length > 0)
       // 有 tools 時走 retry wrapper：第一輪完整 buffer 後偵測空 tool_use 情境，
       // 命中就追加 nudge 重發一次。失去漸進輸出 UX 換 correctness。
+      const adapterMode: 'vanilla' | 'tcq' = config.binaryKind === 'tcq' ? 'tcq' : 'vanilla'
       const sseGen = hasTools
         ? streamWithRetryOnEmptyTool(
             openaiRes.body,
@@ -2045,11 +2127,14 @@ export function createLlamaCppFetch(
             openaiBody,
             reportedModel,
             effectiveApiKey,
+            adapterMode,
           )
         : translateOpenAIStreamToAnthropic(
             openaiRes.body,
             reportedModel,
             mkMsgId(),
+            'turn',
+            adapterMode,
           )
       return new Response(sseGeneratorToStream(sseGen), {
         status: 200,
@@ -2065,6 +2150,7 @@ export function createLlamaCppFetch(
     const anthropicJson = translateChatCompletionToAnthropic(
       openaiJson,
       reportedModel,
+      config.binaryKind === 'tcq' ? 'tcq' : 'vanilla',
     )
 
     return new Response(JSON.stringify(anthropicJson), {
