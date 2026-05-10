@@ -60,27 +60,17 @@ export function seedGlobalConfigIfMissingSync(path: string): void {
 
 /**
  * 手動觸發：重寫 ~/.my-agent/.my-agent.jsonc 為當前 bundled 模板版本，
- * 保留使用者現有值，**並剔除非 my-agent schema 的欄位**（典型來源：使用者
- * 從 upstream 的 `~/.my-agent/config.json` 整份複製過來，帶了 tipsHistory /
- * cachedGrowthBookFeatures / btwUseCount / oauthAccount 等 my-agent 不使用
- * 的欄位）。被剔除的 keys 列在回傳值，呼叫端可顯示給使用者。
- *
- * 寫前備份為 `*.pre-rewrite-<timestamp>`，原始值不會丟失。
- *
- * Allowlist 來源：`createDefaultGlobalConfig()` 的 top-level keys。新增 my-agent
- * 欄位時自動納入；被剔除的欄位若日後 my-agent 想用，把它加進 default config
- * 即可。
+ * 保留使用者現有值。寫前備份為 `*.pre-rewrite-<timestamp>`，原始值不會丟失。
  */
 export async function forceRewriteGlobalConfigWithDocs(
   path: string,
-): Promise<{ backupPath: string | null; droppedKeys: string[] }> {
+): Promise<{ backupPath: string | null }> {
   const {
     forceRewriteJsoncFile,
     writeJsoncPreservingComments,
     parseJsonc,
   } = await import('../utils/jsoncStore.js')
   const { readFile } = await import('fs/promises')
-  const { DEFAULT_GLOBAL_CONFIG } = await import('../utils/config.js')
 
   let currentValue: Record<string, unknown> = {}
   if (existsSync(path)) {
@@ -93,24 +83,11 @@ export async function forceRewriteGlobalConfigWithDocs(
     }
   }
 
-  // 以模板為 baseline，套用使用者現有值；非 my-agent schema 的 key 剔除
+  // 以模板為 baseline，套用使用者現有值
   const templateParsed = parseJsonc<Record<string, unknown>>(
     GLOBAL_CONFIG_JSONC_TEMPLATE,
   )
-  const allowedKeys = new Set<string>([
-    ...Object.keys(DEFAULT_GLOBAL_CONFIG as Record<string, unknown>),
-    // 模板裡標註過的欄位也視為合法（包含 deprecated 但我們仍接受讀回的）
-    ...Object.keys(templateParsed),
-  ])
-  const merged: Record<string, unknown> = { ...templateParsed }
-  const droppedKeys: string[] = []
-  for (const [key, value] of Object.entries(currentValue)) {
-    if (!allowedKeys.has(key)) {
-      droppedKeys.push(key)
-      continue
-    }
-    merged[key] = value
-  }
+  const merged: Record<string, unknown> = { ...templateParsed, ...currentValue }
 
   // 先用 writeJsoncPreservingComments 產出帶註解的新文字
   const { newText } = await writeJsoncPreservingComments(
@@ -120,5 +97,5 @@ export async function forceRewriteGlobalConfigWithDocs(
   )
   // 再用 forceRewrite 完成備份 + atomic overwrite
   const { backupPath } = await forceRewriteJsoncFile(path, newText)
-  return { backupPath, droppedKeys }
+  return { backupPath }
 }

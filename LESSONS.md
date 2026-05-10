@@ -19,6 +19,17 @@
 
 ---
 
+## 設定檔遷移相關
+
+### 移除 Claude Code legacy migration（getGlobalClaudeFile 大簡化）
+- **發生什麼事**：`getGlobalClaudeFile()` 過去支援四層 fallback / migration：(1) `~/.my-agent/.config.json` 早期檔名、(2) `.json` 自動 rename 為 `.jsonc`、(3) home 根下 `~/.my-agent.jsonc` / `~/.my-agent.json` 搬到 config 目錄、(4) `~/.claude{suffix}.json` 從官方 Claude Code 一次性複製。一併拔掉 `forceRewriteGlobalConfigWithDocs` 的 `droppedKeys` schema 過濾（用來剔除 Claude Code 帶過來的非 my-agent 欄位）。
+- **根本原因**：升級窗口已過（2026-Q2），既有使用者要嘛早就升完、要嘛是新安裝。維持 fallback 反而增加 `existsSync` 系統呼叫、設定檔位置不可預測（debug 時不確定實際讀哪個）、邏輯歧義。
+- **正確做法**：`getGlobalClaudeFile()` 只回唯一正規路徑 `~/.my-agent/.my-agent{suffix}.jsonc`。若使用者本機只剩舊位置檔（極罕見），第一次跑會空 config，由 seed 寫出新模板；手動處理：`cp ~/.claude.json ~/.my-agent/.my-agent.jsonc`（或對應舊位置）後跑 `/config-rewrite-with-docs`。
+- **相關檔案**：`src/utils/env.ts`、`src/globalConfig/seed.ts`、`src/commands/configRewriteWithDocs.ts`、`src/configDoctor/fixers/index.ts`。
+- **日期**：2026-05-10
+
+---
+
 ## 設定檔 seed 相關
 
 ### TS Compiler API 解析 zod schema 比 .describe() 路線好用

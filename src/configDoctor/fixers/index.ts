@@ -189,11 +189,6 @@ export async function applyFixes(
     try {
       const r = await forceRewriteGlobalConfigWithDocs(getGlobalClaudeFile())
       if (r.backupPath) sideEffects.push(`global config 已備份 → ${r.backupPath}`)
-      if (r.droppedKeys.length > 0) {
-        sideEffects.push(
-          `global config 剔除非 schema keys: ${r.droppedKeys.join(', ')}`,
-        )
-      }
       // 把 global.strict-json 從 remaining 移到 fixed
       const idx = remaining.indexOf('global.strict-json')
       if (idx >= 0) {
