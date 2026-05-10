@@ -229,6 +229,40 @@ function mkMsgId(): string {
 }
 
 /**
+ * M-SP-FULL Phase 2：偵測 system prompt 是否來自 customSystemPrompt（使用者
+ * 透過 system-prompt-override.md / --system-prompt 完全替代 default）。
+ *
+ * 規則：當 getCLISyspromptPrefix() 的任一 prefix（`CLI_SYSPROMPT_PREFIXES`）
+ * 都不存在於 system blocks 內，視為「使用者完全控制」。getCLISyspromptPrefix
+ * 在 hasCustomSystemPrompt 時會回傳空字串被 filter 掉（claude.ts:1336），所以
+ * prefix 缺席是 customSystemPrompt 的可靠 signal。
+ *
+ * Caller 用此 flag 跳過：
+ *   - streamWithRetryOnEmptyTool（不該強迫人格 mode 改 tool 模式）
+ *
+ * 純函數，可單測（不接 process state）。
+ */
+export async function detectCustomSystemPrompt(
+  system: AnthropicRequestBody['system'],
+): Promise<boolean> {
+  const { CLI_SYSPROMPT_PREFIXES } = await import('../../constants/system.js')
+  // 直接檢查原始 blocks（避免 flatten 後 join 與 split 規約不一致）。
+  // string 形式視為單一 block。
+  const blocks: string[] = []
+  if (typeof system === 'string') {
+    blocks.push(system)
+  } else if (Array.isArray(system)) {
+    for (const b of system) {
+      const t = b?.text ?? ''
+      if (t) blocks.push(t)
+    }
+  }
+  if (blocks.length === 0) return true
+  // 任一 block trim 後命中已知 CLI prefix → 非 custom（走原 retry 路徑）
+  return !blocks.some(b => CLI_SYSPROMPT_PREFIXES.has(b.trim()))
+}
+
+/**
  * 把 Anthropic 的 system（字串或 blocks）扁平化為單一字串。
  */
 function flattenSystemPrompt(
@@ -2117,10 +2151,18 @@ export function createLlamaCppFetch(
       const hasTools =
         (Array.isArray(openaiBody.tools) && openaiBody.tools.length > 0) ||
         (Array.isArray(anthropicBody.tools) && anthropicBody.tools.length > 0)
+      // M-SP-FULL Phase 2：當使用者透過 system-prompt-override.md / --system-prompt
+      // 提供 customSystemPrompt 時，跳過 retry-on-empty-tool nudge —— 使用者
+      // 已經拿到主 prompt 完全控制權（人格 / 桌寵 / 對話模式），系統不該再
+      // 強迫 model 用工具。
+      const hasCustomSystemPrompt = await detectCustomSystemPrompt(
+        anthropicBody.system,
+      )
       // 有 tools 時走 retry wrapper：第一輪完整 buffer 後偵測空 tool_use 情境，
       // 命中就追加 nudge 重發一次。失去漸進輸出 UX 換 correctness。
+      // hasCustomSystemPrompt 時跳過 retry —— 使用者人格不該被 tool nudge 干擾。
       const adapterMode: 'vanilla' | 'tcq' = config.binaryKind === 'tcq' ? 'tcq' : 'vanilla'
-      const sseGen = hasTools
+      const sseGen = hasTools && !hasCustomSystemPrompt
         ? streamWithRetryOnEmptyTool(
             openaiRes.body,
             endpoint,
