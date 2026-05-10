@@ -8,7 +8,7 @@
  *   - 同 cwd 重複 load 命中 cache；不同 cwd 隔離；並發 de-dup
  *   - composeFullDefaultPrompt 拼出 29 個 section + 各段註解分隔
  */
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -16,14 +16,29 @@ import { join } from 'path'
 let testDir: string
 let originalEnv: string | undefined
 
+let originalRemoteMemDir: string | undefined
+
+// 防禦：memoryMutations.test.ts 用 mock.module 永久覆蓋 getMemoryBaseDir 指到
+// 它的 tmpMemDir，跨檔污染。我們重新 mock 指到本檔測試的 testDir。
+// （宣告在 module top-level，因為 bun mock.module 必須在 beforeEach 之外註冊一次。）
+const realPaths = await import('../../../src/memdir/paths.js')
+let currentTestDir = ''
+mock.module('../../../src/memdir/paths.js', () => ({
+  ...realPaths,
+  getMemoryBaseDir: () => currentTestDir || realPaths.getMemoryBaseDir(),
+}))
+
 beforeEach(async () => {
   testDir = join(
     tmpdir(),
     `sp-overrides-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   )
+  currentTestDir = testDir
   mkdirSync(testDir, { recursive: true })
   originalEnv = process.env.CLAUDE_CONFIG_DIR
   process.env.CLAUDE_CONFIG_DIR = testDir
+  originalRemoteMemDir = process.env.MY_AGENT_REMOTE_MEMORY_DIR
+  delete process.env.MY_AGENT_REMOTE_MEMORY_DIR
   const { _resetProjectPromptOverridesForTests } = await import(
     '../../../src/systemPromptFiles/overrides'
   )
@@ -35,6 +50,11 @@ afterEach(() => {
     delete process.env.CLAUDE_CONFIG_DIR
   } else {
     process.env.CLAUDE_CONFIG_DIR = originalEnv
+  }
+  if (originalRemoteMemDir === undefined) {
+    delete process.env.MY_AGENT_REMOTE_MEMORY_DIR
+  } else {
+    process.env.MY_AGENT_REMOTE_MEMORY_DIR = originalRemoteMemDir
   }
   try {
     rmSync(testDir, { recursive: true, force: true })

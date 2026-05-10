@@ -10,9 +10,11 @@ import { toError } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import { asSystemPrompt } from '../../utils/systemPromptType.js'
+import { getSection } from '../../systemPromptFiles/snapshot.js'
 import { queryHaiku } from '../api/claude.js'
 
-const TOOL_USE_SUMMARY_SYSTEM_PROMPT = `Write a short summary label describing what these tool calls accomplished. It appears as a single-line row in a mobile app and truncates around 30 characters, so think git-commit-subject, not sentence.
+// M-SP-FULL Phase 3：透過 getSection('subllm/tool-use-summary') 取，缺檔走 fallback
+const TOOL_USE_SUMMARY_SYSTEM_PROMPT_FALLBACK = `Write a short summary label describing what these tool calls accomplished. It appears as a single-line row in a mobile app and truncates around 30 characters, so think git-commit-subject, not sentence.
 
 Keep the verb in past tense and the most distinctive noun. Drop articles, connectors, and long location context first.
 
@@ -22,6 +24,13 @@ Examples:
 - Created signup endpoint
 - Read config.json
 - Ran failing tests`
+
+function getToolUseSummarySystemPrompt(): string {
+  return (
+    getSection('subllm/tool-use-summary') ??
+    TOOL_USE_SUMMARY_SYSTEM_PROMPT_FALLBACK
+  )
+}
 
 type ToolInfo = {
   name: string
@@ -67,7 +76,7 @@ export async function generateToolUseSummary({
       : ''
 
     const response = await queryHaiku({
-      systemPrompt: asSystemPrompt([TOOL_USE_SUMMARY_SYSTEM_PROMPT]),
+      systemPrompt: asSystemPrompt([getToolUseSummarySystemPrompt()]),
       userPrompt: `${contextPrefix}Tools completed:\n\n${toolSummaries}\n\nLabel:`,
       signal,
       options: {

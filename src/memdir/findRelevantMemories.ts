@@ -66,14 +66,24 @@ export type RelevantMemory = {
   mtimeMs: number
 }
 
-function buildSelectMemoriesSystemPrompt(maxFiles: number): string {
-  return `You are selecting memories that will be useful to my-agent as it processes a user's query. You will be given the user's query and a list of available memory files with their filenames and descriptions.
+// M-SP-FULL Phase 3：sub-LLM prompt fallback；override 走
+// `subllm/memory-selector` section（{maxFiles} 由 getSectionInterpolated 替換）。
+const SELECT_MEMORIES_FALLBACK = `You are selecting memories that will be useful to my-agent as it processes a user's query. You will be given the user's query and a list of available memory files with their filenames and descriptions.
 
-Return a list of filenames for the memories that will clearly be useful to my-agent as it processes the user's query (up to ${maxFiles}). Only include memories that you are certain will be helpful based on their name and description.
+Return a list of filenames for the memories that will clearly be useful to my-agent as it processes the user's query (up to {maxFiles}). Only include memories that you are certain will be helpful based on their name and description.
 - If you are unsure if a memory will be useful in processing the user's query, then do not include it in your list. Be selective and discerning.
 - If there are no memories in the list that would clearly be useful, feel free to return an empty list.
 - If a list of recently-used tools is provided, do not select memories that are usage reference or API documentation for those tools (my-agent is already exercising them). DO still select memories containing warnings, gotchas, or known issues about those tools — active use is exactly when those matter.
 `
+
+function buildSelectMemoriesSystemPrompt(maxFiles: number): string {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getSectionInterpolated, interpolate } =
+    require('../systemPromptFiles/snapshot.js') as typeof import('../systemPromptFiles/snapshot.js')
+  return (
+    getSectionInterpolated('subllm/memory-selector', { maxFiles }) ??
+    interpolate(SELECT_MEMORIES_FALLBACK, { maxFiles })
+  )
 }
 
 /**

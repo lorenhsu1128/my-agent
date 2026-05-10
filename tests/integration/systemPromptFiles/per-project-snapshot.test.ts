@@ -9,7 +9,7 @@
  *   - runWithSystemPromptCwd ALS scope 正確設定 cwd
  *   - 並發載入兩個 cwd 不互相污染
  */
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { mkdirSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -17,15 +17,28 @@ import { join } from 'path'
 let testDir: string
 let originalEnv: string | undefined
 
+let originalRemoteMemDir: string | undefined
+
+// 防禦：memoryMutations.test.ts 用 mock.module 永久覆蓋 getMemoryBaseDir。
+// 我們重新 mock 指到本檔測試的 testDir。
+const realPaths = await import('../../../src/memdir/paths.js')
+let currentTestDir = ''
+mock.module('../../../src/memdir/paths.js', () => ({
+  ...realPaths,
+  getMemoryBaseDir: () => currentTestDir || realPaths.getMemoryBaseDir(),
+}))
+
 beforeEach(async () => {
   testDir = join(
     tmpdir(),
     `sp-snapshot-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   )
+  currentTestDir = testDir
   mkdirSync(testDir, { recursive: true })
   originalEnv = process.env.CLAUDE_CONFIG_DIR
   process.env.CLAUDE_CONFIG_DIR = testDir
-  // 重設 snapshot module-level Map（避免上一個 test 殘留）
+  originalRemoteMemDir = process.env.MY_AGENT_REMOTE_MEMORY_DIR
+  delete process.env.MY_AGENT_REMOTE_MEMORY_DIR
   const { _resetSystemPromptSnapshotForTests } = await import(
     '../../../src/systemPromptFiles/snapshot'
   )
@@ -37,6 +50,11 @@ afterEach(() => {
     delete process.env.CLAUDE_CONFIG_DIR
   } else {
     process.env.CLAUDE_CONFIG_DIR = originalEnv
+  }
+  if (originalRemoteMemDir === undefined) {
+    delete process.env.MY_AGENT_REMOTE_MEMORY_DIR
+  } else {
+    process.env.MY_AGENT_REMOTE_MEMORY_DIR = originalRemoteMemDir
   }
   try {
     rmSync(testDir, { recursive: true, force: true })

@@ -1979,18 +1979,25 @@
 - [ ] M-SP-FULL-2-9 `tests/integration/daemon/persona-per-project.test.ts` E2E：兩 project 不同 override.md 各拿自己的人格
 - [ ] M-SP-FULL-2-10 手測：cwd A 預設 + cwd B 寫 override.md 換成「貓」人格
 
-### M-SP-FULL Phase 3 — 14 個 Sub-LLM Prompts 外部化
-- [ ] M-SP-FULL-3-1 `sections.ts` 加 14 個 `subllm/*` SectionId
-- [ ] M-SP-FULL-3-2 `bundledDefaults.ts` 把現有 hardcoded 字串搬進來（13 條 prompt + agent-tool）
+### M-SP-FULL Phase 3 — 5 個 Sub-LLM Prompts 外部化（範圍重訂 2026-05-10）
+
+**範圍重訂理由**：原 plan 14 條，盤點後實際分成 4 類：
+- **Tier A（5 條，本 phase）**：純靜態或少變數，外部化簡單高 ROI
+- **Tier B（3 條，已外部化）**：SessionMemory template/prompt（`~/.my-agent/session-memory/`）、MagicDocs prompt（`~/.my-agent/magic-docs/`）已有自己的 file-based 載入機制。重複納入 M-SP 會造成兩套載入機制衝突。本 phase 不動，docs 加備註。
+- **Tier C（1 條，留 backlog）**：coordinator-user-context 7 成是動態組裝（worker tools 列舉），靜態文字太短不值得外部化
+- **Tier D（5 條，獨立 milestone M-SP-SUBLLM-COMPOSITION）**：agent-tool/prompt.ts（200 行 9+ feature flag）+ extractMemories 4 條（composition function + 6 個工具名插值）。這些是 prompt builder 不是純 prompt，外部化會 lose 條件邏輯
+
+#### 本 phase 任務
+- [ ] M-SP-FULL-3-1 `sections.ts` 加 5 個 `subllm/*` SectionId（cron-parser / memory-selector / verification-agent / tool-use-summary / buddy-companion）
+- [ ] M-SP-FULL-3-2 `bundledDefaults.ts` 搬入 5 條 hardcoded 字串（變數轉 `{x}` 單花括號格式）
 - [ ] M-SP-FULL-3-3 `seed.ts` seed 進 `~/.my-agent/system-prompt/subllm/`
 - [ ] M-SP-FULL-3-4 改 `cronNlParser.ts:30` → `getSection('subllm/cron-parser')` ?? FALLBACK
-- [ ] M-SP-FULL-3-5 改 `findRelevantMemories.ts:69` → memory-selector
-- [ ] M-SP-FULL-3-6 改 `extractMemories/prompts.ts` 4 條 → persona-editor / extract-opener / extract-auto-only / extract-combined
-- [ ] M-SP-FULL-3-7 改 `verificationAgent.ts:10` + `AgentTool/prompt.ts` → verification-agent / agent-tool
-- [ ] M-SP-FULL-3-8 改 `SessionMemory/prompts.ts` 2 條 + `MagicDocs/prompts.ts` + `toolUseSummary` + `coordinator` + `buddy`
-- [ ] M-SP-FULL-3-9 模板變數統一單花括號 `{x}`（snapshot.ts interpolate 已支援）
-- [ ] M-SP-FULL-3-10 `tests/integration/systemPromptFiles/subllm-externalization.test.ts` 涵蓋 fallback + 覆寫
-- [ ] M-SP-FULL-3-11 手動冒煙：cron parse / memory recall / verification agent / tool summary / buddy 各跑一次
+- [ ] M-SP-FULL-3-5 改 `findRelevantMemories.ts:69` → memory-selector（`{maxFiles}` 插值）
+- [ ] M-SP-FULL-3-6 改 `verificationAgent.ts:10` → verification-agent（`{BASH_TOOL_NAME}`, `{WEB_FETCH_TOOL_NAME}` 插值）
+- [ ] M-SP-FULL-3-7 改 `toolUseSummary` → tool-use-summary
+- [ ] M-SP-FULL-3-8 改 `buddy/prompt.ts:7` → buddy-companion（`{name}`, `{species}` 插值）
+- [ ] M-SP-FULL-3-9 `tests/integration/systemPromptFiles/subllm-externalization.test.ts`：5 條各驗 fallback + 覆寫
+- [ ] M-SP-FULL-3-10 build + smoke：cron parse + verification agent 跑一次
 
 ### M-SP-FULL 文件 + ADR
 - [ ] M-SP-FULL-D-1 `docs/customizing-system-prompt.md` 加 §override-and-append + §sub-llm-prompts
@@ -3766,3 +3773,5 @@
 - 2026-05-10 09:15: Session 結束 | 進度：799/909 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
 
 - 2026-05-10 09:19: Session 結束 | 進度：799/909 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
+
+- 2026-05-10 11:02: Session 結束 | 進度：799/940 任務 | 4f5de5a fix(llamacpp-adapter): customSystemPrompt 時跳過 retry-on-empty-tool

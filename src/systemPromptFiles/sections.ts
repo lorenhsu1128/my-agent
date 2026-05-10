@@ -39,6 +39,12 @@ export type SectionId =
   | 'memory/trusting-recall'
   | 'memory/frontmatter-example'
   | 'memory/combined-template'
+  // M-SP-FULL Phase 3：sub-LLM 提示外部化（Tier A 純靜態 / 少變數）
+  | 'subllm/cron-parser'
+  | 'subllm/memory-selector'
+  | 'subllm/verification-agent'
+  | 'subllm/tool-use-summary'
+  | 'subllm/buddy-companion'
 
 export interface SectionMeta {
   id: SectionId
@@ -282,6 +288,47 @@ export const SECTIONS: SectionMeta[] = [
     id: 'memory/combined-template',
     filename: 'memory/combined-template.md',
     purpose: 'memory combined prompt 完整模板',
+    timing: 'static',
+    externalized: true,
+    safeToDelete: true,
+  },
+  // ─── M-SP-FULL Phase 3：sub-LLM 提示外部化 ──────────────────────────────
+  {
+    id: 'subllm/cron-parser',
+    filename: 'subllm/cron-parser.md',
+    purpose: 'Cron NL → 5-field cron 翻譯子 LLM 系統提示',
+    timing: 'static',
+    externalized: true,
+    safeToDelete: true,
+  },
+  {
+    id: 'subllm/memory-selector',
+    filename: 'subllm/memory-selector.md',
+    purpose: 'Memory 相關性挑選子 LLM 系統提示（{maxFiles} 插值）',
+    timing: 'static',
+    externalized: true,
+    safeToDelete: true,
+  },
+  {
+    id: 'subllm/verification-agent',
+    filename: 'subllm/verification-agent.md',
+    purpose: 'Verification subagent 系統提示（{BASH_TOOL_NAME}, {WEB_FETCH_TOOL_NAME} 插值）',
+    timing: 'static',
+    externalized: true,
+    safeToDelete: true,
+  },
+  {
+    id: 'subllm/tool-use-summary',
+    filename: 'subllm/tool-use-summary.md',
+    purpose: 'Tool use summary（≤30 字元 git-commit 風格）系統提示',
+    timing: 'static',
+    externalized: true,
+    safeToDelete: true,
+  },
+  {
+    id: 'subllm/buddy-companion',
+    filename: 'subllm/buddy-companion.md',
+    purpose: 'Buddy 伴侶介紹（{name}, {species} 插值）',
     timing: 'static',
     externalized: true,
     safeToDelete: true,

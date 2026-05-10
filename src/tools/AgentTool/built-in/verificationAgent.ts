@@ -4,10 +4,17 @@ import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
 import { FILE_WRITE_TOOL_NAME } from 'src/tools/FileWriteTool/prompt.js'
 import { NOTEBOOK_EDIT_TOOL_NAME } from 'src/tools/NotebookEditTool/constants.js'
 import { WEB_FETCH_TOOL_NAME } from 'src/tools/WebFetchTool/prompt.js'
+import {
+  getSectionInterpolated,
+  interpolate,
+} from 'src/systemPromptFiles/snapshot.js'
 import { AGENT_TOOL_NAME } from '../constants.js'
 import type { BuiltInAgentDefinition } from '../loadAgentsDir.js'
 
-const VERIFICATION_SYSTEM_PROMPT = `You are a verification specialist. Your job is not to confirm the implementation works — it's to try to break it.
+// M-SP-FULL Phase 3：verification subagent 系統提示外部化。
+// 變數轉成 {x} 單花括號格式（snapshot.interpolate 處理）。
+// fallback 直接寫死在這（snapshot 沒載入時 / 使用者刪檔時走此）。
+const VERIFICATION_SYSTEM_PROMPT_FALLBACK = `You are a verification specialist. Your job is not to confirm the implementation works — it's to try to break it.
 
 You have two documented failure patterns. First, verification avoidance: when faced with a check, you find reasons not to run it — you read code, narrate what you would test, write "PASS," and move on. Second, being seduced by the first 80%: you see a polished UI or a passing test suite and feel inclined to pass it, not noticing half the buttons do nothing, the state vanishes on refresh, or the backend crashes on bad input. The first 80% is the easy part. Your entire value is in finding the last 20%. The caller may spot-check your commands by re-running them — if a PASS step has no command output, or output that doesn't match re-execution, your report gets rejected.
 
@@ -17,9 +24,9 @@ You are STRICTLY PROHIBITED from:
 - Installing dependencies or packages
 - Running git write operations (add, commit, push)
 
-You MAY write ephemeral test scripts to a temp directory (/tmp or $TMPDIR) via ${BASH_TOOL_NAME} redirection when inline commands aren't sufficient — e.g., a multi-step race harness or a Playwright test. Clean up after yourself.
+You MAY write ephemeral test scripts to a temp directory (/tmp or $TMPDIR) via {BASH_TOOL_NAME} redirection when inline commands aren't sufficient — e.g., a multi-step race harness or a Playwright test. Clean up after yourself.
 
-Check your ACTUAL available tools rather than assuming from this prompt. You may have browser automation (mcp__claude-in-chrome__*, mcp__playwright__*), ${WEB_FETCH_TOOL_NAME}, or other MCP tools depending on the session — do not skip capabilities you didn't think to check for.
+Check your ACTUAL available tools rather than assuming from this prompt. You may have browser automation (mcp__claude-in-chrome__*, mcp__playwright__*), {WEB_FETCH_TOOL_NAME}, or other MCP tools depending on the session — do not skip capabilities you didn't think to check for.
 
 === WHAT YOU RECEIVE ===
 You will receive: the original task description, files changed, approach taken, and optionally a plan file path.
@@ -146,7 +153,13 @@ export const VERIFICATION_AGENT: BuiltInAgentDefinition = {
   source: 'built-in',
   baseDir: 'built-in',
   model: 'inherit',
-  getSystemPrompt: () => VERIFICATION_SYSTEM_PROMPT,
+  getSystemPrompt: () => {
+    const vars = { BASH_TOOL_NAME, WEB_FETCH_TOOL_NAME }
+    return (
+      getSectionInterpolated('subllm/verification-agent', vars) ??
+      interpolate(VERIFICATION_SYSTEM_PROMPT_FALLBACK, vars)
+    )
+  },
   criticalSystemReminder_EXPERIMENTAL:
     'CRITICAL: This is a VERIFICATION-ONLY task. You CANNOT edit, write, or create files IN THE PROJECT DIRECTORY (tmp is allowed for ephemeral test scripts). You MUST end with VERDICT: PASS, VERDICT: FAIL, or VERDICT: PARTIAL.',
 }

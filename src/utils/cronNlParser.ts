@@ -9,6 +9,7 @@ import { queryHaiku } from '../services/api/claude.js'
 import { asSystemPrompt } from './systemPromptType.js'
 import { parseCronExpression } from './cron.js'
 import { logForDebugging } from './debug.js'
+import { getSection } from '../systemPromptFiles/snapshot.js'
 
 export type ParsedNL = {
   cron: string
@@ -27,7 +28,10 @@ export class CronNLParseError extends Error {
   }
 }
 
-const SYSTEM_PROMPT = `You are a schedule parser. Convert a natural-language schedule phrase into a 5-field cron expression in the user's local timezone.
+// M-SP-FULL Phase 3：sub-LLM prompt 透過 getSection('subllm/cron-parser') 取得，
+// snapshot 缺檔 fallback 到此 hardcoded 字串。每次 parseScheduleNL 動態取，
+// 讓 seed 後 / 使用者編輯後新 session 立即生效（不快取於 module load 時）。
+const SYSTEM_PROMPT_FALLBACK = `You are a schedule parser. Convert a natural-language schedule phrase into a 5-field cron expression in the user's local timezone.
 
 OUTPUT FORMAT — emit ONLY a single JSON object. No prose, no markdown, no code fences.
 {
@@ -43,6 +47,10 @@ Rules:
 - For one-shots, fill the dom/month with the actual date based on "now" so it lands once.
 - If the phrase is ambiguous OR cannot be parsed, set "cron" to "INVALID" and put the reason in humanReadable.
 - Avoid landing on minute :00 or :30 unless the user said an exact wall-clock time. Pick :03, :17, :47, etc., for vague phrases like "every morning".`
+
+function getSystemPrompt(): string {
+  return getSection('subllm/cron-parser') ?? SYSTEM_PROMPT_FALLBACK
+}
 
 export interface ParseScheduleNLOptions {
   /** Inject AbortSignal (callers should pass tool's signal). */
@@ -75,7 +83,7 @@ export async function parseScheduleNL(
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const resp = await query({
-        systemPrompt: asSystemPrompt([SYSTEM_PROMPT]),
+        systemPrompt: asSystemPrompt([getSystemPrompt()]),
         userPrompt,
         signal: opts.signal,
         options: {
