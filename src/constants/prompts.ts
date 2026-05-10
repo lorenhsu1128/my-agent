@@ -101,9 +101,30 @@ const skillSearchFeatureCheck = feature('EXPERIMENTAL_SKILL_SEARCH')
 import type { OutputStyleConfig } from './outputStyles.js'
 import { getCyberRiskInstruction } from './cyberRiskInstruction.js'
 import {
-  getSection as getExternalSection,
-  getSectionInterpolated as getExternalSectionInterpolated,
+  getSection as getSectionRaw,
+  getSectionInterpolated as getSectionInterpolatedRaw,
+  getCurrentSystemPromptCwd,
+  type SectionId,
 } from '../systemPromptFiles/index.js'
+
+/**
+ * M-SP-FULL Phase 1：所有 prompts.ts 內的 section 取用都透過這個 wrapper，
+ * 自動從 AsyncLocalStorage 取當前 ask() 的 cwd，路由到對應 project 的 snapshot。
+ *
+ * - daemon 路徑：queryEngineRunner 用 runWithSystemPromptCwd(context.cwd, ...)
+ *   包住 ask() 迴圈，這裡同步 getCurrentSystemPromptCwd() 拿得到 cwd。
+ * - REPL / 啟動 setup 路徑：不在 ALS scope 內，cwd=undefined → DEFAULT_KEY
+ *   snapshot（行為與 M-SP-FULL 前一致）。
+ */
+function getExternalSection(id: SectionId): string | null {
+  return getSectionRaw(id, getCurrentSystemPromptCwd())
+}
+function getExternalSectionInterpolated(
+  id: SectionId,
+  vars: Record<string, string | number>,
+): string | null {
+  return getSectionInterpolatedRaw(id, vars, getCurrentSystemPromptCwd())
+}
 
 export const MY_AGENT_DOCS_MAP_URL =
   'https://code.claude.com/docs/en/claude_code_docs_map.md'

@@ -5,13 +5,23 @@
  *   - Global：~/.my-agent/system-prompt/
  *   - Per-project：~/.my-agent/projects/<slug>/system-prompt/
  *
- * 複用 memdir/paths.ts 的 getMemoryBaseDir() + getAutoMemPath() slug 解析，
- * 確保與 USER.md / memdir 的 project slug 一致。
+ * Project slug：依 cwd 找 canonical git root，sanitize 後當 slug。
+ *
+ * 兩組 API：
+ *   - 無 cwd 版（`getSystemPromptProjectDir()` / `getSystemPromptProjectFile()`）：
+ *     沿用 `getAutoMemPath()`，process-level project root，REPL 路徑用。
+ *   - 帶 cwd 版（`getSystemPromptProjectDirForCwd(cwd)` / 對應檔案 helper）：
+ *     M-SP-FULL Phase 1 新增，daemon multi-project 用，避免 module-level 共用。
+ *
+ * 兩組路徑對相同 cwd 應算出同一個 slug。
  */
 import { dirname, join } from 'path'
 import { getMemoryBaseDir, getAutoMemPath } from '../memdir/paths.js'
+import { findCanonicalGitRoot } from '../utils/git.js'
+import { sanitizePath } from '../utils/path.js'
 
 export const SYSTEM_PROMPT_DIRNAME = 'system-prompt'
+export const PROJECTS_DIRNAME = 'projects'
 
 /**
  * Global system-prompt 目錄：~/.my-agent/system-prompt/
@@ -24,6 +34,8 @@ export function getSystemPromptGlobalDir(): string {
  * Per-project system-prompt 目錄：~/.my-agent/projects/<slug>/system-prompt/
  *
  * 複用 getAutoMemPath() 的 slug 解析（去掉末端 `memory/` → 取 project dir）。
+ * 注意：此函數讀 process-level state（getProjectRoot）。daemon 多 project
+ * 場景請改用 `getSystemPromptProjectDirForCwd(cwd)`。
  */
 export function getSystemPromptProjectDir(): string {
   const memDir = getAutoMemPath()
@@ -42,4 +54,33 @@ export function getSystemPromptGlobalFile(filename: string): string {
 
 export function getSystemPromptProjectFile(filename: string): string {
   return join(getSystemPromptProjectDir(), filename)
+}
+
+/**
+ * M-SP-FULL Phase 1：依 cwd 算 project slug（不依賴 process-level state）。
+ *
+ * Slug = sanitize(canonicalGitRoot(cwd) ?? cwd)，與 memdir.getAutoMemPath()
+ * 對相同 cwd 算出的 slug 一致。
+ */
+export function getProjectSlugForCwd(cwd: string): string {
+  const base = findCanonicalGitRoot(cwd) ?? cwd
+  return sanitizePath(base)
+}
+
+/**
+ * Per-project system-prompt 目錄 — 帶 cwd 版（daemon multi-project 用）。
+ */
+export function getSystemPromptProjectDirForCwd(cwd: string): string {
+  const slug = getProjectSlugForCwd(cwd)
+  return join(getMemoryBaseDir(), PROJECTS_DIRNAME, slug, SYSTEM_PROMPT_DIRNAME)
+}
+
+/**
+ * Per-project system-prompt 檔案 — 帶 cwd 版。
+ */
+export function getSystemPromptProjectFileForCwd(
+  cwd: string,
+  filename: string,
+): string {
+  return join(getSystemPromptProjectDirForCwd(cwd), filename)
 }

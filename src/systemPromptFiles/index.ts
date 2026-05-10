@@ -20,3 +20,12 @@ export {
 export type { SectionId } from './sections.js'
 export { SECTIONS, getSectionMeta } from './sections.js'
 export { getBundledDefault } from './bundledDefaults.js'
+export {
+  runWithSystemPromptCwd,
+  getCurrentSystemPromptCwd,
+} from './cwdContext.js'
+export {
+  getProjectSlugForCwd,
+  getSystemPromptProjectDirForCwd,
+  getSystemPromptProjectFileForCwd,
+} from './paths.js'

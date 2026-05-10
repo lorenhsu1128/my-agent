@@ -34,6 +34,7 @@ import type { Message } from '../types/message.js'
 import type { SDKMessage } from '../entrypoints/sdk/coreTypes.generated.js'
 import type { PermissionDecision } from '../types/permissions.js'
 import { ask } from '../QueryEngine.js'
+import { runWithSystemPromptCwd } from '../systemPromptFiles/cwdContext.js'
 import type { DaemonSessionContext } from './sessionBootstrap.js'
 import type {
   QueuedInput,
@@ -184,32 +185,41 @@ export function createQueryEngineRunner(
 
       let done = false
       try {
-        for await (const sdkMessage of ask({
-          commands: context.commands,
-          // ContentBlockParam[] 是 SDK 提供型別；此處 prompt 已限制為兩種其中之一
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          prompt: prompt as any,
-          promptUuid: input.id as `${string}-${string}-${string}-${string}-${string}`,
-          cwd: context.cwd,
-          tools: context.buildTools(),
-          mcpClients: context.mcpClients,
-          canUseTool: canUseToolWrapped,
-          mutableMessages,
-          getReadFileCache: context.getReadFileCache,
-          setReadFileCache: context.setReadFileCache,
-          getAppState: context.getAppState,
-          setAppState: context.setAppState,
-          userSpecifiedModel: opts.userSpecifiedModel,
-          fallbackModel: opts.fallbackModel,
-          maxTurns: opts.maxTurns,
-          maxBudgetUsd: opts.maxBudgetUsd,
-          customSystemPrompt: opts.customSystemPrompt,
-          appendSystemPrompt: opts.appendSystemPrompt,
-          agents: [...context.agents],
-          // 把 ac cast 成 ask() 期待的型別（Node AbortController 與 DOM 同形）。
-          abortController: ac as unknown as import('../utils/AbortController.js').AbortController,
-          includePartialMessages: true,
-        })) {
+        // M-SP-FULL Phase 1：把 ask() 呼叫包進 cwd ALS scope，讓 prompts.ts
+        // 內同步的 getExternalSection() 能依當前 project cwd 路由到對應的
+        // per-project snapshot（避免 daemon 多 project 共用一份 snapshot）。
+        // ask() 是 async generator，這裡只需在「建立 iterator」當下進入
+        // ALS scope，後續 await 會由 async-hooks 自動延續上下文。
+        const askIter = runWithSystemPromptCwd(context.cwd, () =>
+          ask({
+            commands: context.commands,
+            // ContentBlockParam[] 是 SDK 提供型別；此處 prompt 已限制為兩種其中之一
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            prompt: prompt as any,
+            promptUuid: input.id as `${string}-${string}-${string}-${string}-${string}`,
+            cwd: context.cwd,
+            tools: context.buildTools(),
+            mcpClients: context.mcpClients,
+            canUseTool: canUseToolWrapped,
+            mutableMessages,
+            getReadFileCache: context.getReadFileCache,
+            setReadFileCache: context.setReadFileCache,
+            getAppState: context.getAppState,
+            setAppState: context.setAppState,
+            userSpecifiedModel: opts.userSpecifiedModel,
+            fallbackModel: opts.fallbackModel,
+            maxTurns: opts.maxTurns,
+            maxBudgetUsd: opts.maxBudgetUsd,
+            customSystemPrompt: opts.customSystemPrompt,
+            appendSystemPrompt: opts.appendSystemPrompt,
+            agents: [...context.agents],
+            // 把 ac cast 成 ask() 期待的型別（Node AbortController 與 DOM 同形）。
+            abortController:
+              ac as unknown as import('../utils/AbortController.js').AbortController,
+            includePartialMessages: true,
+          }),
+        )
+        for await (const sdkMessage of askIter) {
           const msg = sdkMessage as SDKMessage
           if (signal.aborted) {
             yield { type: 'error', error: 'aborted' }

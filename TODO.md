@@ -1948,30 +1948,101 @@
 
 ---
 
-## 當前里程碑：M-MASCOT — my-agent 桌寵版整合 virtual-assistant-desktop（2026-05-09 啟動）
+## 當前里程碑：M-SP-FULL — 系統提示根本性外部化（2026-05-10 啟動）
 
-**目標**：把 my-agent 接到 `C:\Users\LOREN\Documents\_projects\virtual-assistant-desktop`（Electron + Three.js + @pixiv/three-vrm 桌寵），讓桌寵以 my-agent daemon 為大腦。整合形態、互動範圍、API 擴充程度待最終決策（plan 已起草，未拍板）。
+**目標**：把「系統提示外部化」做徹底，讓 daemon 多 project 真的能 per-project、使用者能用單一 markdown 檔換整套人格、13 條 sub-LLM prompt 也走 loader。完成後桌寵方案可以「換 cwd → 換 persona」零 my-agent 程式碼解決。
 
-**決策（暫定）**：daemon 以 sidecar 形式被 Electron spawn；桌寵 ws session 用 `source='mascot'` 識別（已落地）；my-agent 端只擴充不改 QueryEngine（ADR-005）。架構選項 A/B/C/D 仍待選定。
+**Plan 全文**：`docs/plans/M-SP-FULL.md`
 
-### M-MASCOT-0 前置（已完成）
+**為什麼需要**：
+1. M-SP per-project section 在 daemon **是壞的** — `snapshot.ts` `cachedSnapshot` 是 module-level singleton，daemon 多 project 共用一份 snapshot，per-project 檔永不被讀。
+2. `customSystemPrompt` / `appendSystemPrompt` 鉤子在 daemon 沒接 — `projectRuntimeFactory.ts:89` 建 runner 時兩欄都 undefined。
+3. 13+ 條 sub-LLM prompt（cron parser / memory selector / verification agent / buddy 等）全部 hardcoded，使用者無法外部化。
+
+### M-SP-FULL Phase 1 — Snapshot 改 per-cwd Map（修 daemon bug）
+- [ ] M-SP-FULL-1-1 `snapshot.ts` singleton → `Map<projectKey, snapshot>`；新 export `getProjectSlugForCwd(cwd)`
+- [ ] M-SP-FULL-1-2 `loadSystemPromptSnapshot(cwd?)` / `getSection(id, cwd?)` 簽名擴充（向後相容 REPL）
+- [ ] M-SP-FULL-1-3 `queryContext.ts:fetchSystemPromptParts()` 用 AsyncLocalStorage 設 cwd；`getExternalSection()` 從 ALS 讀
+- [ ] M-SP-FULL-1-4 `sessionBootstrap.ts:bootstrapDaemonContext()` 加 `loadSystemPromptSnapshot(opts.cwd)`；context 加 snapshot ref
+- [ ] M-SP-FULL-1-5 `tests/integration/systemPromptFiles/per-project-snapshot.test.ts`（多 cwd 隔離 + 並發 ask）
+- [ ] M-SP-FULL-1-6 typecheck + `./cli -p "hello"` 冒煙 + `dump-system-prompt.ts --cwd` 驗證
+
+### M-SP-FULL Phase 2 — Project-level override / append 兩個新檔
+- [ ] M-SP-FULL-2-1 新 `src/systemPromptFiles/overrides.ts`（`loadProjectPromptOverrides` / `getProjectPromptOverrides`）
+- [ ] M-SP-FULL-2-2 `paths.ts` 加 override / append 路徑 helper
+- [ ] M-SP-FULL-2-3 snapshot 整合 overrides 欄位（per-cwd 一起快取）
+- [ ] M-SP-FULL-2-4 `composeFullDefaultPrompt()` helper 拼 29 section；`seed.ts` 寫 `~/.my-agent/system-prompt-override.md`（append.md 不 seed）
+- [ ] M-SP-FULL-2-5 `seed.ts` README 加 override/append 章節（含漂移警告 + per-project 複製方式）
+- [ ] M-SP-FULL-2-6 `projectRuntimeFactory.ts:89` 讀 overrides 注入 runner `customSystemPrompt`/`appendSystemPrompt`
+- [ ] M-SP-FULL-2-7 `main.tsx` REPL 路徑接 file fallback（CLI flag > 檔案 > 無）
+- [ ] M-SP-FULL-2-8 `tests/integration/systemPromptFiles/overrides.test.ts`
+- [ ] M-SP-FULL-2-9 `tests/integration/daemon/persona-per-project.test.ts` E2E：兩 project 不同 override.md 各拿自己的人格
+- [ ] M-SP-FULL-2-10 手測：cwd A 預設 + cwd B 寫 override.md 換成「貓」人格
+
+### M-SP-FULL Phase 3 — 14 個 Sub-LLM Prompts 外部化
+- [ ] M-SP-FULL-3-1 `sections.ts` 加 14 個 `subllm/*` SectionId
+- [ ] M-SP-FULL-3-2 `bundledDefaults.ts` 把現有 hardcoded 字串搬進來（13 條 prompt + agent-tool）
+- [ ] M-SP-FULL-3-3 `seed.ts` seed 進 `~/.my-agent/system-prompt/subllm/`
+- [ ] M-SP-FULL-3-4 改 `cronNlParser.ts:30` → `getSection('subllm/cron-parser')` ?? FALLBACK
+- [ ] M-SP-FULL-3-5 改 `findRelevantMemories.ts:69` → memory-selector
+- [ ] M-SP-FULL-3-6 改 `extractMemories/prompts.ts` 4 條 → persona-editor / extract-opener / extract-auto-only / extract-combined
+- [ ] M-SP-FULL-3-7 改 `verificationAgent.ts:10` + `AgentTool/prompt.ts` → verification-agent / agent-tool
+- [ ] M-SP-FULL-3-8 改 `SessionMemory/prompts.ts` 2 條 + `MagicDocs/prompts.ts` + `toolUseSummary` + `coordinator` + `buddy`
+- [ ] M-SP-FULL-3-9 模板變數統一單花括號 `{x}`（snapshot.ts interpolate 已支援）
+- [ ] M-SP-FULL-3-10 `tests/integration/systemPromptFiles/subllm-externalization.test.ts` 涵蓋 fallback + 覆寫
+- [ ] M-SP-FULL-3-11 手動冒煙：cron parse / memory recall / verification agent / tool summary / buddy 各跑一次
+
+### M-SP-FULL 文件 + ADR
+- [ ] M-SP-FULL-D-1 `docs/customizing-system-prompt.md` 加 §override-and-append + §sub-llm-prompts
+- [ ] M-SP-FULL-D-2 `docs/prompt-inventory.md` 標註 13 條 sub-LLM 已外部化
+- [ ] M-SP-FULL-D-3 `docs/adr.md` 新增 ADR-008-A（per-cwd snapshot）
+- [ ] M-SP-FULL-D-4 `CLAUDE.md` 規則 13 後補一條：sub-LLM prompts 也走 M-SP loader
+
+#### 不在範圍 → 後續 milestone
+- 41 個 tool descriptions 外部化 → 獨立 M-TOOL-PROMPT-EXTERNALIZE
+- 27 個 bundled skills 外部化 → 獨立 M-SKILL-EXTERNALIZE
+- `computeSimpleEnvInfo()` 外部化（環境資訊本就動態，不適合純 markdown）
+- 桌寵 source-aware tool filter / per-source persona → 獨立 milestone（依賴本 milestone）
+
+---
+
+## 已完成里程碑：M-MASCOT — my-agent ↔ virtual-assistant-desktop 整合（2026-05-09 啟動，2026-05-09 主線完成）
+
+**目標**：讓 `C:\Users\LOREN\Documents\_projects\virtual-assistant-desktop`（Electron + React 19 + Three.js + @pixiv/three-vrm 桌寵）以 my-agent daemon 為大腦。
+
+**最終形態（已落地）**：
+- **架構**：A 雙 repo sidecar — Electron 啟動時 spawn `cli daemon` 子行程，my-agent 不引入 Electron build chain（守 ADR-005，QueryEngine 零修改）。
+- **三條通道**：
+  1. **WS 直連 session**：桌寵 `electron/agent/AgentSessionClient` 連 daemon `/sessions`，`source='mascot'` 握手；turn / runnerEvent / stream_event 餵 React 對話氣泡。
+  2. **MCP 反向控制**：桌寵自架 MCP HTTP server（`MascotMcpServer`，per-request stateless），透過 `cli mcp add --scope user --transport http` 註冊到 my-agent 全域 `mcpServers`，暴露 4 個 tool：`set_expression` / `play_animation` / `say` / `look_at_screen`。LLM tool call → MCP HTTP → Electron main process → IPC → renderer dispatcher → ExpressionManager / AnimationManager。
+  3. **設定視窗**：桌寵托盤「設定」開獨立 React BrowserWindow（`src-settings/`），編輯 enable / daemon 模式 / bun / cli / workspace 路徑，套用即觸發 daemon `stop → updateConfig → start`。
+- **my-agent 端改動範圍**：僅 `ClientSource` 加 `'mascot'`（commit 1ceda16）。其餘整合工作全部落在 desktop repo（commits d46cc07 → 5ea8726，P0–P3 + doc-sync）。
+
+### M-MASCOT-0 前置 ✅
 - [x] M-MASCOT-0-1 daemon 加 `'mascot'` client source（`src/server/clientRegistry.ts` / `directConnectServer.ts` / `inputQueue.ts`，commit 1ceda16）
-- [x] M-MASCOT-0-2 desktop 端套件管理改 Bun（virtual-assistant-desktop `bun.lock` 已建）
+- [x] M-MASCOT-0-2 desktop 端套件管理改 Bun（virtual-assistant-desktop `bun.lock`，commit f636ec6）
 
-### M-MASCOT-1 架構決策 + plan 定稿
-- [ ] M-MASCOT-1-1 確認整合形態：A 雙 repo sidecar / B Bun workspace monorepo / C my-agent 內加 desktop 模式 / D Bun workspace + sidecar（待使用者選擇）
-- [ ] M-MASCOT-1-2 確認互動範圍：chat overlay / 語音 (STT+TTS) / agent 觸發動作 / 桌面感知主動行為（多選）
-- [ ] M-MASCOT-1-3 寫定 plan 檔（`~/.claude/plans/m-mascot-*.md`）含 WS 事件契約、tool 介面、release 流程
+### M-MASCOT-1 架構決策 ✅
+- [x] M-MASCOT-1-1 整合形態：**A 雙 repo sidecar** — Electron spawn cli 子行程，my-agent 不動 build chain
+- [x] M-MASCOT-1-2 互動範圍：chat overlay ✅ + agent 觸發動作（MCP 反向）✅；語音 / 桌面感知留 M-MASCOT-3
+- [x] M-MASCOT-1-3 plan 落在 desktop repo `AGENT_INTEGRATION_PLAN.md`（含 P0–P3 commit hash 追蹤）
 
-### M-MASCOT-2 核心整合（依 1 結果展開）
-- [ ] M-MASCOT-2-1 桌寵端 ws client：連 daemon、turn 事件流接到 chat UI
-- [ ] M-MASCOT-2-2 daemon WS 事件擴充（如需）：mascot-only event types（avatar.expression / avatar.animation 等）
-- [ ] M-MASCOT-2-3 自訂 tool：`play_animation` / `set_expression` / `speak`（Electron 端 IPC 接收 → VRM controller）
-- [ ] M-MASCOT-2-4 release 整合：desktop 安裝包內嵌 cli sidecar / 或外部 PATH 偵測
+### M-MASCOT-2 核心整合 ✅（主要工作在 desktop repo）
+- [x] M-MASCOT-2-1 桌寵 ws client：`AgentSessionClient` + `AgentDaemonManager`（NDJSON frame、重連 backoff、source=mascot 握手），commits d46cc07 / 7b86bc6
+- [x] M-MASCOT-2-2 daemon WS 事件擴充：**改用 MCP 反向取代擴 daemon WS event types**（更乾淨；my-agent 完全不用動）
+- [x] M-MASCOT-2-3 反向控制 tool：4 個 MCP tool 由 desktop 端提供（`MascotMcpServer` + `MascotActionDispatcher`），commit d81d5fd / 0cafe57
+- [x] M-MASCOT-2-4 release 形態：sidecar 偵測（`electron/platform/agentPaths.ts` 探 bun / cli / workspace；缺項降級「無 AI 模式」）
+- [x] M-MASCOT-2-5 桌寵對話 UI：移植 my-agent web chat 元件（React + Tailwind + zustand + shadcn），commit 1bd4290 / 23d1f7e
+- [x] M-MASCOT-2-6 設定視窗：P3 AgentPage（enable / 路徑覆寫 / daemon 狀態 chip / 套用即重啟），commit 1129e60
 
-### M-MASCOT-3 進階互動（語音 / 感知，視 1-2 範圍）
+### my-agent 端後續支援（待辦，從整合過程浮出）
+- [ ] M-MASCOT-FU-1 修 Skill router 對 mascot MCP tool 的處理：本機 qwen3.5-9b-neo 會把 mascot MCP tool 包進 Skill meta-tool，導致 router 不認；需研究是否 router 端要把 MCP tool 從 Skill 包裝中拆出來，或在 system prompt / tool 描述上標註不要包
+- [ ] M-MASCOT-FU-2 docs/ 加 mascot 整合指南（連結到 desktop repo 的 `AGENT_INTEGRATION_PLAN.md` + `AGENT.md`），更新 `docs/prompt-inventory.md` 列出 mascot MCP tool 來源
+
+### M-MASCOT-3 進階互動（未啟動，獨立 milestone）
 - [ ] M-MASCOT-3-1 語音 pipeline（mic → STT → my-agent → TTS → viseme 對嘴）
-- [ ] M-MASCOT-3-2 桌面感知（active window / 選取文字 → 主動 prompt）
+- [ ] M-MASCOT-3-2 桌面感知（active window / 選取文字 → 主動 prompt；`uiohook-napi` 已在 desktop 依賴內）
+- [ ] M-MASCOT-3-3 桌寵 v0.4 首次啟動引導（偵測 bun + cli 並彈 dialog；落在 desktop repo）
 
 #### 不在範圍 → 後續 milestone
 - 多 mascot 角色切換 / VRM 即時下載市集
@@ -3677,3 +3748,21 @@
 - 2026-05-09 13:07: Session 結束 | 進度：788/893 任務 | 568daf0 docs: 新增 docs/prompt-inventory.md（全域 prompt 索引）
 
 - 2026-05-09 17:48: Session 結束 | 進度：788/893 任務 | 1ceda16 feat(daemon): support 'mascot' client source
+
+- 2026-05-09 17:58: Session 結束 | 進度：790/904 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
+
+- 2026-05-09 18:07: Session 結束 | 進度：790/904 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
+
+- 2026-05-09 18:12: Session 結束 | 進度：799/909 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
+
+- 2026-05-10 08:35: Session 結束 | 進度：799/909 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
+
+- 2026-05-10 08:50: Session 結束 | 進度：799/909 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
+
+- 2026-05-10 09:05: Session 結束 | 進度：799/909 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
+
+- 2026-05-10 09:11: Session 結束 | 進度：799/909 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
+
+- 2026-05-10 09:15: Session 結束 | 進度：799/909 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
+
+- 2026-05-10 09:19: Session 結束 | 進度：799/909 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
