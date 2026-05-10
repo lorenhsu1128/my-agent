@@ -95,7 +95,6 @@
 | `src/services/toolUseSummary/toolUseSummaryGenerator.ts:15` | **TOOL_USE_SUMMARY_SYSTEM_PROMPT** — Haiku 生成 ≤30 字元 git-commit 風格工具摘要 | ✅ M-SP `subllm/tool-use-summary.md` |
 | `src/llamacppConfig/bundledTemplate.ts:14` | **LLAMACPP_JSONC_TEMPLATE** — 本地 llama.cpp 設定 JSONC 預設（client + server 層全繁中註解） | n/a（config 模板） |
 | `src/coordinator/coordinatorMode.ts:79` | **getCoordinatorUserContext()** — Coordinator 模式 worker 工具/MCP 清單 | ⏸ Tier C（7 成動態組裝） |
-| `src/buddy/prompt.ts:7` | **companionIntroText()** — Buddy 伴侶精靈介紹（一行回覆、點名才接話） | ✅ M-SP `subllm/buddy-companion.md`（`{name}`, `{species}` 插值） |
 
 ---
 

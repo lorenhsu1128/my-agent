@@ -1,11 +1,13 @@
 # M-SP-FULL 使用手冊
 
+> **2026-05-10 更新**：buddy 子系統已於 M-BUDDY-RIP 整個移除，本檔內所有 `buddy-companion`、§4.5、§5.4 桌寵 buddy 覆寫、情境 C 等段落皆**已過期**，僅保留為歷史紀錄。Sub-LLM 外部化清單剩 4 條：cron-parser / memory-selector / verification-agent / tool-use-summary。
+>
 > M-SP-FULL（2026-05-10 完成）三大新能力的操作手冊。
 >
 > 基礎觀念（M-SP 是什麼、29 個 section、優先序、變數插值）見 `docs/customizing-system-prompt.md`。本檔聚焦三件事：
 > - **per-cwd snapshot**：daemon 多 project 場景每個 cwd 各自獨立的 snapshot
 > - **`system-prompt-override.md` / `system-prompt-append.md`**：一檔換整個主 prompt 或在尾巴追加
-> - **5 個 sub-LLM prompt**：`cron-parser` / `memory-selector` / `verification-agent` / `tool-use-summary` / `buddy-companion`
+> - **4 個 sub-LLM prompt**：`cron-parser` / `memory-selector` / `verification-agent` / `tool-use-summary`
 
 ---
 

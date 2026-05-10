@@ -23,7 +23,7 @@ Hermes 原始碼在 `reference/hermes-agent/`（Python，唯讀）。閱讀以�
 11. **Milestone 級修改先列 TODO.md。** plan → 更新 TODO.md（含「不在範圍 → 後續 milestone」）→ 才開始 code。
 12. **回覆/註解一律繁體中文。** 識別字 / 指令 / npm 套件名保留英文。
 13. **改 zod schema 後跑 `bun run docs:gen`。** `src/llamacppConfig/schema.ts` / `webConfig/schema.ts` / `discordConfig/schema.ts` 任一改動後要重新產生 `docs/config-*.md`，否則 `bun run docs:verify` 會 fail（CI 會擋）。
-14. **System prompt + 5 個 sub-LLM prompt 已外部化。** 改人格 / 桌寵 / 子 LLM 行為不必改 code：編輯 `~/.my-agent/system-prompt-override.md`（整段替代）、`~/.my-agent/system-prompt-append.md`（追加）、`~/.my-agent/system-prompt/<id>.md`（個別 section）、`~/.my-agent/system-prompt/subllm/<id>.md`（cron-parser / memory-selector / verification-agent / tool-use-summary / buddy-companion）。Daemon 多 project 各 cwd 獨立 snapshot（M-SP-FULL Phase 1）。詳見 `docs/customizing-system-prompt.md` + ADR-008-A。
+14. **System prompt + 4 個 sub-LLM prompt 已外部化。** 改人格 / 子 LLM 行為不必改 code：編輯 `~/.my-agent/system-prompt-override.md`（整段替代）、`~/.my-agent/system-prompt-append.md`（追加）、`~/.my-agent/system-prompt/<id>.md`（個別 section）、`~/.my-agent/system-prompt/subllm/<id>.md`（cron-parser / memory-selector / verification-agent / tool-use-summary）。Daemon 多 project 各 cwd 獨立 snapshot（M-SP-FULL Phase 1）。詳見 `docs/customizing-system-prompt.md` + ADR-008-A。
 
 ## 倉庫結構
 
@@ -107,7 +107,6 @@ bun test                         # 全部測試
 | **node-llama-tcq E2E 測試啟動參數** | `docs/live-test-realistic-v3-setup.md` |
 | **Sampling preset（Qwen 推薦值 / family gate）** | `docs/sampling-presets.md`、`docs/sampling-preset-findings-2026-05-08.md` |
 | **Coordinator 模式（多 agent 協作）** | `docs/coordinator-mode.md` |
-| **Buddy 伴侶精靈（/buddy）** | `docs/buddy-companion.md` |
 | **CCR 遠端 session（claude assistant）** | `docs/remote-sessions.md` |
 | **CCR upstreamproxy（容器 HTTPS 代理）** | `docs/upstreamproxy-relay.md` |
 | **Native-TS 純 TS 取代 NAPI** | `docs/native-ts-addons.md` |

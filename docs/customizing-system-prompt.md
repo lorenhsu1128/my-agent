@@ -230,7 +230,6 @@ my-agent -p "hi"   # 重新 seed
 | [`memory-selector.md`](m-sp-full-guide.md#42-memory-selectormd) | 記憶相關性挑選 | `{maxFiles}` |
 | [`verification-agent.md`](m-sp-full-guide.md#43-verification-agentmd) | Verification subagent | `{BASH_TOOL_NAME}` `{WEB_FETCH_TOOL_NAME}` |
 | [`tool-use-summary.md`](m-sp-full-guide.md#44-tool-use-summarymd) | ≤30 字工具摘要 | — |
-| [`buddy-companion.md`](m-sp-full-guide.md#45-buddy-companionmd) | Buddy 伴侶介紹 | `{name}` `{species}` |
 
 變數用單花括號 `{x}`（未識別 key 原樣保留）。各條 call site / 改寫範例 / 失效後果見 m-sp-full-guide §4。
 
@@ -240,8 +239,8 @@ my-agent -p "hi"   # 重新 seed
 
 ### 桌寵 / 多人格使用模式
 
-「換 cwd → 換 persona」零 my-agent 程式碼改動。完整 7 步流程（規劃 → 算 slug → 寫 override → 加 buddy 覆寫 → 啟 daemon → 驗證隔離 → 加 append 規範）見 m-sp-full-guide §5。
+「換 cwd → 換 persona」零 my-agent 程式碼改動。完整 6 步流程（規劃 → 算 slug → 寫 override → 啟 daemon → 驗證隔離 → 加 append 規範）見 m-sp-full-guide §5。
 
 ---
 
-最後更新：M-SP-FULL（2026-05-10）— per-cwd snapshot + override.md/append.md + 5 sub-LLM 外部化
+最後更新：M-SP-FULL（2026-05-10）— per-cwd snapshot + override.md/append.md + 4 sub-LLM 外部化（buddy-companion 已於 M-BUDDY-RIP 隨 buddy 子系統一併移除）

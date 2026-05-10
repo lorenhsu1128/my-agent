@@ -245,7 +245,6 @@ My Agent 把所有使用者設定放在兩個目錄：
 | [docs/llamacpp-watchdog.md](./docs/llamacpp-watchdog.md) | Inter-chunk / reasoning-block / token-cap 三層守門 |
 | **進階模組** | |
 | [docs/coordinator-mode.md](./docs/coordinator-mode.md) | Coordinator 模式（多 agent 協作、worker 派發、scratchpad） |
-| [docs/buddy-companion.md](./docs/buddy-companion.md) | `/buddy` 伴侶精靈（deterministic bones、companion intro） |
 | [docs/remote-sessions.md](./docs/remote-sessions.md) | CCR 遠端 session（`claude assistant`、WS bridge、permission） |
 | [docs/upstreamproxy-relay.md](./docs/upstreamproxy-relay.md) | CCR 容器 HTTPS 代理（CONNECT-over-WS + credential 注入） |
 | [docs/native-ts-addons.md](./docs/native-ts-addons.md) | color-diff / file-index / yoga-layout 純 TS 取代 NAPI |
