@@ -285,10 +285,6 @@ export type GlobalConfig = {
     [tipId: string]: number // Key is tipId, value is the numStartups when tip was last shown
   }
 
-  // /buddy companion soul — bones regenerated from userId on read. See src/buddy/.
-  companion?: import('../buddy/types.js').StoredCompanion
-  companionMuted?: boolean
-
   // Feedback survey tracking
   feedbackSurveyState?: {
     lastShownTime?: number
@@ -901,6 +897,17 @@ registerCleanup(async () => {
  * @internal
  */
 function migrateConfigFields(config: GlobalConfig): GlobalConfig {
+  // 2026-05-10 buddy removal cleanup：刪除 buddy 子系統後，舊 settings 殘留
+  // companion / companionMuted 欄位已無對應型別。記憶體層先 delete，下次任何
+  // saveConfig 自然會把乾淨版本寫回磁碟。整段未來可整段移除。
+  const legacy = config as GlobalConfig & {
+    companion?: unknown
+    companionMuted?: unknown
+  }
+  if (legacy.companion !== undefined || legacy.companionMuted !== undefined) {
+    delete legacy.companion
+    delete legacy.companionMuted
+  }
   return config
 }
 
