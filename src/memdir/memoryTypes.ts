@@ -339,19 +339,3 @@ export function getMemoryDriftCaveat(): string {
     getExternalSection('memory/drift-caveat') ?? MEMORY_DRIFT_CAVEAT_DEFAULT
   )
 }
-
-// --- Legacy exports（@deprecated，保留以避免同時改動太多 call sites） ---
-/** @deprecated use getTypesSectionCombined() */
-export const TYPES_SECTION_COMBINED = TYPES_SECTION_COMBINED_DEFAULT
-/** @deprecated use getTypesSectionIndividual() */
-export const TYPES_SECTION_INDIVIDUAL = TYPES_SECTION_INDIVIDUAL_DEFAULT
-/** @deprecated use getWhatNotToSaveSection() */
-export const WHAT_NOT_TO_SAVE_SECTION = WHAT_NOT_TO_SAVE_SECTION_DEFAULT
-/** @deprecated use getMemoryDriftCaveat() */
-export const MEMORY_DRIFT_CAVEAT = MEMORY_DRIFT_CAVEAT_DEFAULT
-/** @deprecated use getWhenToAccessSection() */
-export const WHEN_TO_ACCESS_SECTION = WHEN_TO_ACCESS_SECTION_DEFAULT
-/** @deprecated use getTrustingRecallSection() */
-export const TRUSTING_RECALL_SECTION = TRUSTING_RECALL_SECTION_DEFAULT
-/** @deprecated use getMemoryFrontmatterExample() */
-export const MEMORY_FRONTMATTER_EXAMPLE = MEMORY_FRONTMATTER_EXAMPLE_DEFAULT
