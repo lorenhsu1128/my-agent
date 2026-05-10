@@ -35,20 +35,22 @@ export const LlamaCppServerSchema = z.object({
     .default('models/Qwen3.5-9B-Q4_K_M.gguf'),
   /** --alias，讓 OpenAI 相容客戶端用這名字呼叫模型 */
   alias: z.string().default('qwen3.5-9b'),
-  /** llama-server binary 位置（相對 repo root 或絕對路徑） */
+  /**
+   * llama-server binary 位置（相對 repo root 或絕對路徑）。
+   * 僅當 `binaryKind === 'buun'` 時被執行；`'tcq'` 模式忽略此欄位。
+   */
   binaryPath: z
     .string()
-    .default('buun-llama-cpp/build/bin/Release/llama-server.exe'),
+    .default('vendor/node-llama-tcq/src/cli/cli.ts'),
   /**
    * Server 實作種類：
-   * - `'buun'`（預設）：執行 binaryPath 指定的 buun-llama-cpp llama-server 原生 binary
-   * - `'tcq'`：改執行 `bun vendor/node-llama-tcq/src/cli/cli.ts serve`（TCQ-shim sidecar），
-   *   binaryPath 此時被忽略；TCQ-shim 規格與 buun llama-server 對齊（M-TCQ-SHIM）
+   * - `'tcq'`（預設）：執行 `bun vendor/node-llama-tcq/src/cli/cli.ts serve`（TCQ-shim sidecar）；
+   *   binaryPath 不被執行；TCQ-shim 規格與 buun llama-server 對齊（M-TCQ-SHIM）
+   * - `'buun'`：執行 binaryPath 指定的 buun-llama-cpp llama-server 原生 binary
    *
    * 切換不影響 baseUrl / model / OpenAI 相容性。
-   * 預設保持 `buun` → 升級無破壞。
    */
-  binaryKind: z.enum(['buun', 'tcq']).default('buun'),
+  binaryKind: z.enum(['buun', 'tcq']).default('tcq'),
   /** 要額外帶的 flag（例 --jinja、--slots、--cache-reuse 1） */
   extraArgs: z
     .array(z.string())

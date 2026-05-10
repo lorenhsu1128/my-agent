@@ -85,9 +85,17 @@ export const LLAMACPP_JSONC_TEMPLATE = `{
     // env \`LLAMA_ALIAS\` 覆蓋。
     "alias": "qwen3.5-9b",
 
-    // llama-server 執行檔路徑（相對 repo root 或絕對）。Windows 要含 .exe 副檔名。
+    // llama-server 執行檔路徑。僅當 binaryKind === "buun" 時才被執行；
+    // "tcq" 模式忽略此欄位（改跑 vendor/node-llama-tcq/src/cli/cli.ts serve）。
     // buun-llama-cpp（TCQ KV cache 壓縮 fork）支援 turbo4 cache type。
-    "binaryPath": "buun-llama-cpp/build/bin/Release/llama-server.exe",
+    "binaryPath": "vendor/node-llama-tcq/src/cli/cli.ts",
+
+    // Server 實作種類：
+    //   "tcq"（預設）= bun vendor/node-llama-tcq/src/cli/cli.ts serve（TCQ-shim sidecar）
+    //   "buun"       = 執行 binaryPath 指定的 buun-llama-cpp llama-server 原生 binary
+    // TCQ-shim 規格與 buun llama-server 對齊（M-TCQ-SHIM）；切換不影響 baseUrl /
+    // model / OpenAI 相容性。
+    "binaryKind": "tcq",
 
     // 額外傳給 llama-server 的 CLI flag。
     // turbo4 = buun TCQ KV cache 壓縮（4.25 bpv，~3.8x），幾乎無品質損失。
@@ -156,6 +164,75 @@ export const LLAMACPP_JSONC_TEMPLATE = `{
     "memoryPrefetch": "local",
     "background": "local",
     "vision": "local"
-  }
+  },
+
+  // ═══ Watchdog（M-LLAMACPP-WATCHDOG；client-side 守門）═══
+  //
+  // 三層 watchdog 守門 llama.cpp 失控生成（reasoning loop、SSE hang 等）。
+  // 全部預設 false → 不影響既有行為；要用透過 \`/llamacpp\` opt-in 或直接改本檔。
+  // master \`enabled\` + 三層各自 \`enabled\` 雙層 AND；env LLAMACPP_WATCHDOG_DISABLE=1
+  // 強制關（無視 config），LLAMACPP_WATCHDOG_ENABLE=1 一鍵全開。
+  //
+  // 三層責任：
+  //   A. interChunk — SSE 連續無 token N ms = 連線真的 hung
+  //   B. reasoning  — 進 <think> 後 N ms 仍未見 </think> = CoT 失控迴圈
+  //   C. tokenCap   — 累積 token 超 ceiling[callSite] = 防失控總量
+  "watchdog": {
+    "enabled": false,
+    "interChunk": {
+      "enabled": false,
+      // 兩個 SSE chunk 間最大允許間隔（毫秒）
+      "gapMs": 30000
+    },
+    "reasoning": {
+      "enabled": false,
+      // 進 <think> 後最大滯留時間（毫秒）
+      "blockMs": 120000
+    },
+    "tokenCap": {
+      "enabled": false,
+      // 主 turn ceiling — caller 可送更小但不能超此值
+      "default": 16000,
+      // memory prefetch（findRelevantMemories selector）ceiling
+      "memoryPrefetch": 256,
+      // sideQuery（queryHaiku / cron NL parser）ceiling
+      "sideQuery": 1024,
+      // 背景呼叫（extractMemories 等）ceiling
+      "background": 4000
+    }
+  },
+
+  // ═══ Sampling preset 庫（M-TCQ-SHIM-SAMPLER；可選）═══
+  //
+  // caller 在 Anthropic request 帶 metadata.taskType: '<key>' 即觸發；沒帶就走
+  // defaultSamplingPreset；仍無則不注入。優先序：request body > preset > shim
+  // CLI default > engine 內建。preset 只填 body 沒帶的欄位（caller 顯式覆蓋永遠贏）。
+  //
+  // Schema 內建 4 組 Qwen 推薦 preset（key 名稱可在此檔覆寫；缺項走內建）：
+  //   - "thinking-general"    溫和創意：temp 1.0  / top_p 0.95 / presence 1.5
+  //   - "thinking-coding"     嚴格穩定：temp 0.6  / top_p 0.95 / presence 0.0
+  //   - "instruct-general"    通用對話：temp 0.7  / top_p 0.8  / presence 1.5
+  //   - "instruct-reasoning"  推理任務：temp 1.0  / top_p 0.95 / presence 1.5
+  //
+  // 4 組都標 appliesTo: ['qwen*', '*qwen*'] family gate — 不會誤套 Claude / Llama / GPT-OSS。
+  // 改了下個 turn 立刻生效（mtime hot-reload）。
+  "samplingPresets": {
+    // 範例：覆寫 thinking-coding 為 Qwen 官方 coding 嚴格版
+    // "thinking-coding": {
+    //   "appliesTo": ["qwen*", "*qwen*"],
+    //   "params": {
+    //     "temperature": 0.6,
+    //     "top_p": 0.8,
+    //     "top_k": 20,
+    //     "min_p": 0.0,
+    //     "presence_penalty": 1.0,
+    //     "repetition_penalty": 1.05
+    //   }
+    // }
+  },
+
+  // 沒帶 metadata.taskType 時的 fallback preset key（仍會經過 family gate）。
+  // 不設 = 不注入 sampler。常用值："thinking-coding" / "instruct-general"。
+  // "defaultSamplingPreset": "thinking-coding"
 }
 `
