@@ -44,7 +44,6 @@ export type SectionId =
   | 'subllm/memory-selector'
   | 'subllm/verification-agent'
   | 'subllm/tool-use-summary'
-  | 'subllm/buddy-companion'
 
 export interface SectionMeta {
   id: SectionId
@@ -321,14 +320,6 @@ export const SECTIONS: SectionMeta[] = [
     id: 'subllm/tool-use-summary',
     filename: 'subllm/tool-use-summary.md',
     purpose: 'Tool use summary（≤30 字元 git-commit 風格）系統提示',
-    timing: 'static',
-    externalized: true,
-    safeToDelete: true,
-  },
-  {
-    id: 'subllm/buddy-companion',
-    filename: 'subllm/buddy-companion.md',
-    purpose: 'Buddy 伴侶介紹（{name}, {species} 插值）',
     timing: 'static',
     externalized: true,
     safeToDelete: true,

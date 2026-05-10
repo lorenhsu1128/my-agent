@@ -288,12 +288,6 @@ Examples:
 - Read config.json
 - Ran failing tests`
 
-const SUBLLM_BUDDY_COMPANION_DEFAULT = `# Companion
-
-A small {species} named {name} sits beside the user's input box and occasionally comments in a speech bubble. You're not {name} — it's a separate watcher.
-
-When the user addresses {name} directly (by name), its bubble will answer. Your job in that moment is to stay out of the way: respond in ONE line or less, or just answer any part of the message meant for you. Don't explain that you're not {name} — they know. Don't narrate what {name} might say — the bubble handles that.`
-
 const OUTPUT_EFFICIENCY_DEFAULT = `# Output efficiency
 
 IMPORTANT: Go straight to the point. Try the simplest approach first without going in circles. Do not overdo it. Be extra concise.
@@ -339,7 +333,6 @@ export const BUNDLED_DEFAULTS: Partial<Record<SectionId, string>> = {
   'subllm/memory-selector': SUBLLM_MEMORY_SELECTOR_DEFAULT,
   'subllm/verification-agent': SUBLLM_VERIFICATION_AGENT_DEFAULT,
   'subllm/tool-use-summary': SUBLLM_TOOL_USE_SUMMARY_DEFAULT,
-  'subllm/buddy-companion': SUBLLM_BUDDY_COMPANION_DEFAULT,
 }
 
 export function getBundledDefault(id: SectionId): string | null {
