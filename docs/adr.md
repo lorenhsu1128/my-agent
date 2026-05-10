@@ -27,6 +27,7 @@
 | ADR-020 | M-LLAMACPP-REMOTE 雙固定槽 schema（local + remote）非 N endpoints | ✅ |
 | ADR-021 | M-LLAMACPP-REMOTE routing 失敗硬性報錯，不 auto-fallback | ✅ |
 | ADR-022 | llamacpp apiKey 寫 jsonc 為單一來源，不另設 env override | ✅ |
+| ADR-008-A | M-SP per-cwd snapshot + override.md/append.md + 5 sub-LLM 外部化（M-SP-FULL） | ✅ |
 
 > 編號跳過 017：保留給未來 milestone。
 
@@ -73,6 +74,18 @@ Qwen3.5-Neo 的 `reasoning_content` 映射為 Anthropic `thinking` content block
 29 個 section 外部化至 `~/.my-agent/system-prompt/` 下的 .md 檔。新增 `src/systemPromptFiles/` 模組。session 啟動凍結快照、per-project > global > bundled 三層解析、完全取代（不合併）、首次啟動自動 seed global 層。覆蓋 prompts.ts 全部 15 個 section + cyber-risk + user-profile 外框 + memory 系統 8 個常數 + QueryEngine 4 條錯誤訊息。使用者指南：`docs/customizing-system-prompt.md`。
 
 理由：措辭調整不必改 code → rebuild；per-project 可做專案專屬客製化。
+
+## ADR-008-A — M-SP-FULL：per-cwd snapshot + override.md + 5 sub-LLM 外部化（2026-05-10）
+
+ADR-008 的補充與修正。三件事：
+
+**Phase 1 — snapshot 改 per-cwd Map（修 daemon bug）**：原 ADR-008 的 snapshot 是 module-level singleton，daemon 多 project 共存時全部讀同一份，per-project section 永不被讀。改成 `Map<projectKey, snapshot>`。daemon 端透過 `runWithSystemPromptCwd(cwd, () => ask(...))`（AsyncLocalStorage）讓 prompts.ts 內 17 處 `getExternalSection()` 自動拿到當前 project 的 snapshot；REPL 走 DEFAULT_KEY snapshot（process cwd）。`bootstrapDaemonContext` 在 attach project 時 `await loadSystemPromptSnapshot(opts.cwd)`。守 ADR-005（QueryEngine.ts / StreamingToolExecutor.ts 沒動）。
+
+**Phase 2 — Project-level override.md + append.md（一檔換整套人格）**：在 `system-prompt/` 同層加 `system-prompt-override.md`（完全替代 default 主 prompt，對應 customSystemPrompt 鉤子）+ `system-prompt-append.md`（追加在最後，對應 appendSystemPrompt）。Per-project > global 解析。Override 首次啟動 seed `composeFullDefaultPrompt()` 拼好的 29 section 當編輯起點；append 不 seed（避免空字串覆蓋陷阱）。空字串 / 純註解視為「未啟用」。daemon 端 projectRuntimeFactory 讀 overrides 注入 runner；REPL 端 main.tsx 接 file fallback（CLI flag > 檔 > 無）。**配合修正**：`getCLISyspromptPrefix()` 的 hardcoded「You are a my-agent agent...」prefix 在 `hasCustomSystemPrompt=true` 時被跳過，避免使用者人格被 default prefix 蓋過；`streamWithRetryOnEmptyTool` 同樣偵測 customSystemPrompt 並跳過 retry，避免桌寵 / 純對話人格被 tool nudge 強迫第二輪 hallucinate。
+
+**Phase 3 — 5 個 sub-LLM prompt 外部化**：cron-parser / memory-selector / verification-agent / tool-use-summary / buddy-companion。SECTIONS 加 `subllm/*` SectionId，bundledDefaults 搬入字串，模板變數統一 `{x}` 單花括號（snapshot.interpolate 處理）。範圍取捨：SessionMemory / MagicDocs prompt 已自有外部化機制，不重複造輪；agent-tool/prompt.ts 與 extractMemories 4 條是 prompt builder 不是純 prompt（200+ 行 9+ feature flag 分支 / 6 個工具名插值），外部化會 lose composition logic，獨立 milestone M-SP-SUBLLM-COMPOSITION 處理。
+
+理由：(a) 修 daemon multi-project per-section 失效的 bug；(b) 開出「換 cwd → 換 persona」零 my-agent 程式碼修改的桌寵 / 多人格使用模式（M-MASCOT 後續方案的基礎）；(c) 讓使用者能客製 cron 解析 / verification 行為 / 桌寵伴侶語氣等高 ROI sub-LLM 提示。Plan: `docs/plans/M-SP-FULL.md`。
 
 ## ADR-009 — llamacpp 上下文長度偵測改善（2026-04-19，M-LLAMACPP-CTX）
 

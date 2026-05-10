@@ -1948,7 +1948,7 @@
 
 ---
 
-## 當前里程碑：M-SP-FULL — 系統提示根本性外部化（2026-05-10 啟動）
+## 已完成里程碑：M-SP-FULL — 系統提示根本性外部化（2026-05-10 啟動 → 2026-05-10 完成 ✅）
 
 **目標**：把「系統提示外部化」做徹底，讓 daemon 多 project 真的能 per-project、使用者能用單一 markdown 檔換整套人格、13 條 sub-LLM prompt 也走 loader。完成後桌寵方案可以「換 cwd → 換 persona」零 my-agent 程式碼解決。
 
@@ -1960,24 +1960,24 @@
 3. 13+ 條 sub-LLM prompt（cron parser / memory selector / verification agent / buddy 等）全部 hardcoded，使用者無法外部化。
 
 ### M-SP-FULL Phase 1 — Snapshot 改 per-cwd Map（修 daemon bug）
-- [ ] M-SP-FULL-1-1 `snapshot.ts` singleton → `Map<projectKey, snapshot>`；新 export `getProjectSlugForCwd(cwd)`
-- [ ] M-SP-FULL-1-2 `loadSystemPromptSnapshot(cwd?)` / `getSection(id, cwd?)` 簽名擴充（向後相容 REPL）
-- [ ] M-SP-FULL-1-3 `queryContext.ts:fetchSystemPromptParts()` 用 AsyncLocalStorage 設 cwd；`getExternalSection()` 從 ALS 讀
-- [ ] M-SP-FULL-1-4 `sessionBootstrap.ts:bootstrapDaemonContext()` 加 `loadSystemPromptSnapshot(opts.cwd)`；context 加 snapshot ref
-- [ ] M-SP-FULL-1-5 `tests/integration/systemPromptFiles/per-project-snapshot.test.ts`（多 cwd 隔離 + 並發 ask）
-- [ ] M-SP-FULL-1-6 typecheck + `./cli -p "hello"` 冒煙 + `dump-system-prompt.ts --cwd` 驗證
+- [x] M-SP-FULL-1-1 `snapshot.ts` singleton → `Map<projectKey, snapshot>`；新 export `getProjectSlugForCwd(cwd)`
+- [x] M-SP-FULL-1-2 `loadSystemPromptSnapshot(cwd?)` / `getSection(id, cwd?)` 簽名擴充（向後相容 REPL）
+- [x] M-SP-FULL-1-3 `queryContext.ts:fetchSystemPromptParts()` 用 AsyncLocalStorage 設 cwd；`getExternalSection()` 從 ALS 讀
+- [x] M-SP-FULL-1-4 `sessionBootstrap.ts:bootstrapDaemonContext()` 加 `loadSystemPromptSnapshot(opts.cwd)`；context 加 snapshot ref
+- [x] M-SP-FULL-1-5 `tests/integration/systemPromptFiles/per-project-snapshot.test.ts`（多 cwd 隔離 + 並發 ask）
+- [x] M-SP-FULL-1-6 typecheck + `./cli -p "hello"` 冒煙 + `dump-system-prompt.ts --cwd` 驗證
 
 ### M-SP-FULL Phase 2 — Project-level override / append 兩個新檔
-- [ ] M-SP-FULL-2-1 新 `src/systemPromptFiles/overrides.ts`（`loadProjectPromptOverrides` / `getProjectPromptOverrides`）
-- [ ] M-SP-FULL-2-2 `paths.ts` 加 override / append 路徑 helper
-- [ ] M-SP-FULL-2-3 snapshot 整合 overrides 欄位（per-cwd 一起快取）
-- [ ] M-SP-FULL-2-4 `composeFullDefaultPrompt()` helper 拼 29 section；`seed.ts` 寫 `~/.my-agent/system-prompt-override.md`（append.md 不 seed）
-- [ ] M-SP-FULL-2-5 `seed.ts` README 加 override/append 章節（含漂移警告 + per-project 複製方式）
-- [ ] M-SP-FULL-2-6 `projectRuntimeFactory.ts:89` 讀 overrides 注入 runner `customSystemPrompt`/`appendSystemPrompt`
-- [ ] M-SP-FULL-2-7 `main.tsx` REPL 路徑接 file fallback（CLI flag > 檔案 > 無）
-- [ ] M-SP-FULL-2-8 `tests/integration/systemPromptFiles/overrides.test.ts`
-- [ ] M-SP-FULL-2-9 `tests/integration/daemon/persona-per-project.test.ts` E2E：兩 project 不同 override.md 各拿自己的人格
-- [ ] M-SP-FULL-2-10 手測：cwd A 預設 + cwd B 寫 override.md 換成「貓」人格
+- [x] M-SP-FULL-2-1 新 `src/systemPromptFiles/overrides.ts`（`loadProjectPromptOverrides` / `getProjectPromptOverrides`）
+- [x] M-SP-FULL-2-2 `paths.ts` 加 override / append 路徑 helper
+- [x] M-SP-FULL-2-3 snapshot 整合 overrides 欄位（per-cwd 一起快取）
+- [x] M-SP-FULL-2-4 `composeFullDefaultPrompt()` helper 拼 29 section；`seed.ts` 寫 `~/.my-agent/system-prompt-override.md`（append.md 不 seed）
+- [x] M-SP-FULL-2-5 `seed.ts` README 加 override/append 章節（含漂移警告 + per-project 複製方式）
+- [x] M-SP-FULL-2-6 `projectRuntimeFactory.ts:89` 讀 overrides 注入 runner `customSystemPrompt`/`appendSystemPrompt`
+- [x] M-SP-FULL-2-7 `main.tsx` REPL 路徑接 file fallback（CLI flag > 檔案 > 無）
+- [x] M-SP-FULL-2-8 `tests/integration/systemPromptFiles/overrides.test.ts`
+- [x] M-SP-FULL-2-9 `tests/integration/daemon/persona-per-project.test.ts` E2E：兩 project 不同 override.md 各拿自己的人格
+- [x] M-SP-FULL-2-10 手測：cwd A 預設 + cwd B 寫 override.md 換成「貓」人格
 
 ### M-SP-FULL Phase 3 — 5 個 Sub-LLM Prompts 外部化（範圍重訂 2026-05-10）
 
@@ -1988,22 +1988,22 @@
 - **Tier D（5 條，獨立 milestone M-SP-SUBLLM-COMPOSITION）**：agent-tool/prompt.ts（200 行 9+ feature flag）+ extractMemories 4 條（composition function + 6 個工具名插值）。這些是 prompt builder 不是純 prompt，外部化會 lose 條件邏輯
 
 #### 本 phase 任務
-- [ ] M-SP-FULL-3-1 `sections.ts` 加 5 個 `subllm/*` SectionId（cron-parser / memory-selector / verification-agent / tool-use-summary / buddy-companion）
-- [ ] M-SP-FULL-3-2 `bundledDefaults.ts` 搬入 5 條 hardcoded 字串（變數轉 `{x}` 單花括號格式）
-- [ ] M-SP-FULL-3-3 `seed.ts` seed 進 `~/.my-agent/system-prompt/subllm/`
-- [ ] M-SP-FULL-3-4 改 `cronNlParser.ts:30` → `getSection('subllm/cron-parser')` ?? FALLBACK
-- [ ] M-SP-FULL-3-5 改 `findRelevantMemories.ts:69` → memory-selector（`{maxFiles}` 插值）
-- [ ] M-SP-FULL-3-6 改 `verificationAgent.ts:10` → verification-agent（`{BASH_TOOL_NAME}`, `{WEB_FETCH_TOOL_NAME}` 插值）
-- [ ] M-SP-FULL-3-7 改 `toolUseSummary` → tool-use-summary
-- [ ] M-SP-FULL-3-8 改 `buddy/prompt.ts:7` → buddy-companion（`{name}`, `{species}` 插值）
-- [ ] M-SP-FULL-3-9 `tests/integration/systemPromptFiles/subllm-externalization.test.ts`：5 條各驗 fallback + 覆寫
-- [ ] M-SP-FULL-3-10 build + smoke：cron parse + verification agent 跑一次
+- [x] M-SP-FULL-3-1 `sections.ts` 加 5 個 `subllm/*` SectionId（cron-parser / memory-selector / verification-agent / tool-use-summary / buddy-companion）
+- [x] M-SP-FULL-3-2 `bundledDefaults.ts` 搬入 5 條 hardcoded 字串（變數轉 `{x}` 單花括號格式）
+- [x] M-SP-FULL-3-3 `seed.ts` seed 進 `~/.my-agent/system-prompt/subllm/`
+- [x] M-SP-FULL-3-4 改 `cronNlParser.ts:30` → `getSection('subllm/cron-parser')` ?? FALLBACK
+- [x] M-SP-FULL-3-5 改 `findRelevantMemories.ts:69` → memory-selector（`{maxFiles}` 插值）
+- [x] M-SP-FULL-3-6 改 `verificationAgent.ts:10` → verification-agent（`{BASH_TOOL_NAME}`, `{WEB_FETCH_TOOL_NAME}` 插值）
+- [x] M-SP-FULL-3-7 改 `toolUseSummary` → tool-use-summary
+- [x] M-SP-FULL-3-8 改 `buddy/prompt.ts:7` → buddy-companion（`{name}`, `{species}` 插值）
+- [x] M-SP-FULL-3-9 `tests/integration/systemPromptFiles/subllm-externalization.test.ts`：5 條各驗 fallback + 覆寫
+- [x] M-SP-FULL-3-10 build + smoke：cron parse + verification agent 跑一次
 
 ### M-SP-FULL 文件 + ADR
-- [ ] M-SP-FULL-D-1 `docs/customizing-system-prompt.md` 加 §override-and-append + §sub-llm-prompts
-- [ ] M-SP-FULL-D-2 `docs/prompt-inventory.md` 標註 13 條 sub-LLM 已外部化
-- [ ] M-SP-FULL-D-3 `docs/adr.md` 新增 ADR-008-A（per-cwd snapshot）
-- [ ] M-SP-FULL-D-4 `CLAUDE.md` 規則 13 後補一條：sub-LLM prompts 也走 M-SP loader
+- [x] M-SP-FULL-D-1 `docs/customizing-system-prompt.md` 加 §override-and-append + §sub-llm-prompts
+- [x] M-SP-FULL-D-2 `docs/prompt-inventory.md` 標註 13 條 sub-LLM 已外部化
+- [x] M-SP-FULL-D-3 `docs/adr.md` 新增 ADR-008-A（per-cwd snapshot）
+- [x] M-SP-FULL-D-4 `CLAUDE.md` 規則 13 後補一條：sub-LLM prompts 也走 M-SP loader
 
 #### 不在範圍 → 後續 milestone
 - 41 個 tool descriptions 外部化 → 獨立 M-TOOL-PROMPT-EXTERNALIZE

@@ -187,8 +187,65 @@ my-agent -p "hi"   # 重新 seed
 
 - `docs/context-architecture.md` — 上下文組成整體架構
 - `docs/archive/M_SP_PLAN.md` — M-SP 完整實作計畫（已歸檔）
+- `docs/plans/M-SP-FULL.md` — M-SP-FULL（per-cwd snapshot + override.md + sub-LLM）
 - `~/.my-agent/system-prompt/README.md` — seed 時自動寫入的使用者指引
+- ADR-008-A — M-SP-FULL 補充修正（per-cwd snapshot bug 修復、override 機制、sub-LLM 範圍取捨）
 
 ---
 
-最後更新：M-SP-5（2026-04-19）— 29/29 section 全部外部化完成
+## M-SP-FULL（2026-05-10）新增能力
+
+### Per-cwd snapshot（修 daemon multi-project bug）
+
+原 M-SP 的 snapshot 是 module-level singleton，daemon 模式下多 project 共用一份，per-project section 永不被讀。M-SP-FULL Phase 1 改成 `Map<projectKey, snapshot>`：daemon attach project 時自動載入該 cwd 的 snapshot；REPL 走 process cwd。**對使用者無感**——只是「per-project 設定真的能 work」。
+
+### `system-prompt-override.md` / `system-prompt-append.md`（一檔換整套人格）
+
+兩個 sibling 檔（與 `system-prompt/` 同層）：
+
+```
+~/.my-agent/system-prompt-override.md   ← 整段替代 default 主 prompt（global）
+~/.my-agent/system-prompt-append.md     ← 追加在最後（global）
+~/.my-agent/projects/<slug>/system-prompt-override.md  ← per-project
+~/.my-agent/projects/<slug>/system-prompt-append.md    ← per-project
+```
+
+- **override.md**：首次啟動會 seed default 完整字串當編輯起點。整段替代後 my-agent 升級不會自動同步 default（要回到 default 就刪檔重啟）。
+- **append.md**：預設不 seed，需要追加時自己建。
+- 空字串 / 純 HTML 註解視為「未啟用」（不傳給 LLM）。
+- 優先序：per-project > global > 無。
+- 適合「桌寵伴侶」、「Linus 風格 reviewer」、「特定領域對話人格」等整套切換。
+- **配套修正**：當 override / `--system-prompt` 啟用時，hardcoded CLI prefix（「You are a my-agent agent...」）會被自動跳過；llamacpp adapter 也會跳過 `streamWithRetryOnEmptyTool` 的 retry nudge，避免人格被預設行為蓋過。
+
+### 5 個 Sub-LLM Prompt 外部化（`~/.my-agent/system-prompt/subllm/`）
+
+| 檔名 | 用途 | 變數 |
+|------|------|------|
+| `cron-parser.md` | 自然語言 → 5-field cron 翻譯 | — |
+| `memory-selector.md` | 記憶相關性挑選（Sonnet） | `{maxFiles}` |
+| `verification-agent.md` | Verification subagent 系統提示 | `{BASH_TOOL_NAME}` `{WEB_FETCH_TOOL_NAME}` |
+| `tool-use-summary.md` | ≤30 字元 git-commit 風格工具摘要 | — |
+| `buddy-companion.md` | Buddy 伴侶介紹 | `{name}` `{species}` |
+
+變數用單花括號 `{x}` 格式（snapshot.interpolate 處理；未識別的 key 維持原樣）。
+
+**未外部化的 sub-LLM**（見 `docs/prompt-inventory.md` 的「M-SP 狀態」欄）：
+- 已自有外部化機制：SessionMemory template/prompt（`~/.my-agent/session-memory/`）、MagicDocs prompt（`~/.my-agent/magic-docs/`）
+- 動態 builder（不適合純 .md）：agent-tool prompt（200 行 9+ feature flag 分支）、extractMemories 4 條（composition + 6 個工具名插值）—— 留 M-SP-SUBLLM-COMPOSITION milestone
+
+### 桌寵 / 多人格使用模式
+
+完成 M-SP-FULL 後，桌寵與多人格切換的最簡解法：
+
+```bash
+# 桌寵的 daemon 用獨立 cwd
+mkdir -p ~/.my-agent/mascot-workspace
+echo "你是一隻名叫小橘的桌寵貓..." > ~/.my-agent/projects/<mascot-slug>/system-prompt-override.md
+
+# 同時跑 REPL 程式助理（cwd 在專案目錄）+ 桌寵 daemon（cwd 在 mascot-workspace）
+# 兩個 cwd 各自的 snapshot 獨立，零 my-agent 程式碼改動
+```
+
+---
+
+最後更新：M-SP-FULL（2026-05-10）— 加入 per-cwd snapshot + override.md/append.md + 5 sub-LLM 外部化

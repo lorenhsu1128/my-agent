@@ -64,21 +64,24 @@
 
 ## 2. Sub-LLM / Sub-agent Prompts
 
-| 位置 | 用途 |
-|---|---|
-| `src/utils/cronNlParser.ts:30-45` | **Cron NL Parser** — 自然語言排程 → 5-field cron JSON（避免 :00/:30 整點） |
-| `src/services/api/claude.ts:3212` | **queryHaiku()** — Haiku 小模型查詢入口（cron/memory/tool 摘要共用，含 llama.cpp 直通） |
-| `src/services/api/claude.ts:3184` | **buildSystemPromptBlocks()** — system prompt 切 block 並注入 cache control |
-| `src/memdir/findRelevantMemories.ts:69` | **buildSelectMemoriesSystemPrompt()** — 記憶選擇器（Sonnet），依檔名 + description 挑 ≤N 條相關記憶 |
-| `src/services/extractMemories/prompts.ts:36` | **personaSection()** — Persona/USER.md 編輯規則（≤80 chars/行、global vs project） |
-| `src/services/extractMemories/prompts.ts:61` | **opener()** — Memory extractor 開場（並行讀寫、turn budget 策略） |
-| `src/services/extractMemories/prompts.ts:82` | **buildExtractAutoOnlyPrompt()** — Auto-only 記憶抽取（4 type / frontmatter / MEMORY.md 索引） |
-| `src/services/extractMemories/prompts.ts:134` | **buildExtractCombinedPrompt()** — Auto + team memory 抽取（私人 vs 團隊目錄） |
-| `src/userModel/prompt.ts:20` | **formatUserProfileBlock()** — `<user-profile>` 區塊（>1500 chars 警告） |
-| `src/userModel/prompt.ts:50` | **loadUserProfilePrompt()** — 載入 user profile snapshot |
-| `src/memdir/memdir.ts:33-146` | **memdir loader** — MEMORY.md 載入 + 截斷（200 行/25K bytes）+ 目錄存在指南 |
-| `src/tools/AgentTool/prompt.ts:14-112` | **Agent tool prompt** — sub-agent 可用工具列表 + 何時 fork + 如何寫 prompt |
-| `src/tools/AgentTool/built-in/verificationAgent.ts:10` | **VERIFICATION_SYSTEM_PROMPT** — 驗證特化 sub-agent（不改檔、不 git write、跑 build/test/lint、敵對探測） |
+> **M-SP-FULL Phase 3（2026-05-10）**：5 條已外部化（標 ✅ 外部化）— 使用者可改 `~/.my-agent/system-prompt/subllm/<name>.md`。
+> 其餘 prompt builder（agent-tool 動態組裝 / extractMemories 4 條 composition）外部化會 lose 條件邏輯，留 M-SP-SUBLLM-COMPOSITION milestone。
+
+| 位置 | 用途 | M-SP 狀態 |
+|---|---|---|
+| `src/utils/cronNlParser.ts:30-45` | **Cron NL Parser** — 自然語言排程 → 5-field cron JSON（避免 :00/:30 整點） | ✅ `subllm/cron-parser.md` |
+| `src/services/api/claude.ts:3212` | **queryHaiku()** — Haiku 小模型查詢入口（cron/memory/tool 摘要共用，含 llama.cpp 直通） | n/a（管線非 prompt） |
+| `src/services/api/claude.ts:3184` | **buildSystemPromptBlocks()** — system prompt 切 block 並注入 cache control | n/a |
+| `src/memdir/findRelevantMemories.ts:69` | **buildSelectMemoriesSystemPrompt()** — 記憶選擇器（Sonnet），依檔名 + description 挑 ≤N 條相關記憶 | ✅ `subllm/memory-selector.md`（`{maxFiles}` 插值） |
+| `src/services/extractMemories/prompts.ts:36` | **personaSection()** — Persona/USER.md 編輯規則（≤80 chars/行、global vs project） | ⏸ Tier D（M-SP-SUBLLM-COMPOSITION） |
+| `src/services/extractMemories/prompts.ts:61` | **opener()** — Memory extractor 開場（並行讀寫、turn budget 策略） | ⏸ Tier D |
+| `src/services/extractMemories/prompts.ts:82` | **buildExtractAutoOnlyPrompt()** — Auto-only 記憶抽取（4 type / frontmatter / MEMORY.md 索引） | ⏸ Tier D |
+| `src/services/extractMemories/prompts.ts:134` | **buildExtractCombinedPrompt()** — Auto + team memory 抽取（私人 vs 團隊目錄） | ⏸ Tier D |
+| `src/userModel/prompt.ts:20` | **formatUserProfileBlock()** — `<user-profile>` 區塊（>1500 chars 警告） | n/a（純包裝） |
+| `src/userModel/prompt.ts:50` | **loadUserProfilePrompt()** — 載入 user profile snapshot | n/a（loader） |
+| `src/memdir/memdir.ts:33-146` | **memdir loader** — MEMORY.md 載入 + 截斷（200 行/25K bytes）+ 目錄存在指南 | n/a |
+| `src/tools/AgentTool/prompt.ts:14-112` | **Agent tool prompt** — sub-agent 可用工具列表 + 何時 fork + 如何寫 prompt | ⏸ Tier D（200 行 9+ feature flag） |
+| `src/tools/AgentTool/built-in/verificationAgent.ts:10` | **VERIFICATION_SYSTEM_PROMPT** — 驗證特化 sub-agent（不改檔、不 git write、跑 build/test/lint、敵對探測） | ✅ `subllm/verification-agent.md`（`{BASH_TOOL_NAME}`, `{WEB_FETCH_TOOL_NAME}` 插值） |
 
 ---
 
@@ -86,13 +89,13 @@
 
 | 位置 | 用途 |
 |---|---|
-| `src/services/SessionMemory/prompts.ts:11` | **DEFAULT_SESSION_MEMORY_TEMPLATE** — 8 區段樣板（Title/Current State/Files/Workflow/Errors/Learnings/Worklog） |
-| `src/services/SessionMemory/prompts.ts:43` | **getDefaultUpdatePrompt()** — 會話記憶更新指令（保留 section header） |
-| `src/services/MagicDocs/prompts.ts:8` | **getUpdatePromptTemplate()** — Magic Docs 自動更新（`{{docPath}}/{{docContents}}/{{docTitle}}/{{customInstructions}}` 模板） |
-| `src/services/toolUseSummary/toolUseSummaryGenerator.ts:15` | **TOOL_USE_SUMMARY_SYSTEM_PROMPT** — Haiku 生成 ≤30 字元 git-commit 風格工具摘要 |
-| `src/llamacppConfig/bundledTemplate.ts:14` | **LLAMACPP_JSONC_TEMPLATE** — 本地 llama.cpp 設定 JSONC 預設（client + server 層全繁中註解） |
-| `src/coordinator/coordinatorMode.ts:79` | **getCoordinatorUserContext()** — Coordinator 模式 worker 工具/MCP 清單 |
-| `src/buddy/prompt.ts:7` | **companionIntroText()** — Buddy 伴侶精靈介紹（一行回覆、點名才接話） |
+| `src/services/SessionMemory/prompts.ts:11` | **DEFAULT_SESSION_MEMORY_TEMPLATE** — 8 區段樣板（Title/Current State/Files/Workflow/Errors/Learnings/Worklog） | ✅ 自有外部化：`~/.my-agent/session-memory/config/template.md` |
+| `src/services/SessionMemory/prompts.ts:43` | **getDefaultUpdatePrompt()** — 會話記憶更新指令（保留 section header） | ✅ 自有外部化：`~/.my-agent/session-memory/config/prompt.md` |
+| `src/services/MagicDocs/prompts.ts:8` | **getUpdatePromptTemplate()** — Magic Docs 自動更新（`{{docPath}}/{{docContents}}/{{docTitle}}/{{customInstructions}}` 模板） | ✅ 自有外部化：`~/.my-agent/magic-docs/prompt.md` |
+| `src/services/toolUseSummary/toolUseSummaryGenerator.ts:15` | **TOOL_USE_SUMMARY_SYSTEM_PROMPT** — Haiku 生成 ≤30 字元 git-commit 風格工具摘要 | ✅ M-SP `subllm/tool-use-summary.md` |
+| `src/llamacppConfig/bundledTemplate.ts:14` | **LLAMACPP_JSONC_TEMPLATE** — 本地 llama.cpp 設定 JSONC 預設（client + server 層全繁中註解） | n/a（config 模板） |
+| `src/coordinator/coordinatorMode.ts:79` | **getCoordinatorUserContext()** — Coordinator 模式 worker 工具/MCP 清單 | ⏸ Tier C（7 成動態組裝） |
+| `src/buddy/prompt.ts:7` | **companionIntroText()** — Buddy 伴侶精靈介紹（一行回覆、點名才接話） | ✅ M-SP `subllm/buddy-companion.md`（`{name}`, `{species}` 插值） |
 
 ---
 
