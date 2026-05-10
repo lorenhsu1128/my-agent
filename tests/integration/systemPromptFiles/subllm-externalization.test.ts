@@ -1,5 +1,6 @@
 /**
- * M-SP-FULL Phase 3：5 個 sub-LLM prompt 外部化的端到端驗證。
+ * M-SP-FULL Phase 3：4 個 sub-LLM prompt 外部化的端到端驗證。
+ * （buddy-companion 已於 M-BUDDY-RIP / 2026-05-10 隨 buddy 子系統一併移除）
  *
  * 對每個 prompt 驗：
  *   - default 路徑：snapshot 載完無 override 檔 → callsite 拿到 BUNDLED_DEFAULT
@@ -80,7 +81,7 @@ async function writeGlobalSubllmSection(
 }
 
 describe('M-SP-FULL Phase 3：BUNDLED_DEFAULTS + SECTIONS 註冊一致', () => {
-  test('5 個 sub-LLM SectionId 全部有 BUNDLED_DEFAULTS 對映', async () => {
+  test('4 個 sub-LLM SectionId 全部有 BUNDLED_DEFAULTS 對映', async () => {
     const { SECTIONS } = await import(
       '../../../src/systemPromptFiles/sections'
     )
@@ -95,7 +96,6 @@ describe('M-SP-FULL Phase 3：BUNDLED_DEFAULTS + SECTIONS 註冊一致', () => {
       'subllm/memory-selector',
       'subllm/verification-agent',
       'subllm/tool-use-summary',
-      'subllm/buddy-companion',
     ])
     for (const id of subllmIds) {
       expect(BUNDLED_DEFAULTS[id]).toBeDefined()
@@ -103,7 +103,7 @@ describe('M-SP-FULL Phase 3：BUNDLED_DEFAULTS + SECTIONS 註冊一致', () => {
     }
   })
 
-  test('seedSystemPromptDirIfMissing seed 5 個 subllm/*.md 到 global 目錄', async () => {
+  test('seedSystemPromptDirIfMissing seed 4 個 subllm/*.md 到 global 目錄', async () => {
     const { seedSystemPromptDirIfMissing } = await import(
       '../../../src/systemPromptFiles/seed'
     )
@@ -117,7 +117,6 @@ describe('M-SP-FULL Phase 3：BUNDLED_DEFAULTS + SECTIONS 註冊一致', () => {
       'subllm/memory-selector.md',
       'subllm/verification-agent.md',
       'subllm/tool-use-summary.md',
-      'subllm/buddy-companion.md',
     ]) {
       expect(existsSync(getSystemPromptGlobalFile(filename))).toBe(true)
     }
@@ -230,38 +229,3 @@ describe('M-SP-FULL Phase 3：tool-use-summary', () => {
   })
 })
 
-describe('M-SP-FULL Phase 3：buddy-companion（{name}, {species} 插值）', () => {
-  test('default：companionIntroText 端到端 interpolate', async () => {
-    const { loadSystemPromptSnapshot } = await import(
-      '../../../src/systemPromptFiles/snapshot'
-    )
-    await loadSystemPromptSnapshot()
-    const { companionIntroText } = await import(
-      '../../../src/buddy/prompt'
-    )
-    const result = companionIntroText('Tangerine', 'cat')
-    expect(result).toContain('Tangerine')
-    expect(result).toContain('cat')
-    expect(result).not.toContain('{name}')
-    expect(result).not.toContain('{species}')
-    // 出現次數：name 至少 4 次（介紹 + speech bubble + addressed + bubble narration）
-    expect((result.match(/Tangerine/g) ?? []).length).toBeGreaterThanOrEqual(3)
-  })
-
-  test('override：使用者自訂 prompt 仍支援 {name} {species} 插值', async () => {
-    await writeGlobalSubllmSection(
-      'buddy-companion.md',
-      'A {species} called {name} watches.',
-    )
-    const { loadSystemPromptSnapshot } = await import(
-      '../../../src/systemPromptFiles/snapshot'
-    )
-    await loadSystemPromptSnapshot()
-    const { companionIntroText } = await import(
-      '../../../src/buddy/prompt'
-    )
-    expect(companionIntroText('Mochi', 'shiba')).toBe(
-      'A shiba called Mochi watches.',
-    )
-  })
-})

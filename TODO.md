@@ -3,6 +3,29 @@
 > Claude Code 在每次 session 開始時讀取此檔案，在工作過程中更新任務狀態。
 > 里程碑結構由人類維護。Claude Code 負責管理任務狀態的勾選。
 
+## 當前里程碑：M-BUDDY-RIP — 移除 dead-code REPL 小精靈子系統（2026-05-10 啟動）
+
+**目標**：完整刪除 `src/buddy/` 與所有 buddy/companion 相關 caller、bundled sub-LLM section、設定欄位、文件。`BUDDY` feature flag 因 `src/commands/buddy/index.js` 不存在而永遠 false（FEATURES.md:231-233），整個子系統實質為 dead code，移除等於清理。**Plan**：`~/.claude/plans/repl-src-buddy-floofy-allen.md`。
+
+### 任務
+- [x] M-BUDDY-RIP-1 移除 caller：`attachments.ts:861` companion_intro / `messages.ts:24` companionIntroText / `commands.ts:95-99` buddy command
+- [x] M-BUDDY-RIP-2 移除 REPL UI：`screens/REPL.tsx`（CompanionSprite import + 5 處 feature 區塊）+ `components/PromptInput/PromptInput.tsx`（305 / 1757 / 1952 + useBuddyNotification）
+- [x] M-BUDDY-RIP-3 移除狀態 / 設定：`state/AppStateStore.ts` FooterItem 'companion' + companionReaction/companionPetAt；`utils/config.ts` StoredCompanion / companionMuted 型別
+- [x] M-BUDDY-RIP-4 一次性 migration：config load 偵測舊 `companion` / `companionMuted` 欄位則 delete + 回寫（註解標 `// 2026-05-10 buddy removal cleanup`）
+- [x] M-BUDDY-RIP-5 移除 sub-LLM section：`systemPromptFiles/sections.ts` SectionId + 陣列項；`bundledDefaults.ts` SUBLLM_BUDDY_COMPANION_DEFAULT
+- [x] M-BUDDY-RIP-6 刪 `src/buddy/` 整個目錄（6 檔）
+- [x] M-BUDDY-RIP-7 刪 / 修文件：`docs/buddy-companion.md` / `customizing-system-prompt.md` / `prompt-inventory.md` / `adr.md` / `m-sp-full-guide.md` / `dev-log/2026-Q2.md` / `FEATURES.md` / `CLAUDE.md` / `README.md`
+- [x] M-BUDDY-RIP-8 修 / 刪測試：`tests/integration/systemPromptFiles/subllm-externalization.test.ts` 內 buddy case
+- [x] M-BUDDY-RIP-9 驗證：`bun run typecheck` + `bun run docs:verify` + `bun test` + `./cli -p "hello"` 冒煙
+- [x] M-BUDDY-RIP-10 commit（繁中）：`refactor(buddy): 移除 dead-code REPL 小精靈子系統`
+
+### 不在範圍 → 後續
+- 使用者本機 `~/.my-agent/system-prompt/subllm/buddy-companion.md` 不主動清除（使用者自管）
+- `feature()` 機制本身不重構，僅移除 BUDDY 這個 key 的所有 caller
+- `src/services/api/` 與其他無關模組不動
+
+---
+
 ## 當前里程碑：M-TCQ-SHIM — node-llama-tcq OpenAI-compat sidecar（2026-05-03 啟動）
 
 **目標**：在 `vendor/node-llama-tcq/` 內新增 OpenAI 相容 HTTP server（TCQ-shim），規格對齊 `buun-llama-cpp/build/bin/llama-server`，my-agent 端只改 `~/.my-agent/llamacpp.json` 的 `binaryPath`/`port`，fetch adapter 與 QueryEngine 零改動。完整設計見 `~/.claude/plans/node-llama-tcq-my-agent-my-dazzling-sprout.md`。
@@ -3775,3 +3798,43 @@
 - 2026-05-10 09:19: Session 結束 | 進度：799/909 任務 | 6145fb3 docs(todo): 新增 M-MASCOT 桌寵整合里程碑 + .gitignore 收 live-test log
 
 - 2026-05-10 11:02: Session 結束 | 進度：799/940 任務 | 4f5de5a fix(llamacpp-adapter): customSystemPrompt 時跳過 retry-on-empty-tool
+
+- 2026-05-10 11:52: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 12:04: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 12:48: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 13:04: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 13:12: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 13:38: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 13:44: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 13:59: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 14:07: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 14:13: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 14:17: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 14:19: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 14:24: Session 結束 | 進度：829/939 任務 | 8b6c438 docs: M-SP-FULL 三階段完成 — ADR-008-A + customizing 指南 + inventory 標註
+
+- 2026-05-10 14:27: Session 結束 | 進度：829/939 任務 | 4df2409 docs(m-sp-full): 新增詳細使用手冊 + 濃縮 customizing 章節
+
+- 2026-05-10 14:35: Session 結束 | 進度：829/939 任務 | 4df2409 docs(m-sp-full): 新增詳細使用手冊 + 濃縮 customizing 章節
+
+- 2026-05-10 14:37: Session 結束 | 進度：829/939 任務 | 4df2409 docs(m-sp-full): 新增詳細使用手冊 + 濃縮 customizing 章節
+
+- 2026-05-10 14:43: Session 結束 | 進度：829/939 任務 | 4df2409 docs(m-sp-full): 新增詳細使用手冊 + 濃縮 customizing 章節
+
+- 2026-05-10 15:35: Session 結束 | 進度：829/939 任務 | 4df2409 docs(m-sp-full): 新增詳細使用手冊 + 濃縮 customizing 章節
+
+- 2026-05-10 16:52: Session 結束 | 進度：829/939 任務 | 4df2409 docs(m-sp-full): 新增詳細使用手冊 + 濃縮 customizing 章節
+
+- 2026-05-10 16:53: Session 結束 | 進度：829/939 任務 | 4df2409 docs(m-sp-full): 新增詳細使用手冊 + 濃縮 customizing 章節
