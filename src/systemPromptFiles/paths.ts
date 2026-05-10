@@ -24,6 +24,18 @@ export const SYSTEM_PROMPT_DIRNAME = 'system-prompt'
 export const PROJECTS_DIRNAME = 'projects'
 
 /**
+ * Override / append 兩個檔（M-SP-FULL Phase 2）：
+ *   - override.md：完全替代 default 主 prompt（對應 customSystemPrompt 鉤子）
+ *   - append.md：追加在最後（對應 appendSystemPrompt 鉤子）
+ *
+ * 兩者各自獨立解析，可同時存在。優先序：per-project > global。
+ * 與 SECTION 檔（必須在 system-prompt/ 子目錄內）不同，這兩個檔是 system-prompt
+ * 同層 sibling，命名直接帶 `system-prompt-` 前綴方便辨識。
+ */
+export const OVERRIDE_FILENAME = 'system-prompt-override.md'
+export const APPEND_FILENAME = 'system-prompt-append.md'
+
+/**
  * Global system-prompt 目錄：~/.my-agent/system-prompt/
  */
 export function getSystemPromptGlobalDir(): string {
@@ -83,4 +95,24 @@ export function getSystemPromptProjectFileForCwd(
   filename: string,
 ): string {
   return join(getSystemPromptProjectDirForCwd(cwd), filename)
+}
+
+/**
+ * M-SP-FULL Phase 2：override / append 檔的路徑。
+ * 注意：override.md / append.md 不在 `system-prompt/` 子目錄裡，而是與其同層
+ * 的 sibling，所以路徑用 `dirname(...) + filename`。
+ */
+export function getOverrideGlobalFile(): string {
+  return join(getMemoryBaseDir(), OVERRIDE_FILENAME)
+}
+export function getAppendGlobalFile(): string {
+  return join(getMemoryBaseDir(), APPEND_FILENAME)
+}
+export function getOverrideProjectFileForCwd(cwd: string): string {
+  const slug = getProjectSlugForCwd(cwd)
+  return join(getMemoryBaseDir(), PROJECTS_DIRNAME, slug, OVERRIDE_FILENAME)
+}
+export function getAppendProjectFileForCwd(cwd: string): string {
+  const slug = getProjectSlugForCwd(cwd)
+  return join(getMemoryBaseDir(), PROJECTS_DIRNAME, slug, APPEND_FILENAME)
 }

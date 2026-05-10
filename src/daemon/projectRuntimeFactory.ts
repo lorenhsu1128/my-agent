@@ -21,6 +21,7 @@ import {
 } from './sessionBootstrap.js'
 import { beginDaemonSession } from './sessionWriter.js'
 import { createQueryEngineRunner } from './queryEngineRunner.js'
+import { getProjectPromptOverrides } from '../systemPromptFiles/overrides.js'
 import { createSessionBroker, type SessionBroker } from './sessionBroker.js'
 import {
   createPermissionRouter,
@@ -86,11 +87,17 @@ export function createDefaultProjectRuntimeFactory(
           brokerRef.current?.queue.currentInput?.id ?? null,
       })
 
+      // M-SP-FULL Phase 2：讀此 project 的 override / append（snapshot 在
+      // bootstrapDaemonContext 已 load，這裡 sync 取）。空值會 forward 成
+      // undefined，等同於不啟用 customSystemPrompt / appendSystemPrompt。
+      const overrides = getProjectPromptOverrides(cwd)
       const rawRunner = createQueryEngineRunner({
         context,
         canUseTool: permissionRouter.canUseTool,
         // M-WEB-PARITY-5：讓 runner 能解析 prompt 內 [Image:<id>] refToken
         projectId,
+        customSystemPrompt: overrides.override,
+        appendSystemPrompt: overrides.append,
       })
       const wrappedRunner = wrapRunnerWithProjectCwd(rawRunner, {
         mutex: deps.mutex,

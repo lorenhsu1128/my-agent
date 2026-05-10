@@ -7,6 +7,7 @@
 //    sequentially via sync spawn inside applySafeConfigEnvironmentVariables()
 //    (~65ms on every macOS startup)
 import { profileCheckpoint, profileReport } from './utils/startupProfiler.js';
+import { getProjectPromptOverrides, loadProjectPromptOverrides } from './systemPromptFiles/overrides.js';
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 profileCheckpoint('main_tsx_entry');
@@ -1349,6 +1350,12 @@ async function run(): Promise<CommanderCommand> {
       process.exit(1);
     }
 
+    // M-SP-FULL Phase 2：CLI flag 都沒給時，fallback 到檔案層 override / append。
+    // 優先序：CLI flag > 檔案 > 無。
+    // 此處 await 自帶 cache（同 cwd 第二次呼叫 hit cache）；setup.ts 也載一份做 warm。
+    await loadProjectPromptOverrides(process.cwd());
+    const fileOverrides = getProjectPromptOverrides(process.cwd());
+
     // Handle system prompt options
     let systemPrompt = options.systemPrompt;
     if (options.systemPromptFile) {
@@ -1368,6 +1375,10 @@ async function run(): Promise<CommanderCommand> {
         process.stderr.write(chalk.red(`Error reading system prompt file: ${errorMessage(error)}\n`));
         process.exit(1);
       }
+    }
+    // M-SP-FULL Phase 2：CLI flag / file flag 都沒給時，套用 ~/.my-agent/system-prompt-override.md
+    if (!systemPrompt && fileOverrides.override !== undefined) {
+      systemPrompt = fileOverrides.override;
     }
 
     // Handle append system prompt options
@@ -1389,6 +1400,10 @@ async function run(): Promise<CommanderCommand> {
         process.stderr.write(chalk.red(`Error reading append system prompt file: ${errorMessage(error)}\n`));
         process.exit(1);
       }
+    }
+    // M-SP-FULL Phase 2：CLI flag / file flag 都沒給時，套用 ~/.my-agent/system-prompt-append.md
+    if (!appendSystemPrompt && fileOverrides.append !== undefined) {
+      appendSystemPrompt = fileOverrides.append;
     }
 
     // Add teammate-specific system prompt addendum for tmux teammates

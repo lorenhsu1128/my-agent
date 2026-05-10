@@ -28,4 +28,16 @@ export {
   getProjectSlugForCwd,
   getSystemPromptProjectDirForCwd,
   getSystemPromptProjectFileForCwd,
+  getOverrideGlobalFile,
+  getAppendGlobalFile,
+  getOverrideProjectFileForCwd,
+  getAppendProjectFileForCwd,
+  OVERRIDE_FILENAME,
+  APPEND_FILENAME,
 } from './paths.js'
+export {
+  loadProjectPromptOverrides,
+  getProjectPromptOverrides,
+  _resetProjectPromptOverridesForTests,
+  type ProjectPromptOverrides,
+} from './overrides.js'

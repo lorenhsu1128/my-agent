@@ -678,6 +678,14 @@ export type Options = {
   agents: AgentDefinition[]
   allowedAgentTypes?: string[]
   hasAppendSystemPrompt: boolean
+  /**
+   * M-SP-FULL Phase 2：caller 提供 customSystemPrompt 時為 true。
+   * 設為 true 時：
+   *   - 跳過 getCLISyspromptPrefix 注入（不前置「You are a my-agent agent...」）
+   *   - 使用者拿到對主 prompt 的完全控制（與 customSystemPrompt 語義一致）
+   * 不影響 attribution header（API 計費需要）。
+   */
+  hasCustomSystemPrompt?: boolean
   fetchOverride?: ClientOptions['fetch']
   enablePromptCaching?: boolean
   skipCacheWrite?: boolean
@@ -1330,13 +1338,19 @@ async function* queryModel(
   }
 
   // filter(Boolean) works by converting each element to a boolean - empty strings become false and are filtered out.
+  // M-SP-FULL Phase 2：hasCustomSystemPrompt=true 時跳過 CLI prefix —— 使用者
+  // 透過 system-prompt-override.md / --system-prompt 拿到主 prompt 完全控制權，
+  // 不該被 hardcoded「You are a my-agent agent...」覆蓋。attribution header 仍保留
+  // （API 計費需要）。
   systemPrompt = asSystemPrompt(
     [
       getAttributionHeader(fingerprint),
-      getCLISyspromptPrefix({
-        isNonInteractive: options.isNonInteractiveSession,
-        hasAppendSystemPrompt: options.hasAppendSystemPrompt,
-      }),
+      options.hasCustomSystemPrompt
+        ? ''
+        : getCLISyspromptPrefix({
+            isNonInteractive: options.isNonInteractiveSession,
+            hasAppendSystemPrompt: options.hasAppendSystemPrompt,
+          }),
       ...systemPrompt,
       ...(advisorModel ? [ADVISOR_TOOL_INSTRUCTIONS] : []),
     ].filter(Boolean),

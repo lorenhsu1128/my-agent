@@ -254,6 +254,34 @@ cp ~/.my-agent/system-prompt/tone-style.md ~/.my-agent/projects/<專案 slug>/sy
 # 編輯該專案的 tone-style.md，只影響該專案
 \`\`\`
 
+## 整段 Override / Append（M-SP-FULL Phase 2）
+
+除了上述「個別 section .md」之外，還可以用兩個 sibling 檔（與本目錄同層）做整段替換或追加：
+
+\`\`\`
+~/.my-agent/system-prompt-override.md   ← 整段替代 default 主 prompt（global）
+~/.my-agent/system-prompt-append.md     ← 追加在最後（global）
+~/.my-agent/projects/<slug>/system-prompt-override.md  ← per-project 版
+~/.my-agent/projects/<slug>/system-prompt-append.md    ← per-project 版
+\`\`\`
+
+- **override.md**：首次啟動會 **自動 seed** 一份「當下 default 拼出來」的內容當編輯起點。
+  - 編輯後生效需新 session。
+  - 與 \`customSystemPrompt\` 鉤子等價：整個主 prompt 被你寫的內容取代（但 user/memory/env 動態段仍由程式注入）。
+  - 想回到 default → **刪掉 override.md**（不會再 seed，需先 \`rm -rf ~/.my-agent/system-prompt-override.md\` 並重啟才會重 seed）。
+  - ⚠️ **漂移警告**：my-agent 升級若改了 bundled default，你的 override.md **不會自動跟進**。要拿最新 default 就刪檔重啟。
+- **append.md**：**預設不 seed**（避免空檔誤觸 loader「空字串覆蓋」規約），需要追加時自己建。
+  - 與 \`appendSystemPrompt\` 鉤子等價：內容接在 system prompt 最後。
+- **空字串視為未啟用**（純註解 \`<!-- ... -->\` 也算）—— 想暫時停用整段 override 而不刪檔，可整段註解。
+- **優先序**：per-project > global > 無。
+- 適合場景：桌寵 / 伴侶 / 特定 code review 風格 / Linus 模式等「整套人格切換」。
+
+\`\`\`bash
+# Per-project 範例（讓 ~/projects/cat-mascot 啟動時用桌寵人格）
+mkdir -p ~/.my-agent/projects/-Users-loren-projects-cat-mascot
+echo "你是一隻在電腦角落的橘貓..." > ~/.my-agent/projects/-Users-loren-projects-cat-mascot/system-prompt-override.md
+\`\`\`
+
 ## 檔案清單
 
 | 檔名 | 影響的 prompt 區塊 | 注入時機 | 可否刪除 |
@@ -307,5 +335,5 @@ cp ~/.my-agent/system-prompt/tone-style.md ~/.my-agent/projects/<專案 slug>/sy
 
 ---
 
-最後更新：M-SP-2（2026-04-19）— 已外部化 15 個 section
+最後更新：M-SP-FULL Phase 2（2026-05-10）— 加入整段 override / append + per-cwd snapshot
 `

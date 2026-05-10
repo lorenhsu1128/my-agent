@@ -58,6 +58,7 @@ import {
 } from '../bootstrap/state.js'
 import { resetGetMemoryFilesCache } from '../utils/claudemd.js'
 import { loadSystemPromptSnapshot } from '../systemPromptFiles/snapshot.js'
+import { loadProjectPromptOverrides } from '../systemPromptFiles/overrides.js'
 
 export interface DaemonBootstrapOptions {
   cwd: string
@@ -109,10 +110,14 @@ export async function bootstrapDaemonContext(
   try { process.chdir(opts.cwd) } catch { /* ignore — cwd 不存在時沿用原目錄 */ }
   resetGetMemoryFilesCache('session_start')
 
-  // M-SP-FULL Phase 1：載入此 project 的 per-cwd system prompt snapshot。
-  // 同 cwd 第二次 attach 會 hit cache（snapshot 是 per-key Map）。
-  // 失敗就讓上層 throw — bootstrap 階段就 fail 比 turn 中靜默走 default 安全。
-  await loadSystemPromptSnapshot(opts.cwd)
+  // M-SP-FULL Phase 1+2：載入此 project 的 per-cwd system prompt snapshot
+  // 與 override / append 設定。同 cwd 第二次 attach 會 hit cache（兩者都是
+  // per-key Map）。失敗就讓上層 throw — bootstrap 階段就 fail 比 turn 中靜默
+  // 走 default 安全。
+  await Promise.all([
+    loadSystemPromptSnapshot(opts.cwd),
+    loadProjectPromptOverrides(opts.cwd),
+  ])
 
   try {
   const mode: PermissionMode = opts.permissionMode ?? 'default'

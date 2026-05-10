@@ -23,6 +23,7 @@ import { ensureReconciled } from './services/sessionIndex/index.js'
 import {
   seedSystemPromptDirIfMissing,
   loadSystemPromptSnapshot,
+  loadProjectPromptOverrides,
 } from './systemPromptFiles/index.js'
 import {
   seedLlamaCppConfigIfMissing,
@@ -308,6 +309,10 @@ export async function setup(
     // seed 是 ms 級寫檔，失敗也只 log warn 走 bundled fallback，不會阻擋 boot。
     await seedSystemPromptDirIfMissing()
     await loadSystemPromptSnapshot()
+    // M-SP-FULL Phase 2：REPL 路徑用 process.cwd() 載入 per-project override / append
+    // （process 啟動 cwd 通常就是專案目錄）。main.tsx 用同一 cwd 取，保證 cache 命中
+    // 並讀到 ~/.my-agent/projects/<slug>/system-prompt-override.md。
+    await loadProjectPromptOverrides(process.cwd())
     // M-LLAMA-CFG：首次啟動種出 ~/.my-agent/llamacpp.jsonc + 載入 snapshot。
     // 同樣 await；缺 / 壞都走 DEFAULT_LLAMACPP_CONFIG。
     await seedLlamaCppConfigIfMissing()
