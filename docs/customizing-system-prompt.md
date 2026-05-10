@@ -195,57 +195,53 @@ my-agent -p "hi"   # 重新 seed
 
 ## M-SP-FULL（2026-05-10）新增能力
 
+> **完整使用手冊**：`docs/m-sp-full-guide.md` — Quickstart 三情境、5 sub-LLM 詳解、桌寵實戰、疑難排解。
+> 本節只列「做了什麼 / 使用者拿到什麼」。
+
 ### Per-cwd snapshot（修 daemon multi-project bug）
 
-原 M-SP 的 snapshot 是 module-level singleton，daemon 模式下多 project 共用一份，per-project section 永不被讀。M-SP-FULL Phase 1 改成 `Map<projectKey, snapshot>`：daemon attach project 時自動載入該 cwd 的 snapshot；REPL 走 process cwd。**對使用者無感**——只是「per-project 設定真的能 work」。
+原 snapshot 是 module-level singleton → daemon 多 project 共用一份，per-project 檔永不被讀。Phase 1 改成 `Map<projectKey, snapshot>`，daemon attach 自動載入該 cwd 的 snapshot。**對使用者無感**，只是「per-project 設定真的能 work」。詳見 m-sp-full-guide §8。
 
-### `system-prompt-override.md` / `system-prompt-append.md`（一檔換整套人格）
+### `system-prompt-override.md` / `system-prompt-append.md`
 
 兩個 sibling 檔（與 `system-prompt/` 同層）：
 
 ```
-~/.my-agent/system-prompt-override.md   ← 整段替代 default 主 prompt（global）
-~/.my-agent/system-prompt-append.md     ← 追加在最後（global）
+~/.my-agent/system-prompt-override.md   ← 整段替代 default 主 prompt
+~/.my-agent/system-prompt-append.md     ← 追加在最後
 ~/.my-agent/projects/<slug>/system-prompt-override.md  ← per-project
 ~/.my-agent/projects/<slug>/system-prompt-append.md    ← per-project
 ```
 
-- **override.md**：首次啟動會 seed default 完整字串當編輯起點。整段替代後 my-agent 升級不會自動同步 default（要回到 default 就刪檔重啟）。
-- **append.md**：預設不 seed，需要追加時自己建。
-- 空字串 / 純 HTML 註解視為「未啟用」（不傳給 LLM）。
-- 優先序：per-project > global > 無。
-- 適合「桌寵伴侶」、「Linus 風格 reviewer」、「特定領域對話人格」等整套切換。
-- **配套修正**：當 override / `--system-prompt` 啟用時，hardcoded CLI prefix（「You are a my-agent agent...」）會被自動跳過；llamacpp adapter 也會跳過 `streamWithRetryOnEmptyTool` 的 retry nudge，避免人格被預設行為蓋過。
+- **override.md**：首次啟動 seed 完整 default 當編輯起點；空字串 / 純 HTML 註解視為未啟用。
+- **append.md**：預設不 seed，需要時自己建。
+- 優先序：per-project > global > 無；override 與 append 各自獨立。
+- 適合「Linus reviewer」「桌寵貓」等整套人格切換。
 
-### 5 個 Sub-LLM Prompt 外部化（`~/.my-agent/system-prompt/subllm/`）
+操作步驟、優先序總圖、與個別 section 檔的互動：m-sp-full-guide §2 / §3。
+
+### 5 個 Sub-LLM Prompt 外部化
+
+`~/.my-agent/system-prompt/subllm/<id>.md`（per-project 同樣有對應路徑）：
 
 | 檔名 | 用途 | 變數 |
 |------|------|------|
-| `cron-parser.md` | 自然語言 → 5-field cron 翻譯 | — |
-| `memory-selector.md` | 記憶相關性挑選（Sonnet） | `{maxFiles}` |
-| `verification-agent.md` | Verification subagent 系統提示 | `{BASH_TOOL_NAME}` `{WEB_FETCH_TOOL_NAME}` |
-| `tool-use-summary.md` | ≤30 字元 git-commit 風格工具摘要 | — |
-| `buddy-companion.md` | Buddy 伴侶介紹 | `{name}` `{species}` |
+| [`cron-parser.md`](m-sp-full-guide.md#41-cron-parsermd) | NL → 5-field cron | — |
+| [`memory-selector.md`](m-sp-full-guide.md#42-memory-selectormd) | 記憶相關性挑選 | `{maxFiles}` |
+| [`verification-agent.md`](m-sp-full-guide.md#43-verification-agentmd) | Verification subagent | `{BASH_TOOL_NAME}` `{WEB_FETCH_TOOL_NAME}` |
+| [`tool-use-summary.md`](m-sp-full-guide.md#44-tool-use-summarymd) | ≤30 字工具摘要 | — |
+| [`buddy-companion.md`](m-sp-full-guide.md#45-buddy-companionmd) | Buddy 伴侶介紹 | `{name}` `{species}` |
 
-變數用單花括號 `{x}` 格式（snapshot.interpolate 處理；未識別的 key 維持原樣）。
+變數用單花括號 `{x}`（未識別 key 原樣保留）。各條 call site / 改寫範例 / 失效後果見 m-sp-full-guide §4。
 
 **未外部化的 sub-LLM**（見 `docs/prompt-inventory.md` 的「M-SP 狀態」欄）：
 - 已自有外部化機制：SessionMemory template/prompt（`~/.my-agent/session-memory/`）、MagicDocs prompt（`~/.my-agent/magic-docs/`）
-- 動態 builder（不適合純 .md）：agent-tool prompt（200 行 9+ feature flag 分支）、extractMemories 4 條（composition + 6 個工具名插值）—— 留 M-SP-SUBLLM-COMPOSITION milestone
+- 動態 builder（不適合純 .md）：agent-tool prompt（200 行 9+ feature flag 分支）、extractMemories 4 條 → M-SP-SUBLLM-COMPOSITION milestone
 
 ### 桌寵 / 多人格使用模式
 
-完成 M-SP-FULL 後，桌寵與多人格切換的最簡解法：
-
-```bash
-# 桌寵的 daemon 用獨立 cwd
-mkdir -p ~/.my-agent/mascot-workspace
-echo "你是一隻名叫小橘的桌寵貓..." > ~/.my-agent/projects/<mascot-slug>/system-prompt-override.md
-
-# 同時跑 REPL 程式助理（cwd 在專案目錄）+ 桌寵 daemon（cwd 在 mascot-workspace）
-# 兩個 cwd 各自的 snapshot 獨立，零 my-agent 程式碼改動
-```
+「換 cwd → 換 persona」零 my-agent 程式碼改動。完整 7 步流程（規劃 → 算 slug → 寫 override → 加 buddy 覆寫 → 啟 daemon → 驗證隔離 → 加 append 規範）見 m-sp-full-guide §5。
 
 ---
 
-最後更新：M-SP-FULL（2026-05-10）— 加入 per-cwd snapshot + override.md/append.md + 5 sub-LLM 外部化
+最後更新：M-SP-FULL（2026-05-10）— per-cwd snapshot + override.md/append.md + 5 sub-LLM 外部化
