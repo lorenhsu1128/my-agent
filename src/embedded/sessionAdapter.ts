@@ -160,6 +160,9 @@ export class AgentSession extends EventEmitter {
     if (this.disposed) return
     this.disposed = true
     await this.queue.dispose()
+    // close 後解掉所有 listener，避免 InputQueue 內部 timer / pending promise
+    // resolve 時 emitFrame 又觸發到（reviewer S2）
+    this.removeAllListeners()
   }
 
   get state(): QueueState {
@@ -170,7 +173,14 @@ export class AgentSession extends EventEmitter {
     return this.sessionId
   }
 
+  /**
+   * Emit frame 前檢查 disposed — close() 後 InputQueue 的 dispose flow 仍可能
+   * resolve 一個 pending `await runner.run()` 並 emit turnEnd，這時上層
+   * （桌寵 AgentRuntime）已 detach listener，但若 disposed 沒擋，broadcast
+   * 仍會送出 stale frame（reviewer S2）。
+   */
   private emitFrame(frame: Frame): void {
+    if (this.disposed) return
     this.emit('frame', frame)
   }
 }
