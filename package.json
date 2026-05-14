@@ -28,6 +28,8 @@
     "build": "bun run ./scripts/build.ts",
     "build:dev": "bun run ./scripts/build.ts --dev",
     "build:dev:full": "bun run ./scripts/build.ts --dev --feature-set=dev-full",
+    "build:embedded": "bun run ./scripts/build-embedded.ts",
+    "build:embedded:skip-dts": "bun run ./scripts/build-embedded.ts --skip-dts",
     "compile": "bun run ./scripts/build.ts --compile",
     "dev": "bun run ./scripts/dev.ts",
     "dev:raw": "bun run ./src/entrypoints/cli.tsx",

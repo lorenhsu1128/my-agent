@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./dist-embedded/types",
+    "rootDir": "./src",
+    "allowImportingTsExtensions": false,
+    "isolatedDeclarations": false,
+    "ignoreDeprecations": "6.0"
+  },
+  "include": [
+    "src/embedded/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "tests",
+    "scripts",
+    "dist",
+    "dist-embedded"
+  ]
+}
