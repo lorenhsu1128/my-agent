@@ -25,6 +25,7 @@ import {
   isFirstPartyAnthropicBaseUrl,
   queryLlamaCppContextSize,
 } from 'src/utils/model/providers.js'
+import { getLlamaCppConfigSnapshot } from '../../llamacppConfig/loader.js'
 import { getProxyFetchOptions } from 'src/utils/proxy.js'
 import {
   getIsNonInteractiveSession,
@@ -39,6 +40,8 @@ import {
 } from '../../utils/envUtils.js'
 import { createCodexFetch } from './codex-fetch-adapter.js'
 import { createLlamaCppFetch } from './llamacpp-fetch-adapter.js'
+import { createLlamaCppEmbeddedFetch } from './llamacpp-embedded-adapter.js'
+import { decideEmbeddedRouting } from '../../utils/model/embeddedRouting.js'
 
 /**
  * Environment variables for different client types:
@@ -130,6 +133,37 @@ export async function getAnthropicClient({
       // biome-ignore lint/suspicious/noConsole:: debug only
       console.error('[LLAMA_DEBUG] llamacpp branch hit, baseUrl=', llamaCppConfig.baseUrl)
     }
+
+    // M-MASCOT-EMBED Phase 6：判定 embedded vs fetch 路徑。
+    // 桌寵 master toggle ON 時設 MY_AGENT_LLAMACPP_EMBEDDED=1 走 in-process
+    // node-llama-tcq 載入 GGUF 直接推論，不需要外部 llama-server。
+    // 既有 CLI / Bun 路徑無此 env var → 走 fetch adapter 連 baseUrl。
+    const snapshot = getLlamaCppConfigSnapshot()
+    const decision = decideEmbeddedRouting({
+      modelPath: snapshot.server.modelPath,
+      embeddedConfig: {
+        contextSize: snapshot.server.ctxSize,
+        gpu: 'cuda',
+        mmprojPath: snapshot.server.vision?.mmprojPath,
+      },
+    })
+
+    if (decision.useEmbedded && decision.config) {
+      if (process.env.LLAMA_DEBUG) {
+        // biome-ignore lint/suspicious/noConsole:: debug only
+        console.error('[LLAMA_DEBUG] embedded path:', decision.reason, 'modelPath=', decision.config.modelPath)
+      }
+      const embeddedFetch = createLlamaCppEmbeddedFetch({ config: decision.config })
+      return new Anthropic({
+        apiKey: 'llamacpp-embedded-placeholder',
+        maxRetries,
+        timeout: parseInt(process.env.API_TIMEOUT_MS || String(600 * 1000), 10),
+        dangerouslyAllowBrowser: true,
+        fetch: embeddedFetch as unknown as typeof globalThis.fetch,
+        ...(isDebugToStdErr() && { logger: createStderrLogger() }),
+      })
+    }
+
     // 查詢 llama-server 的 /slots 端點取得實際 context size，快取供
     // getContextWindowForModel() 同步讀取 → autocompact 閾值正確
     await queryLlamaCppContextSize(llamaCppConfig.baseUrl)

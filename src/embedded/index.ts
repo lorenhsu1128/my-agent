@@ -36,6 +36,7 @@ import {
   type DaemonBootstrapOptions,
   type DaemonSessionContext,
 } from '../daemon/sessionBootstrap.js'
+import { enableConfigs } from '../utils/config.js'
 import type { Tool } from '../Tool.js'
 import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import type { ClientSource } from '../server/clientRegistry.js'
@@ -141,11 +142,16 @@ export class AgentEmbedded extends EventEmitter {
       }
     }
 
-    // Phase: configDir injection（必須在 bootstrap 之前）
+    // Phase: configDir injection（必須在 enableConfigs / bootstrap 之前）
     reportProgress('configDir', 0.05)
     if (config.configDir) {
       process.env.CLAUDE_CONFIG_DIR = config.configDir
     }
+
+    // Phase: enable config reading（my-agent 內部 getConfig() gate；
+    // CLI 啟動會在 entry 呼叫 enableConfigs()，library 模式需自行觸發。
+    // idempotent — 重複呼叫不影響）
+    enableConfigs()
 
     // Phase: bootstrap daemon context（tools / commands / MCP / AppState）
     reportProgress('bootstrapContext', 0.15)
