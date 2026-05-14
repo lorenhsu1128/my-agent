@@ -113,6 +113,8 @@ bun test                         # 全部測試
 | **REPL MoreRight panel（外部 stub）** | `docs/ui-moreright-panel.md` |
 | **System prompt 客製化** | `docs/customizing-system-prompt.md` |
 | **Prompt 全域索引**（system / sub-LLM / tools / skills / commands） | `docs/prompt-inventory.md` |
+| **桌寵整合**（virtual-assistant-desktop，唯一 mascot 客戶端） | `docs/mascot-integration.md` |
+| **SSH 遠端執行模式**（規劃中，方案 B：stdio bridge） | `docs/ssh-remote-mode.md` |
 
 ## 關鍵 ADR 摘要（活的限制）
 

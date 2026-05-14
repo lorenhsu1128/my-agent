@@ -161,6 +161,14 @@
 | **ReadMcpResource** | 讀 MCP 資源（server + URI） |
 | **MCPTool** | MCP runtime 整合（提示在 runtime 覆寫） |
 
+**外部 MCP server（已知客戶端）**：
+
+| 來源 | server | 暴露 tool |
+|---|---|---|
+| virtual-assistant-desktop（桌寵；my-agent 唯一 mascot 客戶端） | `MascotMcpServer`（HTTP，per-request stateless，由桌寵自架；用 `cli mcp add --scope user --transport http` 註冊到 `~/.my-agent/mcp.json`） | `set_expression` / `play_animation` / `say` / `look_at_screen` |
+
+整合詳情見 `docs/mascot-integration.md`。
+
 ### 4.7 通訊 / UI
 
 | 工具 | 說明 |

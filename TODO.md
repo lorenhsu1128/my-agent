@@ -2067,7 +2067,7 @@
 
 ### my-agent 端後續支援（待辦，從整合過程浮出）
 - [ ] M-MASCOT-FU-1 修 Skill router 對 mascot MCP tool 的處理：本機 qwen3.5-9b-neo 會把 mascot MCP tool 包進 Skill meta-tool，導致 router 不認；需研究是否 router 端要把 MCP tool 從 Skill 包裝中拆出來，或在 system prompt / tool 描述上標註不要包
-- [ ] M-MASCOT-FU-2 docs/ 加 mascot 整合指南（連結到 desktop repo 的 `AGENT_INTEGRATION_PLAN.md` + `AGENT.md`），更新 `docs/prompt-inventory.md` 列出 mascot MCP tool 來源
+- [x] M-MASCOT-FU-2 docs/ 加 mascot 整合指南（`docs/mascot-integration.md`，連結 desktop repo 的 `AGENT_INTEGRATION_PLAN.md`），更新 `docs/prompt-inventory.md` § 4.6 列出 mascot MCP tool 來源、CLAUDE.md 文件索引加入口（2026-05-10）
 
 ### M-MASCOT-3 進階互動（未啟動，獨立 milestone）
 - [ ] M-MASCOT-3-1 語音 pipeline（mic → STT → my-agent → TTS → viseme 對嘴）
@@ -3838,3 +3838,47 @@
 - 2026-05-10 16:52: Session 結束 | 進度：829/939 任務 | 4df2409 docs(m-sp-full): 新增詳細使用手冊 + 濃縮 customizing 章節
 
 - 2026-05-10 16:53: Session 結束 | 進度：829/939 任務 | 4df2409 docs(m-sp-full): 新增詳細使用手冊 + 濃縮 customizing 章節
+
+- 2026-05-10 17:12: Session 結束 | 進度：839/949 任務 | 6810b8a test(buddy): 修 subllm-externalization 測試 + 勾選 M-BUDDY-RIP
+
+- 2026-05-10 17:17: Session 結束 | 進度：839/949 任務 | 6810b8a test(buddy): 修 subllm-externalization 測試 + 勾選 M-BUDDY-RIP
+
+- 2026-05-10 17:23: Session 結束 | 進度：839/949 任務 | 6810b8a test(buddy): 修 subllm-externalization 測試 + 勾選 M-BUDDY-RIP
+
+- 2026-05-10 18:01: Session 結束 | 進度：840/949 任務 | f348eca refactor(memdir): 移除 7 個 @deprecated legacy 常數 export
+
+- 2026-05-10 18:08: Session 結束 | 進度：840/949 任務 | f348eca refactor(memdir): 移除 7 個 @deprecated legacy 常數 export
+
+- 2026-05-10 18:12: Session 結束 | 進度：840/949 任務 | f348eca refactor(memdir): 移除 7 個 @deprecated legacy 常數 export
+
+- 2026-05-10 18:15: Session 結束 | 進度：840/949 任務 | f348eca refactor(memdir): 移除 7 個 @deprecated legacy 常數 export
+
+- 2026-05-10 18:18: Session 結束 | 進度：840/949 任務 | f348eca refactor(memdir): 移除 7 個 @deprecated legacy 常數 export
+
+- 2026-05-10 18:47: Session 結束 | 進度：840/949 任務 | 99b644b refactor(config): 移除 Claude Code legacy migration 與 droppedKeys 機制
+
+- 2026-05-10 18:54: Session 結束 | 進度：840/949 任務 | 99b644b refactor(config): 移除 Claude Code legacy migration 與 droppedKeys 機制
+
+- 2026-05-10 18:59: Session 結束 | 進度：840/949 任務 | 99b644b refactor(config): 移除 Claude Code legacy migration 與 droppedKeys 機制
+
+- 2026-05-10 19:00: Session 結束 | 進度：840/949 任務 | 99b644b refactor(config): 移除 Claude Code legacy migration 與 droppedKeys 機制
+
+- 2026-05-10 19:23: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
+
+- 2026-05-11 11:19: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
+
+- 2026-05-11 11:27: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
+
+- 2026-05-11 11:38: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
+
+- 2026-05-11 11:43: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
+
+- 2026-05-11 11:49: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
+
+- 2026-05-11 11:52: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
+
+- 2026-05-11 11:56: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
+
+- 2026-05-11 12:03: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
+
+- 2026-05-11 12:55: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
