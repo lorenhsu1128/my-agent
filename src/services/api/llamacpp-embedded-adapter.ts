@@ -22,6 +22,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type {EmbeddedRoutingConfig} from "../../utils/model/embeddedRouting.js";
+import {
+    translateRequestToOpenAI,
+    translateChatCompletionToAnthropic,
+    translateOpenAIStreamToAnthropic,
+    sseGeneratorToStream,
+    mkMsgId,
+} from "./llamacpp-fetch-adapter.js";
 
 interface OpenAIImageUrl {
     type: "image_url";
@@ -316,55 +323,88 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
     const fetchFn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         if (!init || !init.body) return new Response("missing body", {status: 400});
 
-        const body: OpenAIChatRequest = JSON.parse(
-            typeof init.body === "string" ? init.body : new TextDecoder().decode(init.body as ArrayBuffer)
-        );
+        // 桌寵 / my-agent 透過 Anthropic SDK 注入 fetch，body 是 Anthropic 格式
+        // （/v1/messages）。沿用 fetch-adapter 的翻譯：Anthropic→OpenAI 入、
+        // OpenAI→Anthropic 出，讓 SDK 拿到符合預期的 Anthropic SSE / JSON。
+        // 修正 v0.4：原先直接把 body 當 OpenAI 解析造成 SDK 收到 OpenAI shape →
+        // 內部 read response.usage.input_tokens crash → assistant text 顯示
+        // 「Cannot read properties of undefined (reading 'input_tokens')」。
+        const rawBodyText: string = typeof init.body === "string"
+            ? init.body
+            : new TextDecoder().decode(init.body as ArrayBuffer);
+        const anthropicBody = JSON.parse(rawBodyText) as Record<string, unknown>;
 
         const state = await ensure(opts.config);
-        const modelLabel = body.model ?? "embedded";
+        const reportedModel = (typeof anthropicBody.model === "string" && anthropicBody.model) || "embedded";
+
+        // Anthropic → OpenAI 翻譯（含 messages / tools / system）
+        const openaiBody = translateRequestToOpenAI(
+            anthropicBody as Parameters<typeof translateRequestToOpenAI>[0],
+            reportedModel,
+            {vision: state.mtmdCtx != null},
+        );
+
+        const body: OpenAIChatRequest = openaiBody as unknown as OpenAIChatRequest;
+        const modelLabel = reportedModel;
+        const isStream = anthropicBody.stream === true;
 
         const wantsMedia = hasMediaContent(body.messages);
         const mediaAvailable = state.mtmdCtx != null;
 
-        // 非 streaming：等完整 reply 再回 JSON
+        // 非 streaming：等完整 reply 再回 OpenAI JSON
         const generateReplyBlocking = async (): Promise<string> => {
             if (wantsMedia && mediaAvailable) return await runVisionPath(state, body);
             const userMsg = lastUserMessage(body.messages);
             return await state.session.prompt(userMsg, {
-                maxTokens: body.max_tokens ?? 256,
+                maxTokens: (body.max_tokens ?? (anthropicBody.max_tokens as number)) ?? 256,
                 temperature: body.temperature
             });
         };
 
-        // Streaming：逐 token push SSE chunk（onTextChunk callback）
+        // Streaming：逐 token push OpenAI SSE chunk
         const generateReplyStreaming = async (
             onChunk: (text: string) => void
         ): Promise<string> => {
             if (wantsMedia && mediaAvailable) return await runVisionPath(state, body, onChunk);
             const userMsg = lastUserMessage(body.messages);
             return await state.session.prompt(userMsg, {
-                maxTokens: body.max_tokens ?? 256,
+                maxTokens: (body.max_tokens ?? (anthropicBody.max_tokens as number)) ?? 256,
                 temperature: body.temperature,
                 onTextChunk: onChunk
             });
         };
 
-        if (!body.stream) {
+        const adapterMode: "vanilla" | "tcq" = "tcq";
+
+        if (!isStream) {
             const reply = await generateReplyBlocking();
-            return new Response(JSON.stringify({
+            const openaiJson = {
                 id: "embedded-" + Date.now(),
-                object: "chat.completion",
+                object: "chat.completion" as const,
                 created: Math.floor(Date.now() / 1000),
                 model: modelLabel,
                 choices: [{
                     index: 0,
-                    message: {role: "assistant", content: reply},
-                    finish_reason: "stop"
-                }]
-            }), {status: 200, headers: {"content-type": "application/json"}});
+                    message: {role: "assistant" as const, content: reply},
+                    finish_reason: "stop" as const,
+                }],
+                usage: {prompt_tokens: 0, completion_tokens: 0, total_tokens: 0},
+            };
+            // OpenAI ChatCompletion → Anthropic Message
+            const anthropicJson = translateChatCompletionToAnthropic(
+                openaiJson as Parameters<typeof translateChatCompletionToAnthropic>[0],
+                modelLabel,
+                adapterMode,
+            );
+            return new Response(JSON.stringify(anthropicJson), {
+                status: 200,
+                headers: {"content-type": "application/json"},
+            });
         }
 
-        const stream = new ReadableStream({
+        // Stream 模式：生 OpenAI SSE chunks → 餵 translateOpenAIStreamToAnthropic
+        // → 包成 Anthropic SSE Response。
+        const openaiSseStream = new ReadableStream<Uint8Array>({
             async start(controller) {
                 const enc = new TextEncoder();
                 try {
@@ -379,10 +419,20 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
                 }
             }
         });
-
-        return new Response(stream, {
+        const anthropicSse = translateOpenAIStreamToAnthropic(
+            openaiSseStream,
+            modelLabel,
+            mkMsgId(),
+            "turn",
+            adapterMode,
+        );
+        return new Response(sseGeneratorToStream(anthropicSse), {
             status: 200,
-            headers: {"content-type": "text/event-stream", "cache-control": "no-cache"}
+            headers: {
+                "content-type": "text/event-stream",
+                "cache-control": "no-cache",
+                connection: "keep-alive",
+            },
         });
     };
 

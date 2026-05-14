@@ -224,7 +224,7 @@ const FINISH_TO_STOP: Record<string, string> = {
   content_filter: 'end_turn',
 }
 
-function mkMsgId(): string {
+export function mkMsgId(): string {
   return `msg_llamacpp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
 }
 
@@ -1790,7 +1790,7 @@ export async function* streamWithRetryOnEmptyTool(
   }
 }
 
-function sseGeneratorToStream(
+export function sseGeneratorToStream(
   gen: AsyncGenerator<string>,
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder()
