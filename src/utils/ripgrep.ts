@@ -560,7 +560,9 @@ const testRipgrepOnFirstUse = memoize(async (): Promise<void> => {
     let test: { code: number; stdout: string }
 
     // For embedded ripgrep, use Bun.spawn with argv0
-    if (config.argv0) {
+    // M-MASCOT-EMBED Phase 4：embedded（Node runtime）下 config.argv0 不會被設，
+    // 但加 typeof Bun guard 雙重保險，避免 bundle 在 Node 跑時意外進入這條路徑。
+    if (config.argv0 && typeof Bun !== 'undefined') {
       // Only Bun embeds ripgrep.
       // eslint-disable-next-line custom-rules/require-bun-typeof-guard
       const proc = Bun.spawn([config.command, '--version'], {

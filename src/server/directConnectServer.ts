@@ -112,7 +112,28 @@ function parseCwdFromRequest(req: Request): string | undefined {
   return undefined
 }
 
+/**
+ * Public entry — runtime 偵測 Bun / Node 後分派到對應實作。
+ *
+ * - Bun runtime（CLI / `bun run cli daemon start`）→ 走下方 Bun.serve 版（原邏輯保留）
+ * - Node runtime（virtual-assistant-desktop Electron embedded）→ 走
+ *   `nodeDirectConnectServer.ts` 的 `http` + `ws` 版（行為協議完全一致）
+ *
+ * 兩條路徑回傳的 `DirectConnectServerHandle` 介面完全相同，呼叫端不感知差異。
+ */
 export async function startDirectConnectServer(
+  opts: DirectConnectServerOptions,
+): Promise<DirectConnectServerHandle> {
+  if (typeof Bun === 'undefined') {
+    const { startNodeDirectConnectServer } = await import(
+      './nodeDirectConnectServer.js'
+    )
+    return startNodeDirectConnectServer(opts)
+  }
+  return startBunDirectConnectServer(opts)
+}
+
+async function startBunDirectConnectServer(
   opts: DirectConnectServerOptions,
 ): Promise<DirectConnectServerHandle> {
   const host = opts.host ?? DEFAULT_HOST
