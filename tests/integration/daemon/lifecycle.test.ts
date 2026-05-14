@@ -1,7 +1,7 @@
 /**
  * M-DAEMON-1：daemon 基礎設施測試（pid.json / token / heartbeat / stale 偵測）。
  *
- * 這組測試全部在 tmp 目錄跑，不碰真實 `~/.my-agent/`。
+ * 這組測試全部在 tmp 目錄跑，不碰真實 `~/.virtual-assistant-desktop/`。
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'

@@ -24,7 +24,7 @@ type ShellInfo = {
 function detectShell(): ShellInfo | null {
   const shell = process.env.SHELL || ''
   const home = homedir()
-  const claudeDir = join(home, '.my-agent')
+  const claudeDir = join(home, '.virtual-assistant-desktop')
 
   if (shell.endsWith('/zsh') || shell.endsWith('/zsh.exe')) {
     const cacheFile = join(claudeDir, 'completion.zsh')
@@ -134,7 +134,7 @@ export async function setupShellCompletion(theme: ThemeName): Promise<string> {
 }
 
 /**
- * Regenerate cached shell completion scripts in ~/.my-agent/.
+ * Regenerate cached shell completion scripts in ~/.virtual-assistant-desktop/.
  * Called after `claude update` so completions stay in sync with the new binary.
  */
 export async function regenerateCompletionCache(): Promise<void> {

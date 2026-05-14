@@ -2,7 +2,7 @@
  * System Prompt Externalization — Bundled 預設文字
  *
  * 這些是從 src/constants/prompts.ts 搬出來的預設字串。
- * 首次啟動時會被 seed.ts 寫入 ~/.my-agent/system-prompt/；
+ * 首次啟動時會被 seed.ts 寫入 ~/.virtual-assistant-desktop/system-prompt/；
  * 使用者刻意刪除個別檔案時也會用這裡的預設作為 fallback。
  *
  * M-SP-1 僅搬了 3 個最單純的靜態段：
@@ -342,7 +342,7 @@ export function getBundledDefault(id: SectionId): string | null {
 /**
  * Seed 時寫入目錄的 README.md 內容。表格列出每個 section。
  */
-export const README_TEMPLATE = `# ~/.my-agent/system-prompt/
+export const README_TEMPLATE = `# ~/.virtual-assistant-desktop/system-prompt/
 
 這個目錄存放 **my-agent 的 system prompt 各個區段**，以 \`.md\` 檔的形式讓你可以直接編輯。
 
@@ -350,8 +350,8 @@ export const README_TEMPLATE = `# ~/.my-agent/system-prompt/
 
 - **首次啟動**：若此目錄不存在，my-agent 會自動建立並寫入一整套預設檔案（含本 README）。
 - **解析順序**（每個檔案獨立判斷）：
-  1. \`~/.my-agent/projects/<slug>/system-prompt/<檔名>\` — 專案層覆蓋（若存在）
-  2. \`~/.my-agent/system-prompt/<檔名>\` — 全域層（就是這個目錄）
+  1. \`~/.virtual-assistant-desktop/projects/<slug>/system-prompt/<檔名>\` — 專案層覆蓋（若存在）
+  2. \`~/.virtual-assistant-desktop/system-prompt/<檔名>\` — 全域層（就是這個目錄）
   3. 程式內建預設 — 最終 fallback（使用者刻意刪除個別檔案時）
 - **完全取代，不合併**：檔案存在就整段採用，不會與內建預設合併。
 - **編輯後生效**：需**開新 session** 才會套用（每 session 啟動時凍結快照）。
@@ -359,13 +359,13 @@ export const README_TEMPLATE = `# ~/.my-agent/system-prompt/
 ## 復原方式
 
 - 想讓某段回到預設 → 刪掉該檔案（下次啟動不會補寫）
-- 想全部重置 → \`rm -rf ~/.my-agent/system-prompt && <重新啟動>\`，會重新 seed
+- 想全部重置 → \`rm -rf ~/.virtual-assistant-desktop/system-prompt && <重新啟動>\`，會重新 seed
 
 ## Per-project 覆蓋
 
 \`\`\`bash
-mkdir -p ~/.my-agent/projects/<專案 slug>/system-prompt
-cp ~/.my-agent/system-prompt/tone-style.md ~/.my-agent/projects/<專案 slug>/system-prompt/
+mkdir -p ~/.virtual-assistant-desktop/projects/<專案 slug>/system-prompt
+cp ~/.virtual-assistant-desktop/system-prompt/tone-style.md ~/.virtual-assistant-desktop/projects/<專案 slug>/system-prompt/
 # 編輯該專案的 tone-style.md，只影響該專案
 \`\`\`
 
@@ -374,16 +374,16 @@ cp ~/.my-agent/system-prompt/tone-style.md ~/.my-agent/projects/<專案 slug>/sy
 除了上述「個別 section .md」之外，還可以用兩個 sibling 檔（與本目錄同層）做整段替換或追加：
 
 \`\`\`
-~/.my-agent/system-prompt-override.md   ← 整段替代 default 主 prompt（global）
-~/.my-agent/system-prompt-append.md     ← 追加在最後（global）
-~/.my-agent/projects/<slug>/system-prompt-override.md  ← per-project 版
-~/.my-agent/projects/<slug>/system-prompt-append.md    ← per-project 版
+~/.virtual-assistant-desktop/system-prompt-override.md   ← 整段替代 default 主 prompt（global）
+~/.virtual-assistant-desktop/system-prompt-append.md     ← 追加在最後（global）
+~/.virtual-assistant-desktop/projects/<slug>/system-prompt-override.md  ← per-project 版
+~/.virtual-assistant-desktop/projects/<slug>/system-prompt-append.md    ← per-project 版
 \`\`\`
 
 - **override.md**：首次啟動會 **自動 seed** 一份「當下 default 拼出來」的內容當編輯起點。
   - 編輯後生效需新 session。
   - 與 \`customSystemPrompt\` 鉤子等價：整個主 prompt 被你寫的內容取代（但 user/memory/env 動態段仍由程式注入）。
-  - 想回到 default → **刪掉 override.md**（不會再 seed，需先 \`rm -rf ~/.my-agent/system-prompt-override.md\` 並重啟才會重 seed）。
+  - 想回到 default → **刪掉 override.md**（不會再 seed，需先 \`rm -rf ~/.virtual-assistant-desktop/system-prompt-override.md\` 並重啟才會重 seed）。
   - ⚠️ **漂移警告**：my-agent 升級若改了 bundled default，你的 override.md **不會自動跟進**。要拿最新 default 就刪檔重啟。
 - **append.md**：**預設不 seed**（避免空檔誤觸 loader「空字串覆蓋」規約），需要追加時自己建。
   - 與 \`appendSystemPrompt\` 鉤子等價：內容接在 system prompt 最後。
@@ -393,8 +393,8 @@ cp ~/.my-agent/system-prompt/tone-style.md ~/.my-agent/projects/<專案 slug>/sy
 
 \`\`\`bash
 # Per-project 範例（讓 ~/projects/cat-mascot 啟動時用桌寵人格）
-mkdir -p ~/.my-agent/projects/-Users-loren-projects-cat-mascot
-echo "你是一隻在電腦角落的橘貓..." > ~/.my-agent/projects/-Users-loren-projects-cat-mascot/system-prompt-override.md
+mkdir -p ~/.virtual-assistant-desktop/projects/-Users-loren-projects-cat-mascot
+echo "你是一隻在電腦角落的橘貓..." > ~/.virtual-assistant-desktop/projects/-Users-loren-projects-cat-mascot/system-prompt-override.md
 \`\`\`
 
 ## 檔案清單

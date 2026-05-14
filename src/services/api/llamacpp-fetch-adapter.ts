@@ -1892,7 +1892,7 @@ export function createLlamaCppFetch(
         const path = require('path')
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const os = require('os')
-        const evidenceDir = path.join(os.homedir(), '.my-agent', 'corruption-evidence')
+        const evidenceDir = path.join(os.homedir(), '.virtual-assistant-desktop', 'corruption-evidence')
         fs.mkdirSync(evidenceDir, { recursive: true })
         const ts = Date.now()
         const idx = _rawBodyText.indexOf('\x00')
@@ -1963,7 +1963,7 @@ export function createLlamaCppFetch(
       } catch {/* ignore */}
     }
     // M-PROMPT-CORRUPTION-HUNT auto-detect：unconditional check for C0 byte
-    // before sanitize；命中即 dump 證據到 ~/.my-agent/corruption-evidence/
+    // before sanitize；命中即 dump 證據到 ~/.virtual-assistant-desktop/corruption-evidence/
     // （無需 env var）。配合 sanitize 的 bandaid，user 不會看到 user-facing crash，
     // 但有資料供 root cause 調查。
     {
@@ -1979,7 +1979,7 @@ export function createLlamaCppFetch(
           const path = require('path')
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const os = require('os')
-          const evidenceDir = path.join(os.homedir(), '.my-agent', 'corruption-evidence')
+          const evidenceDir = path.join(os.homedir(), '.virtual-assistant-desktop', 'corruption-evidence')
           fs.mkdirSync(evidenceDir, { recursive: true })
           const ts = Date.now()
           // 找第一個 NULL byte 位置 + 周圍 80 chars

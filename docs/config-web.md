@@ -7,7 +7,7 @@
 
 M-WEB Web UI 嵌入 daemon 的設定。
 
-**來源優先序**：env var override → `~/.my-agent/web.jsonc` → schema default。
+**來源優先序**：env var override → `~/.virtual-assistant-desktop/web.jsonc` → schema default。
 
 
 ## Env 變數一覽

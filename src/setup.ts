@@ -289,7 +289,7 @@ export async function setup(
     clearMemoryFileCaches()
     // Settings cache was populated in init() (via applySafeConfigEnvironmentVariables)
     // and again at captureHooksConfigSnapshot() above, both from the original dir's
-    // .my-agent/settings.json. Re-read from the worktree and re-capture hooks.
+    // .virtual-assistant-desktop/settings.json. Re-read from the worktree and re-capture hooks.
     updateHooksConfigSnapshot()
   }
 
@@ -311,9 +311,9 @@ export async function setup(
     await loadSystemPromptSnapshot()
     // M-SP-FULL Phase 2：REPL 路徑用 process.cwd() 載入 per-project override / append
     // （process 啟動 cwd 通常就是專案目錄）。main.tsx 用同一 cwd 取，保證 cache 命中
-    // 並讀到 ~/.my-agent/projects/<slug>/system-prompt-override.md。
+    // 並讀到 ~/.virtual-assistant-desktop/projects/<slug>/system-prompt-override.md。
     await loadProjectPromptOverrides(process.cwd())
-    // M-LLAMA-CFG：首次啟動種出 ~/.my-agent/llamacpp.jsonc + 載入 snapshot。
+    // M-LLAMA-CFG：首次啟動種出 ~/.virtual-assistant-desktop/llamacpp.jsonc + 載入 snapshot。
     // 同樣 await；缺 / 壞都走 DEFAULT_LLAMACPP_CONFIG。
     await seedLlamaCppConfigIfMissing()
     await loadLlamaCppConfigSnapshot()

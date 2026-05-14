@@ -8,7 +8,7 @@
  * - Track and update marketplace configurations
  *
  * File structure managed by this module:
- * ~/.my-agent/
+ * ~/.virtual-assistant-desktop/
  *   └── plugins/
  *       ├── known_marketplaces.json    # Configuration of all known marketplaces
  *       └── marketplaces/              # Cache directory for marketplace data
@@ -239,7 +239,7 @@ export function saveMarketplaceToSettings(
 /**
  * Load known marketplaces configuration from disk
  *
- * Reads the configuration file at ~/.my-agent/plugins/known_marketplaces.json
+ * Reads the configuration file at ~/.virtual-assistant-desktop/plugins/known_marketplaces.json
  * which contains a mapping of marketplace names to their sources and metadata.
  *
  * Example configuration file content:
@@ -247,12 +247,12 @@ export function saveMarketplaceToSettings(
  * {
  *   "official-marketplace": {
  *     "source": { "source": "url", "url": "https://example.com/marketplace.json" },
- *     "installLocation": "/Users/me/.my-agent/plugins/marketplaces/official-marketplace.json",
+ *     "installLocation": "/Users/me/.virtual-assistant-desktop/plugins/marketplaces/official-marketplace.json",
  *     "lastUpdated": "2024-01-15T10:30:00.000Z"
  *   },
  *   "company-plugins": {
  *     "source": { "source": "github", "repo": "mycompany/plugins" },
- *     "installLocation": "/Users/me/.my-agent/plugins/marketplaces/company-plugins",
+ *     "installLocation": "/Users/me/.virtual-assistant-desktop/plugins/marketplaces/company-plugins",
  *     "lastUpdated": "2024-01-14T15:45:00.000Z"
  *   }
  * }
@@ -318,7 +318,7 @@ export async function loadKnownMarketplacesConfigSafe(): Promise<KnownMarketplac
 /**
  * Save known marketplaces configuration to disk
  *
- * Writes the configuration to ~/.my-agent/plugins/known_marketplaces.json,
+ * Writes the configuration to ~/.virtual-assistant-desktop/plugins/known_marketplaces.json,
  * creating the directory structure if it doesn't exist.
  *
  * @param config - The marketplace configuration to save
@@ -1417,7 +1417,7 @@ async function parseFileWithSchema<T>(
  * to match the marketplace's actual name from the manifest.
  *
  * Cache structure:
- * ~/.my-agent/plugins/marketplaces/
+ * ~/.virtual-assistant-desktop/plugins/marketplaces/
  *   ├── official-marketplace.json     # From URL source
  *   ├── github-marketplace/          # From GitHub/Git source
  *   │   └── .claude-plugin/
@@ -1770,7 +1770,7 @@ async function loadAndCacheMarketplace(
  * Add a marketplace source to the known marketplaces
  *
  * The marketplace is fetched, validated, and cached locally.
- * The configuration is saved to ~/.my-agent/plugins/known_marketplaces.json.
+ * The configuration is saved to ~/.virtual-assistant-desktop/plugins/known_marketplaces.json.
  *
  * @param source - MarketplaceSource object representing the marketplace source.
  *                 Callers should parse user input into MarketplaceSource format

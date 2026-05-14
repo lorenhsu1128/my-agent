@@ -22,7 +22,7 @@ export function getLocalClaudePath(): string {
  */
 export function isRunningFromLocalInstallation(): boolean {
   const execPath = process.argv[1] || ''
-  return execPath.includes('/.my-agent/local/node_modules/')
+  return execPath.includes('/.virtual-assistant-desktop/local/node_modules/')
 }
 
 /**

@@ -4,9 +4,9 @@ My Agent 的記憶分三層，彼此互補：
 
 | 層級 | 機制 | 檔案位置 | 用途 |
 |---|---|---|---|
-| **Session Recall** | SQLite FTS5 索引 | `~/.my-agent/session-index.db` | 跨 session 搜尋歷史對話 |
+| **Session Recall** | SQLite FTS5 索引 | `~/.virtual-assistant-desktop/session-index.db` | 跨 session 搜尋歷史對話 |
 | **Dynamic Memory Prefetch** | Query-driven 注入 | 無 persist | 每次 query 自動附上最相關的過去訊息 |
-| **MemoryTool + memdir** | 結構化 markdown | `~/.my-agent/memory/` | 長期偏好、計劃、專案、待辦 |
+| **MemoryTool + memdir** | 結構化 markdown | `~/.virtual-assistant-desktop/memory/` | 長期偏好、計劃、專案、待辦 |
 | **User Modeling** | 雙層 markdown | `USER.md`（global + project） | 使用者人格 / 偏好 / 工作脈絡 |
 
 ---
@@ -116,12 +116,12 @@ Prefetch 內部要決定「目前的 query 該抓哪幾個 memory 檔」— 這�
 
 ## MemoryTool + memdir
 
-結構化長期記憶，存在 `~/.my-agent/memory/` 下。
+結構化長期記憶，存在 `~/.virtual-assistant-desktop/memory/` 下。
 
 ### 四型檔案（memdir）
 
 ```
-~/.my-agent/memory/
+~/.virtual-assistant-desktop/memory/
 ├── preferences/       # 使用者偏好（例：「寫 code 時總是加 type hint」）
 ├── plans/             # 進行中計劃（例：「M-LLAMA-CFG 設計決策」）
 ├── projects/          # 專案級事實（例：「專案 X 用 Drizzle ORM」）
@@ -154,7 +154,7 @@ Agent 用 `MemoryTool` 工具讀寫：
 
 ### 使用者可以直接編輯
 
-`~/.my-agent/memory/` 下都是純 markdown，可以用任何編輯器開起來改。
+`~/.virtual-assistant-desktop/memory/` 下都是純 markdown，可以用任何編輯器開起來改。
 Agent 下次讀取就會拿到新的內容。
 
 ---
@@ -164,8 +164,8 @@ Agent 下次讀取就會拿到新的內容。
 專門給 *使用者人格* 的記憶層，比 memdir 更權威。靈感來自雙層設計：
 
 ```
-~/.my-agent/USER.md                      # 全域人格
-~/.my-agent/projects/<slug>/USER.md      # per-project 覆寫（可選）
+~/.virtual-assistant-desktop/USER.md                      # 全域人格
+~/.virtual-assistant-desktop/projects/<slug>/USER.md      # per-project 覆寫（可選）
 ```
 
 ### 內容範例
@@ -236,7 +236,7 @@ Dynamic Prefetch / MemoryTool / User Modeling）皆預設啟用。
 
 ### SessionSearch 找不到東西
 - 檢查索引：`bun scripts/rebuild-session-index.ts`
-- 確認 session JSONL 存在於 `~/.my-agent/projects/<slug>/sessions/`
+- 確認 session JSONL 存在於 `~/.virtual-assistant-desktop/projects/<slug>/sessions/`
 - 中文查詢失敗：改用 3 字以上的關鍵片段（trigram 最短 3）
 
 ### MemoryTool 寫入被拒絕
@@ -251,7 +251,7 @@ Dynamic Prefetch / MemoryTool / User Modeling）皆預設啟用。
 ### 記憶檔案太多
 memdir 不做自動清理 — 你要自己管。簡單做法：
 ```bash
-ls -lh ~/.my-agent/memory/**/*.md | sort -k5 -h
+ls -lh ~/.virtual-assistant-desktop/memory/**/*.md | sort -k5 -h
 ```
 看看哪些檔案大、舊、可以刪。或者跟 agent 說「幫我整理 memdir」。
 

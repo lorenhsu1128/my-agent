@@ -110,7 +110,7 @@ export const getGitStatus = memoize(async (): Promise<string | null> => {
         const p = require('path')
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const os = require('os')
-        const dir = p.join(os.homedir(), '.my-agent', 'corruption-evidence')
+        const dir = p.join(os.homedir(), '.virtual-assistant-desktop', 'corruption-evidence')
         fs.mkdirSync(dir, { recursive: true })
         const ts = Date.now()
         fs.writeFileSync(

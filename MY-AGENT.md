@@ -79,8 +79,8 @@ bun run dev                      # 直接跑 src/entrypoints/cli.tsx
 - ADR-003：新功能不使用 feature flag — 直接啟用
 - ADR-005：provider 內部做格式轉譯（OpenAI SSE → Anthropic `stream_event`），保持 `QueryEngine.ts` 與 `StreamingToolExecutor.ts` 零修改
 - ADR-007：`@anthropic-ai` 套件內化，vendor `.ts` 檔，透過 paths 映射，既有 import 不需修改
-- ADR-008：29 段 system prompt 外部化至 `~/.my-agent/system-prompt/*.md`，per-project > global > bundled 三層解析
-- ADR-009 / ADR-010：llamacpp ctx 偵測復原 + 設定統一到 `~/.my-agent/llamacpp.json`
+- ADR-008：29 段 system prompt 外部化至 `~/.virtual-assistant-desktop/system-prompt/*.md`，per-project > global > bundled 三層解析
+- ADR-009 / ADR-010：llamacpp ctx 偵測復原 + 設定統一到 `~/.virtual-assistant-desktop/llamacpp.json`
 - ADR-011：Browser 走 puppeteer-core（不走 playwright-core，bun + Windows 不相容）
 - ADR-012：Daemon 採 Path A in-process QueryEngine 整合（非 Path B subprocess）
 - ADR-013：單 daemon 多 project Discord gateway（B-1 全域 turn mutex + chdir 序列化）

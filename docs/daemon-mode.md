@@ -47,7 +47,7 @@ my-agent daemon start
 三個管道（任擇）：
 
 ```bash
-# 方法 1：CLI subcommand（持久寫入 ~/.my-agent/.claude.json）
+# 方法 1：CLI subcommand（持久寫入 ~/.virtual-assistant-desktop/.claude.json）
 my-agent daemon autostart off
 my-agent daemon autostart on
 my-agent daemon autostart status   # 顯示目前設定
@@ -74,7 +74,7 @@ MY_AGENT_NO_DAEMON_AUTOSTART=1 my-agent
 | `my-agent daemon logs [-f]` | 印 daemon.log（JSON 行）；`-f` 類似 tail -f。 |
 | `my-agent daemon autostart on\|off\|status` | 切換「REPL 首次開啟時自動啟動 daemon」的行為（持久化到 config）。 |
 
-所有子命令吃 `CLAUDE_CONFIG_DIR` env var（預設 `~/.my-agent/`）來決定
+所有子命令吃 `CLAUDE_CONFIG_DIR` env var（預設 `~/.virtual-assistant-desktop/`）來決定
 pid.json / daemon.token / daemon.log 的位置。
 
 ---
@@ -149,7 +149,7 @@ cwd 被兩個 daemon 誤啟用（pidfile 只管 per-user）。
 
 ## Cron Scheduler 行為
 
-Cron（`~/.my-agent/scheduled_tasks.json`）由 daemon **獨占跑**：
+Cron（`~/.virtual-assistant-desktop/scheduled_tasks.json`）由 daemon **獨占跑**：
 
 - daemon alive：daemon 每秒 tick scheduler；到時間 fire → 塞 background
   intent 到 InputQueue（FIFO，不打斷 interactive turn）。所有 attached
@@ -197,7 +197,7 @@ interrupt grace 3s 逾時 force-clear（防 runner 卡死）。
 - 先 `my-agent daemon status` 看是否真有活 daemon。
 - 若 pid.json 顯示 stale（heartbeat 超過 30s），下次 `daemon start` 會自動
   take-over。
-- 強制清：刪掉 `~/.my-agent/daemon.pid.json` + `~/.my-agent/<projectDir>/.daemon.lock`。
+- 強制清：刪掉 `~/.virtual-assistant-desktop/daemon.pid.json` + `~/.virtual-assistant-desktop/<projectDir>/.daemon.lock`。
 
 ### REPL badge 卡在 `reconnecting`
 - WS 連 daemon 失敗但 pidfile 還在；daemon 程序可能 hang。

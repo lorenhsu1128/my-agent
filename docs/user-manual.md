@@ -287,7 +287,7 @@ bash scripts/llama/verify.sh    # 冒煙測試
 
 #### 統一設定檔
 
-所有設定集中於 `~/.my-agent/llamacpp.jsonc`：
+所有設定集中於 `~/.virtual-assistant-desktop/llamacpp.jsonc`：
 
 ```json
 {
@@ -390,12 +390,12 @@ Agent 自帶 `SessionSearch` 工具，全文搜尋所有歷史：
 
 ### MemoryTool
 
-結構化長期記憶，存在 `~/.my-agent/memory/` 下。
+結構化長期記憶，存在 `~/.virtual-assistant-desktop/memory/` 下。
 
 #### 四型檔案
 
 ```
-~/.my-agent/memory/
+~/.virtual-assistant-desktop/memory/
 ├── preferences/       # 使用者偏好
 ├── plans/             # 進行中計劃
 ├── projects/          # 專案級事實
@@ -423,8 +423,8 @@ Agent 用 `MemoryTool` 讀寫：
 專門給使用者人格的記憶層，雙層設計：
 
 ```
-~/.my-agent/USER.md                      # 全域人格
-~/.my-agent/projects/<slug>/USER.md      # per-project 覆寫
+~/.virtual-assistant-desktop/USER.md                      # 全域人格
+~/.virtual-assistant-desktop/projects/<slug>/USER.md      # per-project 覆寫
 ```
 
 #### 內容範例
@@ -712,7 +712,7 @@ Vision client 走 vendored SDK；可選模型由 env var 決定。
 
 **四個工具都在發 request 前呼叫 ssrfGuard**。
 
-#### Blocklist（`~/.my-agent/website-blocklist.yaml`）
+#### Blocklist（`~/.virtual-assistant-desktop/website-blocklist.yaml`）
 
 ```yaml
 enabled: true
@@ -776,7 +776,7 @@ paths:
 #### 技能結構
 
 ```text
-~/.my-agent/skills/
+~/.virtual-assistant-desktop/skills/
 ├── my-skill/
 │   ├── SKILL.md          # 技能說明
 │   └── reference/        # 參考文件
@@ -921,7 +921,7 @@ if (feature('AGENT_TRIGGERS')) {
 每個排程任務的輸出會寫入稽核日誌：
 
 ```
-~/.my-agent/cron/output/<job-id>/
+~/.virtual-assistant-desktop/cron/output/<job-id>/
   ├── 2026-04-19
   │   ├── 09:00:00.log
   │   └── 09:30:00.log
@@ -946,7 +946,7 @@ if (feature('AGENT_TRIGGERS')) {
 #### 外部化位置
 
 ```
-~/.my-agent/system-prompt/
+~/.virtual-assistant-desktop/system-prompt/
 ├── 00-general.md
 ├── 01-persona.md
 ├── 02-capabilities.md
@@ -996,10 +996,10 @@ if (feature('AGENT_TRIGGERS')) {
 
 ```bash
 # 新增自訂 section
-echo "CUSTOM_PROMPT" > ~/.my-agent/system-prompt/29-custom.md
+echo "CUSTOM_PROMPT" > ~/.virtual-assistant-desktop/system-prompt/29-custom.md
 
 # 覆寫既有 section
-echo "OVERRIDE_PROMPT" > ~/.my-agent/system-prompt/00-general.md
+echo "OVERRIDE_PROMPT" > ~/.virtual-assistant-desktop/system-prompt/00-general.md
 ```
 
 ### 三層解析
@@ -1008,12 +1008,12 @@ echo "OVERRIDE_PROMPT" > ~/.my-agent/system-prompt/00-general.md
 
 1. **Project-specific**（專案特定）
    ```
-   ~/.my-agent/projects/<slug>/system-prompt/
+   ~/.virtual-assistant-desktop/projects/<slug>/system-prompt/
    ```
 
 2. **Global**（全域）
    ```
-   ~/.my-agent/system-prompt/
+   ~/.virtual-assistant-desktop/system-prompt/
    ```
 
 3. **Bundled**（內建預設）
@@ -1109,7 +1109,7 @@ bun run build --define "FEATURE('CHICAGO_MCP')"
 ### 設定目錄結構
 
 ```
-~/.my-agent/
+~/.virtual-assistant-desktop/
 ├── config.json                       # 一般設定
 ├── llamacpp.jsonc                    # 本地模型設定
 ├── system-prompt/                    # 自訂 system prompt
@@ -1145,10 +1145,10 @@ my-agent 內建 5 個會在背景觀察使用情況、適時跳出建議的 nudg
 
 - ↑/↓ 切換項目；Space 切換啟用 / 停用
 - Enter 或 `e` 編輯數值閾值
-- 變更即時寫入 `~/.my-agent/settings.jsonc`（cowork 模式為 `cowork_settings.jsonc`；舊 `.json` 會自動遷移）的 `selfImproveThresholds`
+- 變更即時寫入 `~/.virtual-assistant-desktop/settings.jsonc`（cowork 模式為 `cowork_settings.jsonc`；舊 `.json` 會自動遷移）的 `selfImproveThresholds`
 - Esc 或 `q` 關閉面板
 
-也可手動編輯 `~/.my-agent/settings.jsonc`：
+也可手動編輯 `~/.virtual-assistant-desktop/settings.jsonc`：
 
 ```jsonc
 {
@@ -1242,7 +1242,7 @@ export MY_AGENT_ALWAYS_DENY="Bash,PowerShell,Grep,Find"
 
 ```bash
 # 使用 Blocklist
-export MYAGENT_WEBSITE_BLOCKLIST=~/.my-agent/website-blocklist.yaml
+export MYAGENT_WEBSITE_BLOCKLIST=~/.virtual-assistant-desktop/website-blocklist.yaml
 
 # 檢查 URL 安全
 ./cli -p "請幫我檢查這個 URL 是否安全：https://suspicious-site.com"
@@ -1502,7 +1502,7 @@ bun test tests/integration/
 
 ### B. 設定檔案範例
 
-#### `~/.my-agent/llamacpp.jsonc`
+#### `~/.virtual-assistant-desktop/llamacpp.jsonc`
 
 ```json
 {
@@ -1519,7 +1519,7 @@ bun test tests/integration/
 }
 ```
 
-#### `~/.my-agent/website-blocklist.yaml`
+#### `~/.virtual-assistant-desktop/website-blocklist.yaml`
 
 ```yaml
 enabled: true
@@ -1531,7 +1531,7 @@ paths:
   - "*/checkout*"
 ```
 
-#### `~/.my-agent/memory/preferences/preference-1.md`
+#### `~/.virtual-assistant-desktop/memory/preferences/preference-1.md`
 
 ```markdown
 ---
@@ -1567,10 +1567,10 @@ type: preferences
 **A**: 
 ```bash
 # 查看記憶檔案大小
-ls -lh ~/.my-agent/memory/**/*.md | sort -k5 -h
+ls -lh ~/.virtual-assistant-desktop/memory/**/*.md | sort -k5 -h
 
 # 手動刪除舊記憶
-rm ~/.my-agent/memory/preferences/old-preference.md
+rm ~/.virtual-assistant-desktop/memory/preferences/old-preference.md
 
 # 請 Agent 整理
 ./cli -p "請幫我整理 memdir"
@@ -1603,10 +1603,10 @@ env | grep MY_AGENT
 **A**: 
 ```bash
 # 備份重要設定
-cp ~/.my-agent/USER.md ~/.my-agent/USER.md.bak
+cp ~/.virtual-assistant-desktop/USER.md ~/.virtual-assistant-desktop/USER.md.bak
 
-# 重置設定（刪除 ~/.my-agent）
-rm -rf ~/.my-agent
+# 重置設定（刪除 ~/.virtual-assistant-desktop）
+rm -rf ~/.virtual-assistant-desktop
 
 # 重新啟動
 ./cli

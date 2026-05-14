@@ -95,7 +95,7 @@ const TEAMMATE_ENV_VARS = [
   // Config directory override
   'CLAUDE_CONFIG_DIR',
   // CCR marker — teammates need this for CCR-aware code paths. Auth finds
-  // its own way via /home/claude/.my-agent/remote/.oauth_token regardless;
+  // its own way via /home/claude/.virtual-assistant-desktop/remote/.oauth_token regardless;
   // the FD env var wouldn't help (pipe FDs don't cross tmux).
   'MY_AGENT_REMOTE',
   // Auto-memory gate (memdir/paths.ts) checks REMOTE && !MEMORY_DIR to

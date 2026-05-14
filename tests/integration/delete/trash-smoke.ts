@@ -46,8 +46,8 @@ function section(title: string): void {
 const testRoot = join(tmpdir(), `my-agent-trash-test-${Date.now()}`)
 mkdirSync(testRoot, { recursive: true })
 
-// Override CLAUDE_CONFIG_DIR so getProjectDir() 不會動真正的 ~/.my-agent
-const configDir = join(testRoot, '.my-agent-config')
+// Override CLAUDE_CONFIG_DIR so getProjectDir() 不會動真正的 ~/.virtual-assistant-desktop
+const configDir = join(testRoot, '.virtual-assistant-desktop-config')
 process.env.CLAUDE_CONFIG_DIR = configDir
 mkdirSync(configDir, { recursive: true })
 

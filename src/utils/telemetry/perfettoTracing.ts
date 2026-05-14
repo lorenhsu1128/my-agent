@@ -17,7 +17,7 @@
  * 2. Optionally set MY_AGENT_PERFETTO_WRITE_INTERVAL_S=<positive integer> to write the
  *    trace file periodically (default: write only on exit).
  * 3. Run my-agent normally
- * 4. Trace file is written to ~/.my-agent/traces/trace-<session-id>.json
+ * 4. Trace file is written to ~/.virtual-assistant-desktop/traces/trace-<session-id>.json
  *    or to the specified path
  * 5. Open in ui.perfetto.dev to visualize
  */

@@ -4,9 +4,9 @@
  *
  * 五類：
  * 1. auto-memory  — getAutoMemPath() 的 .md 檔（排除 MEMORY.md）
- * 2. user-profile — ~/.my-agent/USER.md (global) + <slug>/USER.md (project)
+ * 2. user-profile — ~/.virtual-assistant-desktop/USER.md (global) + <slug>/USER.md (project)
  * 3. project-memory — 專案根目錄的 MY-AGENT.md（**非** CLAUDE.md，見 ADR-MD-02）
- * 4. local-config — 專案根目錄下 `.my-agent/*.md`
+ * 4. local-config — 專案根目錄下 `.virtual-assistant-desktop/*.md`
  * 5. daily-log    — auto-memory 下 `logs/YYYY/MM/*.md`
  *
  * 每個 entry 帶有：類別、顯示名、描述、絕對路徑、mtime。
@@ -165,7 +165,7 @@ function listProjectMemory(cwd: string): MemoryEntry[] {
 }
 
 function listLocalConfigs(cwd: string): MemoryEntry[] {
-  const localDir = join(cwd, '.my-agent')
+  const localDir = join(cwd, '.virtual-assistant-desktop')
   if (!existsSync(localDir)) return []
   const out: MemoryEntry[] = []
   let entries: string[]
@@ -186,7 +186,7 @@ function listLocalConfigs(cwd: string): MemoryEntry[] {
     }
     out.push({
       kind: 'local-config',
-      displayName: `[local] .my-agent/${entry}`,
+      displayName: `[local] .virtual-assistant-desktop/${entry}`,
       description: '專案本地設定',
       absolutePath,
       ...st,
@@ -261,7 +261,7 @@ function listDailyLogs(): MemoryEntry[] {
 
 /**
  * 列舉所有可刪除 / 編輯的 memory 條目，依 mtime 新→舊排序。
- * cwd = 目前專案根目錄（用於找 MY-AGENT.md / .my-agent/）
+ * cwd = 目前專案根目錄（用於找 MY-AGENT.md / .virtual-assistant-desktop/）
  */
 export function listAllMemoryEntries(cwd: string): MemoryEntry[] {
   const all = [

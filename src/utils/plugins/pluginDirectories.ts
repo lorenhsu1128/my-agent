@@ -48,12 +48,12 @@ function getPluginsDirectoryName(): string {
  *
  * Priority:
  * 1. MY_AGENT_PLUGIN_CACHE_DIR env var (explicit override)
- * 2. Default: ~/.my-agent/plugins or ~/.my-agent/cowork_plugins
+ * 2. Default: ~/.virtual-assistant-desktop/plugins or ~/.virtual-assistant-desktop/cowork_plugins
  */
 export function getPluginsDirectory(): string {
   // expandTilde: when MY_AGENT_PLUGIN_CACHE_DIR is set via settings.json
   // `env` (not shell), ~ is not expanded by the shell. Without this, a value
-  // like "~/.my-agent/plugins" becomes a literal `~` directory created in the
+  // like "~/.virtual-assistant-desktop/plugins" becomes a literal `~` directory created in the
   // cwd of every project (gh-30794 / CC-212).
   const envOverride = process.env.MY_AGENT_PLUGIN_CACHE_DIR
   if (envOverride) {

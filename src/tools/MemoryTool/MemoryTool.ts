@@ -67,7 +67,7 @@ const inputSchema = lazySchema(() =>
       .enum(['global', 'project'])
       .optional()
       .describe(
-        'Only for target="user_profile". "global" (default) writes ~/.my-agent/USER.md; "project" writes ~/.my-agent/projects/<slug>/USER.md.',
+        'Only for target="user_profile". "global" (default) writes ~/.virtual-assistant-desktop/USER.md; "project" writes ~/.virtual-assistant-desktop/projects/<slug>/USER.md.',
       ),
     filename: z
       .string()

@@ -68,7 +68,7 @@ export async function createLocalConfig(input: {
   filename: string
   body: string
 }): Promise<MutationResult> {
-  const dir = join(input.cwd, '.my-agent')
+  const dir = join(input.cwd, '.virtual-assistant-desktop')
   if (!input.filename.endsWith('.md')) {
     return { ok: false, error: 'filename 必須以 .md 結尾' }
   }
@@ -191,7 +191,7 @@ export async function renameLocalConfig(input: {
   if (!input.newFilename.endsWith('.md')) {
     return { ok: false, error: 'filename 必須以 .md 結尾' }
   }
-  const dir = join(input.cwd, '.my-agent')
+  const dir = join(input.cwd, '.virtual-assistant-desktop')
   const oldP = join(dir, input.oldFilename)
   const newP = join(dir, input.newFilename)
   if (!existsSync(oldP)) {

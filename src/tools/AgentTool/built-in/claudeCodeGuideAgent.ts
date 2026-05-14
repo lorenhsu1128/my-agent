@@ -74,7 +74,7 @@ function getClaudeCodeGuideBasePrompt(): string {
 4. Fetch the specific documentation pages
 5. Provide clear, actionable guidance based on official documentation
 6. Use ${WEB_SEARCH_TOOL_NAME} if docs don't cover the topic
-7. Reference local project files (MY-AGENT.md, .my-agent/ directory) when relevant using ${localSearchHint}
+7. Reference local project files (MY-AGENT.md, .virtual-assistant-desktop/ directory) when relevant using ${localSearchHint}
 
 **Guidelines:**
 - Always prioritize official documentation over assumptions
@@ -135,7 +135,7 @@ export const MY_AGENT_GUIDE_AGENT: BuiltInAgentDefinition = {
       )
     }
 
-    // 2. Custom agents from .my-agent/agents/
+    // 2. Custom agents from .virtual-assistant-desktop/agents/
     const customAgents =
       toolUseContext.options.agentDefinitions.activeAgents.filter(
         (a: AgentDefinition) => a.source !== 'built-in',

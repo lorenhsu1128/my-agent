@@ -1,5 +1,5 @@
 /**
- * .my-agent.jsonc（global config）健康檢查（M-CONFIG-DOCTOR）。
+ * .virtual-assistant-desktop.jsonc（global config）健康檢查（M-CONFIG-DOCTOR）。
  *
  * GlobalConfig 沒走 zod，型別由 src/utils/config.ts:184 GlobalConfig type 定義。
  * 此檢查只能做：JSONC parse / 註解保留 / 模板新欄位偵測。
@@ -25,7 +25,7 @@ export async function checkGlobal(): Promise<{
       severity: 'error',
       module: 'global',
       path,
-      summary: '.my-agent.jsonc 不存在',
+      summary: '.virtual-assistant-desktop.jsonc 不存在',
       detail: 'main.tsx 啟動時會自動 seed；若仍缺檔表示 seed 失敗（權限？）',
       autoFixable: true,
     })
@@ -69,7 +69,7 @@ export async function checkGlobal(): Promise<{
       severity: 'warning',
       module: 'global',
       path,
-      summary: '.my-agent.jsonc 是 strict JSON（無註解）',
+      summary: '.virtual-assistant-desktop.jsonc 是 strict JSON（無註解）',
       detail:
         '--rewrite-with-docs 會套最新模板（保留使用者值，補回註解）。',
       autoFixable: false, // 不在 --fix 範圍，需要 --rewrite-with-docs 才會改

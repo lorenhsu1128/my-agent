@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# M-LLAMA-CFG: 從 ~/.my-agent/llamacpp.jsonc（或 .json）抽出 env vars 供 serve.sh 使用。
+# M-LLAMA-CFG: 從 ~/.virtual-assistant-desktop/llamacpp.jsonc（或 .json）抽出 env vars 供 serve.sh 使用。
 # 供其他 scripts source，本身不 exec。
 #
 # 優先序（先定義者勝）：
 #   1. Shell 已 export 的 env（例：臨時覆蓋 `LLAMA_CTX=65536 bash serve.sh`）
-#   2. ~/.my-agent/llamacpp.jsonc 裡的 server.* 欄位（自動去除 `//` 行註解）
+#   2. ~/.virtual-assistant-desktop/llamacpp.jsonc 裡的 server.* 欄位（自動去除 `//` 行註解）
 #   3. 腳本內硬編碼 fallback（與 src/llamacppConfig/schema.ts 預設對齊）
 #
 # 設定檔解析：
@@ -20,10 +20,10 @@
 
 if [[ -n "${LLAMACPP_CONFIG_PATH:-}" ]]; then
   CONFIG_PATH="$LLAMACPP_CONFIG_PATH"
-elif [[ -f "$HOME/.my-agent/llamacpp.jsonc" ]]; then
-  CONFIG_PATH="$HOME/.my-agent/llamacpp.jsonc"
+elif [[ -f "$HOME/.virtual-assistant-desktop/llamacpp.jsonc" ]]; then
+  CONFIG_PATH="$HOME/.virtual-assistant-desktop/llamacpp.jsonc"
 else
-  CONFIG_PATH="$HOME/.my-agent/llamacpp.json"
+  CONFIG_PATH="$HOME/.virtual-assistant-desktop/llamacpp.json"
 fi
 
 # 把 JSONC（含 `//` 行註解）轉成 jq 吃得下的純 JSON 輸出到 stdout。

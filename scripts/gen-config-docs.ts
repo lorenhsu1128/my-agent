@@ -80,7 +80,7 @@ const CONFIGS: ConfigSpec[] = [
     outputDoc: 'docs/config-llamacpp.md',
     intro: `本檔是 my-agent TS 端與 \`scripts/llama/serve.sh\` shell 端**共用**的 llama.cpp 設定來源。
 
-**來源優先序**（自上而下）：env var override → \`~/.my-agent/llamacpp.jsonc\` → schema default。
+**來源優先序**（自上而下）：env var override → \`~/.virtual-assistant-desktop/llamacpp.jsonc\` → schema default。
 `,
   },
   {
@@ -94,7 +94,7 @@ const CONFIGS: ConfigSpec[] = [
     outputDoc: 'docs/config-web.md',
     intro: `M-WEB Web UI 嵌入 daemon 的設定。
 
-**來源優先序**：env var override → \`~/.my-agent/web.jsonc\` → schema default。
+**來源優先序**：env var override → \`~/.virtual-assistant-desktop/web.jsonc\` → schema default。
 `,
   },
   {
@@ -109,7 +109,7 @@ const CONFIGS: ConfigSpec[] = [
     outputDoc: 'docs/config-discord.md',
     intro: `M-DISCORD：Discord bot 嵌入 daemon 的設定。
 
-**來源優先序**：env var override → \`~/.my-agent/discord.jsonc\` → schema default。
+**來源優先序**：env var override → \`~/.virtual-assistant-desktop/discord.jsonc\` → schema default。
 `,
   },
 ]
@@ -341,7 +341,7 @@ function renderIndex(): string {
   lines.push('## 來源優先序（所有 my-agent config 一致）')
   lines.push('')
   lines.push('1. **Env var override**（最高）— 對應 env 存在且非空字串時')
-  lines.push('2. **`~/.my-agent/<config>.jsonc`** 檔案值')
+  lines.push('2. **`~/.virtual-assistant-desktop/<config>.jsonc`** 檔案值')
   lines.push('3. **Schema default**（最低）')
   lines.push('')
   lines.push('讀檔 / parse / schema validation 任一失敗 → fallback 到 schema default 並 stderr warn 一次。')
@@ -354,16 +354,16 @@ function renderIndex(): string {
   lines.push('|---|---|---|')
   for (const c of CONFIGS) {
     lines.push(
-      `| ${c.module} | \`~/.my-agent/${c.module}.jsonc\` | [${c.outputDoc}](${
+      `| ${c.module} | \`~/.virtual-assistant-desktop/${c.module}.jsonc\` | [${c.outputDoc}](${
         c.outputDoc.replace(/^docs\//, '')
       }) |`,
     )
   }
   lines.push(
-    '| global | `~/.my-agent/.my-agent.jsonc` | _(無 zod schema，請見 `src/utils/config.ts:184` GlobalConfig type)_ |',
+    '| global | `~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc` | _(無 zod schema，請見 `src/utils/config.ts:184` GlobalConfig type)_ |',
   )
   lines.push(
-    '| system-prompt | `~/.my-agent/system-prompt/` | _(純 markdown 文本，無 schema；外部化 sections 在 `src/systemPromptFiles/sections.ts`)_ |',
+    '| system-prompt | `~/.virtual-assistant-desktop/system-prompt/` | _(純 markdown 文本，無 schema；外部化 sections 在 `src/systemPromptFiles/sections.ts`)_ |',
   )
   lines.push('')
   lines.push(AUTO_GEN_END)

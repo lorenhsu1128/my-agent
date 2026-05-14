@@ -12,7 +12,7 @@
  *   - 回應策略：ephemeral 回應（只有執行者看到）減少頻道噪音
  *
  * 白名單檢查：handleInteraction 最外層擋；所有 command（含 whitelist-add）
- * 都必須先過。首個 whitelist 仍要手動編 ~/.my-agent/discord.json。
+ * 都必須先過。首個 whitelist 仍要手動編 ~/.virtual-assistant-desktop/discord.json。
  */
 import {
   ApplicationCommandOptionType,
@@ -360,7 +360,7 @@ export async function handleInteraction(
     const projects = ctx.config.projects
     const lines: string[] = ['**Configured projects:**']
     if (projects.length === 0) {
-      lines.push('_(none — edit `~/.my-agent/discord.json`)_')
+      lines.push('_(none — edit `~/.virtual-assistant-desktop/discord.json`)_')
     }
     for (const p of projects) {
       const loaded = ctx.registry.getProjectByCwd(p.path) ? ' 🟢' : ' ⚪'

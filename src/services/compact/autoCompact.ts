@@ -71,7 +71,7 @@ export const MANUAL_COMPACT_BUFFER_TOKENS = 3_000
  * ends with the model exhausting context inside <thinking> and emitting a
  * blank `content`. Resolution chain for llama.cpp models:
  *   1. env `LLAMACPP_COMPACT_BUFFER` (numeric override)
- *   2. `~/.my-agent/llamacpp.json` → `autoCompactBufferTokens`
+ *   2. `~/.virtual-assistant-desktop/llamacpp.json` → `autoCompactBufferTokens`
  *   3. fallback to AUTOCOMPACT_BUFFER_TOKENS
  */
 function getAutoCompactBufferTokens(model: string): number {

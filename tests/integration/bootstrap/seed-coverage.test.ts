@@ -296,7 +296,7 @@ describe('system-prompt/ seed', () => {
 // 跨配置：首次啟動模擬（一次跑所有 seed，斷言完整檔案清單）
 // ════════════════════════════════════════════════════════════════════
 
-describe('全新 ~/.my-agent/ 首次啟動模擬', () => {
+describe('全新 ~/.virtual-assistant-desktop/ 首次啟動模擬', () => {
   test('REPL 模式（setup.ts 路徑）跑後檔案齊全', async () => {
     const { seedLlamaCppConfigIfMissing } = await import(
       '../../../src/llamacppConfig/seed'

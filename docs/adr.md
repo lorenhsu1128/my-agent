@@ -13,9 +13,9 @@
 | ADR-005 | Provider 內部做格式轉譯（OpenAI SSE → Anthropic stream_event）；不改 `QueryEngine.ts` / `StreamingToolExecutor.ts` | ✅ |
 | ADR-006 | qwen3.5-Neo `reasoning_content` 映射 Anthropic `thinking` block | ✅ |
 | ADR-007 | `@anthropic-ai/*` 全部 vendor 進 `src/vendor/my-agent-ai/` | ✅ |
-| ADR-008 | System prompt 29 個 section 外部化到 `~/.my-agent/system-prompt/` | ✅ |
+| ADR-008 | System prompt 29 個 section 外部化到 `~/.virtual-assistant-desktop/system-prompt/` | ✅ |
 | ADR-009 | llamacpp context-overflow 三路修復（`/slots` warn / error regex / finish_reason warn） | ✅ |
-| ADR-010 | llama.cpp 設定統一到 `~/.my-agent/llamacpp.jsonc` 單一來源 | ✅ |
+| ADR-010 | llama.cpp 設定統一到 `~/.virtual-assistant-desktop/llamacpp.jsonc` 單一來源 | ✅ |
 | ADR-011 | Browser 走 puppeteer-core，不走 playwright-core | ✅ |
 | ADR-012 | M-DAEMON Path A — in-process QueryEngine 整合（非 spawn 子程序） | ✅ |
 | ADR-013 | M-DISCORD 單 daemon 多 project；B-1 並行策略（turn mutex + chdir） | ✅ |
@@ -71,7 +71,7 @@ Qwen3.5-Neo 的 `reasoning_content` 映射為 Anthropic `thinking` content block
 
 ## ADR-008 — System prompt 外部化（2026-04-19，M-SP）
 
-29 個 section 外部化至 `~/.my-agent/system-prompt/` 下的 .md 檔。新增 `src/systemPromptFiles/` 模組。session 啟動凍結快照、per-project > global > bundled 三層解析、完全取代（不合併）、首次啟動自動 seed global 層。覆蓋 prompts.ts 全部 15 個 section + cyber-risk + user-profile 外框 + memory 系統 8 個常數 + QueryEngine 4 條錯誤訊息。使用者指南：`docs/customizing-system-prompt.md`。
+29 個 section 外部化至 `~/.virtual-assistant-desktop/system-prompt/` 下的 .md 檔。新增 `src/systemPromptFiles/` 模組。session 啟動凍結快照、per-project > global > bundled 三層解析、完全取代（不合併）、首次啟動自動 seed global 層。覆蓋 prompts.ts 全部 15 個 section + cyber-risk + user-profile 外框 + memory 系統 8 個常數 + QueryEngine 4 條錯誤訊息。使用者指南：`docs/customizing-system-prompt.md`。
 
 理由：措辭調整不必改 code → rebuild；per-project 可做專案專屬客製化。
 
@@ -95,7 +95,7 @@ ADR-008 的補充與修正。三件事：
 
 ## ADR-010 — llama.cpp 設定單一來源（2026-04-19，M-LLAMA-CFG）
 
-本地 LLM server 設定統一到 `~/.my-agent/llamacpp.jsonc`（原始決策時為 `.json`，後改用 jsonc 以支援註解）。新增 `src/llamacppConfig/` 模組（schema / paths / loader / seed / index），Zod schema 驗證；TS 端讀 snapshot 取 `baseUrl` / `model` / `modelAliases` / `contextSize`（env var override 仍優先）；Shell 端新增 `scripts/llama/load-config.sh`（jq 抽 env），`serve.sh` source 它。首次啟動 `setup.ts` seed 出預設 config + README。缺 jq / 缺檔 / JSON 壞 graceful fallback。
+本地 LLM server 設定統一到 `~/.virtual-assistant-desktop/llamacpp.jsonc`（原始決策時為 `.json`，後改用 jsonc 以支援註解）。新增 `src/llamacppConfig/` 模組（schema / paths / loader / seed / index），Zod schema 驗證；TS 端讀 snapshot 取 `baseUrl` / `model` / `modelAliases` / `contextSize`（env var override 仍優先）；Shell 端新增 `scripts/llama/load-config.sh`（jq 抽 env），`serve.sh` source 它。首次啟動 `setup.ts` seed 出預設 config + README。缺 jq / 缺檔 / JSON 壞 graceful fallback。
 
 理由：原本 15 處散落（3 const、5 env var、serve.sh hard-code、`LLAMACPP_MODEL_ALIASES`）難維護；統一後 TS + shell 共用一份 source of truth。
 
@@ -111,7 +111,7 @@ bun + Windows 下 playwright-core 的 `--remote-debugging-pipe` transport 無限
 
 ## ADR-013 — M-DISCORD 單 daemon 多 project（2026-04-20）
 
-一個 daemon process 內活 N 個 `ProjectRuntime`（各自 AppState / broker / runner / permissionRouter / cron / session JSONL），透過 `ProjectRegistry` 管理 lifecycle（lazy load / hasAttachedRepl-aware idle unload / onLoad/onUnload listeners）。並行策略 **B-1**：daemon 全域 turn mutex + `wrapRunnerWithProjectCwd` 切 `process.cwd()` 與 `STATE.originalCwd` 序列化跨 project turn（接受「後到者排隊」UX）；`Project` singleton 改 `Map<cwd, Project>`。REPL thin-client WS handshake 帶 `?cwd=`。Discord gateway 以 `~/.my-agent/discord.json` 為入口。discord.js v14 DM 坑（MESSAGE_CREATE 缺 `channel.type`）workaround：啟動 pre-fetch whitelist users DM + 'raw' event fallback。8 個 slash commands + permissionMode 雙向同步 + Home channel 鏡像。**不含**：voice / Slack-Telegram / button UX / 多使用者 guild。使用者指南：`docs/discord-mode.md`。
+一個 daemon process 內活 N 個 `ProjectRuntime`（各自 AppState / broker / runner / permissionRouter / cron / session JSONL），透過 `ProjectRegistry` 管理 lifecycle（lazy load / hasAttachedRepl-aware idle unload / onLoad/onUnload listeners）。並行策略 **B-1**：daemon 全域 turn mutex + `wrapRunnerWithProjectCwd` 切 `process.cwd()` 與 `STATE.originalCwd` 序列化跨 project turn（接受「後到者排隊」UX）；`Project` singleton 改 `Map<cwd, Project>`。REPL thin-client WS handshake 帶 `?cwd=`。Discord gateway 以 `~/.virtual-assistant-desktop/discord.json` 為入口。discord.js v14 DM 坑（MESSAGE_CREATE 缺 `channel.type`）workaround：啟動 pre-fetch whitelist users DM + 'raw' event fallback。8 個 slash commands + permissionMode 雙向同步 + Home channel 鏡像。**不含**：voice / Slack-Telegram / button UX / 多使用者 guild。使用者指南：`docs/discord-mode.md`。
 
 ## ADR-014 — Memory prefetch llama.cpp 模式（2026-04-24，M-MEMRECALL-LOCAL）
 
@@ -157,4 +157,4 @@ Routing 失敗硬性報錯不 auto-fallback。訊息前綴 `[llamacpp routing=<c
 
 llamacpp apiKey 寫 jsonc 為單一來源，不另設 env override。Web GET 回傳 masked、PUT 留空 = 不變更。
 
-理由：(a) 多處設定容易產生不一致；(b) `~/.my-agent/` 家目錄已隔離；(c) 避免 UI 上無意覆蓋。
+理由：(a) 多處設定容易產生不一致；(b) `~/.virtual-assistant-desktop/` 家目錄已隔離；(c) 避免 UI 上無意覆蓋。

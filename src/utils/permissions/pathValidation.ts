@@ -96,7 +96,7 @@ export function expandTilde(path: string): string {
  * prompt for permission when /tmp/claude/ is already in the sandbox allowlist.
  *
  * Respects the deny-within-allow list: paths in denyWithinAllow (like
- * .my-agent/settings.json) are still blocked even if their parent is in allowOnly.
+ * .virtual-assistant-desktop/settings.json) are still blocked even if their parent is in allowOnly.
  */
 export function isPathInSandboxWriteAllowlist(resolvedPath: string): boolean {
   if (!SandboxManager.isSandboxingEnabled()) {
@@ -163,7 +163,7 @@ export function isPathAllowed(
 
   // 2. For write/create operations, check internal editable paths (plan files, scratchpad, agent memory, job dirs)
   // This MUST come before checkPathSafetyForAutoEdit since .claude is a dangerous directory
-  // and internal editable paths live under ~/.my-agent/ — matching the ordering in
+  // and internal editable paths live under ~/.virtual-assistant-desktop/ — matching the ordering in
   // checkWritePermissionForTool (filesystem.ts step 1.5)
   if (operationType !== 'read') {
     const internalEditResult = checkEditableInternalPath(resolvedPath, {})

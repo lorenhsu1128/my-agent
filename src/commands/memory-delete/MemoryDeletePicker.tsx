@@ -1,7 +1,7 @@
 /**
  * M-DELETE-7：/memory-delete picker。
  *
- * 列出 auto-memory 條目、MY-AGENT.md、./.my-agent/*.md、daily logs；
+ * 列出 auto-memory 條目、MY-AGENT.md、./.virtual-assistant-desktop/*.md、daily logs；
  * 支援多選後軟刪除（搬到 .trash/）；游標列可按 `e` 直接 spawn $EDITOR 編輯。
  *
  * 操作：

@@ -7,7 +7,7 @@
 
 本檔是 my-agent TS 端與 `scripts/llama/serve.sh` shell 端**共用**的 llama.cpp 設定來源。
 
-**來源優先序**（自上而下）：env var override → `~/.my-agent/llamacpp.jsonc` → schema default。
+**來源優先序**（自上而下）：env var override → `~/.virtual-assistant-desktop/llamacpp.jsonc` → schema default。
 
 
 ## Env 變數一覽

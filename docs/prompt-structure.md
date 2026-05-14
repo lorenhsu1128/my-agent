@@ -110,9 +110,9 @@
 │ "project"   │                   │ "reference" │
 └─────────────┘                   └─────────────┘
 
-Global → ~/.my-agent/USER.md
-Project → ~/.my-agent/projects/<proj>/USER.md
-File   → ~/.my-agent/projects/<proj>/memory/<type>_<name>.md
+Global → ~/.virtual-assistant-desktop/USER.md
+Project → ~/.virtual-assistant-desktop/projects/<proj>/USER.md
+File   → ~/.virtual-assistant-desktop/projects/<proj>/memory/<type>_<name>.md
 ```
 
 ---
@@ -165,7 +165,7 @@ Session 啟動
 ## 📊 記憶檔案分佈圖
 
 ```
-~/.my-agent/
+~/.virtual-assistant-desktop/
 │
 ├── USER.md                           ← 全域用戶設定（每個 turn 讀）
 │

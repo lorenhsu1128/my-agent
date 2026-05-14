@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 啟動 llama-server，提供 OpenAI 相容 API。
-# M-LLAMA-CFG：設定來源改為 ~/.my-agent/llamacpp.json（透過 load-config.sh）。
+# M-LLAMA-CFG：設定來源改為 ~/.virtual-assistant-desktop/llamacpp.json（透過 load-config.sh）。
 # 舊環境變數（LLAMA_HOST / LLAMA_PORT / LLAMA_CTX / LLAMA_NGL / LLAMA_ALIAS）仍可臨時覆蓋。
 
 set -euo pipefail

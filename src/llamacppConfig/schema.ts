@@ -1,7 +1,7 @@
 /**
  * llama.cpp 設定檔 schema。
  *
- * 存放位置：~/.my-agent/llamacpp.json
+ * 存放位置：~/.virtual-assistant-desktop/llamacpp.json
  * 單一來源：my-agent TS 端 + scripts/llama/*.sh 都讀這份。
  *
  * 設計原則：

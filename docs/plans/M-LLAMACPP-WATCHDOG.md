@@ -12,7 +12,7 @@
 **前提決策（與使用者對齊）**：
 - Q1 不採固定 wall-clock timeout — 誤殺率高，legit 長 turn（refactor / 長文總結 / 深度推理）會被切
 - Q2 採三層各自精準：inter-chunk gap / reasoning-block / token-cap
-- Q3 全部走 `~/.my-agent/llamacpp.json` config 可調
+- Q3 全部走 `~/.virtual-assistant-desktop/llamacpp.json` config 可調
 - Q4 主 turn 與背景呼叫的 `max_tokens` ceiling 分流（per-call-site）
 - Q5 重點不是「server 端 cancel」而是「client 端斷連 → server 自動釋放 slot」（HTTP 標準行為）
 - **Q6（新）watchdog 預設關閉** — 安裝後 ABC 三層皆 `enabled: false`，不影響既有行為。使用者透過 `/llamacpp` TUI 或 `/llamacpp watchdog A on` 主動開啟。理由：(a) 避免誤殺 legit 長 turn 給不知情使用者；(b) 留 escape hatch，watchdog 是 opt-in 安全網不是強制保護；(c) `/llamacpp` TUI 一鍵開關讓 opt-in 成本極低
@@ -57,7 +57,7 @@
 - `AbortSignal.any()`（Node ≥ 20）— 串接 caller signal + watchdog signal
 - `iterOpenAISSELines()`（adapter 內既有 SSE 解析器）— 接上 inter-chunk timer
 - `LlamaCppConfigSchema` zod 解析 + 三層 snapshot 凍結（M-LLAMA-CFG pattern）
-- `~/.my-agent/llamacpp.json` config 檔（已存在）
+- `~/.virtual-assistant-desktop/llamacpp.json` config 檔（已存在）
 
 ---
 
@@ -150,14 +150,14 @@ env override：
 **設計概覽**（與使用者對齊）：
 - 命令：合併 `/llamacpp`（取代 Phase 3 原本的 `/llamacpp-status`），未來擴 server 啟停等子畫面共用
 - UI：Hybrid — 無參數開 TUI、有參數直接套用（兼顧監看與 script）
-- 持久化：兩者都做 — 寫 `~/.my-agent/llamacpp.json` + adapter 每次 fetch 重讀 snapshot（hot-reload）
+- 持久化：兩者都做 — 寫 `~/.virtual-assistant-desktop/llamacpp.json` + adapter 每次 fetch 重讀 snapshot（hot-reload）
 - 多 REPL 同步：daemon broadcast `llamacpp.configChanged` frame（mirror cron pattern）
 
 **Master TUI 結構（Hybrid）**：
 ```
 LlamaCpp · ‹ Watchdog ›   Slots                    (←/→ 切 tab)
 ─────────────────────────────────────────────────────────────────
- Watchdog 設定（檔案：~/.my-agent/llamacpp.json）
+ Watchdog 設定（檔案：~/.virtual-assistant-desktop/llamacpp.json）
 
    ☐ Master enabled                  (整體開關，預設 OFF)
  ▶ ☐ A. Inter-chunk gap            30000 ms     (預設 OFF)
@@ -258,7 +258,7 @@ helper：
 4. **預設關閉驗證（最重要）**：
    - 安裝 / `bun run build:dev` 後**不改任何設定**
    - 跑全套 `decouple-comprehensive.sh A-K`：行為與當前一致，不退步、不被 watchdog 誤殺任何 case
-   - `cat ~/.my-agent/llamacpp.json` 看 `watchdog.enabled = false` + ABC 也 false
+   - `cat ~/.virtual-assistant-desktop/llamacpp.json` 看 `watchdog.enabled = false` + ABC 也 false
 5. **實機 watchdog 驗證（opt-in 路徑）**：
    - `/llamacpp watchdog all on` 開全部
    - `curl /slots` 看 idle

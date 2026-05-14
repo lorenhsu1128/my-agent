@@ -268,7 +268,7 @@ function executeInBackground({
  * Checks if a hook should be skipped due to lack of workspace trust.
  *
  * ALL hooks require workspace trust because they execute arbitrary commands from
- * .my-agent/settings.json. This is a defense-in-depth security measure.
+ * .virtual-assistant-desktop/settings.json. This is a defense-in-depth security measure.
  *
  * Context: Hooks are captured via captureHooksConfigSnapshot() before the trust
  * dialog is shown. While most hooks won't execute until after trust is established
@@ -4321,7 +4321,7 @@ export function hasInstructionsLoadedHook(): boolean {
 
 /**
  * Execute InstructionsLoaded hooks when an instruction file (MY-AGENT.md or
- * .my-agent/rules/*.md) is loaded into context. Fire-and-forget — this hook is
+ * .virtual-assistant-desktop/rules/*.md) is loaded into context. Fire-and-forget — this hook is
  * for observability/audit only and does not support blocking.
  *
  * Dispatch sites:

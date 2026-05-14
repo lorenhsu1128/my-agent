@@ -135,7 +135,7 @@ export function WatchdogTab({
   return (
     <Box flexDirection="column">
       <Text dimColor>
-        Watchdog 設定（檔案：~/.my-agent/llamacpp.json）
+        Watchdog 設定（檔案：~/.virtual-assistant-desktop/llamacpp.json）
       </Text>
       <Box marginTop={1} flexDirection="column">
         {WATCHDOG_FIELDS.map((f, i) => {

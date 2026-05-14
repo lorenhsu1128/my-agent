@@ -123,7 +123,7 @@ export function ToolsPicker({ onExit }: Props): React.ReactNode {
         )
       } else {
         onExit(
-          `已寫入 project 設定 (~/.my-agent/projects/...)：停用 ${working.size} 個工具`,
+          `已寫入 project 設定 (~/.virtual-assistant-desktop/projects/...)：停用 ${working.size} 個工具`,
         )
       }
       return
@@ -138,7 +138,7 @@ export function ToolsPicker({ onExit }: Props): React.ReactNode {
         onExit(`僅 session 套用；寫入 global 設定失敗：${error.message}`)
       } else {
         onExit(
-          `已寫入 global 設定 (~/.my-agent/settings.json)：停用 ${working.size} 個工具`,
+          `已寫入 global 設定 (~/.virtual-assistant-desktop/settings.json)：停用 ${working.size} 個工具`,
         )
       }
       return

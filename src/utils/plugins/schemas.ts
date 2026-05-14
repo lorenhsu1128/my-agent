@@ -1440,7 +1440,7 @@ export const SettingsPluginEntrySchema = lazySchema(() =>
  *   "version": "1.2.0",
  *   "installedAt": "2024-01-15T10:30:00Z",
  *   "marketplace": "anthropic-tools",
- *   "installPath": "/home/user/.my-agent/plugins/installed/anthropic-tools/code-formatter"
+ *   "installPath": "/home/user/.virtual-assistant-desktop/plugins/installed/anthropic-tools/code-formatter"
  * }
  */
 export const InstalledPluginSchema = lazySchema(() =>
@@ -1496,9 +1496,9 @@ export const InstalledPluginsFileSchemaV1 = lazySchema(() =>
  *
  * Plugins can be installed at different scopes:
  * - managed: Enterprise/system-wide (read-only, platform-specific paths)
- * - user: User's global settings (~/.my-agent/settings.json)
- * - project: Shared project settings ($project/.my-agent/settings.json)
- * - local: Personal project overrides ($project/.my-agent/settings.local.json)
+ * - user: User's global settings (~/.virtual-assistant-desktop/settings.json)
+ * - project: Shared project settings ($project/.virtual-assistant-desktop/settings.json)
+ * - local: Personal project overrides ($project/.virtual-assistant-desktop/settings.local.json)
  *
  * Note: 'flag' scope plugins (from --settings) are session-only and
  * are NOT persisted to installed_plugins.json.
@@ -1585,7 +1585,7 @@ export const InstalledPluginsFileSchema = lazySchema(() =>
  * Example entry:
  * {
  *   "source": { "source": "github", "repo": "anthropic/claude-plugins" },
- *   "installLocation": "/home/user/.my-agent/plugins/cached/marketplaces/anthropic-tools",
+ *   "installLocation": "/home/user/.virtual-assistant-desktop/plugins/cached/marketplaces/anthropic-tools",
  *   "lastUpdated": "2024-01-15T10:30:00Z"
  * }
  */

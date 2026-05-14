@@ -7,7 +7,7 @@
 要解決三件事：
 1. **Adapter 會轉 OpenAI `image_url`** — base64 / URL image block 翻成 `{type:"image_url", image_url:{url:"data:image/…;base64,…"}}`
 2. **llama-server 帶 `--mmproj`** — vision 模型必要條件，文字模型則不帶
-3. **Fallback 由 config 宣告** — 不做 runtime probing；使用者在 `~/.my-agent/llamacpp.json` 宣告當前模型是否支援 vision，adapter 依此決定翻譯 or 佔位符
+3. **Fallback 由 config 宣告** — 不做 runtime probing；使用者在 `~/.virtual-assistant-desktop/llamacpp.json` 宣告當前模型是否支援 vision，adapter 依此決定翻譯 or 佔位符
 
 **預期結果**：使用者把 `llamacpp.json` 的 `vision.enabled` 設 `true` + 填 `mmprojPath`，重啟 llama-server 後丟截圖進 TUI，模型能描述圖片內容；切回 Neo（`vision.enabled: false`）時舊行為（佔位符）完全不變。
 
@@ -67,13 +67,13 @@ bun run typecheck
 bun test tests/integration/llamacpp/vision-adapter-smoke.ts
 
 # 2. 文字模型回歸（vision:false）— 確認舊行為 zero diff
-# 編輯 ~/.my-agent/llamacpp.json 確認沒有 vision.enabled 或為 false
+# 編輯 ~/.virtual-assistant-desktop/llamacpp.json 確認沒有 vision.enabled 或為 false
 ./cli --model qwen3.5-9b-neo -p "hello"   # 不應報錯
 # 丟一張圖：開 TUI，drag image，觀察模型收到「[Image attachment]」
 
 # 3. Vision 模型端到端
 # 下載 Gemopus-4-E4B-it GGUF + 對應 mmproj*.gguf 到 models/
-# 編輯 ~/.my-agent/llamacpp.json：
+# 編輯 ~/.virtual-assistant-desktop/llamacpp.json：
 #   server.modelPath = "models/Gemopus-4-E4B-it-Preview-Q5_K_M.gguf"
 #   server.vision.mmprojPath = "models/mmproj-Gemopus-4-E4B-it-f16.gguf"
 #   server.alias = "gemopus-4-e4b"

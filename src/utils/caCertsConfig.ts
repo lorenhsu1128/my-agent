@@ -28,7 +28,7 @@ import { getSettingsForSource } from './settings/settings.js'
  * is lazy-initialized) and ensure Node.js compatibility.
  *
  * This is safe to call before the trust dialog because we only read from
- * user-controlled files (~/.my-agent/settings.jsonc and ~/.my-agent/.my-agent.jsonc),
+ * user-controlled files (~/.virtual-assistant-desktop/settings.jsonc and ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc),
  * not from project-level settings.
  */
 export function applyExtraCACertsFromConfig(): void {
@@ -52,15 +52,15 @@ export function applyExtraCACertsFromConfig(): void {
  * after the trust dialog. But we need the CA cert early to establish the TLS
  * connection to an HTTPS proxy during init().
  *
- * We read from global config (~/.my-agent/.my-agent.jsonc) and user settings
- * (~/.my-agent/settings.jsonc). These are user-controlled files that don't
+ * We read from global config (~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc) and user settings
+ * (~/.virtual-assistant-desktop/settings.jsonc). These are user-controlled files that don't
  * require trust approval.
  */
 function getExtraCertsPathFromConfig(): string | undefined {
   try {
     const globalConfig = getGlobalConfig()
     const globalEnv = globalConfig?.env
-    // Only read from user-controlled settings (~/.my-agent/settings.json),
+    // Only read from user-controlled settings (~/.virtual-assistant-desktop/settings.json),
     // not project-level settings, to prevent malicious projects from
     // injecting CA certs before the trust dialog.
     const settings = getSettingsForSource('userSettings')

@@ -1,7 +1,7 @@
 /**
  * M-DISCORD-3：Discord gateway 設定 schema。
  *
- * 存放位置：~/.my-agent/discord.json
+ * 存放位置：~/.virtual-assistant-desktop/discord.json
  * 預設啟用時需要 `DISCORD_BOT_TOKEN` 環境變數（不寫進 config 避免 secrets 進檔）。
  *
  * 路由規則：
@@ -31,7 +31,7 @@ export const DiscordConfigSchema = z.object({
   /** 開關；為 false 時 daemon 不起 Discord gateway。 */
   enabled: z.boolean().default(false),
   /**
-   * Bot token。可直接寫在此處（~/.my-agent/ 在使用者家目錄、非 git 目錄，風險低）
+   * Bot token。可直接寫在此處（~/.virtual-assistant-desktop/ 在使用者家目錄、非 git 目錄，風險低）
    * 或改用 env var `DISCORD_BOT_TOKEN`（env 優先於此欄位）。
    *
    * 安全提醒：

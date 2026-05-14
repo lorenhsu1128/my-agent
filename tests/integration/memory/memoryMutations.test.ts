@@ -15,7 +15,7 @@ beforeEach(() => {
   tmpCwd = join(tmpdir(), `memtui-cwd-${stamp}`)
   mkdirSync(tmpMemDir, { recursive: true })
   mkdirSync(tmpCwd, { recursive: true })
-  mkdirSync(join(tmpCwd, '.my-agent'), { recursive: true })
+  mkdirSync(join(tmpCwd, '.virtual-assistant-desktop'), { recursive: true })
   // .trash 由 moveToTrash 自動建；確保 cwd 存在即可
 })
 
@@ -211,14 +211,14 @@ describe('createLocalConfig + renameLocalConfig', () => {
       body: 'rule body',
     })
     expect(r1.ok).toBe(true)
-    expect(existsSync(join(tmpCwd, '.my-agent', 'rules.md'))).toBe(true)
+    expect(existsSync(join(tmpCwd, '.virtual-assistant-desktop', 'rules.md'))).toBe(true)
     const r2 = await m.renameLocalConfig({
       cwd: tmpCwd,
       oldFilename: 'rules.md',
       newFilename: 'policies.md',
     })
     expect(r2.ok).toBe(true)
-    expect(existsSync(join(tmpCwd, '.my-agent', 'rules.md'))).toBe(false)
-    expect(existsSync(join(tmpCwd, '.my-agent', 'policies.md'))).toBe(true)
+    expect(existsSync(join(tmpCwd, '.virtual-assistant-desktop', 'rules.md'))).toBe(false)
+    expect(existsSync(join(tmpCwd, '.virtual-assistant-desktop', 'policies.md'))).toBe(true)
   })
 })

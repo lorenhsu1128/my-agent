@@ -37,9 +37,9 @@ export function getMacOsKeychainStorageServiceName(
   const dirHash = isDefaultDir
     ? ''
     : `-${createHash('sha256').update(configDir).digest('hex').substring(0, 8)}`
-  // my-agent：獨立 prefix 與官方 Claude Code 隔離（與 ~/.my-agent/ 家目錄
+  // my-agent：獨立 prefix 與官方 Claude Code 隔離（與 ~/.virtual-assistant-desktop/ 家目錄
   // 隔離的決定一致）。Windows / Linux 不走此路（改用 plaintext
-  // ~/.my-agent/.credentials.json）。
+  // ~/.virtual-assistant-desktop/.credentials.json）。
   return `my-agent${getKeychainFileSuffix()}${serviceSuffix}${dirHash}`
 }
 

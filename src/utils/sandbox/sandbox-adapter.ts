@@ -241,20 +241,20 @@ export function convertToSandboxRuntimeConfig(
   const originalCwd = getOriginalCwd()
   if (cwd !== originalCwd) {
     // 同時 deny .json 與 .jsonc 兩種副檔名（migration 期間兩者都可能存在）
-    denyWrite.push(resolve(cwd, '.my-agent', 'settings.jsonc'))
-    denyWrite.push(resolve(cwd, '.my-agent', 'settings.json'))
-    denyWrite.push(resolve(cwd, '.my-agent', 'settings.local.jsonc'))
-    denyWrite.push(resolve(cwd, '.my-agent', 'settings.local.json'))
+    denyWrite.push(resolve(cwd, '.virtual-assistant-desktop', 'settings.jsonc'))
+    denyWrite.push(resolve(cwd, '.virtual-assistant-desktop', 'settings.json'))
+    denyWrite.push(resolve(cwd, '.virtual-assistant-desktop', 'settings.local.jsonc'))
+    denyWrite.push(resolve(cwd, '.virtual-assistant-desktop', 'settings.local.json'))
   }
 
-  // Block writes to .my-agent/skills in both original and current working directories.
-  // The sandbox-runtime's getDangerousDirectories() protects .my-agent/commands and
-  // .my-agent/agents but not .my-agent/skills. Skills have the same privilege level
+  // Block writes to .virtual-assistant-desktop/skills in both original and current working directories.
+  // The sandbox-runtime's getDangerousDirectories() protects .virtual-assistant-desktop/commands and
+  // .virtual-assistant-desktop/agents but not .virtual-assistant-desktop/skills. Skills have the same privilege level
   // (auto-discovered, auto-loaded, full Claude capabilities) so they need the
   // same OS-level sandbox protection.
-  denyWrite.push(resolve(originalCwd, '.my-agent', 'skills'))
+  denyWrite.push(resolve(originalCwd, '.virtual-assistant-desktop', 'skills'))
   if (cwd !== originalCwd) {
-    denyWrite.push(resolve(cwd, '.my-agent', 'skills'))
+    denyWrite.push(resolve(cwd, '.virtual-assistant-desktop', 'skills'))
   }
 
   // SECURITY: Git's is_git_directory() treats cwd as a bare repo if it has

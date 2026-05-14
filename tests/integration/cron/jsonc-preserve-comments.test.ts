@@ -22,7 +22,7 @@ beforeEach(() => {
     tmpdir(),
     `cron-jsonc-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   )
-  mkdirSync(join(testDir, '.my-agent'), { recursive: true })
+  mkdirSync(join(testDir, '.virtual-assistant-desktop'), { recursive: true })
 })
 
 afterEach(() => {
@@ -64,7 +64,7 @@ describe('writeCronTasks + readCronTasks JSONC 行為', () => {
       ],
       testDir,
     )
-    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.jsonc')
+    const filePath = join(testDir, '.virtual-assistant-desktop', 'scheduled_tasks.jsonc')
     expect(existsSync(filePath)).toBe(true)
     const text = readFileSync(filePath, 'utf-8')
     // 檔頭註解（模板帶的）應該留著
@@ -94,7 +94,7 @@ describe('writeCronTasks + readCronTasks JSONC 行為', () => {
   })
 
   test('保留使用者手加的檔頭註解（模擬 fire 後寫回 lastFiredAt）', async () => {
-    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.jsonc')
+    const filePath = join(testDir, '.virtual-assistant-desktop', 'scheduled_tasks.jsonc')
     // 使用者手寫的註解版本
     const userVersion = `{
   // 使用者加的備註：這些是我每天的例行任務
@@ -137,7 +137,7 @@ describe('writeCronTasks + readCronTasks JSONC 行為', () => {
   })
 
   test('相容既有 strict JSON 檔（parseJsonc fallback 成 safeParseJSON）', async () => {
-    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.jsonc')
+    const filePath = join(testDir, '.virtual-assistant-desktop', 'scheduled_tasks.jsonc')
     // 舊的 strict JSON 格式（無註解）
     writeFileSync(
       filePath,
@@ -177,7 +177,7 @@ describe('writeCronTasks + readCronTasks JSONC 行為', () => {
       testDir,
     )
     await writeCronTasks([], testDir)
-    const filePath = join(testDir, '.my-agent', 'scheduled_tasks.jsonc')
+    const filePath = join(testDir, '.virtual-assistant-desktop', 'scheduled_tasks.jsonc')
     expect(existsSync(filePath)).toBe(true)
     const tasks = await readCronTasks(testDir)
     expect(tasks).toEqual([])

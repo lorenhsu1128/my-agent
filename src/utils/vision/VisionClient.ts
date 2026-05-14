@@ -3,7 +3,7 @@
  *
  * 支援三個 provider：
  *   - anthropic：vendored Anthropic SDK（claude-sonnet 等）。需 ANTHROPIC_API_KEY
- *   - llamacpp：本地 llama.cpp server，共用 `~/.my-agent/llamacpp.json` 的
+ *   - llamacpp：本地 llama.cpp server，共用 `~/.virtual-assistant-desktop/llamacpp.json` 的
  *     baseUrl + model（須為 multimodal 模型，例如 Gemopus-4-E4B-it-Preview）
  *   - disabled：`isConfigured()` 回 false，呼叫 describe/locate 立刻 throw
  *     可讀錯誤訊息，避開 ANTHROPIC_API_KEY 被硬吃

@@ -211,7 +211,7 @@ export const DeniedMcpServerEntrySchema = lazySchema(() =>
  *
  * ⚠️ BACKWARD COMPATIBILITY NOTICE ⚠️
  *
- * This schema defines the structure of user settings files (.my-agent/settings.json).
+ * This schema defines the structure of user settings files (.virtual-assistant-desktop/settings.json).
  * We support backward-compatible changes! Here's how:
  *
  * ✅ ALLOWED CHANGES:
@@ -541,7 +541,7 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'When set in managed settings, blocks non-plugin customization sources for the listed surfaces. ' +
             'Array form locks specific surfaces (e.g. ["skills", "hooks"]); `true` locks all four; `false` is an explicit no-op. ' +
-            'Blocked: ~/.my-agent/{surface}/, .my-agent/{surface}/ (project), settings.json hooks, .mcp.json. ' +
+            'Blocked: ~/.virtual-assistant-desktop/{surface}/, .virtual-assistant-desktop/{surface}/ (project), settings.json hooks, .mcp.json. ' +
             'NOT blocked: managed (policySettings) sources, plugin-provided customizations. ' +
             'Composes with strictKnownMarketplaces for end-to-end admin control — plugins gated by ' +
             'marketplace allowlist, everything else blocked here.',
@@ -596,7 +596,7 @@ export const SettingsSchema = lazySchema(() =>
         })
         .optional()
         .describe(
-          'Additional marketplaces to make available for this repository. Typically used in repository .my-agent/settings.json to ensure team members have required plugin sources.',
+          'Additional marketplaces to make available for this repository. Typically used in repository .virtual-assistant-desktop/settings.json to ensure team members have required plugin sources.',
         ),
       // Enterprise strict list of allowed marketplace sources (policy settings only)
       // When set, ONLY these exact sources can be added. Check happens BEFORE download.
@@ -822,7 +822,7 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           'Custom directory for plan files, relative to project root. ' +
-            'If not set, defaults to ~/.my-agent/plans/',
+            'If not set, defaults to ~/.virtual-assistant-desktop/plans/',
         ),
       ...(process.env.USER_TYPE === 'ant'
         ? {
@@ -933,7 +933,7 @@ export const SettingsSchema = lazySchema(() =>
         .string()
         .optional()
         .describe(
-          'Custom directory path for auto-memory storage. Supports ~/ prefix for home directory expansion. Ignored if set in projectSettings (checked-in .my-agent/settings.json) for security. When unset, defaults to ~/.my-agent/projects/<sanitized-cwd>/memory/.',
+          'Custom directory path for auto-memory storage. Supports ~/ prefix for home directory expansion. Ignored if set in projectSettings (checked-in .virtual-assistant-desktop/settings.json) for security. When unset, defaults to ~/.virtual-assistant-desktop/projects/<sanitized-cwd>/memory/.',
         ),
       userModelEnabled: z
         .boolean()
@@ -1161,7 +1161,7 @@ export const SettingsSchema = lazySchema(() =>
           'Glob patterns or absolute paths of MY-AGENT.md files to exclude from loading. ' +
             'Patterns are matched against absolute file paths using picomatch. ' +
             'Only applies to User, Project, and Local memory types (Managed/policy files cannot be excluded). ' +
-            'Examples: "/home/user/monorepo/MY-AGENT.md", "**/code/MY-AGENT.md", "**/some-dir/.my-agent/rules/**"',
+            'Examples: "/home/user/monorepo/MY-AGENT.md", "**/code/MY-AGENT.md", "**/some-dir/.virtual-assistant-desktop/rules/**"',
         ),
       pluginTrustMessage: z
         .string()

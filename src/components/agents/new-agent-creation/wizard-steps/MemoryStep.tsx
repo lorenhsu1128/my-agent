@@ -37,28 +37,28 @@ export function MemoryStep() {
   let t1;
   if ($[1] !== isUserScope) {
     t1 = isUserScope ? [{
-      label: "User scope (~/.my-agent/agent-memory/) (Recommended)",
+      label: "User scope (~/.virtual-assistant-desktop/agent-memory/) (Recommended)",
       value: "user"
     }, {
       label: "None (no persistent memory)",
       value: "none"
     }, {
-      label: "Project scope (.my-agent/agent-memory/)",
+      label: "Project scope (.virtual-assistant-desktop/agent-memory/)",
       value: "project"
     }, {
-      label: "Local scope (.my-agent/agent-memory-local/)",
+      label: "Local scope (.virtual-assistant-desktop/agent-memory-local/)",
       value: "local"
     }] : [{
-      label: "Project scope (.my-agent/agent-memory/) (Recommended)",
+      label: "Project scope (.virtual-assistant-desktop/agent-memory/) (Recommended)",
       value: "project"
     }, {
       label: "None (no persistent memory)",
       value: "none"
     }, {
-      label: "User scope (~/.my-agent/agent-memory/)",
+      label: "User scope (~/.virtual-assistant-desktop/agent-memory/)",
       value: "user"
     }, {
-      label: "Local scope (.my-agent/agent-memory-local/)",
+      label: "Local scope (.virtual-assistant-desktop/agent-memory-local/)",
       value: "local"
     }];
     $[1] = isUserScope;

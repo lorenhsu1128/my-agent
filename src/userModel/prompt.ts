@@ -14,7 +14,7 @@ export const USER_PROFILE_SOFT_LIMIT = 1500
 /**
  * 產生 <user-profile> 區塊。snapshot 為空時回 null（呼叫端決定略過注入）。
  */
-// M-SP-3: 外框 header 已外部化至 ~/.my-agent/system-prompt/user-profile-frame.md
+// M-SP-3: 外框 header 已外部化至 ~/.virtual-assistant-desktop/system-prompt/user-profile-frame.md
 // .md 內容為 header 段（`<user-profile>\n# About...\n\n...指示文字...\n`）；
 // snapshot.combined 由程式插入於末尾，`</user-profile>` 為固定尾框。
 const USER_PROFILE_FRAME_FALLBACK = `<user-profile>

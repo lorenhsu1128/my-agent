@@ -221,9 +221,9 @@ Durable cron 跨 session 會重新 spawn。
 
 ### 檔案位置
 
-- `<project>/.my-agent/scheduled_tasks.json` — durable job
-- `<project>/.my-agent/cron/output/<id>/<ts>.md` — 觸發稽核
-- `<project>/.my-agent/scheduler.lock` — 多 session 互斥
+- `<project>/.virtual-assistant-desktop/scheduled_tasks.json` — durable job
+- `<project>/.virtual-assistant-desktop/cron/output/<id>/<ts>.md` — 觸發稽核
+- `<project>/.virtual-assistant-desktop/scheduler.lock` — 多 session 互斥
 
 ### Scheduler tick（`src/utils/cronScheduler.ts`）
 

@@ -1,7 +1,7 @@
 # 啟動 llama-server（PowerShell 版本，Windows 用）
 # M-TCQ-SHIM：依 server.binaryKind 分流（buun 原生 binary | tcq vendored shim）
 #
-# 設定來源同 serve.sh：~/.my-agent/llamacpp.json 的 server.* 欄位 +
+# 設定來源同 serve.sh：~/.virtual-assistant-desktop/llamacpp.json 的 server.* 欄位 +
 # 環境變數 LLAMA_HOST / LLAMA_PORT / LLAMA_CTX / LLAMA_NGL / LLAMA_ALIAS / LLAMA_BINARY_KIND 覆蓋
 #
 # 跨平台對齊原則（CLAUDE.md §10）：行為與 serve.sh 一致；
@@ -16,8 +16,8 @@ function Read-CfgValue {
     param([string]$JqPath, [string]$Default)
     $cfgFile = $env:LLAMACPP_CONFIG_PATH
     if (-not $cfgFile) {
-        $jsoncPath = Join-Path $env:USERPROFILE ".my-agent\llamacpp.jsonc"
-        $jsonPath  = Join-Path $env:USERPROFILE ".my-agent\llamacpp.json"
+        $jsoncPath = Join-Path $env:USERPROFILE ".virtual-assistant-desktop\llamacpp.jsonc"
+        $jsonPath  = Join-Path $env:USERPROFILE ".virtual-assistant-desktop\llamacpp.json"
         if (Test-Path $jsoncPath) { $cfgFile = $jsoncPath }
         elseif (Test-Path $jsonPath) { $cfgFile = $jsonPath }
     }

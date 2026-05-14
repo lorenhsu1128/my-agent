@@ -1,7 +1,7 @@
 /**
  * Daemon WS bearer token 生成 / 讀寫 / 驗證。
  *
- * Token 是 64 字元 hex（32 bytes 隨機），存於 `~/.my-agent/daemon.token`。
+ * Token 是 64 字元 hex（32 bytes 隨機），存於 `~/.virtual-assistant-desktop/daemon.token`。
  * 權限 0600（POSIX 有效；Windows 無效但 %USERPROFILE% 本身已隔離）。
  *
  * 驗證走 timing-safe compare，避免 token leak via timing attack

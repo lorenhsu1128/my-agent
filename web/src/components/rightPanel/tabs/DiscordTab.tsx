@@ -75,7 +75,7 @@ export function DiscordTab() {
         <Card>
           <CardContent className="p-3 text-xs">
             Discord controller 未在 daemon 啟動。請編輯
-            <code className="mx-1">~/.my-agent/discord.json</code>
+            <code className="mx-1">~/.virtual-assistant-desktop/discord.json</code>
             設定 enabled / botToken 並重啟 daemon。
           </CardContent>
         </Card>

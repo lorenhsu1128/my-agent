@@ -24,7 +24,7 @@ import { logForDebugging } from '../utils/debug.js'
 
 const README_FILENAME = 'web.README.md'
 
-const README_CONTENT = `# ~/.my-agent/web.jsonc
+const README_CONTENT = `# ~/.virtual-assistant-desktop/web.jsonc
 
 Web UI（M-WEB）設定。把 \`enabled\` 改 true 後重啟 daemon 即可從瀏覽器使用 my-agent。
 

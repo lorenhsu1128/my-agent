@@ -1,5 +1,5 @@
 /**
- * Daemon 結構化日誌（JSON lines → `~/.my-agent/daemon.log`）。
+ * Daemon 結構化日誌（JSON lines → `~/.virtual-assistant-desktop/daemon.log`）。
  *
  * 此模組僅負責寫檔；REPL 的 debug.ts 面向 stderr / ink UI，不適合 daemon
  * （daemon 背景跑沒 TTY）。

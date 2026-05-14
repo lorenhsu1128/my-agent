@@ -15,7 +15,7 @@ beforeEach(() => {
   tmpCwd = join(tmpdir(), `memrpc-cwd-${stamp}`)
   mkdirSync(tmpMemDir, { recursive: true })
   mkdirSync(tmpCwd, { recursive: true })
-  mkdirSync(join(tmpCwd, '.my-agent'), { recursive: true })
+  mkdirSync(join(tmpCwd, '.virtual-assistant-desktop'), { recursive: true })
 })
 
 afterEach(() => {

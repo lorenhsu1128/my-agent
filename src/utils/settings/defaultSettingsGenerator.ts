@@ -1,5 +1,5 @@
 // Generates a default global settings.json (JSONC format with Traditional Chinese comments)
-// for first-time users. Called once at startup when ~/.my-agent/settings.json doesn't exist.
+// for first-time users. Called once at startup when ~/.virtual-assistant-desktop/settings.json doesn't exist.
 
 export function generateDefaultSettingsContent(): string {
   return `{
@@ -10,10 +10,10 @@ export function generateDefaultSettingsContent(): string {
   //  檔案格式：JSONC（支援 // 註解）
   //
   //  設定優先級（低→高）：
-  //    此檔案（全域）→ 專案 .my-agent/settings.json
-  //    → .my-agent/settings.local.json → 命令列參數
+  //    此檔案（全域）→ 專案 .virtual-assistant-desktop/settings.json
+  //    → .virtual-assistant-desktop/settings.local.json → 命令列參數
   //
-  //  全域目錄結構（~/.my-agent/）：
+  //  全域目錄結構（~/.virtual-assistant-desktop/）：
   //    settings.json      ← 你正在讀的這份檔案
   //    projects/           ← 各專案的 session 記錄與記憶
   //      <project>/          每個專案一個子目錄（以專案路徑命名）

@@ -32,7 +32,7 @@ const RAW_CHANGELOG_URL =
 
 /**
  * Get the path for the cached changelog file.
- * The changelog is stored at ~/.my-agent/cache/changelog.md
+ * The changelog is stored at ~/.virtual-assistant-desktop/cache/changelog.md
  */
 function getChangelogCachePath(): string {
   return join(getMyAgentConfigHomeDir(), 'cache', 'changelog.md')

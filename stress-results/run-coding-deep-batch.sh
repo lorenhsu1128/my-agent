@@ -14,7 +14,7 @@ total_start=$SECONDS
 for preset in "${PRESETS[@]}"; do
   ts=$(date +%H:%M:%S)
   echo "[$ts] === preset: $preset ==="
-  sed -i "s/\"defaultSamplingPreset\": \"[^\"]*\"/\"defaultSamplingPreset\": \"$preset\"/" "$HOME/.my-agent/llamacpp.jsonc"
+  sed -i "s/\"defaultSamplingPreset\": \"[^\"]*\"/\"defaultSamplingPreset\": \"$preset\"/" "$HOME/.virtual-assistant-desktop/llamacpp.jsonc"
   for rep in $(seq 1 "$REPS"); do
     rts=$(date +%H:%M:%S)
     echo "[$rts]   rep $rep/$REPS"

@@ -15,8 +15,8 @@
 
 | 項目 | 決定 |
 |------|------|
-| Memory 範圍 | auto-memory（個別條目） + MY-AGENT.md（專案）+ `./.my-agent/*.md` + Kairos daily logs |
-| 專案 memory 目標 | **MY-AGENT.md**（不是 CLAUDE.md — my-agent 實際 import 的是前者）+ `./.my-agent/*.md` |
+| Memory 範圍 | auto-memory（個別條目） + MY-AGENT.md（專案）+ `./.virtual-assistant-desktop/*.md` + Kairos daily logs |
+| 專案 memory 目標 | **MY-AGENT.md**（不是 CLAUDE.md — my-agent 實際 import 的是前者）+ `./.virtual-assistant-desktop/*.md` |
 | Session 當前進行中 | 禁止刪，picker 顯示 `[current]` 且 disabled |
 | 刪除模式 | 軟刪（`.trash/`），搭配 `/trash` 還原或清空 |
 | 搜尋 UX | Live filter — picker 內按 `/` 進入輸入模式 |
@@ -83,10 +83,10 @@
 ### 涵蓋項目（混合列表）
 | 類型 | 來源 | 顯示 | 可編輯 (e)? |
 |------|------|------|------------|
-| auto-memory 條目 | `~/.my-agent/projects/<slug>/memory/*.md`（解析 frontmatter） | `[user] user_role — ...` | ✓（開 $EDITOR） |
+| auto-memory 條目 | `~/.virtual-assistant-desktop/projects/<slug>/memory/*.md`（解析 frontmatter） | `[user] user_role — ...` | ✓（開 $EDITOR） |
 | Project memory | `MY-AGENT.md`（整檔） | `[project] MY-AGENT.md` | ✓ |
-| Project local configs | `./.my-agent/*.md` | `[local] <filename>` | ✓ |
-| Kairos daily logs | `~/.my-agent/projects/<slug>/memory/logs/YYYY/MM/DD.md` | `[log] 2026-04-21` | ✓ |
+| Project local configs | `./.virtual-assistant-desktop/*.md` | `[local] <filename>` | ✓ |
+| Kairos daily logs | `~/.virtual-assistant-desktop/projects/<slug>/memory/logs/YYYY/MM/DD.md` | `[log] 2026-04-21` | ✓ |
 
 ### Picker 操作
 - `SPACE` toggle 選取；Enter → 確認 → 軟刪所選
@@ -173,9 +173,9 @@
 ```bash
 ./cli /session-delete
 # 選 2 筆 → Enter → y
-sqlite3 ~/.my-agent/projects/<slug>/session-index.db \
+sqlite3 ~/.virtual-assistant-desktop/projects/<slug>/session-index.db \
   "SELECT COUNT(*) FROM sessions;"         # 應減 2
-ls ~/.my-agent/projects/<slug>/.trash/     # 應出現 session-* 目錄
+ls ~/.virtual-assistant-desktop/projects/<slug>/.trash/     # 應出現 session-* 目錄
 ./cli /trash
 # r restore 其中一筆 → reconciler 重建 → /session-search 找得回
 ```
@@ -184,8 +184,8 @@ ls ~/.my-agent/projects/<slug>/.trash/     # 應出現 session-* 目錄
 ```bash
 ./cli /memory-delete
 # 選 [user] user_role → d → y
-cat ~/.my-agent/projects/<slug>/memory/MEMORY.md      # 索引行消失
-ls ~/.my-agent/projects/<slug>/.trash/memory-*        # 軟刪檔在
+cat ~/.virtual-assistant-desktop/projects/<slug>/memory/MEMORY.md      # 索引行消失
+ls ~/.virtual-assistant-desktop/projects/<slug>/.trash/memory-*        # 軟刪檔在
 ./cli /memory-delete
 # 選 MY-AGENT.md → e → $EDITOR 開啟
 ```
@@ -194,7 +194,7 @@ ls ~/.my-agent/projects/<slug>/.trash/memory-*        # 軟刪檔在
 ```bash
 ./cli /trash
 # p → 輸入 30 → 自動勾選 30 天前所有項 → x empty
-ls ~/.my-agent/projects/<slug>/.trash/                # 30 天前已清
+ls ~/.virtual-assistant-desktop/projects/<slug>/.trash/                # 30 天前已清
 ```
 
 ---

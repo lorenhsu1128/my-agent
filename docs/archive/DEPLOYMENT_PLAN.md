@@ -361,9 +361,9 @@ Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
 
 my-agent 沿用官方 Claude Code 的 `~/.claude/` 路徑，bootstrap 會讀到真實 credentials。暫時隔離法：
 ```powershell
-$env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.my-agent-profile"
+$env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.virtual-assistant-desktop-profile"
 ```
-未來可能改為 my-agent 預設用 `~/.my-agent/`，由使用者決定後實作。
+未來可能改為 my-agent 預設用 `~/.virtual-assistant-desktop/`，由使用者決定後實作。
 
 ---
 
@@ -448,9 +448,9 @@ $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.my-agent-profile"
 - llamacpp 推論慢（58 tok/s）；摘要呼叫需有 timeout，超時 fallback 回純片段模式
 - 不加 Sonnet/Haiku 備援路徑（違反 llamacpp-primary）
 
-### ADR-M2-07：SQLite 路徑 `~/.my-agent/projects/{slug}/session-index.db`，用 `bun:sqlite`
+### ADR-M2-07：SQLite 路徑 `~/.virtual-assistant-desktop/projects/{slug}/session-index.db`，用 `bun:sqlite`
 
-走 `~/.my-agent/` 而非 `~/.claude/`，與 my-agent 既有 profile 隔離方向一致。
+走 `~/.virtual-assistant-desktop/` 而非 `~/.claude/`，與 my-agent 既有 profile 隔離方向一致。
 
 ### ADR-M2-08：FTS schema 多存欄位
 
@@ -718,7 +718,7 @@ function extractToolName(entry: TranscriptEntry): string | null {
    - 用空內容訊息呼叫 — 驗證沒有任何 insert
    - 模擬 `SQLITE_BUSY` 例外 — 驗證被吞掉、流程不崩
 3. 端到端：`bun run dev --model qwen3.5-9b-neo`，問一個問題，然後開 `session-index.db` 跑 `SELECT * FROM sessions; SELECT content FROM messages_fts;`，確認有對應內容
-4. 驗證 slug 一致：`.my-agent/projects/{slug}/session-index.db` 的 `{slug}` 與 JSONL 目錄名相同
+4. 驗證 slug 一致：`.virtual-assistant-desktop/projects/{slug}/session-index.db` 的 `{slug}` 與 JSONL 目錄名相同
 5. 迴歸：原本的 30 筆 smoke check 還是要綠
 
 ## 明確不在本任務範圍的 gap（已知、延後處理）
@@ -979,7 +979,7 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 - `src/main.tsx` — 刪 bootstrap 呼叫與 import
 - `CLAUDE.md` — 新增「從官方 Claude Code 遷移設定」段落，以文件取代 runtime hint
 
-**不變**：`getClaudeConfigHomeDir()` 預設 `~/.my-agent`，`CLAUDE_CONFIG_DIR` env 覆寫保留。
+**不變**：`getClaudeConfigHomeDir()` 預設 `~/.virtual-assistant-desktop`，`CLAUDE_CONFIG_DIR` env 覆寫保留。
 
 ---
 
@@ -1040,7 +1040,7 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 
 詳細計畫見 `M_SP_PLAN.md`。
 
-**目標**：把約 15–16K tokens 的寫死 system prompt 文字外部化到 `~/.my-agent/system-prompt/` 下的 `.md` 檔，讓使用者可直接編輯並在下一 session 生效。採雙層架構（global + per-project）+ 首次啟動自動 seed + README.md 使用者指引。
+**目標**：把約 15–16K tokens 的寫死 system prompt 文字外部化到 `~/.virtual-assistant-desktop/system-prompt/` 下的 `.md` 檔，讓使用者可直接編輯並在下一 session 生效。採雙層架構（global + per-project）+ 首次啟動自動 seed + README.md 使用者指引。
 
 **範圍**：
 - `src/constants/prompts.ts` 8 大靜態段 + 8 個動態段 fallback 字串
@@ -1072,13 +1072,13 @@ OAuth scaffolding 完整下架（`src/cli/handlers/auth.ts`、`src/components/Co
 
 ## M-LLAMA-CFG — 本地 LLM server 設定外部化（2026-04-19）
 
-**目標**：原本 15 處散落的 llamacpp 設定（TS const + env var + shell hard-code）統一到 `~/.my-agent/llamacpp.json`。
+**目標**：原本 15 處散落的 llamacpp 設定（TS const + env var + shell hard-code）統一到 `~/.virtual-assistant-desktop/llamacpp.json`。
 
 **結構**：
 - TS：`src/llamacppConfig/` 模組（schema / paths / loader / seed / index），Zod 驗證 + session 凍結快照
 - Shell：`scripts/llama/load-config.sh` 用 jq 抽出 env → `serve.sh` source 它
 - Seed：首次啟動 `setup.ts` 自動寫 `llamacpp.json` + `llamacpp.README.md`
 
-**優先序**：env var > ~/.my-agent/llamacpp.json > 內建預設。JSON 壞 / 缺檔 / 缺 jq 一律 graceful fallback。
+**優先序**：env var > ~/.virtual-assistant-desktop/llamacpp.json > 內建預設。JSON 壞 / 缺檔 / 缺 jq 一律 graceful fallback。
 
 **使用者體驗**：改 port / ctx / 模型路徑改一個 JSON 檔，TS 開新 session 生效、shell 下次 exec 生效。

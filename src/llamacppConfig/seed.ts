@@ -39,7 +39,7 @@ function localizeTemplate(template: string): string {
 
 // 既有 README 內容（M-LLAMA-CFG 時期的深度說明）。
 // 註解已搬到 JSONC 模板內；此 README 只在檔案不存在時 seed，已存在就不動。
-const README_CONTENT = `# ~/.my-agent/llamacpp.json
+const README_CONTENT = `# ~/.virtual-assistant-desktop/llamacpp.json
 
 本檔為 my-agent 與 \`scripts/llama/serve.sh\` **共用**的本地 LLM server 設定來源。
 

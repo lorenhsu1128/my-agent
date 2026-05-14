@@ -125,7 +125,7 @@ export function isVisionEnabled(): boolean {
  * 優先序（高 → 低）：
  *   1. LLAMACPP_WATCHDOG_DISABLE=1   一鍵全關（debug；最高優先）
  *   2. LLAMACPP_WATCHDOG_ENABLE=1    一鍵全開（quick test；無視 config）
- *   3. ~/.my-agent/llamacpp.json 的 watchdog 區塊
+ *   3. ~/.virtual-assistant-desktop/llamacpp.json 的 watchdog 區塊
  *   4. DEFAULT_LLAMACPP_CONFIG.watchdog（全 false）
  *
  * 回傳結構與 schema 一致；caller（adapter / TUI）直接用 master + 各層 enabled

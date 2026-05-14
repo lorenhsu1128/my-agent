@@ -21,7 +21,7 @@ export function getAPIProvider(): APIProvider {
 
 /**
  * 預設連到 scripts/llama/serve.sh 啟動的本地 llama.cpp server。
- * M-LLAMA-CFG：優先讀 ~/.my-agent/llamacpp.json 的 baseUrl，缺則用硬編碼預設。
+ * M-LLAMA-CFG：優先讀 ~/.virtual-assistant-desktop/llamacpp.json 的 baseUrl，缺則用硬編碼預設。
  */
 export const DEFAULT_LLAMACPP_BASE_URL = 'http://127.0.0.1:8080/v1'
 
@@ -81,7 +81,7 @@ export function isLlamaCppActive(): boolean {
  *
  * 優先序（先命中者勝）：
  *   1. env var（LLAMA_BASE_URL / LLAMA_MODEL）
- *   2. ~/.my-agent/llamacpp.json 的 baseUrl / model
+ *   2. ~/.virtual-assistant-desktop/llamacpp.json 的 baseUrl / model
  *   3. 使用者傳入的 --model 參數（若命中 alias）
  *   4. 硬編碼 DEFAULT_*
  *
@@ -102,7 +102,7 @@ export function getLlamaCppConfig(
     model:
       process.env.LLAMA_MODEL ||
       (modelActivated ? (model as string) : cfg.model || DEFAULT_LLAMACPP_MODEL),
-    // M-VISION: 由 `~/.my-agent/llamacpp.json` 的 `vision.enabled` 宣告
+    // M-VISION: 由 `~/.virtual-assistant-desktop/llamacpp.json` 的 `vision.enabled` 宣告
     vision: cfg.vision.enabled,
     // M-TCQ-ADAPTER: server.binaryKind = 'tcq' 時 client 端 adapter 跳過
     // XML/bare-pythonic leak fallback（shim 端已 parse 過 Qwen 工具）。
@@ -135,7 +135,7 @@ export async function queryLlamaCppContextSize(
     })
     if (!res.ok) {
       warnOnceCtxSizeMissing(
-        `llama-server /slots HTTP ${res.status}; 若模型非 128K 請設 LLAMACPP_CTX_SIZE=<tokens> 或編輯 ~/.my-agent/.my-agent.jsonc 的 contextSize`,
+        `llama-server /slots HTTP ${res.status}; 若模型非 128K 請設 LLAMACPP_CTX_SIZE=<tokens> 或編輯 ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc 的 contextSize`,
       )
       return null
     }
@@ -146,11 +146,11 @@ export async function queryLlamaCppContextSize(
       return n_ctx
     }
     warnOnceCtxSizeMissing(
-      `llama-server /slots 未回傳 n_ctx；若模型非 128K 請設 LLAMACPP_CTX_SIZE=<tokens> 或編輯 ~/.my-agent/.my-agent.jsonc 的 contextSize`,
+      `llama-server /slots 未回傳 n_ctx；若模型非 128K 請設 LLAMACPP_CTX_SIZE=<tokens> 或編輯 ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc 的 contextSize`,
     )
   } catch (e) {
     warnOnceCtxSizeMissing(
-      `llama-server /slots 查詢失敗（${e instanceof Error ? e.message : String(e)}）；若模型非 128K 請設 LLAMACPP_CTX_SIZE=<tokens> 或編輯 ~/.my-agent/.my-agent.jsonc 的 contextSize，否則 auto-compact 閾值會落在 128K`,
+      `llama-server /slots 查詢失敗（${e instanceof Error ? e.message : String(e)}）；若模型非 128K 請設 LLAMACPP_CTX_SIZE=<tokens> 或編輯 ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc 的 contextSize，否則 auto-compact 閾值會落在 128K`,
     )
   }
   return null

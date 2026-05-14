@@ -2,8 +2,8 @@
  * System Prompt Externalization — 路徑解析
  *
  * 雙層儲存：
- *   - Global：~/.my-agent/system-prompt/
- *   - Per-project：~/.my-agent/projects/<slug>/system-prompt/
+ *   - Global：~/.virtual-assistant-desktop/system-prompt/
+ *   - Per-project：~/.virtual-assistant-desktop/projects/<slug>/system-prompt/
  *
  * Project slug：依 cwd 找 canonical git root，sanitize 後當 slug。
  *
@@ -36,14 +36,14 @@ export const OVERRIDE_FILENAME = 'system-prompt-override.md'
 export const APPEND_FILENAME = 'system-prompt-append.md'
 
 /**
- * Global system-prompt 目錄：~/.my-agent/system-prompt/
+ * Global system-prompt 目錄：~/.virtual-assistant-desktop/system-prompt/
  */
 export function getSystemPromptGlobalDir(): string {
   return join(getMemoryBaseDir(), SYSTEM_PROMPT_DIRNAME)
 }
 
 /**
- * Per-project system-prompt 目錄：~/.my-agent/projects/<slug>/system-prompt/
+ * Per-project system-prompt 目錄：~/.virtual-assistant-desktop/projects/<slug>/system-prompt/
  *
  * 複用 getAutoMemPath() 的 slug 解析（去掉末端 `memory/` → 取 project dir）。
  * 注意：此函數讀 process-level state（getProjectRoot）。daemon 多 project

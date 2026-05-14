@@ -9,7 +9,7 @@ const statusline = {
   aliases: [],
   name: 'statusline',
   progressMessage: 'setting up statusLine',
-  allowedTools: [AGENT_TOOL_NAME, 'Read(~/**)', 'Edit(~/.my-agent/settings.json)'],
+  allowedTools: [AGENT_TOOL_NAME, 'Read(~/**)', 'Edit(~/.virtual-assistant-desktop/settings.json)'],
   source: 'builtin',
   disableNonInteractive: true,
   async getPromptForCommand(args): Promise<ContentBlockParam[]> {

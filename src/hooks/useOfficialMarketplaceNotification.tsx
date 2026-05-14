@@ -19,7 +19,7 @@ async function _temp() {
     logForDebugging("Showing marketplace config save failure notification");
     notifs.push({
       key: "marketplace-config-save-failed",
-      jsx: <Text color="error">Failed to save marketplace retry info · Check ~/.my-agent/.my-agent.jsonc permissions</Text>,
+      jsx: <Text color="error">Failed to save marketplace retry info · Check ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc permissions</Text>,
       priority: "immediate",
       timeoutMs: 10000
     });

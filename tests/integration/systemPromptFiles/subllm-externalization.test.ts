@@ -4,7 +4,7 @@
  *
  * 對每個 prompt 驗：
  *   - default 路徑：snapshot 載完無 override 檔 → callsite 拿到 BUNDLED_DEFAULT
- *   - override 路徑：放使用者檔到 ~/.my-agent/system-prompt/subllm/<name>.md
+ *   - override 路徑：放使用者檔到 ~/.virtual-assistant-desktop/system-prompt/subllm/<name>.md
  *     → callsite 拿到使用者內容
  *   - 變數插值：{name} / {species} / {maxFiles} / {BASH_TOOL_NAME} 等
  *     在 fallback 與 override 路徑都正確替換

@@ -24,7 +24,7 @@ describe('cronHistory — append-only run history', () => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  test('appendHistoryEntry creates file under .my-agent/cron/history/', async () => {
+  test('appendHistoryEntry creates file under .virtual-assistant-desktop/cron/history/', async () => {
     await appendHistoryEntry(
       'abcd1234',
       { ts: 1735000000000, status: 'ok' },
@@ -33,7 +33,7 @@ describe('cronHistory — append-only run history', () => {
     const path = getHistoryFilePath('abcd1234', tmpDir)
     expect(existsSync(path)).toBe(true)
     expect(path).toContain(
-      join('.my-agent', 'cron', 'history', 'abcd1234.jsonl'),
+      join('.virtual-assistant-desktop', 'cron', 'history', 'abcd1234.jsonl'),
     )
   })
 

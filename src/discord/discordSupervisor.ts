@@ -3,7 +3,7 @@
  * 抽成可重複呼叫的 lifecycle 物件，讓 web admin 端能 reload / restart。
  *
  * Lifecycle：
- *   - `start()` 讀 ~/.my-agent/discord.json + env token，跑 `startDiscordGateway`
+ *   - `start()` 讀 ~/.virtual-assistant-desktop/discord.json + env token，跑 `startDiscordGateway`
  *   - `stop()` 呼叫 dispose（gateway 自己處理 client.destroy）
  *   - `restart()` = stop + start（讀最新 config，可重啟連線、套新 token / intents）
  *   - `reload()` 不重啟連線，只重讀 config 快照（影響 channelBindings / whitelistUserIds

@@ -78,7 +78,7 @@ my-agent 既有的 `AbortSignal` 只在使用者按 Esc 才觸發；**背景呼�
 
 ## 設定檔
 
-寫到 `~/.my-agent/llamacpp.jsonc` 的 `watchdog` 區塊：
+寫到 `~/.virtual-assistant-desktop/llamacpp.jsonc` 的 `watchdog` 區塊：
 
 ```jsonc
 {

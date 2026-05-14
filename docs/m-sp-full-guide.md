@@ -18,7 +18,7 @@
 | Per-cwd snapshot | daemon 在不同 project attach 時各自載入該 cwd 的 system prompt 檔 | 不用，自動。原本壞掉的 per-project 覆蓋現在真的會 work |
 | `system-prompt-override.md` | 整段替代 default 主 prompt（29 section 拼成的那一坨） | 想換整套人格時編這個檔 |
 | `system-prompt-append.md` | 追加在最後（不蓋既有內容） | 想加團隊規範 / 安全守則 / 額外指令時建這個檔 |
-| 5 sub-LLM prompts | cron / memory selector / verification / tool summary / buddy 子 LLM 系統提示 | 想改子系統口吻或行為時編 `~/.my-agent/system-prompt/subllm/<id>.md` |
+| 5 sub-LLM prompts | cron / memory selector / verification / tool summary / buddy 子 LLM 系統提示 | 想改子系統口吻或行為時編 `~/.virtual-assistant-desktop/system-prompt/subllm/<id>.md` |
 
 > 三條通道**獨立**：override 蓋整段主 prompt，section 檔（29 個）蓋單段，append 純追加；同時存在會疊加。
 
@@ -30,15 +30,15 @@
 
 ### 情境 A：把預設人格整套換成「Linus 風格 reviewer」
 
-第一次跑 my-agent 時，`~/.my-agent/system-prompt-override.md` 會自動 seed 成一份完整 default 拷貝（29 個 section 拼出來）— 直接編這個檔即可。
+第一次跑 my-agent 時，`~/.virtual-assistant-desktop/system-prompt-override.md` 會自動 seed 成一份完整 default 拷貝（29 個 section 拼出來）— 直接編這個檔即可。
 
 **bash / zsh：**
 
     # 1. 確認 seed 已建好（沒有就先跑一次冒煙）
-    ls ~/.my-agent/system-prompt-override.md || ./cli -p "hi"
+    ls ~/.virtual-assistant-desktop/system-prompt-override.md || ./cli -p "hi"
 
     # 2. 整段替換成你的人格
-    cat > ~/.my-agent/system-prompt-override.md <<'EOF'
+    cat > ~/.virtual-assistant-desktop/system-prompt-override.md <<'EOF'
     You are a Linus Torvalds-style code reviewer.
     Your tone is blunt, surgical, and zero patience for sloppiness.
     When you spot a bug you say it directly. No sandwich feedback.
@@ -52,11 +52,11 @@
 
 **PowerShell：**
 
-    if (-not (Test-Path "$env:USERPROFILE\.my-agent\system-prompt-override.md")) { .\cli.exe -p "hi" }
+    if (-not (Test-Path "$env:USERPROFILE\.virtual-assistant-desktop\system-prompt-override.md")) { .\cli.exe -p "hi" }
     @"
     You are a Linus Torvalds-style code reviewer.
     ...
-    "@ | Set-Content -Path "$env:USERPROFILE\.my-agent\system-prompt-override.md" -Encoding utf8
+    "@ | Set-Content -Path "$env:USERPROFILE\.virtual-assistant-desktop\system-prompt-override.md" -Encoding utf8
 
 **預期效果**：所有 29 個 section（intro / system / doing-tasks / actions / using-tools …）整段被你寫的內容取代。memory 注入、user-profile、env-info 等動態段仍會由程式注入。
 
@@ -70,7 +70,7 @@ dump 出來的 `intro` 段會看到你寫的字而不是 my-agent default。
 
 **還原**：刪掉檔案，下次啟動會重 seed 完整 default：
 
-    rm ~/.my-agent/system-prompt-override.md
+    rm ~/.virtual-assistant-desktop/system-prompt-override.md
     ./cli -p "hi"   # 重 seed
 
 > 空字串或純 HTML 註解（`<!-- ... -->`）都視為「未啟用」→ 走 default。所以你可以整檔註解掉暫時停用而不刪檔。
@@ -81,7 +81,7 @@ dump 出來的 `intro` 段會看到你寫的字而不是 my-agent default。
 
 `system-prompt-append.md` **不會 seed**（沒這個需求拿 default 當起點），要自己建。
 
-    cat > ~/.my-agent/system-prompt-append.md <<'EOF'
+    cat > ~/.virtual-assistant-desktop/system-prompt-append.md <<'EOF'
     ## 團隊規範
     - 修 bug 必須附 regression test
     - commit 訊息一律繁體中文
@@ -98,13 +98,13 @@ dump 出來的 `intro` 段會看到你寫的字而不是 my-agent default。
 
 ### 情境 C：把 buddy 桌寵的口吻改成貓奴語氣
 
-5 個 sub-LLM prompt 在 `~/.my-agent/system-prompt/subllm/` 子目錄下，首次啟動會 seed 預設值。
+5 個 sub-LLM prompt 在 `~/.virtual-assistant-desktop/system-prompt/subllm/` 子目錄下，首次啟動會 seed 預設值。
 
     # 看一眼預設長什麼樣（保留變數佔位符）
-    cat ~/.my-agent/system-prompt/subllm/buddy-companion.md
+    cat ~/.virtual-assistant-desktop/system-prompt/subllm/buddy-companion.md
 
     # 改寫
-    cat > ~/.my-agent/system-prompt/subllm/buddy-companion.md <<'EOF'
+    cat > ~/.virtual-assistant-desktop/system-prompt/subllm/buddy-companion.md <<'EOF'
     # Companion
 
     A small {species} named {name} curls up next to the user's input box,
@@ -133,18 +133,18 @@ dump 出來的 `intro` 段會看到你寫的字而不是 my-agent default。
 三條通道，每條獨立判斷：
 
     主 prompt：
-      per-project override (~/.my-agent/projects/<slug>/system-prompt-override.md)
-        > global override   (~/.my-agent/system-prompt-override.md)
+      per-project override (~/.virtual-assistant-desktop/projects/<slug>/system-prompt-override.md)
+        > global override   (~/.virtual-assistant-desktop/system-prompt-override.md)
         > [若兩者都無] default 拼接 29 section（每 section 各自走下方優先序）
 
     個別 section（在 default 拼接路徑被使用）：
-      per-project section (~/.my-agent/projects/<slug>/system-prompt/<file>)
-        > global section    (~/.my-agent/system-prompt/<file>)
+      per-project section (~/.virtual-assistant-desktop/projects/<slug>/system-prompt/<file>)
+        > global section    (~/.virtual-assistant-desktop/system-prompt/<file>)
         > bundled default
 
     Append（追加在主 prompt 末尾）：
-      per-project append (~/.my-agent/projects/<slug>/system-prompt-append.md)
-        > global append     (~/.my-agent/system-prompt-append.md)
+      per-project append (~/.virtual-assistant-desktop/projects/<slug>/system-prompt-append.md)
+        > global append     (~/.virtual-assistant-desktop/system-prompt-append.md)
         > [若兩者都無] 不追加
 
 關鍵性質：
@@ -158,7 +158,7 @@ dump 出來的 `intro` 段會看到你寫的字而不是 my-agent default。
 
 ## 4. 5 個 Sub-LLM 詳解
 
-每條檔案：`~/.my-agent/system-prompt/subllm/<id>.md`。Per-project 覆蓋路徑：`~/.my-agent/projects/<slug>/system-prompt/subllm/<id>.md`。
+每條檔案：`~/.virtual-assistant-desktop/system-prompt/subllm/<id>.md`。Per-project 覆蓋路徑：`~/.virtual-assistant-desktop/projects/<slug>/system-prompt/subllm/<id>.md`。
 
 優先序與一般 section 相同：per-project > global > bundled fallback。**檔不存在 / 純空 → bundled fallback**；**檔存在但空字串 → 注入空字串**（loader 規約，故意留的「停用」語意）。
 
@@ -225,7 +225,7 @@ dump 出來的 `intro` 段會看到你寫的字而不是 my-agent default。
 
 - 桌寵走 daemon mode（`./cli daemon`）
 - 桌寵專屬 cwd 用獨立工作目錄（不要跟程式專案共用，避免 git root 污染）
-- 在該 cwd 對應的 `~/.my-agent/projects/<slug>/` 下放 override.md + sub-LLM 覆寫
+- 在該 cwd 對應的 `~/.virtual-assistant-desktop/projects/<slug>/` 下放 override.md + sub-LLM 覆寫
 
 ### 5.2 算 per-project slug
 
@@ -247,32 +247,32 @@ Slug 算法（`src/systemPromptFiles/paths.ts:77`）：
 
 （**沒 git**，例如桌寵獨立 workspace）：
 
-    cwd = C:\Users\LOREN\.my-agent\mascot-workspace
+    cwd = C:\Users\LOREN\.virtual-assistant-desktop\mascot-workspace
     git root = null
     slug = C--Users-LOREN--my-agent-mascot-workspace
 
-實際算的最快方式 — 先建 `~/.my-agent/mascot-workspace`，跑一次 `./cli -p "hi"`，然後看 `~/.my-agent/projects/` 底下多出哪個目錄就是 slug：
+實際算的最快方式 — 先建 `~/.virtual-assistant-desktop/mascot-workspace`，跑一次 `./cli -p "hi"`，然後看 `~/.virtual-assistant-desktop/projects/` 底下多出哪個目錄就是 slug：
 
 **bash：**
 
-    mkdir -p ~/.my-agent/mascot-workspace
-    cd ~/.my-agent/mascot-workspace && ~/Documents/_projects/my-agent/cli -p "hi"
-    ls -1 ~/.my-agent/projects/ | grep mascot
+    mkdir -p ~/.virtual-assistant-desktop/mascot-workspace
+    cd ~/.virtual-assistant-desktop/mascot-workspace && ~/Documents/_projects/my-agent/cli -p "hi"
+    ls -1 ~/.virtual-assistant-desktop/projects/ | grep mascot
 
 **PowerShell：**
 
-    New-Item -ItemType Directory -Force "$env:USERPROFILE\.my-agent\mascot-workspace"
-    Push-Location "$env:USERPROFILE\.my-agent\mascot-workspace"
+    New-Item -ItemType Directory -Force "$env:USERPROFILE\.virtual-assistant-desktop\mascot-workspace"
+    Push-Location "$env:USERPROFILE\.virtual-assistant-desktop\mascot-workspace"
     & "C:\Users\LOREN\Documents\_projects\my-agent\cli.exe" -p "hi"
     Pop-Location
-    Get-ChildItem "$env:USERPROFILE\.my-agent\projects" | Where-Object Name -like "*mascot*"
+    Get-ChildItem "$env:USERPROFILE\.virtual-assistant-desktop\projects" | Where-Object Name -like "*mascot*"
 
 ### 5.3 寫桌寵 override.md
 
 假設算出來的 slug 是 `C--Users-LOREN--my-agent-mascot-workspace`：
 
     SLUG="C--Users-LOREN--my-agent-mascot-workspace"
-    DIR="$HOME/.my-agent/projects/$SLUG"
+    DIR="$HOME/.virtual-assistant-desktop/projects/$SLUG"
     mkdir -p "$DIR"
 
     cat > "$DIR/system-prompt-override.md" <<'EOF'
@@ -313,7 +313,7 @@ daemon 怎麼啟動見 `docs/daemon-mode.md`。關鍵：daemon attach 時要把�
 開兩個 shell：
 
     # Shell A：桌寵 cwd
-    cd ~/.my-agent/mascot-workspace
+    cd ~/.virtual-assistant-desktop/mascot-workspace
     ~/Documents/_projects/my-agent/cli -p "你好"
     # 預期：小橘語氣
 
@@ -369,7 +369,7 @@ Override（小橘人格）+ append（安全規範）會疊加。
 2. **檔案不是空 / 純註解** — 純空白或只剩 HTML 註解視為「未啟用」（`overrides.ts:64`）
 3. **沒被 CLI flag 蓋掉** — `--system-prompt <path>` 比 override.md 優先
 4. **daemon 路徑下 cwd 對齊** — `bootstrapDaemonContext()` 拿的是 `opts.cwd`，從桌寵 / SDK 端傳進來的；錯 cwd → 套錯 snapshot
-5. **per-project vs global 路徑寫對** — per-project 是 `~/.my-agent/projects/<slug>/system-prompt-override.md`（注意 `system-prompt-` 前綴是檔名，**不是子目錄**）
+5. **per-project vs global 路徑寫對** — per-project 是 `~/.virtual-assistant-desktop/projects/<slug>/system-prompt-override.md`（注意 `system-prompt-` 前綴是檔名，**不是子目錄**）
 
 ### Q2：append.md 改了沒效果？
 
@@ -391,10 +391,10 @@ Override（小橘人格）+ append（安全規範）會疊加。
 
 要拿最新 default：
 
-    cp ~/.my-agent/system-prompt-override.md ~/.my-agent/system-prompt-override.md.bak
-    rm ~/.my-agent/system-prompt-override.md
+    cp ~/.virtual-assistant-desktop/system-prompt-override.md ~/.virtual-assistant-desktop/system-prompt-override.md.bak
+    rm ~/.virtual-assistant-desktop/system-prompt-override.md
     ./cli -p "hi"   # 重 seed
-    diff ~/.my-agent/system-prompt-override.md.bak ~/.my-agent/system-prompt-override.md
+    diff ~/.virtual-assistant-desktop/system-prompt-override.md.bak ~/.virtual-assistant-desktop/system-prompt-override.md
     # 手動把你的客製化 merge 回新 default
 
 個別 section 同理 — 刪檔重啟 → seed 補回最新預設。
@@ -412,11 +412,11 @@ Override 啟用 → 整段主 prompt 被 override 取代 → 29 個個別 sectio
 
 最直接：開 session 跟它說「請覆述你的系統提示前 200 字」。
 
-或檢查 daemon log（`~/.my-agent/daemon.log`）— `[systemPromptFiles]` 前綴的訊息會記錄 seed / load 過程。
+或檢查 daemon log（`~/.virtual-assistant-desktop/daemon.log`）— `[systemPromptFiles]` 前綴的訊息會記錄 seed / load 過程。
 
 ### Q7：per-project slug 算錯了怎麼辦？
 
-最簡單：跑一次 `./cli -p "hi"` 從該 cwd，看 `~/.my-agent/projects/` 多出哪個目錄就是。或對該 cwd 跑：
+最簡單：跑一次 `./cli -p "hi"` 從該 cwd，看 `~/.virtual-assistant-desktop/projects/` 多出哪個目錄就是。或對該 cwd 跑：
 
     bun -e "import('./src/systemPromptFiles/paths.js').then(m => console.log(m.getProjectSlugForCwd(process.cwd())))"
 
@@ -455,7 +455,7 @@ Override 啟用 → 整段主 prompt 被 override 取代 → 29 個個別 sectio
 - `docs/plans/M-SP-FULL.md` — M-SP-FULL plan 全文
 - `docs/adr.md` — ADR-008-A（per-cwd snapshot 設計決策）
 - `docs/prompt-inventory.md` — 全 prompt 索引（標註各條外部化狀態）
-- `~/.my-agent/system-prompt/README.md` — seed 自動寫入的速查指引
+- `~/.virtual-assistant-desktop/system-prompt/README.md` — seed 自動寫入的速查指引
 
 ---
 

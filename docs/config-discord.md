@@ -7,7 +7,7 @@
 
 M-DISCORD：Discord bot 嵌入 daemon 的設定。
 
-**來源優先序**：env var override → `~/.my-agent/discord.jsonc` → schema default。
+**來源優先序**：env var override → `~/.virtual-assistant-desktop/discord.jsonc` → schema default。
 
 
 ## Env 變數一覽
@@ -35,7 +35,7 @@ M-DISCORD：Discord bot 嵌入 daemon 的設定。
 | 欄位 | 型別 | Default | Env override | 說明 |
 |---|---|---|---|---|
 | `enabled` | `boolean` | `false` | — | 開關；為 false 時 daemon 不起 Discord gateway。 |
-| `botToken` | `string` _(optional)_ | _(undefined)_ | — | Bot token。可直接寫在此處（~/.my-agent/ 在使用者家目錄、非 git 目錄，風險低） 或改用 env var `DISCORD_BOT_TOKEN`（env 優先於此欄位）。 安全提醒： - 這檔不要 commit 進 git（家目錄預設不會） - 檔案權限建議 0600（ssh/credentials 慣例） - 若 token 外洩請立刻到 Discord Developer Portal → Bot → Reset Token |
+| `botToken` | `string` _(optional)_ | _(undefined)_ | — | Bot token。可直接寫在此處（~/.virtual-assistant-desktop/ 在使用者家目錄、非 git 目錄，風險低） 或改用 env var `DISCORD_BOT_TOKEN`（env 優先於此欄位）。 安全提醒： - 這檔不要 commit 進 git（家目錄預設不會） - 檔案權限建議 0600（ssh/credentials 慣例） - 若 token 外洩請立刻到 Discord Developer Portal → Bot → Reset Token |
 | `whitelistUserIds` | `array<string>` | `[]` | — | 白名單 Discord user id（snowflake 字串）；必填非空。 |
 | `defaultProjectPath` | `string` _(optional)_ | _(undefined)_ | — | DM 沒前綴時的 fallback project path。必須是 projects[].path 中的其中一個； loader 會驗證。沒設 = DM 沒前綴時忽略訊息。 |
 | `projects` | `array` | `[]` | — | 多 project 宣告。 |

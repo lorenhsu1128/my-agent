@@ -10,10 +10,10 @@ import { which } from './which.js'
 type Platform = 'win32' | 'darwin' | 'linux'
 
 // Config and data paths
-// config 檔案位於 ~/.my-agent/.my-agent.jsonc（config 目錄內，JSONC 格式）
+// config 檔案位於 ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc（config 目錄內，JSONC 格式）
 export const getGlobalClaudeFile = memoize((): string => {
   const suffix = fileSuffixForOauthConfig()
-  return join(getMyAgentConfigHomeDir(), `.my-agent${suffix}.jsonc`)
+  return join(getMyAgentConfigHomeDir(), `.virtual-assistant-desktop${suffix}.jsonc`)
 })
 
 const hasInternetAccess = memoize(async (): Promise<boolean> => {

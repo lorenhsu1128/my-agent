@@ -1,7 +1,7 @@
 /**
  * scheduled_tasks.json JSONC 模板（bundled）。
  *
- * 此檔案在每個專案的 .my-agent/scheduled_tasks.json 落盤，格式為
+ * 此檔案在每個專案的 .virtual-assistant-desktop/scheduled_tasks.json 落盤，格式為
  * { tasks: CronTask[] }。
  *
  * 首次寫入（使用者尚未建過任何 cron）→ 落盤此模板（空 tasks 陣列 +
@@ -10,7 +10,7 @@
 
 export const CRON_TASKS_JSONC_TEMPLATE = `{
   // ═══════════════════════════════════════════════════════════════════
-  // Cron 排程任務（<project>/.my-agent/scheduled_tasks.json）
+  // Cron 排程任務（<project>/.virtual-assistant-desktop/scheduled_tasks.json）
   //
   // my-agent 在背景按時間表執行的任務清單。由以下 8 個工具維護，一般
   // 不需手改：CronCreate / CronList / CronDelete / CronPause / CronResume /

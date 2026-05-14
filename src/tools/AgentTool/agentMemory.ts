@@ -9,7 +9,7 @@ import { getCwd } from '../../utils/cwd.js'
 import { findCanonicalGitRoot } from '../../utils/git.js'
 import { sanitizePath } from '../../utils/path.js'
 
-// Persistent agent memory scope: 'user' (~/.my-agent/agent-memory/), 'project' (.my-agent/agent-memory/), or 'local' (.my-agent/agent-memory-local/)
+// Persistent agent memory scope: 'user' (~/.virtual-assistant-desktop/agent-memory/), 'project' (.virtual-assistant-desktop/agent-memory/), or 'local' (.virtual-assistant-desktop/agent-memory-local/)
 export type AgentMemoryScope = 'user' | 'project' | 'local'
 
 /**
@@ -24,7 +24,7 @@ function sanitizeAgentTypeForPath(agentType: string): string {
 /**
  * Returns the local agent memory directory, which is project-specific and not checked into VCS.
  * When MY_AGENT_REMOTE_MEMORY_DIR is set, persists to the mount with project namespacing.
- * Otherwise, uses <cwd>/.my-agent/agent-memory-local/<agentType>/.
+ * Otherwise, uses <cwd>/.virtual-assistant-desktop/agent-memory-local/<agentType>/.
  */
 function getLocalAgentMemoryDir(dirName: string): string {
   if (process.env.MY_AGENT_REMOTE_MEMORY_DIR) {
@@ -40,13 +40,13 @@ function getLocalAgentMemoryDir(dirName: string): string {
       ) + sep
     )
   }
-  return join(getCwd(), '.my-agent', 'agent-memory-local', dirName) + sep
+  return join(getCwd(), '.virtual-assistant-desktop', 'agent-memory-local', dirName) + sep
 }
 
 /**
  * Returns the agent memory directory for a given agent type and scope.
  * - 'user' scope: <memoryBase>/agent-memory/<agentType>/
- * - 'project' scope: <cwd>/.my-agent/agent-memory/<agentType>/
+ * - 'project' scope: <cwd>/.virtual-assistant-desktop/agent-memory/<agentType>/
  * - 'local' scope: see getLocalAgentMemoryDir()
  */
 export function getAgentMemoryDir(
@@ -56,7 +56,7 @@ export function getAgentMemoryDir(
   const dirName = sanitizeAgentTypeForPath(agentType)
   switch (scope) {
     case 'project':
-      return join(getCwd(), '.my-agent', 'agent-memory', dirName) + sep
+      return join(getCwd(), '.virtual-assistant-desktop', 'agent-memory', dirName) + sep
     case 'local':
       return getLocalAgentMemoryDir(dirName)
     case 'user':
@@ -77,7 +77,7 @@ export function isAgentMemoryPath(absolutePath: string): boolean {
 
   // Project scope: always cwd-based (not redirected)
   if (
-    normalizedPath.startsWith(join(getCwd(), '.my-agent', 'agent-memory') + sep)
+    normalizedPath.startsWith(join(getCwd(), '.virtual-assistant-desktop', 'agent-memory') + sep)
   ) {
     return true
   }
@@ -94,7 +94,7 @@ export function isAgentMemoryPath(absolutePath: string): boolean {
     }
   } else if (
     normalizedPath.startsWith(
-      join(getCwd(), '.my-agent', 'agent-memory-local') + sep,
+      join(getCwd(), '.virtual-assistant-desktop', 'agent-memory-local') + sep,
     )
   ) {
     return true
@@ -120,7 +120,7 @@ export function getMemoryScopeDisplay(
     case 'user':
       return `User (${join(getMemoryBaseDir(), 'agent-memory')}/)`
     case 'project':
-      return 'Project (.my-agent/agent-memory/)'
+      return 'Project (.virtual-assistant-desktop/agent-memory/)'
     case 'local':
       return `Local (${getLocalAgentMemoryDir('...')})`
     default:
@@ -133,7 +133,7 @@ export function getMemoryScopeDisplay(
  * Creates the memory directory if needed and returns a prompt with memory contents.
  *
  * @param agentType The agent's type name (used as directory name)
- * @param scope 'user' for ~/.my-agent/agent-memory/ or 'project' for .my-agent/agent-memory/
+ * @param scope 'user' for ~/.virtual-assistant-desktop/agent-memory/ or 'project' for .virtual-assistant-desktop/agent-memory/
  */
 export function loadAgentMemoryPrompt(
   agentType: string,

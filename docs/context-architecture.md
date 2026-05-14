@@ -72,7 +72,7 @@ return [
 │                    USER.md 雙層設計                          │
 ├─────────────────────────────────────────────────────────────┤
 │  Global USER.md (跨專案)                                    │
-│  └─ 位置：~/.my-agent/USER.md                                │
+│  └─ 位置：~/.virtual-assistant-desktop/USER.md                                │
 │  └─ 內容：個人身份、語言偏好、工作風格                         │
 │  └─ 範例：                                                   │
 │     - 主要語言：繁體中文                                      │
@@ -80,7 +80,7 @@ return [
 │     - 偏好：簡潔回應，不冗長                                  │
 ├─────────────────────────────────────────────────────────────┤
 │  Per-Project USER.md (專案專屬)                              │
-│  └─ 位置：~/.my-agent/projects/{slug}/USER.md                │
+│  └─ 位置：~/.virtual-assistant-desktop/projects/{slug}/USER.md                │
 │  └─ 內容：專案特定角色、目標、約束                             │
 │  └─ 範例：                                                   │
 │     - 本專案用 Bun 而非 Node                                 │
@@ -322,7 +322,7 @@ export const USER_PROFILE_SOFT_LIMIT = 1500
 
 ## 8. M-SP — System Prompt 外部化（2026-04-19）
 
-原本寫死在 `prompts.ts` / `memoryTypes.ts` / `QueryEngine.ts` 等檔案的 **29 個 system prompt section**，已全部搬到 `~/.my-agent/system-prompt/` 下的 `.md` 檔，使用者可直接編輯、下一 session 生效。
+原本寫死在 `prompts.ts` / `memoryTypes.ts` / `QueryEngine.ts` 等檔案的 **29 個 system prompt section**，已全部搬到 `~/.virtual-assistant-desktop/system-prompt/` 下的 `.md` 檔，使用者可直接編輯、下一 session 生效。
 
 ### 架構
 
@@ -338,8 +338,8 @@ prompts.ts / memoryTypes.ts / QueryEngine.ts
 
 ### 解析鏈（每個 section 獨立判斷）
 
-1. `~/.my-agent/projects/<slug>/system-prompt/<filename>` — per-project 覆蓋
-2. `~/.my-agent/system-prompt/<filename>` — global（通常由 seed 寫入）
+1. `~/.virtual-assistant-desktop/projects/<slug>/system-prompt/<filename>` — per-project 覆蓋
+2. `~/.virtual-assistant-desktop/system-prompt/<filename>` — global（通常由 seed 寫入）
 3. Bundled 預設 — 程式內建 fallback
 
 ### 變數插值

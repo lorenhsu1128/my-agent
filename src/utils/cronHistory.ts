@@ -1,6 +1,6 @@
 // Append-only run history index for cron fires.
 //
-// Layout:  <project>/.my-agent/cron/history/{taskId}.jsonl
+// Layout:  <project>/.virtual-assistant-desktop/cron/history/{taskId}.jsonl
 // Each line is one fire entry — ts / status / error / optional metadata.
 // Truncation: when entry count exceeds CronTask.history.keepRuns (default 50),
 // the oldest entries are dropped via read-slice-atomic-write.
@@ -16,7 +16,7 @@ import { getProjectRoot } from '../bootstrap/state.js'
 import { logForDebugging } from './debug.js'
 import { isFsInaccessible } from './errors.js'
 
-const HISTORY_DIR_REL = join('.my-agent', 'cron', 'history')
+const HISTORY_DIR_REL = join('.virtual-assistant-desktop', 'cron', 'history')
 
 /** One row in the history JSONL. All fields except `ts` and `status` are optional. */
 export type CronHistoryEntry = {

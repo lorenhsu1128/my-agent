@@ -11,15 +11,15 @@ import {
 import { clearPluginOutputStyleCache } from '../utils/plugins/loadPluginOutputStyles.js'
 
 /**
- * Loads markdown files from .my-agent/output-styles directories throughout the project
- * and from ~/.my-agent/output-styles directory and converts them to output styles.
+ * Loads markdown files from .virtual-assistant-desktop/output-styles directories throughout the project
+ * and from ~/.virtual-assistant-desktop/output-styles directory and converts them to output styles.
  *
  * Each filename becomes a style name, and the file content becomes the style prompt.
  * The frontmatter provides name and description.
  *
  * Structure:
- * - Project .my-agent/output-styles/*.md -> project styles
- * - User ~/.my-agent/output-styles/*.md -> user styles (overridden by project styles)
+ * - Project .virtual-assistant-desktop/output-styles/*.md -> project styles
+ * - User ~/.virtual-assistant-desktop/output-styles/*.md -> user styles (overridden by project styles)
  *
  * @param cwd Current working directory for project directory traversal
  */

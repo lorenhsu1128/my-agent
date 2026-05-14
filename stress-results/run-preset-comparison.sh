@@ -1,5 +1,5 @@
 #!/bin/bash
-# 批次跑 4 preset × v3-myagent 12 case，每輪換 ~/.my-agent/llamacpp.jsonc 的 defaultSamplingPreset
+# 批次跑 4 preset × v3-myagent 12 case，每輪換 ~/.virtual-assistant-desktop/llamacpp.jsonc 的 defaultSamplingPreset
 set -u
 cd "$(dirname "$0")/.."
 PRESETS=(thinking-general thinking-coding instruct-general instruct-reasoning)
@@ -9,7 +9,7 @@ for preset in "${PRESETS[@]}"; do
   ts=$(date +%H:%M:%S)
   echo "[$ts] === Running preset: $preset ==="
   # in-place 換 defaultSamplingPreset 值
-  sed -i "s/\"defaultSamplingPreset\": \"[^\"]*\"/\"defaultSamplingPreset\": \"$preset\"/" "$HOME/.my-agent/llamacpp.jsonc"
+  sed -i "s/\"defaultSamplingPreset\": \"[^\"]*\"/\"defaultSamplingPreset\": \"$preset\"/" "$HOME/.virtual-assistant-desktop/llamacpp.jsonc"
   start=$SECONDS
   bun vendor/node-llama-tcq/scripts/live-test-realistic-v3-myagent.ts \
     > "$OUT/$preset.log" 2>&1

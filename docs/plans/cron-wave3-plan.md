@@ -44,7 +44,7 @@
          ▼                      ▼                   ▼
 ┌──────────────────┐  ┌──────────────────┐  ┌─────────────────┐
 │ cronScheduler.ts │  │ cronWiring.ts    │  │ history store   │
-│ (catch-up,       │  │ (condition gate, │  │ .my-agent/cron/ │
+│ (catch-up,       │  │ (condition gate, │  │ .virtual-assistant-desktop/cron/ │
 │  fire decision)  │  │  retry, notify   │  │ output/{id}/ +  │
 │                  │  │  emit)           │  │ history.jsonl   │
 └──────────────────┘  └──────────────────┘  └─────────────────┘
@@ -168,8 +168,8 @@ emit 點：
 
 ### 設計
 
-- 既有 `saveJobOutput()` 已寫 `.my-agent/cron/output/{id}/{timestamp}.md`（cronScheduler.ts:386-399），這是 raw 內容
-- 新增 **history index**：`.my-agent/cron/history/{id}.jsonl`（append-only），每行一筆：
+- 既有 `saveJobOutput()` 已寫 `.virtual-assistant-desktop/cron/output/{id}/{timestamp}.md`（cronScheduler.ts:386-399），這是 raw 內容
+- 新增 **history index**：`.virtual-assistant-desktop/cron/history/{id}.jsonl`（append-only），每行一筆：
   ```json
   {"ts": 1735000000000, "status": "ok", "durationMs": 4200, "attempt": 1, "outputFile": "2026-04-23T09:00:01.md", "errorMsg": null}
   ```

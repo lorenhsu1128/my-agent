@@ -247,7 +247,7 @@ describe('M-SP-FULL Phase 2：composeFullDefaultPrompt + seed', () => {
     // header 含警告與優先序說明
     expect(prompt).toContain('M-SP-FULL Phase 2')
     expect(prompt).toContain('刪除本檔即回到')
-    expect(prompt).toContain('per-project: ~/.my-agent/projects/')
+    expect(prompt).toContain('per-project: ~/.virtual-assistant-desktop/projects/')
 
     // 每個 externalized + 非空 section 都帶分隔註解
     for (const section of SECTIONS) {

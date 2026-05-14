@@ -4,7 +4,7 @@
 //
 // 前置：
 //   - GPU server 已起：bash scripts/llama/serve.sh
-//   - ~/.my-agent/llamacpp.jsonc 設 defaultSamplingPreset=thinking-coding
+//   - ~/.virtual-assistant-desktop/llamacpp.jsonc 設 defaultSamplingPreset=thinking-coding
 //   - shim console 會印 [qwen-tool-leak] warn line（B3 接入），driver 不依賴
 //     抓 stderr — 只看 client-side 收到的 result text；shim warn 用人眼對。
 //

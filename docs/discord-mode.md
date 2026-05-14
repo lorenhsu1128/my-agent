@@ -9,7 +9,7 @@
 1. Discord Developer Portal 建 bot，複製 token
 2. 開 `MESSAGE CONTENT INTENT`（Privileged Gateway Intent）
 3. OAuth2 URL 邀請 bot 到**你自己的**私人 guild（scope: `bot` + `applications.commands`）
-4. 編輯 `~/.my-agent/discord.json`（token、白名單 userId、project、home channel）
+4. 編輯 `~/.virtual-assistant-desktop/discord.json`（token、白名單 userId、project、home channel）
 5. 終端機 `bun run dev daemon start`
 6. Discord DM bot 任意訊息（或在綁定的 channel）即開始對話
 
@@ -117,7 +117,7 @@ Discord 本體設定 → **進階** → 打開 **開發者模式**。接著：
 
 ### 4.2 本機端
 
-#### Step E — 填 `~/.my-agent/discord.json`
+#### Step E — 填 `~/.virtual-assistant-desktop/discord.json`
 
 首次啟動 daemon 會自動 seed 出一份空範本 + `discord.README.md`。最小可用範例：
 
@@ -170,7 +170,7 @@ bun run dev daemon start
 
 看 log 確認：
 ```bash
-tail -f ~/.my-agent/daemon.log
+tail -f ~/.virtual-assistant-desktop/daemon.log
 ```
 
 應出現：
@@ -196,14 +196,14 @@ tail -f ~/.my-agent/daemon.log
 
 **② 編輯設定**
 ```bash
-notepad ~/.my-agent/discord.json
+notepad ~/.virtual-assistant-desktop/discord.json
 ```
 填入 Step E 的範例，替換對應 ID 與 token。
 
 **③ 啟 daemon**
 ```bash
 bun run dev daemon start
-tail -f ~/.my-agent/daemon.log
+tail -f ~/.virtual-assistant-desktop/daemon.log
 ```
 看到 `discord ready` 即可。打開 Discord，bot `MY-AGENT#xxxx` 應顯示**綠點在線**，presence 文字 `Managing 0 projects`（還沒 lazy-load）。
 
@@ -296,7 +296,7 @@ bun run dev daemon stop
 
 ### 6.3 圖片進出
 
-- **你傳圖給 bot**：image/* attachment → 下載快取到 `~/.my-agent/cache/discord-images/` → 若 llamacpp vision 啟用則送入 agent；否則回傳 `[Image attachment: name]` 佔位
+- **你傳圖給 bot**：image/* attachment → 下載快取到 `~/.virtual-assistant-desktop/cache/discord-images/` → 若 llamacpp vision 啟用則送入 agent；否則回傳 `[Image attachment: name]` 佔位
 - **Bot 產圖**：回覆內 `![alt](path)` 若為絕對路徑且存在 → `AttachmentBuilder` 上傳；http(s) URL → 保留讓 Discord 自動 preview
 
 ### 6.4 Permission flow
@@ -414,7 +414,7 @@ Guild 先能用就先試，DM 等 ~15 分鐘再確認。
 - 仍失敗 → 回 Developer Portal 確認 **MESSAGE CONTENT INTENT** 真的開了
 
 ### Token 保護
-- `~/.my-agent/discord.json` 在家目錄，不會進 git
+- `~/.virtual-assistant-desktop/discord.json` 在家目錄，不會進 git
 - Windows：右鍵檔案 → 內容 → 安全性 → 只允許自己讀
 - 外洩：Developer Portal → Bot → Reset Token
 
@@ -430,7 +430,7 @@ daemon turn mutex 序列化跨 project turn — 兩個 project 同時來會**排
 
 看 log：
 ```bash
-tail -n 50 ~/.my-agent/daemon.log
+tail -n 50 ~/.virtual-assistant-desktop/daemon.log
 ```
 
 | 症狀 | 可能原因 | 解決 |

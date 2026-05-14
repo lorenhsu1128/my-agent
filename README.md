@@ -92,7 +92,7 @@ bun run build:dev             # ./cli-dev，dev 版本
 | `ANTHROPIC_API_KEY` | Messages API 直連 API key |
 | `ANTHROPIC_BASE_URL` | Messages API 的 base URL |
 | `LLAMA_BASE_URL` | 本地 llama.cpp endpoint（預設 `http://127.0.0.1:8080/v1`） |
-| `LLAMA_MODEL` | 本地模型名稱（或用 `~/.my-agent/llamacpp.jsonc` 集中管理） |
+| `LLAMA_MODEL` | 本地模型名稱（或用 `~/.virtual-assistant-desktop/llamacpp.jsonc` 集中管理） |
 | `LLAMACPP_CTX_SIZE` | 手動覆寫 llama.cpp context size（tokens；`/slots` 偵測失敗時使用） |
 | `BROWSER_PROVIDER` | WebBrowser backend 顯式指定（`local` / `browserbase` / `browser-use`） |
 | `BROWSERBASE_API_KEY` / `BROWSER_USE_API_KEY` | Cloud browser provider 認證（自動偵測） |
@@ -194,7 +194,7 @@ bun src/cli/cli.ts serve \
 My Agent 把所有使用者設定放在兩個目錄：
 
 ```
-~/.my-agent/                          # 全域（使用者層級）
+~/.virtual-assistant-desktop/                          # 全域（使用者層級）
 ├── config.json                       # 一般設定
 ├── llamacpp.jsonc                    # 本地模型統一設定（M-LLAMA-CFG）
 ├── system-prompt/                    # 自訂 system prompt sections
@@ -214,7 +214,7 @@ My Agent 把所有使用者設定放在兩個目錄：
 ├── agents/                           # 使用者自建 subagents
 └── website-blocklist.yaml            # Web 工具封鎖清單
 
-<project-root>/.my-agent/             # 專案層（隨 repo 走）
+<project-root>/.virtual-assistant-desktop/             # 專案層（隨 repo 走）
 ├── scheduled_tasks.json              # 專案層 cron 任務
 ├── cron/output/<job-id>/             # cron 稽核 log
 └── scheduler.lock                    # 排程互斥鎖（多 session 共用 cwd）
@@ -240,7 +240,7 @@ My Agent 把所有使用者設定放在兩個目錄：
 | [docs/live-test-realistic-v3-setup.md](./docs/live-test-realistic-v3-setup.md) | TCQ-shim + my-agent E2E 測試啟動參數逐項說明 + 排錯 |
 | [docs/sampling-presets.md](./docs/sampling-presets.md) | Qwen 推薦 sampling preset、`appliesTo` family gate 機制 |
 | [docs/sampling-preset-findings-2026-05-08.md](./docs/sampling-preset-findings-2026-05-08.md) | 4 組 preset 在 thinking 模型上的實測結果與失敗模式 |
-| [docs/config-llamacpp.md](./docs/config-llamacpp.md) | `~/.my-agent/llamacpp.jsonc` 完整 schema |
+| [docs/config-llamacpp.md](./docs/config-llamacpp.md) | `~/.virtual-assistant-desktop/llamacpp.jsonc` 完整 schema |
 | [docs/llamacpp-remote.md](./docs/llamacpp-remote.md) | Remote llama.cpp server routing |
 | [docs/llamacpp-watchdog.md](./docs/llamacpp-watchdog.md) | Inter-chunk / reasoning-block / token-cap 三層守門 |
 | **進階模組** | |

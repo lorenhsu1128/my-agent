@@ -147,9 +147,9 @@ my-agent/
 
 | 層級 | 機制 | 儲存 | 更新頻率 |
 |------|------|------|----------|
-| Session Recall | SQLite FTS5 | `~/.my-agent/session-index.db` | 每次寫入 JSONL 時增量更新 |
+| Session Recall | SQLite FTS5 | `~/.virtual-assistant-desktop/session-index.db` | 每次寫入 JSONL 時增量更新 |
 | Dynamic Prefetch | Query-driven | 無 persist | 每 turn 依語意動態注入 |
-| MemoryTool + memdir | 結構化 markdown | `~/.my-agent/memory/` | 使用者或 agent 寫入 |
+| MemoryTool + memdir | 結構化 markdown | `~/.virtual-assistant-desktop/memory/` | 使用者或 agent 寫入 |
 
 **優勢**：
 - **搜尋能力**：可模糊搜尋所有歷史對話，找回過往決策脈絡
@@ -166,8 +166,8 @@ my-agent/
 **雙層儲存**：
 
 ```
-~/.my-agent/USER.md                      # 全域人格（跨專案）
-~/.my-agent/projects/<slug>/USER.md      # 專案特定人格（覆寫）
+~/.virtual-assistant-desktop/USER.md                      # 全域人格（跨專案）
+~/.virtual-assistant-desktop/projects/<slug>/USER.md      # 專案特定人格（覆寫）
 ```
 
 **優勢**：
@@ -183,8 +183,8 @@ my-agent/
 **設計理念**：29 個 system prompt section 全部外部化到 markdown 檔，使用者可直接編輯。
 
 **解析鏈**：
-1. `~/.my-agent/projects/<slug>/system-prompt/<filename>` — per-project 覆蓋
-2. `~/.my-agent/system-prompt/<filename>` — global
+1. `~/.virtual-assistant-desktop/projects/<slug>/system-prompt/<filename>` — per-project 覆蓋
+2. `~/.virtual-assistant-desktop/system-prompt/<filename>` — global
 3. Bundled 預設 — 程式內建 fallback
 
 **優勢**：

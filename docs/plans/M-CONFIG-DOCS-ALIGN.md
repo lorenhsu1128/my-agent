@@ -8,7 +8,7 @@
 - env var 命名前綴不統一（`LLAMACPP_*` / `MYAGENT_WEB_*` / `DISCORD_*` / `LLAMA_*` 混用），使用者每次要去翻 source 才知道哪個能蓋哪個
 - 沒有「中央索引」可一次看到「config 欄位 vs default 值 vs env override vs 來源優先序」
 - 有些 env var 已 deprecated 但還在 README 提到（維護負擔）
-- `~/.my-agent/<config>.README.md` 與 `docs/config-reference.md` 內容部分重疊但不一致
+- `~/.virtual-assistant-desktop/<config>.README.md` 與 `docs/config-reference.md` 內容部分重疊但不一致
 
 **目標**：自動產生器 + CI 檢查，讓 schema → 文件單向同步；同時統一 env var 命名 + 來源優先序文件。
 
@@ -133,7 +133,7 @@ function envField<T extends z.ZodType>(schema: T, env: string): T {
 ## 來源優先序（所有 my-agent config 一致）
 
 1. **Env var override**（最高）— 若對應 env 存在且非空字串
-2. **`~/.my-agent/<config>.jsonc` 檔案值**
+2. **`~/.virtual-assistant-desktop/<config>.jsonc` 檔案值**
 3. **Schema default**（最低）
 
 讀檔 / parse / schema validation 任一失敗 → fallback 到 schema default 並 stderr warn 一次。
@@ -150,7 +150,7 @@ function envField<T extends z.ZodType>(schema: T, env: string): T {
 - [ ] DOCS-5：更新 `docs/config-reference.md` 主索引（連結到各 config + 來源優先序）
 - [ ] DOCS-6：寫 `scripts/verify-config-docs.ts` CI 驗證
 - [ ] DOCS-7：env 命名統一 Phase 1 — 新前綴支援 + deprecated alias warn
-- [ ] DOCS-8：清掉 5 個 `~/.my-agent/<config>.README.md` 中與主文件重複的內容（保留跨檔資訊）
+- [ ] DOCS-8：清掉 5 個 `~/.virtual-assistant-desktop/<config>.README.md` 中與主文件重複的內容（保留跨檔資訊）
 - [ ] DOCS-9：整合測試 — env 新舊前綴都能用 + deprecated warn 出現
 - [ ] DOCS-10：CLAUDE.md 加「改 schema 後跑 `bun run docs:gen`」的提醒
 - [ ] DOCS-11：commit + push + dev log

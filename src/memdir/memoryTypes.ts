@@ -2,7 +2,7 @@
  * Memory type taxonomy.
  *
  * M-SP-4: 8 個 memory 系統 prompt 常數已外部化至
- * `~/.my-agent/system-prompt/memory/*.md`，使用者可編輯、下一 session 生效。
+ * `~/.virtual-assistant-desktop/system-prompt/memory/*.md`，使用者可編輯、下一 session 生效。
  * 本檔內的 `const *_DEFAULT` 為 bundled fallback（缺檔時使用）。
  * 對外仍提供 `getX()` getter 回傳 readonly string[]（與既有 `...X` 語義相容）。
  *

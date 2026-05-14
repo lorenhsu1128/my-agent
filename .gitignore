@@ -19,6 +19,7 @@ openclaw/
 .claude/scheduled_tasks.lock
 
 # my-agent runtime data（cron 歷史、本機 skills、本機排程）
+.virtual-assistant-desktop/
 .my-agent/
 
 # Build / 快取產物

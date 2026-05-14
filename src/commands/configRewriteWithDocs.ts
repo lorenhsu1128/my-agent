@@ -1,7 +1,7 @@
 /**
  * REPL slash command `/config-rewrite-with-docs`
  *
- * 強制把 ~/.my-agent/.my-agent.jsonc 重寫為帶繁中註解的 JSONC 模板版本，
+ * 強制把 ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc 重寫為帶繁中註解的 JSONC 模板版本，
  * 保留使用者現有欄位值。寫前自動備份為 `*.pre-rewrite-<timestamp>`。
  *
  * 同時對 llamacpp.json / discord.json / scheduled_tasks.json 三個檔觸發
@@ -58,7 +58,7 @@ const call: LocalCommandCall = async () => {
   //    此處無需特別動作；若使用者想強制重寫，可刪檔後新建任務。
   messages.push(
     `ℹ️ scheduled_tasks.json：writeCronTasks 已內建 JSONC 保留註解；下次 cron\n` +
-      `   寫回自動生效。若要重置檔頭繁中模板，請刪除 .my-agent/scheduled_tasks.json\n` +
+      `   寫回自動生效。若要重置檔頭繁中模板，請刪除 .virtual-assistant-desktop/scheduled_tasks.json\n` +
       `   後讓 CronCreate 建立新任務時自動重新落盤。\n`,
   )
 

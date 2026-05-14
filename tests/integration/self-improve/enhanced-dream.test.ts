@@ -6,7 +6,7 @@ describe('EnhancedDream prompt', () => {
     const prompt = buildConsolidationPrompt('/tmp/mem', '/tmp/transcripts', '')
     expect(prompt).toContain('Phase 5')
     expect(prompt).toContain('Skill Audit')
-    expect(prompt).toContain('.my-agent/skills/')
+    expect(prompt).toContain('.virtual-assistant-desktop/skills/')
   })
 
   test('包含 Phase 6 Behavior Notes', () => {

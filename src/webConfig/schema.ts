@@ -1,7 +1,7 @@
 /**
  * M-WEB：Web UI 嵌入 daemon 的設定 schema。
  *
- * 存放位置：~/.my-agent/web.jsonc
+ * 存放位置：~/.virtual-assistant-desktop/web.jsonc
  *
  * 設計原則：
  *   - 預設 enabled=false：使用者明確開啟前 daemon 不會綁額外 port

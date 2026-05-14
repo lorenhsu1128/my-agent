@@ -94,7 +94,7 @@ log "✓ cli binary = $CLI"
 
 # 確認 daemon 沒在跑（避免 standalone phase 混淆）
 ensure_daemon_stopped() {
-  if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+  if [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
     "$CLI" daemon stop > /dev/null 2>&1 || true
     sleep 1
   fi
@@ -147,10 +147,10 @@ if scope_includes "all" || scope_includes "daemon"; then
   DAEMON_PID=$!
   # 等 daemon 起來
   for i in {1..20}; do
-    if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then break; fi
+    if [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then break; fi
     sleep 0.5
   done
-  if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+  if [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
     test_fail "daemon 啟動" "10s 內未生成 pid.json"
   else
     log "  ✓ daemon up (pid.json 存在)"

@@ -25,7 +25,7 @@ import { getSection as getExternalSection } from '../systemPromptFiles/index.js'
 
 /**
  * Fallback 值（原始 upstream 為空字串）。M-SP-3 起改走
- * `~/.my-agent/system-prompt/cyber-risk.md`——使用者可補充自訂網安聲明。
+ * `~/.virtual-assistant-desktop/system-prompt/cyber-risk.md`——使用者可補充自訂網安聲明。
  * 使用者刻意不建檔、或檔案內容為空，皆回本 fallback。
  */
 const CYBER_RISK_FALLBACK = ``

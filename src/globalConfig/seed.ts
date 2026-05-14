@@ -1,10 +1,10 @@
 /**
- * 全域設定檔 seed：~/.my-agent/.my-agent.jsonc 不存在時寫入完整模板。
+ * 全域設定檔 seed：~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc 不存在時寫入完整模板。
  *
  * 與 llamacppConfig / discordConfig 不同：GlobalConfig 由 src/utils/config.ts
  * 的 `saveGlobalConfig` → `saveConfigWithLock` 在首次 `getGlobalConfig()` 後
  * 寫入。此 seed 函式在那之前搶先寫入帶繁中註解的模板版本，讓使用者第一
- * 次打開 ~/.my-agent/.my-agent.jsonc 就看到完整欄位說明。
+ * 次打開 ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc 就看到完整欄位說明。
  *
  * JSONC 註解保留：saveConfigWithLock（src/utils/config.ts:1216）已在原檔含
  * 註解時走 jsonc.modify 路徑套變更，保留所有使用者加的繁中註解。檔案若是
@@ -59,7 +59,7 @@ export function seedGlobalConfigIfMissingSync(path: string): void {
 }
 
 /**
- * 手動觸發：重寫 ~/.my-agent/.my-agent.jsonc 為當前 bundled 模板版本，
+ * 手動觸發：重寫 ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc 為當前 bundled 模板版本，
  * 保留使用者現有值。寫前備份為 `*.pre-rewrite-<timestamp>`，原始值不會丟失。
  */
 export async function forceRewriteGlobalConfigWithDocs(

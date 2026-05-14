@@ -6,7 +6,7 @@
  *
  * 前置：
  *   1. llama-server 以 vision 模型 + --mmproj 啟動（Gemopus-4-E4B-it 或同類）
- *   2. ~/.my-agent/llamacpp.json 的 vision.enabled = true
+ *   2. ~/.virtual-assistant-desktop/llamacpp.json 的 vision.enabled = true
  *   3. LLAMA_BASE_URL 正確指向 llama-server（或用預設 127.0.0.1:8080）
  *
  * 用法：

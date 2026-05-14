@@ -26,7 +26,7 @@ Electron + TypeScript + Three.js + @pixiv/three-vrm 的桌面虛擬陪伴軟體�
 ```
 
 1. **WS 直連 session** — desktop 端 `electron/agent/AgentSessionClient` 連 daemon `/sessions`，握手用 `source='mascot'`；turn / runnerEvent / stream_event 餵 React 對話氣泡。
-2. **MCP 反向控制** — desktop 自架 MCP HTTP server（`MascotMcpServer`，per-request stateless），透過 `cli mcp add --scope user --transport http` 註冊到 `~/.my-agent/mcp.json`。LLM tool call → MCP HTTP → Electron main → IPC → renderer dispatcher → ExpressionManager / AnimationManager。
+2. **MCP 反向控制** — desktop 自架 MCP HTTP server（`MascotMcpServer`，per-request stateless），透過 `cli mcp add --scope user --transport http` 註冊到 `~/.virtual-assistant-desktop/mcp.json`。LLM tool call → MCP HTTP → Electron main → IPC → renderer dispatcher → ExpressionManager / AnimationManager。
 3. **設定視窗** — 桌寵托盤「設定」→ React BrowserWindow（desktop `src-settings/`）→ enable / daemon 模式 / bun / cli / workspace 路徑；套用即觸發 daemon `stop → updateConfig → start`。
 
 ## my-agent 端做了什麼 / 沒做什麼
@@ -44,7 +44,7 @@ Electron + TypeScript + Three.js + @pixiv/three-vrm 的桌面虛擬陪伴軟體�
 桌寵連 daemon 時會帶自己的 cwd（`AgentSessionClient` 握手時送），M-SP-FULL Phase 1 的 `bootstrapDaemonContext(opts.cwd)` 會載對應 snapshot。**換 cwd → 換 persona，零 my-agent 程式碼修改**：
 
 - desktop 設 daemon cwd（建議：`~/.virtual-assistant-desktop/agent-workspace/` 或 desktop 設定視窗指定）
-- 在 `~/.my-agent/projects/<mascot-slug>/system-prompt-override.md` 寫桌寵伴侶人格
+- 在 `~/.virtual-assistant-desktop/projects/<mascot-slug>/system-prompt-override.md` 寫桌寵伴侶人格
 
 完整流程見 `docs/m-sp-full-guide.md` § 5「桌寵 / 多人格實戰」。
 

@@ -367,7 +367,7 @@ if scope_includes "D" || scope_includes "cli"; then
   else
     # 確保 daemon 沒殘留（D 走 standalone 模式較好預期）
     ( $BIN daemon stop > /tmp/d-cleanup.log 2>&1 & ); sleep 2
-    rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null
+    rm -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" 2>/dev/null
 
     # D1 算術（避開 grep 配對 prompt echo；LLM thinking 模型可能慢，給 60s）
     OUT=$(timeout -k 10s 60 $BIN -p "請只回一個阿拉伯數字：2+2 等於幾" 2>&1 | tail -5)
@@ -448,12 +448,12 @@ if scope_includes "E" || scope_includes "daemon"; then
     # 先清乾淨任何殘留 daemon
     ( $BIN daemon stop > /tmp/d-cleanup.log 2>&1 & )
     sleep 2
-    rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null || true
+    rm -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" 2>/dev/null || true
 
     # 清前次 F section 殘留的 `e2etest*` cron task — 否則 E5 sendInput
     # 會撞到 cron 觸發的 turn → interactive intent 中斷它 → E5 收 aborted。
     # F 自己有 backup/restore，但 backup 來自前次 F 留下的污染狀態形成連鎖。
-    CRON_FILE="$ROOT/.my-agent/scheduled_tasks.jsonc"
+    CRON_FILE="$ROOT/.virtual-assistant-desktop/scheduled_tasks.jsonc"
     if [[ -f "$CRON_FILE" ]]; then
       bun -e "
         import { readFileSync, writeFileSync } from 'fs'
@@ -473,10 +473,10 @@ if scope_includes "E" || scope_includes "daemon"; then
     # E1 daemon start（subshell + bg + redirect）
     ( $BIN daemon start > "$ROOT/tests/e2e/daemon-start.log" 2>&1 & )
     for i in $(seq 1 12); do
-      [[ -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+      [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]] && break
       sleep 1
     done
-    if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+    if [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
       test_pass "E1 daemon start 寫 pid.json"
     else
       test_fail "E1 daemon start" "no pid.json after 12s"
@@ -499,10 +499,10 @@ if scope_includes "E" || scope_includes "daemon"; then
     # E4 真 thin-client attach — bun 直接跑 _thinClientPing.ts，打開 WS、
     # 等 hello frame、送 permissionContextSync、close。比 E2 精準，
     # daemon.log 會有 `client connected` 紀錄。
-    PING_LOG_BEFORE=$(grep -c "client connected" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
+    PING_LOG_BEFORE=$(grep -c "client connected" "$HOME/.virtual-assistant-desktop/daemon.log" 2>/dev/null || echo 0)
     OUT=$(timeout -k 10s 30 bun run "$ROOT/tests/e2e/_thinClientPing.ts" 2>&1)
     PING_RC=$?
-    PING_LOG_AFTER=$(grep -c "client connected" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
+    PING_LOG_AFTER=$(grep -c "client connected" "$HOME/.virtual-assistant-desktop/daemon.log" 2>/dev/null || echo 0)
     PING_DELTA=$((PING_LOG_AFTER - PING_LOG_BEFORE))
     if [[ $PING_RC -eq 0 ]] && echo "$OUT" | grep -q "hello received" && [[ $PING_DELTA -ge 1 ]]; then
       test_pass "E4 thin-client attach + hello + ack（daemon.log +${PING_DELTA}）"
@@ -537,13 +537,13 @@ if scope_includes "E" || scope_includes "daemon"; then
     # E3 daemon stop（subshell + bg + redirect）
     ( $BIN daemon stop > "$ROOT/tests/e2e/daemon-stop.log" 2>&1 & )
     for i in $(seq 1 12); do
-      [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+      [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]] && break
       sleep 1
     done
-    if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+    if [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
       test_pass "E3 daemon stop 清 pid.json"
     else
-      rm -f "$HOME/.my-agent/daemon.pid.json"
+      rm -f "$HOME/.virtual-assistant-desktop/daemon.pid.json"
       test_fail "E3 daemon stop" "pid.json 12s 後仍存在（已強制清）"
     fi
 
@@ -554,14 +554,14 @@ if scope_includes "E" || scope_includes "daemon"; then
     if [[ -f ./scripts/dev.ts ]]; then
       ( bun run ./scripts/dev.ts daemon stop > /tmp/d-cleanup.log 2>&1 & )
       sleep 2
-      rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null || true
+      rm -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" 2>/dev/null || true
 
       ( bun run ./scripts/dev.ts daemon start > "$ROOT/tests/e2e/daemon-src-start.log" 2>&1 & )
       for i in $(seq 1 15); do
-        [[ -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]] && break
         sleep 1
       done
-      if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+      if [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
         test_pass "E6 SRC daemon start 寫 pid.json"
       else
         test_fail "E6 SRC daemon start" "no pid.json after 15s"
@@ -570,13 +570,13 @@ if scope_includes "E" || scope_includes "daemon"; then
 
       ( bun run ./scripts/dev.ts daemon stop > "$ROOT/tests/e2e/daemon-src-stop.log" 2>&1 & )
       for i in $(seq 1 12); do
-        [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]] && break
         sleep 1
       done
-      if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+      if [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
         test_pass "E7 SRC daemon stop 清 pid.json"
       else
-        rm -f "$HOME/.my-agent/daemon.pid.json"
+        rm -f "$HOME/.virtual-assistant-desktop/daemon.pid.json"
         test_fail "E7 SRC daemon stop" "pid.json 12s 後仍存在（已強制清）"
       fi
     else
@@ -610,11 +610,11 @@ if scope_includes "F" || scope_includes "cron"; then
   if [[ ! -f "$BIN" ]]; then
     test_skip "F1-F8" "$BIN 不存在"
   else
-    # cron tasks 在 <cwd>/.my-agent/scheduled_tasks.jsonc，shape 是 {"tasks":[...]}
-    # cron history 在 <cwd>/.my-agent/cron/history/<task-id>.jsonl
-    CRON_FILE="$ROOT/.my-agent/scheduled_tasks.jsonc"
-    HIST_DIR="$ROOT/.my-agent/cron/history"
-    mkdir -p "$ROOT/.my-agent" "$HIST_DIR" 2>/dev/null
+    # cron tasks 在 <cwd>/.virtual-assistant-desktop/scheduled_tasks.jsonc，shape 是 {"tasks":[...]}
+    # cron history 在 <cwd>/.virtual-assistant-desktop/cron/history/<task-id>.jsonl
+    CRON_FILE="$ROOT/.virtual-assistant-desktop/scheduled_tasks.jsonc"
+    HIST_DIR="$ROOT/.virtual-assistant-desktop/cron/history"
+    mkdir -p "$ROOT/.virtual-assistant-desktop" "$HIST_DIR" 2>/dev/null
 
     BACKUP_CRON="$CRON_FILE.e2e-bak"
     [[ -f "$CRON_FILE" ]] && cp "$CRON_FILE" "$BACKUP_CRON"
@@ -668,13 +668,13 @@ TSEOF
       fi
 
       ( eval "$stop_cmd" > /tmp/d-cleanup-$label.log 2>&1 & ); sleep 2
-      rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null
+      rm -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" 2>/dev/null
       ( eval "$start_cmd" > "$start_log" 2>&1 & )
       for i in $(seq 1 15); do
-        [[ -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]] && break
         sleep 1
       done
-      if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+      if [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
         test_pass "$f_start [$label] daemon 起來 + cron task 寫入 ($task_id)"
       else
         test_fail "$f_start [$label] daemon 起" "no pid.json after 15s"
@@ -703,13 +703,13 @@ TSEOF
 
       ( eval "$stop_cmd" > "$stop_log" 2>&1 & )
       for i in $(seq 1 12); do
-        [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]] && break
         sleep 1
       done
-      if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+      if [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
         test_pass "$f_stop [$label] daemon stop"
       else
-        rm -f "$HOME/.my-agent/daemon.pid.json"
+        rm -f "$HOME/.virtual-assistant-desktop/daemon.pid.json"
         test_fail "$f_stop [$label] daemon stop" "pid.json 仍在（已強制清）"
       fi
     }
@@ -770,7 +770,7 @@ if scope_includes "G" || scope_includes "memory"; then
     test_skip "G" "llama.cpp 未啟動"
   else
     # G1 memdir 存在
-    if compgen -G "$HOME/.my-agent/projects/*/memory" > /dev/null; then
+    if compgen -G "$HOME/.virtual-assistant-desktop/projects/*/memory" > /dev/null; then
       test_pass "G1 memdir 存在"
     else
       test_skip "G1 memdir" "尚無 memory"
@@ -782,7 +782,7 @@ if scope_includes "G" || scope_includes "memory"; then
         try {
           const r = await m.findRelevantMemories({
             query: 'test',
-            memoryDir: process.env.HOME + '/.my-agent/projects',
+            memoryDir: process.env.HOME + '/.virtual-assistant-desktop/projects',
             alreadySurfaced: new Set(),
           });
           console.log('result_type=', Array.isArray(r) ? 'array' : typeof r);
@@ -907,16 +907,16 @@ if scope_includes "I" || scope_includes "discord"; then
       test_skip "I3" "discord 未啟用或 token 不可解（DISCORD_BOT_TOKEN env / discord.jsonc botToken）"
     else
       ( $BIN daemon stop > /tmp/d-cleanup.log 2>&1 & ); sleep 2
-      rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null
+      rm -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" 2>/dev/null
 
-      DAEMON_LOG_BEFORE=$(grep -c "discord ready" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
+      DAEMON_LOG_BEFORE=$(grep -c "discord ready" "$HOME/.virtual-assistant-desktop/daemon.log" 2>/dev/null || echo 0)
       START_LOG="$ROOT/tests/e2e/discord-daemon-start.log"
       ( $BIN daemon start > "$START_LOG" 2>&1 & )
       for i in $(seq 1 15); do
-        [[ -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]] && break
         sleep 1
       done
-      if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+      if [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
         test_fail "I3 daemon start" "no pid.json after 15s"
       else
         # 等最多 60s 看 daemon.log 出現 `discord ready` + `slash commands registered`
@@ -924,10 +924,10 @@ if scope_includes "I" || scope_includes "discord"; then
         # 到檔（OS pipe buffering），所以不查 stdout，靠 daemon.log（authoritative）。
         DISCORD_OK=0
         SLASH_OK=0
-        SLASH_BEFORE=$(grep -c "slash commands registered" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
+        SLASH_BEFORE=$(grep -c "slash commands registered" "$HOME/.virtual-assistant-desktop/daemon.log" 2>/dev/null || echo 0)
         for i in $(seq 1 60); do
-          DAEMON_LOG_AFTER=$(grep -c "discord ready" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
-          SLASH_AFTER=$(grep -c "slash commands registered" "$HOME/.my-agent/daemon.log" 2>/dev/null || echo 0)
+          DAEMON_LOG_AFTER=$(grep -c "discord ready" "$HOME/.virtual-assistant-desktop/daemon.log" 2>/dev/null || echo 0)
+          SLASH_AFTER=$(grep -c "slash commands registered" "$HOME/.virtual-assistant-desktop/daemon.log" 2>/dev/null || echo 0)
           if [[ $DAEMON_LOG_AFTER -gt $DAEMON_LOG_BEFORE ]]; then DISCORD_OK=1; fi
           if [[ $SLASH_AFTER -gt $SLASH_BEFORE ]]; then SLASH_OK=1; fi
           if [[ $DISCORD_OK -eq 1 ]] && [[ $SLASH_OK -eq 1 ]]; then break; fi
@@ -945,10 +945,10 @@ if scope_includes "I" || scope_includes "discord"; then
 
       ( $BIN daemon stop > /tmp/d-discord-stop.log 2>&1 & )
       for i in $(seq 1 12); do
-        [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]] && break
         sleep 1
       done
-      rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null || true
+      rm -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" 2>/dev/null || true
     fi
   fi
 fi
@@ -978,15 +978,15 @@ if scope_includes "J" || scope_includes "pty" || scope_includes "repl"; then
   else
     # 起 daemon — PTY test 靠 daemon 在跑才有 thin-client attach
     ( $BIN daemon stop > /tmp/d-cleanup.log 2>&1 & ); sleep 2
-    rm -f "$HOME/.my-agent/daemon.pid.json"
+    rm -f "$HOME/.virtual-assistant-desktop/daemon.pid.json"
     ( $BIN daemon start > "$ROOT/tests/e2e/pty-daemon-start.log" 2>&1 & )
     for i in $(seq 1 15); do
-      [[ -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+      [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]] && break
       sleep 1
     done
     sleep 5  # 給 daemon WS server / runner 完全就緒
 
-    if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+    if [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
       test_fail "J1-J2 daemon start" "no pid.json"
     else
       OUT=$(timeout -k 10s 240 npx tsx "$ROOT/tests/e2e/_replInteractive.ts" 2>&1)
@@ -1004,10 +1004,10 @@ if scope_includes "J" || scope_includes "pty" || scope_includes "repl"; then
 
       ( $BIN daemon stop > /tmp/d-pty-stop.log 2>&1 & )
       for i in $(seq 1 12); do
-        [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]] && break
+        [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]] && break
         sleep 1
       done
-      rm -f "$HOME/.my-agent/daemon.pid.json" 2>/dev/null || true
+      rm -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" 2>/dev/null || true
     fi
   fi
 fi
@@ -1095,7 +1095,7 @@ if scope_includes "K" || scope_includes "memtui"; then
 
   # K12 daemon RPC + 真 broadcast — 起 daemon、兩個 thin-client attach 同 cwd，
   # A 送 mutation → B 收 itemsChanged broadcast。需 daemon 已啟動。
-  if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+  if [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
     OUT=$(timeout -k 10s 30s bun run tests/e2e/_memoryMutationRpcClient.ts 2>&1 | tail -8)
     if echo "$OUT" | grep -q "B received memory.itemsChanged broadcast"; then
       test_pass "K12 daemon RPC 真 broadcast（A mutation → B itemsChanged）"
@@ -1204,7 +1204,7 @@ if scope_includes "L" || scope_includes "llamacpp" || scope_includes "watchdog";
   fi
 
   # L8 daemon RPC + 真 broadcast — 兩 thin-client setWatchdog → configChanged
-  if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+  if [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
     OUT=$(timeout -k 10s 30s bun run tests/e2e/_llamacppConfigRpcClient.ts 2>&1 | tail -8)
     if echo "$OUT" | grep -q "B received llamacpp.configChanged broadcast"; then
       test_pass "L8 daemon RPC 真 broadcast（A setWatchdog → B configChanged）"

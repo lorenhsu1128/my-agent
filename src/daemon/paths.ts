@@ -6,7 +6,7 @@
  *   - token     : WS 客戶端需帶的 bearer token（0600）
  *   - log       : JSON lines 結構化日誌
  *
- * 測試時傳入 `baseDir` 覆蓋 `~/.my-agent/`，避免踩到真實 daemon。
+ * 測試時傳入 `baseDir` 覆蓋 `~/.virtual-assistant-desktop/`，避免踩到真實 daemon。
  */
 import { join } from 'path'
 import { getMyAgentConfigHomeDir } from '../utils/envUtils.js'

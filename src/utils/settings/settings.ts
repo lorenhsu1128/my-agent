@@ -240,7 +240,7 @@ function parseSettingsFileUncached(path: string): {
 
 /**
  * Get the absolute path to the associated file root for a given settings source
- * (e.g. for $PROJ_DIR/.my-agent/settings.json, returns $PROJ_DIR)
+ * (e.g. for $PROJ_DIR/.virtual-assistant-desktop/settings.json, returns $PROJ_DIR)
  * @param source The source of the settings
  * @returns The root path of the settings file
  */
@@ -314,9 +314,9 @@ export function getRelativeSettingsFilePathForSource(
 ): string {
   switch (source) {
     case 'projectSettings':
-      return join('.my-agent', 'settings.jsonc')
+      return join('.virtual-assistant-desktop', 'settings.jsonc')
     case 'localSettings':
-      return join('.my-agent', 'settings.local.jsonc')
+      return join('.virtual-assistant-desktop', 'settings.local.jsonc')
   }
 }
 

@@ -30,8 +30,8 @@ export type Props = {
   /**
    * When true, skip writing effortLevel to userSettings on selection.
    * Used by the assistant installer wizard where the model choice is
-   * project-scoped (written to the assistant's .my-agent/settings.json via
-   * install.ts) and should not leak to the user's global ~/.my-agent/settings.
+   * project-scoped (written to the assistant's .virtual-assistant-desktop/settings.json via
+   * install.ts) and should not leak to the user's global ~/.virtual-assistant-desktop/settings.
    */
   skipSettingsWrite?: boolean;
 };

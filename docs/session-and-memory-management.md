@@ -13,7 +13,7 @@ my-agent 內建三個互動式 REPL slash commands，方便清理歷史 session 
 ## 軟刪除模型
 
 刪除不會馬上抹掉檔案：
-- **檔案**：搬到 `~/.my-agent/projects/<slug>/.trash/<kind>-<timestamp>-<hex>/payload/`，附 `meta.json` 記錄原始路徑
+- **檔案**：搬到 `~/.virtual-assistant-desktop/projects/<slug>/.trash/<kind>-<timestamp>-<hex>/payload/`，附 `meta.json` 記錄原始路徑
 - **DB 紀錄**（`session-index.db` 的 `sessions` / `messages_fts` / `messages_seen` 三表）：transaction 硬刪
 - **MEMORY.md 索引**：對應 auto-memory 條目的索引行以 regex 定位後原子移除
 
@@ -50,9 +50,9 @@ Range: 1=today 2=week 3=month *0=all*  · Filter: discord_
 
 | kind | 顯示 | 來源 |
 |------|------|------|
-| `auto-memory` | `[user] user_role — ...` | `~/.my-agent/projects/<slug>/memory/*.md` |
+| `auto-memory` | `[user] user_role — ...` | `~/.virtual-assistant-desktop/projects/<slug>/memory/*.md` |
 | `project-memory` | `[project] MY-AGENT.md` | 專案根目錄 MY-AGENT.md（my-agent 實際讀的檔；**非** CLAUDE.md） |
-| `local-config` | `[local] .my-agent/*.md` | 專案根目錄 `.my-agent/*.md` |
+| `local-config` | `[local] .virtual-assistant-desktop/*.md` | 專案根目錄 `.virtual-assistant-desktop/*.md` |
 | `daily-log` | `[log] 2026-04-21` | `memory/logs/YYYY/MM/YYYY-MM-DD.md` |
 
 特殊鍵：
@@ -92,7 +92,7 @@ Session 還原後 `.trash/` 裡的 JSONL 搬回原位，但 `session-index.db` �
 ## 資料夾結構
 
 ```
-~/.my-agent/projects/<slug>/
+~/.virtual-assistant-desktop/projects/<slug>/
   ├── <sessionId>.jsonl                  # transcript
   ├── <sessionId>/tool-results/...       # 工具結果
   ├── memory/
@@ -109,7 +109,7 @@ Session 還原後 `.trash/` 裡的 JSONL 搬回原位，但 `session-index.db` �
 ## 架構筆記
 
 - **ADR-MD-01** 軟刪 — 檔案進 `.trash/`、DB 硬刪；restore 時還原檔 + reconciler 重建索引
-- **ADR-MD-02** Memory 目標 = MY-AGENT.md（非 CLAUDE.md）+ auto-memory + `./.my-agent/*.md` + daily logs；picker 雙鍵 d / e
+- **ADR-MD-02** Memory 目標 = MY-AGENT.md（非 CLAUDE.md）+ auto-memory + `./.virtual-assistant-desktop/*.md` + daily logs；picker 雙鍵 d / e
 - **ADR-MD-03** 禁止刪當前 session，picker `[cur]` 標記
 - **ADR-MD-04** `/trash` 整合 list / restore / empty / prune
 - **ADR-MD-05** Live filter `/`、時間快捷鍵 1/2/3/0

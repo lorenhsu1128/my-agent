@@ -35,7 +35,7 @@ export const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000
 export const DEFAULT_STOP_GRACE_MS = 5_000
 
 export interface DaemonOptions {
-  /** 覆寫 `~/.my-agent/` 根目錄（測試用）。 */
+  /** 覆寫 `~/.virtual-assistant-desktop/` 根目錄（測試用）。 */
   baseDir?: string
   /** my-agent 版本字串（來自呼叫端的 `MACRO.VERSION`）。 */
   agentVersion: string

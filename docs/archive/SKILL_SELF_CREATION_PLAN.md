@@ -10,7 +10,7 @@
 
 | | Hermes | my-agent (M6 現狀) |
 |--|--------|-------------------|
-| **建立方式** | Agent 在對話中呼叫 `skill_manage` **工具**（6 action） | Dream forked agent 直接**寫檔案**到 `.my-agent/skills/` |
+| **建立方式** | Agent 在對話中呼叫 `skill_manage` **工具**（6 action） | Dream forked agent 直接**寫檔案**到 `.virtual-assistant-desktop/skills/` |
 | **安全掃描** | 程式碼層級，在工具內部每次 create/edit/patch/write_file 都執行 | scanSkill() 已實作（8 類 35 regex）但**生產路徑中零呼叫** |
 | **掃描失敗處理** | 自動回滾（shutil.rmtree / 恢復原內容） | 無回滾機制 |
 | **觸發→建立閉環** | 完整（nudge → 背景評審 → skill_manage → 掃描 → 通知） | **三個斷點**（見下方） |
@@ -174,7 +174,7 @@ M6 建立了以下程式碼，本整合方案會修改其中部分：
 | `sessionReview.ts` | 擴展 canUseTool 權限（允許 SkillManageTool）、改 prompt | **邏輯變更**：從「寫 skill-drafts/」改為「呼叫 SkillManage 建立」。原本的草稿路徑不再使用 |
 | `sessionReviewPrompt.ts` | 重寫 Task 1 的引導文字 | **內容替換**：「寫 skill-drafts/<name>.md」改為「呼叫 SkillManage(action='create')」 |
 | `consolidationPrompt.ts` | 簡化 Phase 7-8 | **邏輯簡化**：Phase 7（Skill Draft Review）和 Phase 8（Safety Checklist）變為不必要，因為 skill 建立已移至 Session Review 的 SkillManageTool 路徑。Phase 7 可改為「清理殘留的 skill-drafts/」，Phase 8 移除 |
-| `autoDream.ts` | `createEnhancedDreamCanUseTool` 的 `.my-agent/skills/` 寫入權限可能不再需要 | **可選移除**：如果 Dream 不再負責升級 skill（由 Session Review + SkillManageTool 接管），Dream 就不需要寫入 skills/ 的權限 |
+| `autoDream.ts` | `createEnhancedDreamCanUseTool` 的 `.virtual-assistant-desktop/skills/` 寫入權限可能不再需要 | **可選移除**：如果 Dream 不再負責升級 skill（由 Session Review + SkillManageTool 接管），Dream 就不需要寫入 skills/ 的權限 |
 | `skillImprovement.ts` | `applySkillImprovement()` 後加 `scanSkill()` 呼叫 | **純新增**：不衝突，只是補上安全掃描 |
 
 #### 不需修改的 M6 檔案（無衝突）
@@ -206,9 +206,9 @@ M6 建立了以下程式碼，本整合方案會修改其中部分：
 
 #### 衝突 1：Session Review 的產出路徑變更
 
-**M6 設計**：Session Review → 寫 `memory/skill-drafts/` → Dream Phase 7 驗證 3+ session → 升級到 `.my-agent/skills/`
+**M6 設計**：Session Review → 寫 `memory/skill-drafts/` → Dream Phase 7 驗證 3+ session → 升級到 `.virtual-assistant-desktop/skills/`
 
-**新方案**：Session Review → 呼叫 SkillManageTool → 工具內 scanSkill → 直接建立到 `.my-agent/skills/`
+**新方案**：Session Review → 呼叫 SkillManageTool → 工具內 scanSkill → 直接建立到 `.virtual-assistant-desktop/skills/`
 
 **解決**：
 - `memory/skill-drafts/` 目錄保留，但用途從「暫存待升級的草稿」變為「記錄候選的來源」（可選，非必須）
@@ -217,13 +217,13 @@ M6 建立了以下程式碼，本整合方案會修改其中部分：
 
 #### 衝突 2：Dream 的 skill 寫入權限
 
-**M6 設計**：`createEnhancedDreamCanUseTool` 允許 Dream 寫入 `.my-agent/skills/`
+**M6 設計**：`createEnhancedDreamCanUseTool` 允許 Dream 寫入 `.virtual-assistant-desktop/skills/`
 
 **新方案**：Dream 不再負責建立 skill（由 Session Review + SkillManageTool 接管）
 
 **解決**：兩個選項
 - **選項 A**：保留 `createEnhancedDreamCanUseTool`（不移除功能），Dream 仍可在 Phase 5 Skill Audit 時直接建議性寫入。但 Phase 7-8 的主要升級路徑移至 SkillManageTool
-- **選項 B**：移除 `.my-agent/skills/` 寫入權限，Dream 恢復為純記憶整合。所有 skill 建立都走 SkillManageTool
+- **選項 B**：移除 `.virtual-assistant-desktop/skills/` 寫入權限，Dream 恢復為純記憶整合。所有 skill 建立都走 SkillManageTool
 
 **建議選項 B**——職責清晰：Dream 管記憶，SkillManageTool 管 skill。
 
@@ -241,7 +241,7 @@ M6 建立了以下程式碼，本整合方案會修改其中部分：
 
 1. **觸發架構圖**：加入「對話中 agent 呼叫 SkillManageTool」路徑；Session Review 的產出從 `memory/skill-drafts/` 改為 SkillManageTool
 2. **Dream Phase 清單**：Phase 7-8 簡化/移除
-3. **權限矩陣**：Dream 的 `.my-agent/skills/` 寫入權限移除（如果選方案 B）
+3. **權限矩陣**：Dream 的 `.virtual-assistant-desktop/skills/` 寫入權限移除（如果選方案 B）
 4. **安全掃描段落**：標記 scanSkill 已在 SkillManageTool 中被實際呼叫
 
 ---
@@ -292,7 +292,7 @@ User Turn（每次 query 的模型回應完成後）
 | `src/services/selfImprove/sessionReview.ts` | 擴展權限（SkillManageTool）+ 改產出路徑 |
 | `src/services/selfImprove/sessionReviewPrompt.ts` | Task 1 改為引導呼叫 SkillManage |
 | `src/services/autoDream/consolidationPrompt.ts` | Phase 7-8 簡化 |
-| `src/services/autoDream/autoDream.ts` | 移除 `.my-agent/skills/` 寫入權限（選項 B） |
+| `src/services/autoDream/autoDream.ts` | 移除 `.virtual-assistant-desktop/skills/` 寫入權限（選項 B） |
 | `src/utils/hooks/skillImprovement.ts` | applySkillImprovement 後加 scanSkill |
 | system prompt 注入點 | 加入 SKILLS_GUIDANCE |
 | `tests/integration/self-improve/enhanced-dream.test.ts` | 更新 Phase 7-8 斷言 |

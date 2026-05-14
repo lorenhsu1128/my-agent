@@ -9,7 +9,7 @@
 
 ## 設定
 
-編輯 `~/.my-agent/llamacpp.jsonc`：
+編輯 `~/.virtual-assistant-desktop/llamacpp.jsonc`：
 
 ```jsonc
 {
@@ -51,7 +51,7 @@
 
 ### A. 編輯 jsonc（重啟 session 才生效，但 mtime hot-reload 已開）
 
-直接改 `~/.my-agent/llamacpp.jsonc`，下個 turn 就吃新 routing。
+直接改 `~/.virtual-assistant-desktop/llamacpp.jsonc`，下個 turn 就吃新 routing。
 
 ### B. TUI `/llamacpp` 第 3 tab `Endpoints`
 
@@ -91,7 +91,7 @@ standalone 模式直接寫本機。
 
 ## 安全提醒：apiKey
 
-- `apiKey` 直接寫在 `~/.my-agent/llamacpp.jsonc` 是「單一來源」設計（無 env
+- `apiKey` 直接寫在 `~/.virtual-assistant-desktop/llamacpp.jsonc` 是「單一來源」設計（無 env
   override，避免多處不一致）。建議家目錄已隔離 + 必要時 `chmod 600`。
 - Web `/api/llamacpp/endpoints` GET 回傳的 apiKey 已 mask（前 3 + 後 3）。
 - TUI Endpoints tab 顯示也只顯示 mask 版本；按 Enter 編輯重新輸入。
@@ -118,7 +118,7 @@ standalone 走 client 端 fetch。逾時 5 秒。
 ## 相關 ADR
 
 - ADR-005 `provider 內部做格式轉譯` — adapter 邊界 routing 不影響 QueryEngine
-- ADR-010 `M-LLAMA-CFG` — config 統一走 `~/.my-agent/llamacpp.jsonc`
+- ADR-010 `M-LLAMA-CFG` — config 統一走 `~/.virtual-assistant-desktop/llamacpp.jsonc`
 - ADR-015 `M-LLAMACPP-WATCHDOG` — watchdog 三層分層偵測 + hot-reload
 
 ## 跨平台

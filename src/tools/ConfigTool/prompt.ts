@@ -49,7 +49,7 @@ export function generatePrompt(): string {
 ## Configurable settings list
 The following settings are available for you to change:
 
-### Global Settings (stored in ~/.my-agent/.my-agent.jsonc)
+### Global Settings (stored in ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc)
 ${globalSettings.join('\n')}
 
 ### Project Settings (stored in settings.json)

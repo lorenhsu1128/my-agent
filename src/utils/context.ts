@@ -99,8 +99,8 @@ export function getContextWindowForModel(
   // llamacpp provider：優先級
   //   1. /slots 實際查到的 n_ctx（最準）
   //   2. LLAMACPP_CTX_SIZE env（臨時覆蓋）
-  //   3. ~/.my-agent/.my-agent.jsonc 的 contextSize（全域 GlobalConfig）
-  //   4. ~/.my-agent/llamacpp.json 的 contextSize（llamacpp 模組層，向後相容）
+  //   3. ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc 的 contextSize（全域 GlobalConfig）
+  //   4. ~/.virtual-assistant-desktop/llamacpp.json 的 contextSize（llamacpp 模組層，向後相容）
   //   5. fallback 到 MODEL_CONTEXT_WINDOW_DEFAULT（128K）
   if (getAPIProvider() === 'llamacpp' || isLlamaCppModel(model)) {
     const cached = getLlamaCppContextSize()

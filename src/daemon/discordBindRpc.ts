@@ -99,7 +99,7 @@ export async function handleBindRequest(
       type: 'discord.bindResult',
       requestId: req.requestId,
       ok: false,
-      error: 'Discord gateway not running. Check ~/.my-agent/discord.json has enabled=true and valid bot token.',
+      error: 'Discord gateway not running. Check ~/.virtual-assistant-desktop/discord.json has enabled=true and valid bot token.',
     }
   }
   if (!config.guildId) {
@@ -107,7 +107,7 @@ export async function handleBindRequest(
       type: 'discord.bindResult',
       requestId: req.requestId,
       ok: false,
-      error: 'guildId not set in ~/.my-agent/discord.json. Add your Discord server ID first.',
+      error: 'guildId not set in ~/.virtual-assistant-desktop/discord.json. Add your Discord server ID first.',
     }
   }
 

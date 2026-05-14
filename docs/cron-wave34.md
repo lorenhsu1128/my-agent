@@ -12,7 +12,7 @@ delete / run-now / history 全部操作。規劃詳見 `docs/plans/cron-wave3-pl
 |------|---------|---------|
 | 自然語言排程 | `scheduleSpec: { kind: 'nl', raw }` | 非 5-field / 非 "every Nm" / 非 ISO 自動走 LLM 翻譯 |
 | 結果通知 | `notify: { tui, discord, desktop? }` | `tui='always'`, `discord='off'` |
-| Run history | `history: { keepRuns }` | keepRuns=50，存 `.my-agent/cron/history/{id}.jsonl` |
+| Run history | `history: { keepRuns }` | keepRuns=50，存 `.virtual-assistant-desktop/cron/history/{id}.jsonl` |
 | 失敗重試 | `retry: { maxAttempts, backoffMs, failureMode, attemptCount }` | 不設 = 不重試，舊行為 |
 | Conditional 觸發 | `condition: CronCondition` | 不設 = 每次都 fire |
 | Catch-up 策略 | `catchupMax: number` | 1（與 Wave 2 隱性行為相容） |
@@ -52,7 +52,7 @@ CronCreate({ schedule: "每週一早上 9 點", prompt: "build" })
 ✗ 2026-04-23T07:00:01.000Z 5100ms att=3 err="unreachable"
 ```
 
-- 每 task 一檔 `.my-agent/cron/history/{id}.jsonl`（append-only）
+- 每 task 一檔 `.virtual-assistant-desktop/cron/history/{id}.jsonl`（append-only）
 - keepRuns 上限自動 truncate（10% 機率每次 append 檢查）
 - LLM 透過 `CronHistoryTool` 查；人類可 `cat` 該檔
 

@@ -4,7 +4,7 @@
  */
 export const WEB_JSONC_TEMPLATE = `{
   // ============================================================
-  // ~/.my-agent/web.jsonc — Web UI（M-WEB）設定
+  // ~/.virtual-assistant-desktop/web.jsonc — Web UI（M-WEB）設定
   // ============================================================
   //
   // 開啟流程：

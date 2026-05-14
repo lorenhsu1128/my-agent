@@ -52,7 +52,7 @@ type ShadowResult =
  * - command: From slash command frontmatter, potentially shared
  *
  * Personal settings include:
- * - userSettings: User's global ~/.my-agent settings
+ * - userSettings: User's global ~/.virtual-assistant-desktop settings
  * - localSettings: Gitignored per-project settings
  * - cliArg: Runtime CLI arguments
  * - session: In-memory session rules

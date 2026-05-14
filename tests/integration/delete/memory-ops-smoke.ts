@@ -32,7 +32,7 @@ function section(t: string) {
 
 const testRoot = join(tmpdir(), `my-agent-memop-test-${Date.now()}`)
 mkdirSync(testRoot, { recursive: true })
-process.env.CLAUDE_CONFIG_DIR = join(testRoot, '.my-agent')
+process.env.CLAUDE_CONFIG_DIR = join(testRoot, '.virtual-assistant-desktop')
 mkdirSync(process.env.CLAUDE_CONFIG_DIR, { recursive: true })
 
 const cwd = testRoot
@@ -174,15 +174,15 @@ try {
   // -----------------------------------------------------------------
   section('memoryList — 基本結構（獨立 cwd）')
   // -----------------------------------------------------------------
-  // 為了避免跟真實 ~/.my-agent 串場，直接 import mock 測試環境下
+  // 為了避免跟真實 ~/.virtual-assistant-desktop 串場，直接 import mock 測試環境下
   // getAutoMemPath 仍會讀 CLAUDE_CONFIG_DIR 下計算的 projects/<slug>/memory
   // 這裡我們只驗證 listAllMemoryEntries 對非 auto-memory 類能列出
   const cwd2 = join(testRoot, 'proj2')
   mkdirSync(cwd2, { recursive: true })
   writeFileSync(join(cwd2, 'MY-AGENT.md'), '# project-memory-x\n')
-  mkdirSync(join(cwd2, '.my-agent'))
-  writeFileSync(join(cwd2, '.my-agent', 'note1.md'), '# local note\n')
-  writeFileSync(join(cwd2, '.my-agent', 'note2.md'), '# local note 2\n')
+  mkdirSync(join(cwd2, '.virtual-assistant-desktop'))
+  writeFileSync(join(cwd2, '.virtual-assistant-desktop', 'note1.md'), '# local note\n')
+  writeFileSync(join(cwd2, '.virtual-assistant-desktop', 'note2.md'), '# local note 2\n')
 
   // 動態 import 以確保使用當前 env
   const { listAllMemoryEntries } = await import(

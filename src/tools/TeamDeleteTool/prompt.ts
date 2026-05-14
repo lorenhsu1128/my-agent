@@ -5,8 +5,8 @@ export function getPrompt(): string {
 Remove team and task directories when the swarm work is complete.
 
 This operation:
-- Removes the team directory (\`~/.my-agent/teams/{team-name}/\`)
-- Removes the task directory (\`~/.my-agent/tasks/{team-name}/\`)
+- Removes the team directory (\`~/.virtual-assistant-desktop/teams/{team-name}/\`)
+- Removes the task directory (\`~/.virtual-assistant-desktop/tasks/{team-name}/\`)
 - Clears team context from the current session
 
 **IMPORTANT**: TeamDelete will fail if the team still has active members. Gracefully terminate teammates first, then call TeamDelete after all teammates have shut down.

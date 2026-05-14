@@ -117,7 +117,7 @@ bun <REPO_ROOT>/src/entrypoints/cli.tsx \
 | `--allow-dangerously-skip-permissions` | （flag） | 跳過所有 tool 權限提示（測試環境必開）。|
 | `--disallowed-tools` | `"Edit Write NotebookEdit"` | 禁止寫檔 tool — 測試只用 Read / Glob / Grep / Bash。防止 case 副作用污染 repo。|
 | `--model` | `qwen3.5-9b` | 對應 shim `--alias`。my-agent 比對 `modelAliases` 清單觸發 llamacpp 分支。|
-| `--no-session-persistence` | （flag） | 每 case 全新 session，不寫 `~/.my-agent/sessions/`。|
+| `--no-session-persistence` | （flag） | 每 case 全新 session，不寫 `~/.virtual-assistant-desktop/sessions/`。|
 | `-p` | `<prompt>` | case prompt（測試 driver 帶入）。 |
 
 ### 2.1 driver 內部行為
@@ -156,7 +156,7 @@ bun <REPO_ROOT>/src/entrypoints/cli.tsx \
 
 ---
 
-## 3. my-agent 端設定 `~/.my-agent/llamacpp.jsonc`
+## 3. my-agent 端設定 `~/.virtual-assistant-desktop/llamacpp.jsonc`
 
 完整 schema 在 `src/llamacppConfig/schema.ts`，產生文件 `docs/config-llamacpp.md`。
 此處列 v3 測試會走到的關鍵欄位。
@@ -223,7 +223,7 @@ ADR-021：routing 指 `remote` 但 `remote.enabled=false` → 該 callsite 觸�
 4. 沒帶 `taskType` → 走 `defaultSamplingPreset`（留空 = 不注入）。
 5. **Body 顯式欄位永遠優先**於 preset。
 
-> Hot-reload：改 `~/.my-agent/llamacpp.jsonc` 後**下個 turn** 立刻生效（mtime 監測），不用重啟 my-agent / shim。
+> Hot-reload：改 `~/.virtual-assistant-desktop/llamacpp.jsonc` 後**下個 turn** 立刻生效（mtime 監測），不用重啟 my-agent / shim。
 >
 > 改 schema.ts 內建 default 值要跑 `bun run docs:gen` 重新產 `docs/config-llamacpp.md`，否則 CI `bun run docs:verify` 會 fail（CLAUDE.md 規則 13）。
 
@@ -244,7 +244,7 @@ ADR-021：routing 指 `remote` 但 `remote.enabled=false` → 該 callsite 觸�
 
 ### 4.3 本機 override（v3 測試實際使用）
 
-`~/.my-agent/llamacpp.jsonc` 末尾：
+`~/.virtual-assistant-desktop/llamacpp.jsonc` 末尾：
 
 ```jsonc
 "samplingPresets": {
@@ -349,7 +349,7 @@ ONLY_VISION=1 bun scripts/...                                       # 只跑 D11
 |---|---|---|
 | 全部 case 0 ttft / 0 token | shim 沒起 / port 不對 | `curl http://127.0.0.1:8081/v1/models` |
 | Vision case D11/D12 fail | `--mmproj` 沒帶 | 重起 shim 加 `--mmproj` |
-| 全部 case 走 Anthropic 而非 Qwen | model alias 沒在 `modelAliases` | 確認 `~/.my-agent/llamacpp.jsonc` 內 `modelAliases` 含 `qwen3.5-9b` |
+| 全部 case 走 Anthropic 而非 Qwen | model alias 沒在 `modelAliases` | 確認 `~/.virtual-assistant-desktop/llamacpp.jsonc` 內 `modelAliases` 含 `qwen3.5-9b` |
 | Sampling preset 沒套 | `appliesTo` 沒 match model 名 | 確認 glob；開 `"debug": true` 看 adapter stderr |
 | Tool call 沒被解析 | shim 沒帶 `--enable-tools` | 重起 shim 加 |
 | thinking_delta 拿不到 | `--reasoning-format` 不是 `deepseek` | 改回 `deepseek` |
@@ -370,6 +370,6 @@ ONLY_VISION=1 bun scripts/...                                       # 只跑 D11
 | `src/llamacppConfig/schema.ts` | my-agent llamacpp.jsonc zod schema + sampling preset default |
 | `src/llamacppConfig/applySamplingPreset.ts` | preset 套用 + family gate 邏輯 |
 | `src/services/api/llamacpp-fetch-adapter.ts` | Anthropic ↔ OpenAI 翻譯層 |
-| `~/.my-agent/llamacpp.jsonc` | 本機設定（含 sampling preset override）|
+| `~/.virtual-assistant-desktop/llamacpp.jsonc` | 本機設定（含 sampling preset override）|
 | `docs/sampling-preset-findings-2026-05-08.md` | sampling preset E2E 驗證紀錄 |
 | `docs/node-llama-tcq-vs-buun-llama-cpp.md` | TCQ-shim vs buun-llama-cpp binary 差異 |

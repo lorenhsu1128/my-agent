@@ -23,7 +23,7 @@ my-agent 目前有兩個前端：Ink TUI（REPL）與 Discord gateway（M-DISCOR
 - **Q2 web 可 add/remove project**（call daemon `loadProject(cwd)`）
 - **S3 雙向 session 建立同步**（任一端開新 session 即時廣播）
 - **T1 一刀切**（單一大 milestone，內含 ~12 個 sub-task commit）
-- **V3 `~/.my-agent/web.json` 控制 port + autoStart**（預設 port 9090，conflict +1）
+- **V3 `~/.virtual-assistant-desktop/web.json` 控制 port + autoStart**（預設 port 9090，conflict +1）
 
 預估工期：**8–12 週**（單人）。
 
@@ -111,7 +111,7 @@ my-agent/
 ├── src/
 │   ├── webConfig/                # NEW — 沿用 discordConfig pattern
 │   │   ├── schema.ts             # Zod: enabled / port / autoStart / bindHost / starredProjects
-│   │   ├── paths.ts              # ~/.my-agent/web.json
+│   │   ├── paths.ts              # ~/.virtual-assistant-desktop/web.json
 │   │   ├── loader.ts             # frozen snapshot
 │   │   ├── seed.ts               # default seed
 │   │   └── index.ts
@@ -241,7 +241,7 @@ WS 是 server → browser 廣播為主、browser → server 是 stream input + �
 
 ### Phase 1 — Infra & 骨架（2 週）
 1. **M-WEB-1**：`web/` Vite 專案 scaffold（React 18 + TS + Tailwind + zustand + react-router）+ `bun run build:web` script + `bun run dev:web`（Vite dev port 5173）
-2. **M-WEB-2**：`webConfig/` 模組 5 檔（schema/paths/loader/seed/index）+ `~/.my-agent/web.README.md` seed
+2. **M-WEB-2**：`webConfig/` 模組 5 檔（schema/paths/loader/seed/index）+ `~/.virtual-assistant-desktop/web.README.md` seed
 3. **M-WEB-3**：`src/web/httpServer.ts` + `staticServer.ts` 第二個 Bun.serve listener，serve `web/dist` + SPA fallback；daemonCli 條件啟動（autoStart）
 4. **M-WEB-4**：`src/web/wsServer.ts` + `wsBroadcast.ts` + `browserSession.ts` WS 連線管理（heartbeat / reconnect）
 5. **M-WEB-5**：`src/web/webGateway.ts` 訂閱 `registry.onLoad/onUnload` + per-runtime `broker.queue` / `permissionRouter` / `cron.events` listener；mirror DiscordGateway pattern

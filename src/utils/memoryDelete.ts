@@ -127,7 +127,7 @@ export function softDeleteMemoryEntry(params: {
 }
 
 /**
- * 軟刪除整個獨立檔案（非 memdir 條目）— 用於 MY-AGENT.md / ./.my-agent/*.md / daily logs。
+ * 軟刪除整個獨立檔案（非 memdir 條目）— 用於 MY-AGENT.md / ./.virtual-assistant-desktop/*.md / daily logs。
  * 不動任何索引。
  */
 export function softDeleteStandaloneFile(params: {

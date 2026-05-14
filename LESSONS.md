@@ -22,9 +22,9 @@
 ## 設定檔遷移相關
 
 ### 移除 Claude Code legacy migration（getGlobalClaudeFile 大簡化）
-- **發生什麼事**：`getGlobalClaudeFile()` 過去支援四層 fallback / migration：(1) `~/.my-agent/.config.json` 早期檔名、(2) `.json` 自動 rename 為 `.jsonc`、(3) home 根下 `~/.my-agent.jsonc` / `~/.my-agent.json` 搬到 config 目錄、(4) `~/.claude{suffix}.json` 從官方 Claude Code 一次性複製。一併拔掉 `forceRewriteGlobalConfigWithDocs` 的 `droppedKeys` schema 過濾（用來剔除 Claude Code 帶過來的非 my-agent 欄位）。
+- **發生什麼事**：`getGlobalClaudeFile()` 過去支援四層 fallback / migration：(1) `~/.virtual-assistant-desktop/.config.json` 早期檔名、(2) `.json` 自動 rename 為 `.jsonc`、(3) home 根下 `~/.virtual-assistant-desktop.jsonc` / `~/.virtual-assistant-desktop.json` 搬到 config 目錄、(4) `~/.claude{suffix}.json` 從官方 Claude Code 一次性複製。一併拔掉 `forceRewriteGlobalConfigWithDocs` 的 `droppedKeys` schema 過濾（用來剔除 Claude Code 帶過來的非 my-agent 欄位）。
 - **根本原因**：升級窗口已過（2026-Q2），既有使用者要嘛早就升完、要嘛是新安裝。維持 fallback 反而增加 `existsSync` 系統呼叫、設定檔位置不可預測（debug 時不確定實際讀哪個）、邏輯歧義。
-- **正確做法**：`getGlobalClaudeFile()` 只回唯一正規路徑 `~/.my-agent/.my-agent{suffix}.jsonc`。若使用者本機只剩舊位置檔（極罕見），第一次跑會空 config，由 seed 寫出新模板；手動處理：`cp ~/.claude.json ~/.my-agent/.my-agent.jsonc`（或對應舊位置）後跑 `/config-rewrite-with-docs`。
+- **正確做法**：`getGlobalClaudeFile()` 只回唯一正規路徑 `~/.virtual-assistant-desktop/.virtual-assistant-desktop{suffix}.jsonc`。若使用者本機只剩舊位置檔（極罕見），第一次跑會空 config，由 seed 寫出新模板；手動處理：`cp ~/.claude.json ~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc`（或對應舊位置）後跑 `/config-rewrite-with-docs`。
 - **相關檔案**：`src/utils/env.ts`、`src/globalConfig/seed.ts`、`src/commands/configRewriteWithDocs.ts`、`src/configDoctor/fixers/index.ts`。
 - **日期**：2026-05-10
 
@@ -141,10 +141,10 @@
 
 ### `cachedGrowthBookFeatures` disk cache 蓋掉 code 預設 — 舊版 my-agent 寫 false 永久卡住功能
 - **發生什麼事**：CJK fix 後 prefetch 仍未啟動。debug log 顯示 `gate1: autoEnabled=true mothCopseFlag=false BAIL`。但 `src/utils/config.ts:676` 明明寫 `tengu_moth_copse: true`。
-- **根本原因**：`getFeatureValue_CACHED_MAY_BE_STALE` 讀取順序是 env override → config override → `getGlobalConfig().cachedGrowthBookFeatures[flag]` → caller 傳的 `defaultValue`。my-agent 的「全 flag 預設 true」只會在 disk 上**沒有這個 key** 時生效；而 `~/.my-agent/.my-agent.json` 的 `cachedGrowthBookFeatures.tengu_moth_copse` 已經被舊版 my-agent（或更早的 Claude Code）寫成 false，永久蓋掉 code 預設。
+- **根本原因**：`getFeatureValue_CACHED_MAY_BE_STALE` 讀取順序是 env override → config override → `getGlobalConfig().cachedGrowthBookFeatures[flag]` → caller 傳的 `defaultValue`。my-agent 的「全 flag 預設 true」只會在 disk 上**沒有這個 key** 時生效；而 `~/.virtual-assistant-desktop/.virtual-assistant-desktop.json` 的 `cachedGrowthBookFeatures.tengu_moth_copse` 已經被舊版 my-agent（或更早的 Claude Code）寫成 false，永久蓋掉 code 預設。
 - **影響面**：所有 my-agent shipped-as-true 的 flag 都有同樣風險。`tengu_moth_copse` (memory prefetch)、`tengu_coral_fern` (?)、`tengu_session_memory` 等。任何過去某 GrowthBook server 推送過 false 而留在 disk 的 flag 都會被卡住。
-- **正確做法**（短期）：手動 `sed` 改 disk config：`~/.my-agent/.my-agent.json` 的 `tengu_moth_copse` 改 true。永久修法（M-DISK-CFG-MIGRATION）：lookup 邏輯區分「my-agent strong-default」vs「user-customizable flag」，前者優先於 disk。
-- **診斷路徑**：debug log 顯示 `flagOn=false` → `grep flag-name ~/.my-agent/.my-agent.json` → 看到 explicit false → 確認 lookup 不會 fallback 到 code default。
+- **正確做法**（短期）：手動 `sed` 改 disk config：`~/.virtual-assistant-desktop/.virtual-assistant-desktop.json` 的 `tengu_moth_copse` 改 true。永久修法（M-DISK-CFG-MIGRATION）：lookup 邏輯區分「my-agent strong-default」vs「user-customizable flag」，前者優先於 disk。
+- **診斷路徑**：debug log 顯示 `flagOn=false` → `grep flag-name ~/.virtual-assistant-desktop/.virtual-assistant-desktop.json` → 看到 explicit false → 確認 lookup 不會 fallback 到 code default。
 - **相關檔案**：`src/services/analytics/growthbook.ts:695` `getFeatureValue_CACHED_MAY_BE_STALE`、`src/utils/config.ts:632-689` `cachedGrowthBookFeatures` defaults。
 - **日期**：2026-04-24
 
@@ -248,14 +248,14 @@
 - **日期**：2026-04-23
 
 ### daemon `agentVersion` 帶 `-dev` 後綴 + cron 不 fire → feature flag 可能沒 bake 進 binary
-- **發生什麼事**：`./cli daemon start` 起來了，heartbeat 正常，`/cron` UI 一切 OK、檔案寫入正確、task `state: 'scheduled'`、`lastFiredAt` 卻從不更新，`.my-agent/cron/history/<id>.jsonl` 也不產生。daemon.log 完全沒 cron event。跟上一條 `bun run dev` 的 feature-gate 症狀一模一樣，但這次是走 `./cli`（production binary）啟 daemon。
+- **發生什麼事**：`./cli daemon start` 起來了，heartbeat 正常，`/cron` UI 一切 OK、檔案寫入正確、task `state: 'scheduled'`、`lastFiredAt` 卻從不更新，`.virtual-assistant-desktop/cron/history/<id>.jsonl` 也不產生。daemon.log 完全沒 cron event。跟上一條 `bun run dev` 的 feature-gate 症狀一模一樣，但這次是走 `./cli`（production binary）啟 daemon。
 - **根本原因**：手上的 `./cli` 可能不是用當前 `scripts/build.ts` build 出來的乾淨 binary（例如歷史殘留、中間某次 bun cache、或手動跑過 raw `bun run src/entrypoints/cli.tsx` 寫到同名 path），`feature('AGENT_TRIGGERS')` → false → `cronWiring` gate 在 boot `return { scheduler: null, ... }`。同時 REPL 的 `useScheduledTasks` 偵測到 daemon 活著 → 自己也跳過 → **沒人跑 cron**，但所有寫入動作（`cron.mutation` WS RPC、`updateCronTask`）都只動檔案不需 scheduler，所以 UI 看起來毫無異狀。
 - **指紋 1：`agentVersion`**。正確 production build 是純 `pkg.version`（例如 `2.1.87`）；正確 dev build 是 `2.1.87-dev.<YYYYMMDD>.t<HHMMSS>.sha<8char>`；JIT bun 跑 raw 原始碼是字面 `'dev'`。如果看到 `2.1.87-dev`（**plain，沒後綴**）— 不是 build 出來的 — 一律視為可疑，重 build 再試。
 - **指紋 2：daemon.log 沒有 `cron scheduler started` 或 `cron scheduler disabled` entry**。自 2026-04-24 `eaac529` 後兩條 log 必定擇一出現；都沒出現 = cronWiring 根本沒被 call = 其他更深 bug。
 - **修法**：`bun run build`（production）或 `bun run build:dev`（dev build with full flags — `scripts/build.ts` line 45 已對齊）。重 build 後 `./cli daemon stop && ./cli daemon start`，log 會看到 `{"msg":"cron scheduler started"}` 或 `cron: enabled` 印到 stdout。
 - **診斷 SOP**（往後同症狀）：
   1. `./cli daemon status` 看 `agentVersion` 是不是合理格式
-  2. `tail -20 ~/.my-agent/daemon.log | grep cron` 看有沒有 started / disabled entry
+  2. `tail -20 ~/.virtual-assistant-desktop/daemon.log | grep cron` 看有沒有 started / disabled entry
   3. 若 disabled ERROR → 重 build
   4. 若兩個都沒有 → daemon 本身沒跑 cronWiring（例如別的 projectRuntime bug），再挖
 - **相關檔案**：`src/daemon/cronWiring.ts:123`（gate off 分支 + logger）、`src/daemon/cronWiring.ts:405`（gate on 分支 + logger）、`src/daemon/daemonCli.ts:452`（stdout enabled / DISABLED 印字）、`scripts/build.ts:45`（defaultFeatures 對 prod 和 dev 都是 full）、`src/daemon/main.ts:35`（agentVersion 來源 MACRO.VERSION）。
@@ -588,7 +588,7 @@
 
 - **發生什麼事**：I3 Discord gateway 測試 `( cli-dev.exe daemon start > pty-daemon-start.log 2>&1 & )` 起 daemon，daemon 確實在跑（pid.json 有、`discord ready` 進 daemon.log）— 但 `pty-daemon-start.log` **空檔**，grep `bot connected` 找不到。
 - **根本原因**：daemon 是 long-running blocked process，stdout fd 被 daemon 一直握著、OS pipe / file 緩衝沒 flush 到磁碟。要等 daemon 退（`daemon stop`）file system 才看到內容。
-- **正確做法**：authoritative source 改 `~/.my-agent/daemon.log`（daemon 寫完即 fsync），不靠 stdout banner。grep 用 daemon.log 的 `discord ready` + `slash commands registered` 雙 marker 確認 gateway 起來。
+- **正確做法**：authoritative source 改 `~/.virtual-assistant-desktop/daemon.log`（daemon 寫完即 fsync），不靠 stdout banner。grep 用 daemon.log 的 `discord ready` + `slash commands registered` 雙 marker 確認 gateway 起來。
 - **相關檔案**：`tests/e2e/decouple-comprehensive.sh` I3 段
 - **日期**：2026-04-25
 
@@ -701,7 +701,7 @@
 
 - **問題**：使用者起 `-np 2 + ctxSize 262144` → 每 slot 128K，問哪種配置最佳。
 - **判斷**：my-agent 全鏈路序列化（daemon turn mutex `src/daemon/daemonTurnMutex.ts` + `-np 1` server 預設 + memory pipeline 都 sequential await），第二個 slot 99% 閒置；無 multi-slot 路由邏輯（`routing` 表只有 local/remote 二選）。整塊 256K 給單 slot 可讓長 session 延後觸發 auto-compact。
-- **改動**（`~/.my-agent/llamacpp.jsonc`）：
+- **改動**（`~/.virtual-assistant-desktop/llamacpp.jsonc`）：
   - `contextSize`: 131072 → 262144（client estimate 對齊 per-slot 實際值）
   - `server.extraArgs` `-np 2` → `-np 1`
   - `remote.contextSize`: 131072 → 262144
@@ -713,7 +713,7 @@
   - Prefill 速度 ~500-700 tok/s，180K+ 後攤平
 - **踩坑**：第一輪測試 `max_tokens=60` 全部回空字串。原因：qwen3.5-9b jinja template `generation_prompt` 內建 `<|im_start|>assistant\n<think>\n`，預設一律走 reasoning，60 token 全給 thinking 燒完才換 content → 空回應。長 prompt 測試務必給 ≥300 max_tokens。可從 `/slots` 看 `generation_prompt` 確認模型是否強制 thinking。
 - **何時該回頭考慮 2×128K**：未來 web mode 真的多用戶併發（拿掉 daemon turn mutex），或加機器跑遠端分流。目前不用。
-- **相關檔案**：`~/.my-agent/llamacpp.jsonc`（user 端 config，已改）、`src/llamacppConfig/schema.ts`（schema 預設仍 -np 1）、`scripts/llama/serve.sh`（讀 LLAMA_CTX）
+- **相關檔案**：`~/.virtual-assistant-desktop/llamacpp.jsonc`（user 端 config，已改）、`src/llamacppConfig/schema.ts`（schema 預設仍 -np 1）、`scripts/llama/serve.sh`（讀 LLAMA_CTX）
 - **日期**：2026-05-01
 
 ---

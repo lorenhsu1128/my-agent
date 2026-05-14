@@ -36,7 +36,7 @@
 
 ### 1.3 外部化 Sections
 
-定義在 `src/systemPromptFiles/sections.ts`，預設文字打包在 `src/systemPromptFiles/bundledDefaults.ts`（首次 seed + fallback），使用者可覆寫於 `~/.my-agent/system-prompt/*.md`。
+定義在 `src/systemPromptFiles/sections.ts`，預設文字打包在 `src/systemPromptFiles/bundledDefaults.ts`（首次 seed + fallback），使用者可覆寫於 `~/.virtual-assistant-desktop/system-prompt/*.md`。
 
 | Section | 用途 |
 |---|---|
@@ -64,7 +64,7 @@
 
 ## 2. Sub-LLM / Sub-agent Prompts
 
-> **M-SP-FULL Phase 3（2026-05-10）**：5 條已外部化（標 ✅ 外部化）— 使用者可改 `~/.my-agent/system-prompt/subllm/<name>.md`。
+> **M-SP-FULL Phase 3（2026-05-10）**：5 條已外部化（標 ✅ 外部化）— 使用者可改 `~/.virtual-assistant-desktop/system-prompt/subllm/<name>.md`。
 > 其餘 prompt builder（agent-tool 動態組裝 / extractMemories 4 條 composition）外部化會 lose 條件邏輯，留 M-SP-SUBLLM-COMPOSITION milestone。
 
 | 位置 | 用途 | M-SP 狀態 |
@@ -89,9 +89,9 @@
 
 | 位置 | 用途 |
 |---|---|
-| `src/services/SessionMemory/prompts.ts:11` | **DEFAULT_SESSION_MEMORY_TEMPLATE** — 8 區段樣板（Title/Current State/Files/Workflow/Errors/Learnings/Worklog） | ✅ 自有外部化：`~/.my-agent/session-memory/config/template.md` |
-| `src/services/SessionMemory/prompts.ts:43` | **getDefaultUpdatePrompt()** — 會話記憶更新指令（保留 section header） | ✅ 自有外部化：`~/.my-agent/session-memory/config/prompt.md` |
-| `src/services/MagicDocs/prompts.ts:8` | **getUpdatePromptTemplate()** — Magic Docs 自動更新（`{{docPath}}/{{docContents}}/{{docTitle}}/{{customInstructions}}` 模板） | ✅ 自有外部化：`~/.my-agent/magic-docs/prompt.md` |
+| `src/services/SessionMemory/prompts.ts:11` | **DEFAULT_SESSION_MEMORY_TEMPLATE** — 8 區段樣板（Title/Current State/Files/Workflow/Errors/Learnings/Worklog） | ✅ 自有外部化：`~/.virtual-assistant-desktop/session-memory/config/template.md` |
+| `src/services/SessionMemory/prompts.ts:43` | **getDefaultUpdatePrompt()** — 會話記憶更新指令（保留 section header） | ✅ 自有外部化：`~/.virtual-assistant-desktop/session-memory/config/prompt.md` |
+| `src/services/MagicDocs/prompts.ts:8` | **getUpdatePromptTemplate()** — Magic Docs 自動更新（`{{docPath}}/{{docContents}}/{{docTitle}}/{{customInstructions}}` 模板） | ✅ 自有外部化：`~/.virtual-assistant-desktop/magic-docs/prompt.md` |
 | `src/services/toolUseSummary/toolUseSummaryGenerator.ts:15` | **TOOL_USE_SUMMARY_SYSTEM_PROMPT** — Haiku 生成 ≤30 字元 git-commit 風格工具摘要 | ✅ M-SP `subllm/tool-use-summary.md` |
 | `src/llamacppConfig/bundledTemplate.ts:14` | **LLAMACPP_JSONC_TEMPLATE** — 本地 llama.cpp 設定 JSONC 預設（client + server 層全繁中註解） | n/a（config 模板） |
 | `src/coordinator/coordinatorMode.ts:79` | **getCoordinatorUserContext()** — Coordinator 模式 worker 工具/MCP 清單 | ⏸ Tier C（7 成動態組裝） |
@@ -165,7 +165,7 @@
 
 | 來源 | server | 暴露 tool |
 |---|---|---|
-| virtual-assistant-desktop（桌寵；my-agent 唯一 mascot 客戶端） | `MascotMcpServer`（HTTP，per-request stateless，由桌寵自架；用 `cli mcp add --scope user --transport http` 註冊到 `~/.my-agent/mcp.json`） | `set_expression` / `play_animation` / `say` / `look_at_screen` |
+| virtual-assistant-desktop（桌寵；my-agent 唯一 mascot 客戶端） | `MascotMcpServer`（HTTP，per-request stateless，由桌寵自架；用 `cli mcp add --scope user --transport http` 註冊到 `~/.virtual-assistant-desktop/mcp.json`） | `set_expression` / `play_animation` / `say` / `look_at_screen` |
 
 整合詳情見 `docs/mascot-integration.md`。
 

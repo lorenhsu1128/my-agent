@@ -99,7 +99,7 @@ explicitly called out as default-on.
   a human-friendly schedule DSL (duration "30m", interval "every 2h",
   ISO timestamp, 5-field cron), per-job model override (dispatched via
   in-process teammate), pre-run shell scripts with stdout redaction, audit
-  logs under <project>/.my-agent/cron/output/, at-most-once advance-before-
+  logs under <project>/.virtual-assistant-desktop/cron/output/, at-most-once advance-before-
   fire, stale-run fast-forward with grace window, and injection defense
   (rejects prompts with live secrets or shell exfil patterns). See
   docs/cron.md and src/tools/ScheduleCronTool/README.md.

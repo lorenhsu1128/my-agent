@@ -1,4 +1,4 @@
-// M-LLAMACPP-WATCHDOG Phase 3-2：將 watchdog 設定寫回 ~/.my-agent/llamacpp.json
+// M-LLAMACPP-WATCHDOG Phase 3-2：將 watchdog 設定寫回 ~/.virtual-assistant-desktop/llamacpp.json
 // + 提供 session-only override 機制（in-memory，不寫檔）。
 
 import { existsSync, readFileSync } from 'fs'

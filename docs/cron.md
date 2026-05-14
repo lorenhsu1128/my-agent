@@ -134,7 +134,7 @@ type CronTask = {
 - **session-only**（預設）：只留在記憶體，session 結束就消失。適合
   「提醒我 5 分鐘後…」之類的短命任務。
 - **durable**：`CronCreate durable=true` 寫入
-  `<project>/.my-agent/scheduled_tasks.json`，跨 session / 重啟後依然會跑。
+  `<project>/.virtual-assistant-desktop/scheduled_tasks.json`，跨 session / 重啟後依然會跑。
   只在使用者明確要求「永久排這個」時才用。
 
 **teammate 不能用 durable**：teammate 不會跨 session 存在，durable 的
@@ -243,7 +243,7 @@ agent：[CronCreate]
 每次觸發會寫一筆 markdown 到：
 
 ```
-<project>/.my-agent/cron/output/<job-id>/<timestamp>.md
+<project>/.virtual-assistant-desktop/cron/output/<job-id>/<timestamp>.md
 ```
 
 內容：
@@ -324,9 +324,9 @@ agent：[CronCreate]
 
 | 路徑 | 用途 |
 |---|---|
-| `<project>/.my-agent/scheduled_tasks.json` | durable job 儲存（JSON） |
-| `<project>/.my-agent/cron/output/<id>/*.md` | 每次觸發的稽核 log |
-| `<project>/.my-agent/scheduler.lock` | 多 session 互斥鎖 |
+| `<project>/.virtual-assistant-desktop/scheduled_tasks.json` | durable job 儲存（JSON） |
+| `<project>/.virtual-assistant-desktop/cron/output/<id>/*.md` | 每次觸發的稽核 log |
+| `<project>/.virtual-assistant-desktop/scheduler.lock` | 多 session 互斥鎖 |
 
 ---
 

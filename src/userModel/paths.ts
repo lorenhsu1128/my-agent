@@ -2,8 +2,8 @@
  * User Modeling — 路徑解析 + 開關判定
  *
  * 雙層儲存：
- *   - Global：~/.my-agent/USER.md（跨所有專案共用 persona）
- *   - Per-project：~/.my-agent/projects/<slug>/USER.md（專案專屬 override）
+ *   - Global：~/.virtual-assistant-desktop/USER.md（跨所有專案共用 persona）
+ *   - Per-project：~/.virtual-assistant-desktop/projects/<slug>/USER.md（專案專屬 override）
  *
  * 三路開關優先序（先定義者勝）：
  *   1. MYAGENT_DISABLE_USER_MODEL env var（1/true → OFF）
@@ -26,7 +26,7 @@ import { getInitialSettings } from '../utils/settings/settings.js'
 export const USER_MODEL_FILENAME = 'USER.md'
 
 /**
- * Global USER.md 路徑：~/.my-agent/USER.md
+ * Global USER.md 路徑：~/.virtual-assistant-desktop/USER.md
  * env override: MYAGENT_USER_MODEL_PATH（完整絕對路徑）
  */
 export function getUserModelGlobalPath(): string {
@@ -38,7 +38,7 @@ export function getUserModelGlobalPath(): string {
 }
 
 /**
- * Per-project USER.md 路徑：~/.my-agent/projects/<slug>/USER.md
+ * Per-project USER.md 路徑：~/.virtual-assistant-desktop/projects/<slug>/USER.md
  *
  * 複用 getAutoMemPath() 的 project slug 解析，去掉末端 `memory/`，
  * 以確保 git-root canonicalization / worktree 合併等行為一致。

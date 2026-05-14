@@ -2,7 +2,7 @@
 
 ## 什麼是 M-SP？
 
-M-SP（System Prompt Externalization）把 my-agent 內部的 system prompt 文字從程式碼搬到 `~/.my-agent/system-prompt/` 目錄下的 `.md` 檔，讓你可以直接編輯。下一次 session 啟動時生效。
+M-SP（System Prompt Externalization）把 my-agent 內部的 system prompt 文字從程式碼搬到 `~/.virtual-assistant-desktop/system-prompt/` 目錄下的 `.md` 檔，讓你可以直接編輯。下一次 session 啟動時生效。
 
 外部化涵蓋 **29 個 section**，包含：
 - 身份宣告 / 任務準則 / 工具使用守則 / 風格規則
@@ -16,7 +16,7 @@ M-SP（System Prompt Externalization）把 my-agent 內部的 system prompt 文�
 ## 目錄結構
 
 ```
-~/.my-agent/system-prompt/
+~/.virtual-assistant-desktop/system-prompt/
 ├── README.md                   ← 首次啟動自動生成，含完整檔案清單
 ├── intro.md                    ← 開頭身份宣告
 ├── system.md                   ← # System 規則段
@@ -55,7 +55,7 @@ M-SP（System Prompt Externalization）把 my-agent 內部的 system prompt 文�
 
 ## 首次啟動種檔
 
-**第一次跑 my-agent 時**，如果 `~/.my-agent/system-prompt/` 不存在，會自動建立並寫入 15 個預設 .md 檔（靜態段、動態段、cyber-risk、user-profile-frame、errors/*）加上一份 README.md。
+**第一次跑 my-agent 時**，如果 `~/.virtual-assistant-desktop/system-prompt/` 不存在，會自動建立並寫入 15 個預設 .md 檔（靜態段、動態段、cyber-risk、user-profile-frame、errors/*）加上一份 README.md。
 
 > memory/* 有 8 個區段因內容龐大（每個 ~4K tokens），預設不 seed。你可以手動建立，或留空讓程式用內建值。
 
@@ -63,8 +63,8 @@ M-SP（System Prompt Externalization）把 my-agent 內部的 system prompt 文�
 my-agent -p "hi"
 # → 自動 seed 完成
 
-ls ~/.my-agent/system-prompt/
-cat ~/.my-agent/system-prompt/README.md   # 讀完整清單 + 時機說明
+ls ~/.virtual-assistant-desktop/system-prompt/
+cat ~/.virtual-assistant-desktop/system-prompt/README.md   # 讀完整清單 + 時機說明
 ```
 
 **已經有目錄的使用者**：升級到 M-SP 後不會覆蓋或補寫任何檔案。若要拿到最新預設，刪掉整個 system-prompt 目錄，重啟即可重新 seed。
@@ -75,8 +75,8 @@ cat ~/.my-agent/system-prompt/README.md   # 讀完整清單 + 時機說明
 
 每個 section 獨立判斷，順序：
 
-1. `~/.my-agent/projects/<slug>/system-prompt/<filename>` — **Per-project 覆蓋**
-2. `~/.my-agent/system-prompt/<filename>` — **Global 層**（通常由 seed 自動建立）
+1. `~/.virtual-assistant-desktop/projects/<slug>/system-prompt/<filename>` — **Per-project 覆蓋**
+2. `~/.virtual-assistant-desktop/system-prompt/<filename>` — **Global 層**（通常由 seed 自動建立）
 3. Bundled 預設 — 程式內建，永遠存在
 
 **完全取代，不合併。** 檔案存在就整段採用；若要回到預設，刪檔即可。
@@ -91,14 +91,14 @@ cat ~/.my-agent/system-prompt/README.md   # 讀完整清單 + 時機說明
 # Slug 是專案 git root 的 sanitized 路徑（與 memdir / USER.md 同一套規則）
 SLUG="C--Users-LOREN-Documents--projects-my-agent"
 
-mkdir -p ~/.my-agent/projects/$SLUG/system-prompt
-cp ~/.my-agent/system-prompt/tone-style.md \
-   ~/.my-agent/projects/$SLUG/system-prompt/
+mkdir -p ~/.virtual-assistant-desktop/projects/$SLUG/system-prompt
+cp ~/.virtual-assistant-desktop/system-prompt/tone-style.md \
+   ~/.virtual-assistant-desktop/projects/$SLUG/system-prompt/
 
-vim ~/.my-agent/projects/$SLUG/system-prompt/tone-style.md
+vim ~/.virtual-assistant-desktop/projects/$SLUG/system-prompt/tone-style.md
 ```
 
-Slug 的真實路徑可透過既有 M-UM / M2 機制看出（`~/.my-agent/projects/<slug>/USER.md` 的目錄）。
+Slug 的真實路徑可透過既有 M-UM / M2 機制看出（`~/.virtual-assistant-desktop/projects/<slug>/USER.md` 的目錄）。
 
 ---
 
@@ -159,14 +159,14 @@ bun scripts/dump-system-prompt.ts --no-external  # bundled only
 ### 回到某段的預設
 
 ```bash
-rm ~/.my-agent/system-prompt/intro.md
+rm ~/.virtual-assistant-desktop/system-prompt/intro.md
 # 下次啟動該段會走 bundled fallback；my-agent 不會補寫檔
 ```
 
 ### 完全重置
 
 ```bash
-rm -rf ~/.my-agent/system-prompt
+rm -rf ~/.virtual-assistant-desktop/system-prompt
 my-agent -p "hi"   # 重新 seed
 ```
 
@@ -188,7 +188,7 @@ my-agent -p "hi"   # 重新 seed
 - `docs/context-architecture.md` — 上下文組成整體架構
 - `docs/archive/M_SP_PLAN.md` — M-SP 完整實作計畫（已歸檔）
 - `docs/plans/M-SP-FULL.md` — M-SP-FULL（per-cwd snapshot + override.md + sub-LLM）
-- `~/.my-agent/system-prompt/README.md` — seed 時自動寫入的使用者指引
+- `~/.virtual-assistant-desktop/system-prompt/README.md` — seed 時自動寫入的使用者指引
 - ADR-008-A — M-SP-FULL 補充修正（per-cwd snapshot bug 修復、override 機制、sub-LLM 範圍取捨）
 
 ---
@@ -207,10 +207,10 @@ my-agent -p "hi"   # 重新 seed
 兩個 sibling 檔（與 `system-prompt/` 同層）：
 
 ```
-~/.my-agent/system-prompt-override.md   ← 整段替代 default 主 prompt
-~/.my-agent/system-prompt-append.md     ← 追加在最後
-~/.my-agent/projects/<slug>/system-prompt-override.md  ← per-project
-~/.my-agent/projects/<slug>/system-prompt-append.md    ← per-project
+~/.virtual-assistant-desktop/system-prompt-override.md   ← 整段替代 default 主 prompt
+~/.virtual-assistant-desktop/system-prompt-append.md     ← 追加在最後
+~/.virtual-assistant-desktop/projects/<slug>/system-prompt-override.md  ← per-project
+~/.virtual-assistant-desktop/projects/<slug>/system-prompt-append.md    ← per-project
 ```
 
 - **override.md**：首次啟動 seed 完整 default 當編輯起點；空字串 / 純 HTML 註解視為未啟用。
@@ -222,7 +222,7 @@ my-agent -p "hi"   # 重新 seed
 
 ### 5 個 Sub-LLM Prompt 外部化
 
-`~/.my-agent/system-prompt/subllm/<id>.md`（per-project 同樣有對應路徑）：
+`~/.virtual-assistant-desktop/system-prompt/subllm/<id>.md`（per-project 同樣有對應路徑）：
 
 | 檔名 | 用途 | 變數 |
 |------|------|------|
@@ -234,7 +234,7 @@ my-agent -p "hi"   # 重新 seed
 變數用單花括號 `{x}`（未識別 key 原樣保留）。各條 call site / 改寫範例 / 失效後果見 m-sp-full-guide §4。
 
 **未外部化的 sub-LLM**（見 `docs/prompt-inventory.md` 的「M-SP 狀態」欄）：
-- 已自有外部化機制：SessionMemory template/prompt（`~/.my-agent/session-memory/`）、MagicDocs prompt（`~/.my-agent/magic-docs/`）
+- 已自有外部化機制：SessionMemory template/prompt（`~/.virtual-assistant-desktop/session-memory/`）、MagicDocs prompt（`~/.virtual-assistant-desktop/magic-docs/`）
 - 動態 builder（不適合純 .md）：agent-tool prompt（200 行 9+ feature flag 分支）、extractMemories 4 條 → M-SP-SUBLLM-COMPOSITION milestone
 
 ### 桌寵 / 多人格使用模式

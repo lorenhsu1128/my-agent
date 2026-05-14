@@ -2,7 +2,7 @@
  * M-DISCORD-3b：圖片進出。
  *
  * 進（Discord → agent）：使用者 upload attachment → fetch URL → 存到
- * `~/.my-agent/cache/discord-images/<msg>-<i>-<filename>` → 回傳本地路徑
+ * `~/.virtual-assistant-desktop/cache/discord-images/<msg>-<i>-<filename>` → 回傳本地路徑
  * 給 agent 的 messageAdapter 當 image block / `[Image attachment: name]` fallback。
  *
  * 出（agent → Discord）：掃 assistant text 的 Markdown `![alt](path|url)` +
@@ -32,7 +32,7 @@ export interface DownloadOptions {
   fetchImpl?: typeof fetch
   /** 最大位元組；預設 20MB。 */
   maxBytes?: number
-  /** 目標目錄；預設 ~/.my-agent/cache/discord-images */
+  /** 目標目錄；預設 ~/.virtual-assistant-desktop/cache/discord-images */
   cacheDir?: string
 }
 

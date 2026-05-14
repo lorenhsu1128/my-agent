@@ -17,7 +17,7 @@
 //
 // 前置：
 //   - shim 啟動於 :8081（256k turbo4 enable-tools reasoning=on）
-//   - ~/.my-agent/llamacpp.jsonc 設 baseUrl=:8081, binaryKind=tcq
+//   - ~/.virtual-assistant-desktop/llamacpp.jsonc 設 baseUrl=:8081, binaryKind=tcq
 
 import {spawn} from "node:child_process";
 import path from "node:path";

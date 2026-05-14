@@ -292,7 +292,7 @@ export function getTerminalIdeType(): IdeType | null {
 }
 
 /**
- * Gets sorted IDE lockfiles from ~/.my-agent/ide directory
+ * Gets sorted IDE lockfiles from ~/.virtual-assistant-desktop/ide directory
  * @returns Array of full lockfile paths sorted by modification time (newest first)
  */
 export async function getSortedIdeLockfiles(): Promise<string[]> {
@@ -474,7 +474,7 @@ export async function getIdeLockfilesPaths(): Promise<string[]> {
   if (windowsHome) {
     const converter = new WindowsToWSLConverter(process.env.WSL_DISTRO_NAME)
     const wslPath = converter.toLocalPath(windowsHome)
-    paths.push(resolve(wslPath, '.my-agent', 'ide'))
+    paths.push(resolve(wslPath, '.virtual-assistant-desktop', 'ide'))
   }
 
   // Construct the path based on the standard Windows WSL locations
@@ -499,7 +499,7 @@ export async function getIdeLockfilesPaths(): Promise<string[]> {
       ) {
         continue // Skip system directories
       }
-      paths.push(join(usersDir, user.name, '.my-agent', 'ide'))
+      paths.push(join(usersDir, user.name, '.virtual-assistant-desktop', 'ide'))
     }
   } catch (error: unknown) {
     if (isFsInaccessible(error)) {

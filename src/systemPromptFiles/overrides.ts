@@ -3,10 +3,10 @@
  *
  * 兩個 sibling 檔（與 system-prompt/ 子目錄同層）讓使用者「一檔換整個人格」：
  *
- *   ~/.my-agent/projects/<slug>/system-prompt-override.md  ← 完全替代 default
- *   ~/.my-agent/projects/<slug>/system-prompt-append.md    ← 追加在最後
- *   ~/.my-agent/system-prompt-override.md                  ← global override
- *   ~/.my-agent/system-prompt-append.md                    ← global append
+ *   ~/.virtual-assistant-desktop/projects/<slug>/system-prompt-override.md  ← 完全替代 default
+ *   ~/.virtual-assistant-desktop/projects/<slug>/system-prompt-append.md    ← 追加在最後
+ *   ~/.virtual-assistant-desktop/system-prompt-override.md                  ← global override
+ *   ~/.virtual-assistant-desktop/system-prompt-append.md                    ← global append
  *
  * 解析順序：per-project > global > 無。Override 與 append 各自獨立。
  *

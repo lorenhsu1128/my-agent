@@ -11,7 +11,7 @@ total_start=$SECONDS
 for preset in "${PRESETS[@]}"; do
   ts=$(date +%H:%M:%S)
   echo "[$ts] === preset: $preset ===" | tee -a "$OUT/_summary.log"
-  sed -i "s/\"defaultSamplingPreset\": \"[^\"]*\"/\"defaultSamplingPreset\": \"$preset\"/" "$HOME/.my-agent/llamacpp.jsonc"
+  sed -i "s/\"defaultSamplingPreset\": \"[^\"]*\"/\"defaultSamplingPreset\": \"$preset\"/" "$HOME/.virtual-assistant-desktop/llamacpp.jsonc"
   start=$SECONDS
   bun vendor/node-llama-tcq/scripts/live-test-coding-fast.ts > "$OUT/$preset.log" 2>&1
   ec=$?

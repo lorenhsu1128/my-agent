@@ -22,7 +22,7 @@ describe('cron observability — audit log + markJobRun + advanceNextRun', () =>
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  test('saveJobOutput writes under .my-agent/cron/output/{id}/', async () => {
+  test('saveJobOutput writes under .virtual-assistant-desktop/cron/output/{id}/', async () => {
     const file = await saveJobOutput(
       'abcd1234',
       Date.now(),
@@ -30,7 +30,7 @@ describe('cron observability — audit log + markJobRun + advanceNextRun', () =>
       tmpDir,
     )
     expect(existsSync(file)).toBe(true)
-    expect(file).toContain(join('.my-agent', 'cron', 'output', 'abcd1234'))
+    expect(file).toContain(join('.virtual-assistant-desktop', 'cron', 'output', 'abcd1234'))
     const content = readFileSync(file, 'utf-8')
     expect(content).toBe('# fire\n\nhello')
   })

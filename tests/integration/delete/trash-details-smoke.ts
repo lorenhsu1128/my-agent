@@ -33,7 +33,7 @@ function section(t: string) {
 
 const testRoot = join(tmpdir(), `my-agent-details-test-${Date.now()}`)
 mkdirSync(testRoot, { recursive: true })
-process.env.CLAUDE_CONFIG_DIR = join(testRoot, '.my-agent-config')
+process.env.CLAUDE_CONFIG_DIR = join(testRoot, '.virtual-assistant-desktop-config')
 mkdirSync(process.env.CLAUDE_CONFIG_DIR, { recursive: true })
 
 const cwd = testRoot

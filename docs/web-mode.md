@@ -6,7 +6,7 @@
 
 ## 啟動
 
-1. 編輯 `~/.my-agent/web.jsonc`：
+1. 編輯 `~/.virtual-assistant-desktop/web.jsonc`：
 
    ```jsonc
    {

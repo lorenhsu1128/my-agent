@@ -65,7 +65,7 @@
 - `QueryEngine.ts` / `StreamingToolExecutor.ts`（deny list 內，本來就不該動）
 - 所有 41 個 tools（FileRead / Bash / etc.）— daemon 在遠端跑，tool 視角看到的是遠端本地 fs，無感
 - Cron scheduler / Discord gateway — 跟著 daemon 走在遠端，無需改造
-- Session JSONL 寫在**遠端** `~/.my-agent/projects/<slug>/`（在 daemon 主機，符合既有設計；本地 thin-client 不存歷史 — 可改 follow-up）
+- Session JSONL 寫在**遠端** `~/.virtual-assistant-desktop/projects/<slug>/`（在 daemon 主機，符合既有設計；本地 thin-client 不存歷史 — 可改 follow-up）
 
 ## 安全模型
 
@@ -100,7 +100,7 @@
 遠端機器最小需求：
 1. `bun` ≥ 1.x（curl 一行裝）
 2. `git clone` my-agent + `bun install` + `bun run build:dev`
-3. `~/.my-agent/llamacpp.json` 設 `baseUrl` 指向第三台 model host
+3. `~/.virtual-assistant-desktop/llamacpp.json` 設 `baseUrl` 指向第三台 model host
 4. 啟動：`my-agent daemon start --bind localhost-only-with-token --remote-allow`
 
 ### 自動化安裝腳本（納入本 milestone）
@@ -113,7 +113,7 @@
   3. `git clone <my-agent repo> ~/my-agent`（已存在則 `git pull`）
   4. `cd ~/my-agent && bun install && bun run build:dev`
   5. 互動詢問或讀 flags：`--model-host=<url>` / `--token=<token>`（預設 openssl 隨機 48 char）
-  6. 寫 `~/.my-agent/llamacpp.json`（沿用 `seed.ts` 邏輯，覆寫 baseUrl）
+  6. 寫 `~/.virtual-assistant-desktop/llamacpp.json`（沿用 `seed.ts` 邏輯，覆寫 baseUrl）
   7. 寫 daemon systemd unit（Linux）或 launchd plist（macOS）— optional flag `--install-service`
   8. echo 出 `my-agent --remote ssh://<this-host>/<cwd>` 範例供本地 client 使用
 
@@ -133,7 +133,7 @@
 
 跨平台一致性：
 - 三腳本接受同樣的 flag 命名（`--model-host` / `--token` / `--install-service` / `--repo-url`）
-- 都產生同樣的 `~/.my-agent/llamacpp.json` schema
+- 都產生同樣的 `~/.virtual-assistant-desktop/llamacpp.json` schema
 - 都印出同樣格式的「下一步」訊息（本地 client 該打的指令）
 
 驗證腳本本身：
@@ -159,7 +159,7 @@ curl -fsSL https://<repo>/scripts/install-remote-bootstrap.sh | bash -s -- \
 ```
 ✓ my-agent installed at /home/loren/my-agent
 ✓ Daemon service registered (systemd: my-agent-daemon.service)
-✓ Token written to ~/.my-agent/daemon-token (chmod 600)
+✓ Token written to ~/.virtual-assistant-desktop/daemon-token (chmod 600)
 
 Next step on your local machine:
     my-agent --remote ssh://loren@10.0.0.5/path/to/your/project
@@ -180,7 +180,7 @@ my-agent --remote ssh://loren@10.0.0.5/home/loren/work/myapp
 背後流程（使用者看到的 UI）：
 
 1. `🔌 Establishing SSH tunnel to loren@10.0.0.5...`（spawn 系統 ssh，~1s）
-2. `🔑 Fetching daemon token via ssh exec...`（一次性 `ssh loren@10.0.0.5 cat ~/.my-agent/daemon-token`）
+2. `🔑 Fetching daemon token via ssh exec...`（一次性 `ssh loren@10.0.0.5 cat ~/.virtual-assistant-desktop/daemon-token`）
 3. `🤝 Handshake with remote daemon (cwd=/home/loren/work/myapp)...`
 4. 進入熟悉的 REPL 畫面，狀態列顯示 `🌐 remote: loren@10.0.0.5  📁 myapp  🟢 daemon`
 

@@ -43,7 +43,7 @@ const RULES: Array<{
     hint: {
       category: 'config',
       label: '設定 / 偏好',
-      hint: 'Web 端可在 ⚙ 右欄 Permissions tab 看 mode；其他細節改 ~/.my-agent/settings.json',
+      hint: 'Web 端可在 ⚙ 右欄 Permissions tab 看 mode；其他細節改 ~/.virtual-assistant-desktop/settings.json',
       relatedTab: 'permissions',
     },
   },

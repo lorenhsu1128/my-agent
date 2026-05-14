@@ -358,13 +358,13 @@ export const WebBrowserTool = buildTool({
   },
   async call(input) {
     // 診斷 log：daemon 以 stdio:ignore 起，puppeteer / chromium 錯誤會被吞。
-    // 寫 ~/.my-agent/web-browser.log，hang 時可以 tail 看 phase 卡哪。
+    // 寫 ~/.virtual-assistant-desktop/web-browser.log，hang 時可以 tail 看 phase 卡哪。
     const logLine = (msg: string): void => {
       try {
         const homedir = require('os').homedir() as string
         const path = require('path') as typeof import('path')
         const fs = require('fs') as typeof import('fs')
-        const logPath = path.join(homedir, '.my-agent', 'web-browser.log')
+        const logPath = path.join(homedir, '.virtual-assistant-desktop', 'web-browser.log')
         fs.appendFileSync(
           logPath,
           `${new Date().toISOString()} ${msg}\n`,

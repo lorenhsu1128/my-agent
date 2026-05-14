@@ -31,8 +31,8 @@ export const DANGEROUS_DIRECTORIES = ['.git', '.vscode', '.idea'];
 export function getDangerousDirectories() {
     return [
         ...DANGEROUS_DIRECTORIES.filter(d => d !== '.git'),
-        '.my-agent/commands',
-        '.my-agent/agents',
+        '.virtual-assistant-desktop/commands',
+        '.virtual-assistant-desktop/agents',
     ];
 }
 /**
@@ -247,7 +247,7 @@ export function getDefaultWritePaths() {
         '/tmp/claude',
         '/private/tmp/claude',
         path.join(homeDir, '.npm/_logs'),
-        path.join(homeDir, '.my-agent/debug'),
+        path.join(homeDir, '.virtual-assistant-desktop/debug'),
     ];
     return recommendedPaths;
 }

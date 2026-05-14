@@ -163,7 +163,7 @@ export function Doctor(t0) {
       getDoctorDiagnostic().then(setDiagnostic);
       (async () => {
         const userAgentsDir = join(getMyAgentConfigHomeDir(), "agents");
-        const projectAgentsDir = join(getOriginalCwd(), ".my-agent", "agents");
+        const projectAgentsDir = join(getOriginalCwd(), ".virtual-assistant-desktop", "agents");
         const {
           activeAgents,
           allAgents,

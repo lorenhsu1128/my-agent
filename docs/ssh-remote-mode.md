@@ -21,7 +21,7 @@
 │   │                     │                    │   ├── QueryEngine           │
 │   ├── Ink TUI (render)  │                    │   ├── Tools (Bash/Read/...) │
 │   └── transport client ─┼──ssh stdio pipe───►│   ├── llama.cpp adapter     │
-│         (Duplex stream) │  (走 SSH 22 內)    │   ├── ~/.my-agent/ (遠端)   │
+│         (Duplex stream) │  (走 SSH 22 內)    │   ├── ~/.virtual-assistant-desktop/ (遠端)   │
 │                         │                    │   └── stdio transport       │
 └─────────────────────────┘                    │       (--stdio --attach)    │
                                                └─────────────────────────────┘
@@ -47,7 +47,7 @@
 | Daemon WS protocol | `src/daemon/daemonMain.ts:40-46` 已有完整 WS message framing | 抽象成 transport-agnostic 即可重用全部 message handler |
 | 多 client 廣播 | `sessionBroker.ts` 已支援 | 多裝置 attach 同 sessionId 直接可用 |
 | Tool 邊界 | Bash/Read/Write/Edit 全在 daemon process 內 | 遠端 daemon 即可承擔，零 local-only 依賴 |
-| Config 路徑 | `~/.my-agent` 走 `homedir()`（`envUtils.ts:12`），無硬編碼 | 遠端 daemon 自然指向遠端 home |
+| Config 路徑 | `~/.virtual-assistant-desktop` 走 `homedir()`（`envUtils.ts:12`），無硬編碼 | 遠端 daemon 自然指向遠端 home |
 | Session 資料 | JSONL 寫 project dir | 遠端跑就寫遠端 disk |
 | REPL attach 路徑 | `src/entrypoints/cli.tsx` 已有 attach daemon 模式 | 加 `--remote` flag 即可分支到 stdio transport |
 | ⚠️ Session resume | `sessionBootstrap.ts:26` 註記 M-DAEMON-8 未做 | **前置需求** |
@@ -65,14 +65,14 @@
 2. **`my-agent --remote <ssh-target>` 包裝命令**（~150-200 行）
    - 解析 ssh target（user@host / ssh config alias）
    - 偵測遠端 daemon 是否裝好
-   - 不存在 / 版本不符 → bootstrap：上傳對應 OS/arch 的 my-agent binary 到 `~/.my-agent/server/`
+   - 不存在 / 版本不符 → bootstrap：上傳對應 OS/arch 的 my-agent binary 到 `~/.virtual-assistant-desktop/server/`
    - spawn `ssh ... my-agent daemon --stdio --attach <sid>` child
    - lifecycle：health check、自動 reconnect、優雅關閉
    - 本地 Ink TUI 改連這條 stdio transport 而非 TCP WS
 
 3. **Daemon hardening**（~30 行）
    - 強制 127.0.0.1 bind（即使 stdio 模式 WS 還在，仍要鎖）
-   - `~/.my-agent/remotes/<host>.json` 寫入：last sessionId / 連線時間（純記錄）
+   - `~/.virtual-assistant-desktop/remotes/<host>.json` 寫入：last sessionId / 連線時間（純記錄）
 
 4. **M-DAEMON-8 session resume**（前置）
    - 已在 TODO.md（不算 SSH 規劃的新工作）
@@ -96,13 +96,13 @@
 - 符合「檔案集中 my-agent 內管理」原則（self-contained）
 - VSCode 同款做法（vscode-server 預編譯 + 推送）
 - Bun 原生支援 `bun build --compile --target=bun-linux-x64 / bun-linux-arm64 / bun-darwin-arm64`，arch matrix 只需 3-4 個 target
-- 加版本對齊：path 為 `~/.my-agent/server/<my-agent-version>-<git-sha>/my-agent`，版本不符自動重推
+- 加版本對齊：path 為 `~/.virtual-assistant-desktop/server/<my-agent-version>-<git-sha>/my-agent`，版本不符自動重推
 
 **Bootstrap 流程**：
 1. `my-agent --remote user@host` 首次跑
-2. `ssh host 'cat ~/.my-agent/server/.version 2>/dev/null'` 偵測
+2. `ssh host 'cat ~/.virtual-assistant-desktop/server/.version 2>/dev/null'` 偵測
 3. 不存在或版本不符 → 本地 `bun build --compile --target=$(detect remote arch via ssh uname)` 產 binary
-4. 透過 ssh stdin pipe 上傳：`cat dist/my-agent-server | ssh host 'cat > ~/.my-agent/server/<v>/my-agent && chmod +x ...'`
+4. 透過 ssh stdin pipe 上傳：`cat dist/my-agent-server | ssh host 'cat > ~/.virtual-assistant-desktop/server/<v>/my-agent && chmod +x ...'`
 5. 寫版本 marker
 6. spawn `ssh host my-agent daemon --stdio --attach <sid>`
 
@@ -122,7 +122,7 @@ my-agent --remote user@host --cwd /path    # 另一種寫法
 
 **預設行為**：不帶 path → 遠端 `$HOME`（最安全）。**不**用本地 cwd echo 到遠端（本地 path 在遠端可能不存在/語義不同）。
 
-**Project 識別**：sessionId 由 daemon 依 `(host_machine_id, project_path)` 自動產生 key；`~/.my-agent/remotes/<host>.json` 記錄各 project 的 last sessionId、上次 cwd、上次連線時間。第二次 `my-agent --remote user@host` 預設 attach 同一 sessionId（除非帶 `--new-session`）。
+**Project 識別**：sessionId 由 daemon 依 `(host_machine_id, project_path)` 自動產生 key；`~/.virtual-assistant-desktop/remotes/<host>.json` 記錄各 project 的 last sessionId、上次 cwd、上次連線時間。第二次 `my-agent --remote user@host` 預設 attach 同一 sessionId（除非帶 `--new-session`）。
 
 ### 檔案混淆預防
 
@@ -179,13 +179,13 @@ Connected → (ssh child exit) → Reconnecting → (3 次失敗) → Disconnect
 | Config 類型 | 是否該同步 | 推薦處理 |
 |---|---|---|
 | `models/`、`llamacpp.jsonc`、`daemon.json` | ❌ 不該（每台機硬體 / runtime 不同） | 純遠端，本地完全不參與 |
-| `~/.my-agent/system-prompt/*.md`、`subllm/*.md`（人格、子 LLM 行為） | ✅ 應該（使用者偏好，跨機共用合理） | 顯式同步指令，**不**自動 |
+| `~/.virtual-assistant-desktop/system-prompt/*.md`、`subllm/*.md`（人格、子 LLM 行為） | ✅ 應該（使用者偏好，跨機共用合理） | 顯式同步指令，**不**自動 |
 | `~/.claude/projects/.../memory/MEMORY.md` + 個別 memory files | ⚠️ 視角度 | 每 (host, project) 自成一份；本地不參與遠端 session 的 memory |
 | Project 內 CLAUDE.md / TODO.md / docs/ | ✅ 應該 | git 已同步，不需 my-agent 介入 |
 
 ### 推薦策略
 
-**llama.cpp**：完全遠端優先，本地不碰。`my-agent --remote` 啟動時直接用遠端 `~/.my-agent/llamacpp.jsonc`。
+**llama.cpp**：完全遠端優先，本地不碰。`my-agent --remote` 啟動時直接用遠端 `~/.virtual-assistant-desktop/llamacpp.jsonc`。
 
 **System-prompt / sub-LLM overrides**：
 - 預設不同步（避免雙向修改衝突）
@@ -207,7 +207,7 @@ Connected → (ssh child exit) → Reconnecting → (3 次失敗) → Disconnect
 ## 已捨棄子題
 
 - **G. ControlMaster + Windows**：Windows OpenSSH 對 ControlMaster 支援有限但對本方案不關鍵 — 每個 `--remote` session 一條 SSH 連線即可；多 channel 共用是效能優化，不是正確性需求。Linux/macOS 自動享受，Windows 退化到 per-session 一條連線。不阻塞 MVP。
-- **I. Multi-tenant auth**：stdio transport 走 ssh session，已是 per-user auth；同 host 多使用者各自 daemon process（用 user home 自然隔離）。127.0.0.1 WS 那邊強制 bind localhost + 同機 user 隔離由 OS file permission 守（`~/.my-agent/daemon.json` chmod 600）。不需額外應用層 token。
+- **I. Multi-tenant auth**：stdio transport 走 ssh session，已是 per-user auth；同 host 多使用者各自 daemon process（用 user home 自然隔離）。127.0.0.1 WS 那邊強制 bind localhost + 同機 user 隔離由 OS file permission 守（`~/.virtual-assistant-desktop/daemon.json` chmod 600）。不需額外應用層 token。
 
 ## 不在範圍
 
@@ -219,7 +219,7 @@ Connected → (ssh child exit) → Reconnecting → (3 次失敗) → Disconnect
 
 1. **stdio transport unit test**：daemon 跑在子進程，本地 client 透過 stdin/stdout 完成一輪 turn，驗證 framing/back-pressure。
 2. **手動 SSH 驗證**：遠端先裝好 daemon → 本地 `ssh user@host my-agent daemon --stdio --attach <sid>` 手動跑通 → 確認 turn event 流回本地 stdout。
-3. **包裝命令**：寫 `my-agent --remote <ssh-target>`，測首次 bootstrap（自動部署 daemon 二進位到 `~/.my-agent/server/`）。
+3. **包裝命令**：寫 `my-agent --remote <ssh-target>`，測首次 bootstrap（自動部署 daemon 二進位到 `~/.virtual-assistant-desktop/server/`）。
 4. **斷線重連**：完成 M-DAEMON-8 → 驗證「中途 kill ssh child → 自動 reconnect → 接回同 sessionId 不丟 turn」。
 5. **Hardening 驗證**：嘗試把 daemon config 改成 `bind 0.0.0.0` 應該被 code 拒絕；stdio 模式啟動時 `netstat` 確認遠端零監聽 port。
 6. **跨平台冒煙**：Windows (本地, OpenSSH client) → Linux (遠端 GPU host)；macOS (本地) → Linux 各跑一輪。

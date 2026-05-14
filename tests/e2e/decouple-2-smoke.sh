@@ -100,7 +100,7 @@ if [[ "$SCOPE" == "all" || "$SCOPE" == "daemon" ]]; then
   test_start "B2.1 daemon start"
   if ./cli daemon start 2>&1 | grep -qE "started|listening|pid"; then
     sleep 2
-    if [[ -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+    if [[ -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
       test_pass "B2.1 daemon start"
     else
       test_fail "B2.1 daemon start" "no pid.json"
@@ -127,7 +127,7 @@ if [[ "$SCOPE" == "all" || "$SCOPE" == "daemon" ]]; then
   test_start "B2.4 daemon stop"
   if ./cli daemon stop 2>&1 | grep -qE "stopped|killed|exit"; then
     sleep 1
-    if [[ ! -f "$HOME/.my-agent/daemon.pid.json" ]]; then
+    if [[ ! -f "$HOME/.virtual-assistant-desktop/daemon.pid.json" ]]; then
       test_pass "B2.4 daemon stop"
     else
       test_fail "B2.4 daemon stop" "pid.json still exists"
@@ -162,7 +162,7 @@ if [[ "$SCOPE" == "all" || "$SCOPE" == "cron" ]]; then
   fi
 
   test_start "B3.3 history JSONL exists"
-  if compgen -G "$HOME/.my-agent/projects/*/cron-history.jsonl" > /dev/null; then
+  if compgen -G "$HOME/.virtual-assistant-desktop/projects/*/cron-history.jsonl" > /dev/null; then
     test_pass "B3.3 history JSONL"
   else
     test_fail "B3.3 history JSONL" "no JSONL found"
@@ -177,7 +177,7 @@ if [[ "$SCOPE" == "all" || "$SCOPE" == "memory" ]]; then
   log ""
   log "=== B4. Memory ==="
 
-  MEMORY_DIR="$HOME/.my-agent/projects"
+  MEMORY_DIR="$HOME/.virtual-assistant-desktop/projects"
 
   test_start "B4.1 memdir 存在"
   if compgen -G "$MEMORY_DIR/*/memory" > /dev/null; then

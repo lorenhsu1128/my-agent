@@ -20,7 +20,7 @@
 - [x] M-BUDDY-RIP-10 commit（繁中）：`refactor(buddy): 移除 dead-code REPL 小精靈子系統`
 
 ### 不在範圍 → 後續
-- 使用者本機 `~/.my-agent/system-prompt/subllm/buddy-companion.md` 不主動清除（使用者自管）
+- 使用者本機 `~/.virtual-assistant-desktop/system-prompt/subllm/buddy-companion.md` 不主動清除（使用者自管）
 - `feature()` 機制本身不重構，僅移除 BUDDY 這個 key 的所有 caller
 - `src/services/api/` 與其他無關模組不動
 
@@ -28,7 +28,7 @@
 
 ## 當前里程碑：M-TCQ-SHIM — node-llama-tcq OpenAI-compat sidecar（2026-05-03 啟動）
 
-**目標**：在 `vendor/node-llama-tcq/` 內新增 OpenAI 相容 HTTP server（TCQ-shim），規格對齊 `buun-llama-cpp/build/bin/llama-server`，my-agent 端只改 `~/.my-agent/llamacpp.json` 的 `binaryPath`/`port`，fetch adapter 與 QueryEngine 零改動。完整設計見 `~/.claude/plans/node-llama-tcq-my-agent-my-dazzling-sprout.md`。
+**目標**：在 `vendor/node-llama-tcq/` 內新增 OpenAI 相容 HTTP server（TCQ-shim），規格對齊 `buun-llama-cpp/build/bin/llama-server`，my-agent 端只改 `~/.virtual-assistant-desktop/llamacpp.json` 的 `binaryPath`/`port`，fetch adapter 與 QueryEngine 零改動。完整設計見 `~/.claude/plans/node-llama-tcq-my-agent-my-dazzling-sprout.md`。
 
 **決策**：架構切割原則 — TCQ-shim 完全在 vendor 內、不 import my-agent；my-agent 唯一改檔為 `src/llamacppConfig/schema.ts` 加 `server.binaryKind: 'buun'|'tcq'`（預設 `buun` 向下相容）。Endpoint 規格層**一次到位**對齊 buun（路由表 + payload schema + 錯誤格式全集），未支援者回 501 標準錯誤；里程碑差別在「行為深度」與 fork-only 加值。Dev iteration 一律 `bun run dev`，不需先 npm run build。
 
@@ -139,7 +139,7 @@
 
 ### Optimizations（依 ROI）
 
-- [ ] M-LOCAL-MODEL-ROBUSTNESS-O1 ⭐ adapter 端 prompt sanitizer 自動轉 ``` fence — `src/services/api/llamacpp-fetch-adapter.ts` 加 family-gate prompt rewrite：Qwen 模型偵測 user message 內 ``` 區塊 → 短 code（≤150 字 / 1 行）轉 inline backtick；長 code 寫 `~/.my-agent/tmp/fixture-*.{ts,js}` 然後 prompt 改用 Read。env `LLAMACPP_PROMPT_SANITIZE_FENCE=0` 可關閉
+- [ ] M-LOCAL-MODEL-ROBUSTNESS-O1 ⭐ adapter 端 prompt sanitizer 自動轉 ``` fence — `src/services/api/llamacpp-fetch-adapter.ts` 加 family-gate prompt rewrite：Qwen 模型偵測 user message 內 ``` 區塊 → 短 code（≤150 字 / 1 行）轉 inline backtick；長 code 寫 `~/.virtual-assistant-desktop/tmp/fixture-*.{ts,js}` 然後 prompt 改用 Read。env `LLAMACPP_PROMPT_SANITIZE_FENCE=0` 可關閉
 - [ ] M-LOCAL-MODEL-ROBUSTNESS-O2 ⭐ caller 端 metadata.taskType heuristic — `src/llamacppConfig/inferTaskType.ts` 純函式：依 prompt 關鍵字推 taskType（修/fix/bug → thinking-coding；拒絕/含糊 → thinking-general；分析/解釋/review → thinking-coding；俳句/創作 → thinking-general）；caller 沒帶 metadata.taskType 時 adapter 自動推
 - [ ] M-LOCAL-MODEL-ROBUSTNESS-O3 shim GBNF 強制 tool format — 接續 B3，把 OpenAI JSON Schema → Qwen pythonic-XML grammar 寫一套；參考 vendor/node-llama-tcq/src/evaluator/LlamaJsonSchemaGrammar.ts
 - [ ] M-LOCAL-MODEL-ROBUSTNESS-O4 test framework 通用化 — 提取 `vendor/node-llama-tcq/scripts/_lib/runCaseWithTimeout.ts` 共用 helper：integrate B2 (kill tree) + B4 (safe mkdir) + B7 (dump + 寬 regex)；現有 stress script 改用 helper
@@ -258,9 +258,9 @@
 
 ## 當前里程碑：M-SELFIMPROVE-CMD — `/self-improve` 指令管理 nudge 開關與閾值（2026-05-01 啟動）
 
-**目標**：把內建的 5 個 self-improve nudge（skill creation / skill improvement / memory / session review / auto dream）改成可在 REPL 內透過 slash 指令開關與調閾值，不必手動編輯 `~/.my-agent/settings.jsonc`。
+**目標**：把內建的 5 個 self-improve nudge（skill creation / skill improvement / memory / session review / auto dream）改成可在 REPL 內透過 slash 指令開關與調閾值，不必手動編輯 `~/.virtual-assistant-desktop/settings.jsonc`。
 
-**決策**：每個 nudge 新增獨立 `*Enabled` 布林欄位（預設 `true`，向後相容）；UX 採互動 React Ink 面板（仿 `/sandbox-toggle`）；只寫 `userSettings`（`~/.my-agent/settings.jsonc`）。
+**決策**：每個 nudge 新增獨立 `*Enabled` 布林欄位（預設 `true`，向後相容）；UX 採互動 React Ink 面板（仿 `/sandbox-toggle`）；只寫 `userSettings`（`~/.virtual-assistant-desktop/settings.jsonc`）。
 
 ### 任務
 - [ ] M-SELFIMPROVE-CMD-1 schema：`src/utils/settings/types.ts` 在 `selfImproveThresholds` 物件加 5 個 `*Enabled` 布林欄位
@@ -304,7 +304,7 @@
 
 **目標**：讓 llamacpp 路徑能真實接收圖片（目標後端 Gemopus-4-E4B-it，基於 Gemma-4-E4B-it 多模態 GGUF）；同時當後端是純文字模型（Qwen3.5-9B-Neo）時走 graceful fallback（保留現行 `[Image attachment]` 佔位符行為）。詳見 `docs/archive/M_VISION_PLAN.md`。
 
-**決策**：capability 由 `~/.my-agent/llamacpp.json` 的 `vision.enabled` 宣告（不 runtime probe）；adapter 依旗標分支；serve.sh 透過 load-config.sh 的 extraArgs 機制追加 `--mmproj`。
+**決策**：capability 由 `~/.virtual-assistant-desktop/llamacpp.json` 的 `vision.enabled` 宣告（不 runtime probe）；adapter 依旗標分支；serve.sh 透過 load-config.sh 的 extraArgs 機制追加 `--mmproj`。
 
 ### 任務
 - [x] M-VISION-1 schema 擴充：新增 `LlamaCppVisionSchema`（`vision.enabled`）與 `LlamaCppServerVisionSchema`（`server.vision.mmprojPath?`）
@@ -332,7 +332,7 @@
 **架構決策**（2026-04-19 與使用者逐題對齊 Q1–Q9）：
 - ADR-M-DAEMON-01：Daemon 是唯一的 QueryEngine 跑者、唯一的 session JSONL 寫入者；REPL attach 模式下只透過 WS 送 input + subscribe stream，不寫 session
 - ADR-M-DAEMON-02：IPC 協議 = 復用 `src/server/directConnectManager.ts` 既有的 WS + JSON lines 格式（control_request / control_response / SDK message 轉發已就位，只補 server side）
-- ADR-M-DAEMON-03：Daemon 監聽 `localhost:<port>` + auth token（非 unix socket；bun + Windows unix socket 風險大，呼應 ADR-011 playwright 踩坑）；port / pid 寫入 `~/.my-agent/daemon.pid.json`；token 放 `~/.my-agent/daemon.token`（0600）
+- ADR-M-DAEMON-03：Daemon 監聽 `localhost:<port>` + auth token（非 unix socket；bun + Windows unix socket 風險大，呼應 ADR-011 playwright 踩坑）；port / pid 寫入 `~/.virtual-assistant-desktop/daemon.pid.json`；token 放 `~/.virtual-assistant-desktop/daemon.token`（0600）
 - ADR-M-DAEMON-04：REPL attach UX = 透明偵測 + 狀態列 badge 顯示（`[local]` / `[daemon:12345]` / `[daemon:stale]`）；無 daemon 自動 fallback 獨立模式
 - ADR-M-DAEMON-05：Input 策略 = 混合：使用者互動訊息（REPL Enter / Discord DM / `@mention`）= interrupt 當前 turn；自動觸發（cron / background）= queue；slash command = 立即執行
 - ADR-M-DAEMON-06：Daemon 生命週期 = 顯式 `my-agent daemon start/stop/status/restart/logs` 子命令（非 auto-spawn）
@@ -430,7 +430,7 @@
 - [ ] 實機 E2E（使用者驗證 — daemon + bot 實連）
 
 ### 不含（延後）
-- 自動偵測目錄建立（.my-agent/ seed 觸發）
+- 自動偵測目錄建立（.virtual-assistant-desktop/ seed 觸發）
 - 頻道節流 / 合併鏡像
 - Bot 離線訊息 queue（現況：丟棄 + log）
 - 多 guild 選擇 UI
@@ -495,7 +495,7 @@
 - ADR-M2-04（修訂）：Prefetch = FTS 歷史 + memdir topic files re-rank，預算 ~2000 tokens，片段直接貼原文。**memdir re-rank 第一版用關鍵字 / token overlap 等非 LLM 方法**，不呼叫遠端 LLM；若需 LLM 才能過濾才用 llamacpp（當前主模型），**不**用 Sonnet/Haiku 等 Anthropic 模型
 - ADR-M2-05：MemoryTool 與 Edit/Write 並存（選項 1），不強制，因 `extractMemories.ts` 的 forked agent 仍走 Edit/Write
 - ADR-M2-06（修訂）：SessionSearch 預設回 top-K 片段（輕量），參數 `summarize: true` 時用**當前 session 主模型 = llamacpp** 做摘要；摘要調用需考慮 llamacpp 速度與 context 限制（9B 模型、32K ctx），片段總量需先截斷到 ~8K 以內再送進去
-- ADR-M2-07：SQLite 路徑 `~/.my-agent/projects/{slug}/session-index.db`，用 `bun:sqlite`（零依賴）
+- ADR-M2-07：SQLite 路徑 `~/.virtual-assistant-desktop/projects/{slug}/session-index.db`，用 `bun:sqlite`（零依賴）
 - ADR-M2-08：FTS schema 多存欄位（token/cost/tool_calls/finish_reason/timestamp），為未來分析預留
 - ADR-M2-09：索引範圍僅當前 project；跨 project 全域索引延後到未來里程碑
 - ADR-M2-10（新增）：所有驗收情境以 `./cli --model qwen3.5-9b-neo` 為準；Anthropic 路徑不作為回歸測試項（既有 code 保留但不保證 M2 下仍綠）
@@ -503,7 +503,7 @@
 **詳細實作設計與決策邏輯見 DEPLOYMENT_PLAN.md 的 M2 區段。**
 
 ### 階段一：索引基礎建設
-- [x] M2-01 在 `src/services/sessionIndex/` 建立 SQLite FTS5 schema（sessions + messages_fts）、`bun:sqlite` 連線管理、索引檔路徑 `~/.my-agent/projects/{slug}/session-index.db` — `paths.ts`/`schema.ts`/`db.ts`/`index.ts` 共 4 檔；10 欄 sessions 表 + FTS5 trigram virtual table + schema_version。`scripts/poc/session-index-smoke.ts` 27/27 綠。踩到 trigram ≥3 字元限制，記入 LESSONS.md 供 M2-05 參考
+- [x] M2-01 在 `src/services/sessionIndex/` 建立 SQLite FTS5 schema（sessions + messages_fts）、`bun:sqlite` 連線管理、索引檔路徑 `~/.virtual-assistant-desktop/projects/{slug}/session-index.db` — `paths.ts`/`schema.ts`/`db.ts`/`index.ts` 共 4 檔；10 欄 sessions 表 + FTS5 trigram virtual table + schema_version。`scripts/poc/session-index-smoke.ts` 27/27 綠。踩到 trigram ≥3 字元限制，記入 LESSONS.md 供 M2-05 參考
 - [x] M2-02 找出 JSONL append 寫入點（預期在 `src/utils/sessionStorage.ts` 或 `src/assistant/sessionHistory.ts`），加 tee hook 同步寫 FTS；失敗不可中斷主流程 — hook 在 `sessionStorage.ts:1243`（TranscriptMessage 分支，繼承 `shouldSkipPersistence` 守衛）；`indexWriter.ts` 新增；schema v1→v2 加 `messages_seen` shadow 表做 UUID 去重；用 `getProjectRoot()`（不是 `getOriginalCwd()`）避免 EnterWorktreeTool 分裂索引；`SQLITE_BUSY` 直接吞由 M2-03 補。smoke 從 30 擴到 48/48 綠
 - [x] M2-03 啟動時掃描當前 project 的 JSONL，用 mtime 比對補進未索引內容 — 註：實際路徑是 `{CLAUDE_CONFIG_HOME}/projects/{slug}/{sessionId}.jsonl`（無 `conversations/` 子目錄）。新增 `src/services/sessionIndex/reconciler.ts`：`reconcileProjectIndex` 掃描 + per-session mtime vs `last_indexed_at` 比對 + sidechain / 壞行跳過 + stats log；`ensureReconciled` 冪等 Promise 快取供啟動與 M2-05 共用。Hook 點：`src/setup.ts` 的 background-jobs 區塊（`!isBareMode()` 內，旁邊 `initSessionMemory`）fire-and-forget。Smoke 擴至 62/62 綠，覆蓋空目錄 / 多 session / 壞行 / sidechain 跳過 / up-to-date 跳過 / 冪等
 - [x] M2-04 `bun run typecheck` 綠 + 手動驗證：產幾筆對話、確認 FTS 表有資料、能用 SQL 查到 — typecheck baseline 綠；smoke 66/66 綠；TUI 跑 2 輪天氣查詢後 `scripts/poc/query-session-index.ts` 查到 4 sessions / 79 messages_fts / tool_name 正確抽取（Bash/Read/Skill/Glob）。過程中發現 `indexEntry` 用 `Date.now()` 讓 `started_at` 不準 → 修正為優先 `entry.timestamp`、`ended_at` 改 MAX（commit `0384537`）；砍 db 重建後 started_at 全部對齊真實時間
@@ -549,7 +549,7 @@
 **目標**：移植 Hermes Agent 的 USER.md 概念，建立獨立於現有 typed memories 的 persona block，session 啟動凍結快照注入 system prompt。三路開關（CLI 留待後續、env、settings）預設啟用。**不**破壞現有 M2 memory。
 
 **架構決策**（已與 user 對齊）：
-- ADR-UM-01：雙層儲存 — global (`~/.my-agent/USER.md`) + per-project (`~/.my-agent/projects/<slug>/USER.md`)，注入時 global + project 合併，project 以 `### Project-specific` 分隔
+- ADR-UM-01：雙層儲存 — global (`~/.virtual-assistant-desktop/USER.md`) + per-project (`~/.virtual-assistant-desktop/projects/<slug>/USER.md`)，注入時 global + project 合併，project 以 `### Project-specific` 分隔
 - ADR-UM-02：寫入介面延伸現有 `MemoryTool`，新增 `target='user_profile'` + 可選 `scope='global'|'project'`（預設 global）；不新建工具
 - ADR-UM-03：注入機制為獨立 `<user-profile>` fence，透過 `systemPromptSection('user_profile', ...)` 放在 `memory` section 之前
 - ADR-UM-04：大小 soft limit 1500 chars（global + project 合計），超出告警不截斷
@@ -589,7 +589,7 @@
 - [x] M-SN-03 `bun run typecheck` baseline 綠（僅 TS5101 pre-existing）
 
 ### 完成標準
-- [x] 批准 nudge → `.my-agent/skills/<name>/SKILL.md` 立即出現（不依賴 LLM）
+- [x] 批准 nudge → `.virtual-assistant-desktop/skills/<name>/SKILL.md` 立即出現（不依賴 LLM）
 - [x] 模型於下一輪知道 skill 已建立、可選擇用 SkillManage(edit) 補強而非重複 create
 - [x] 失敗路徑（重名、frontmatter 不合法、scanSkill dangerous）有明確錯誤訊息
 
@@ -602,7 +602,7 @@
 
 ## 當前里程碑：M-SP — System Prompt Externalization（2026-04-19 啟動）
 
-**目標**：把約 15–16K tokens 寫死在 TS 的 system prompt 文字外部化到 `~/.my-agent/system-prompt/` 下的 `.md` 檔，使用者可直接編輯、下一 session 生效。雙層（global + per-project）+ 首次啟動自動 seed + README.md 指引。
+**目標**：把約 15–16K tokens 寫死在 TS 的 system prompt 文字外部化到 `~/.virtual-assistant-desktop/system-prompt/` 下的 `.md` 檔，使用者可直接編輯、下一 session 生效。雙層（global + per-project）+ 首次啟動自動 seed + README.md 指引。
 
 **詳細計畫**：見 `docs/archive/M_SP_PLAN.md`
 
@@ -647,7 +647,7 @@
 - [x] M-SP-5.4 e2e smoke：`bun scripts/dump-system-prompt.ts` 顯示 29/29 externalized，not-yet-externalized 清單空；typecheck baseline 不變
 
 ### 完成標準
-- [x] 首次啟動自動 seed `~/.my-agent/system-prompt/` 含 README.md（手動驗證：刪目錄 → 重跑 → 15 個檔 + README 正確寫入）
+- [x] 首次啟動自動 seed `~/.virtual-assistant-desktop/system-prompt/` 含 README.md（手動驗證：刪目錄 → 重跑 → 15 個檔 + README 正確寫入）
 - [ ] byte-level diff（seed 後 vs 重構前）= 0（未跑完整對照；dump 腳本已可供比對）
 - [ ] 所有既有整合測試通過（memory 154 + user-model 27）（未跑；M-SP-4 改動 memory 常數路徑，建議後續手動驗證）
 - [x] 使用者改檔案後開新 session 生效（機制驗證：loadSystemPromptSnapshot 啟動凍結，下 session 重讀）
@@ -657,7 +657,7 @@
 
 ## 當前里程碑：M-LLAMA-CFG — 本地 LLM server 設定外部化（2026-04-19）
 
-**目標**：15 處 llamacpp 相關設定（TS const / env var / shell 腳本 hard-code）統一到 `~/.my-agent/llamacpp.json`，TS + shell 共用一份 source of truth。
+**目標**：15 處 llamacpp 相關設定（TS const / env var / shell 腳本 hard-code）統一到 `~/.virtual-assistant-desktop/llamacpp.json`，TS + shell 共用一份 source of truth。
 
 ### 任務
 - [x] M-LLAMA-CFG-1 建 `src/llamacppConfig/` 模組：schema / paths / loader / seed / index（Zod 驗證 + session 凍結）
@@ -670,7 +670,7 @@
 - [x] M-LLAMA-CFG-8 typecheck 綠、端對端 seed + shell load 驗證、commit
 
 ### 完成標準
-- [x] 首次跑 my-agent 後 `~/.my-agent/llamacpp.json` + `llamacpp.README.md` 自動建立
+- [x] 首次跑 my-agent 後 `~/.virtual-assistant-desktop/llamacpp.json` + `llamacpp.README.md` 自動建立
 - [x] `bash scripts/llama/serve.sh` 能正確讀 config（驗證過 HOST/PORT/CTX/ALIAS 皆來自 json）
 - [x] env var 臨時覆蓋仍有效（`LLAMA_CTX=65536 bash serve.sh` 依然覆蓋）
 - [x] JSON 壞 / 缺檔不 crash，走內建預設並 stderr 警告
@@ -775,7 +775,7 @@
 - [x] M3-03 移植 doc-coauthoring — Pattern A；`docCoauthoring.ts`；15KB prompt inline
 - [x] M3-04 移植 internal-comms — Pattern C（with `files`）；`internalComms.ts`；4 個 example .md 透過 `files: Record<string, string>` 提取到磁碟
 - [x] M3-05 移植 algorithmic-art — Pattern B（lazy-load）；`algorithmicArt.ts` + `algorithmicArtContent.ts`；~20KB prompt lazy-loaded；viewer.html template 內容整合進 prompt（省去 files 提取複雜度）
-- [x] M3-06 移植 canvas-design（含 binary font 處理）— `canvasDesign.ts` + `canvasDesignContent.ts` + `canvasDesignFonts.ts`（7.2MB base64 字型）；擴充 `bundledSkills.ts` 支援 `binaryFiles` 和 `safeWriteBinaryFile`；字型首次呼叫時 decode+extract 到 `~/.my-agent/bundled-skills/canvas-design/canvas-fonts/`
+- [x] M3-06 移植 canvas-design（含 binary font 處理）— `canvasDesign.ts` + `canvasDesignContent.ts` + `canvasDesignFonts.ts`（7.2MB base64 字型）；擴充 `bundledSkills.ts` 支援 `binaryFiles` 和 `safeWriteBinaryFile`；字型首次呼叫時 decode+extract 到 `~/.virtual-assistant-desktop/bundled-skills/canvas-design/canvas-fonts/`
 - [x] M3-07 修改 index.ts 註冊 Tier 1 全部 + typecheck + build 驗證 — 6 個 skill 全部無條件註冊；typecheck 基線不變（TS5101）；build 成功 130MB（+7MB 字型 = 預期內）；4609 modules bundled
 
 ### 階段二：帶參考檔案的 Skills（3 個）
@@ -821,7 +821,7 @@
 
 **架構決策**（2026-04-22 與使用者逐題對齊）：
 - ADR-MD-01：軟刪除 — 檔案搬到 `<projectDir>/.trash/`，DB 紀錄（FTS 索引、sessions 表）直接硬刪；restore 時檔案搬回 + 跑 reconciler 重建索引
-- ADR-MD-02：Memory 範圍 = auto-memory 個別條目 + MY-AGENT.md（非 CLAUDE.md — my-agent 實際讀前者）+ `./.my-agent/*.md` + Kairos daily logs；memory picker 雙鍵 `d` 刪除 / `e` 編輯（spawn `$EDITOR`）
+- ADR-MD-02：Memory 範圍 = auto-memory 個別條目 + MY-AGENT.md（非 CLAUDE.md — my-agent 實際讀前者）+ `./.virtual-assistant-desktop/*.md` + Kairos daily logs；memory picker 雙鍵 `d` 刪除 / `e` 編輯（spawn `$EDITOR`）
 - ADR-MD-03：Session 當前進行中的 session 禁止刪除，picker 顯示 `[current]` 標籤且 disabled
 - ADR-MD-04：`/trash` 一個 picker 涵蓋 list + restore + empty + prune（跟 `/tools` 同風格）
 - ADR-MD-05：Live filter（按 `/` 進入）+ 時間快捷鍵（`1`=今天 `2`=本週 `3`=本月 `a`=全部）
@@ -836,7 +836,7 @@
 
 #### 階段二：Memory 層
 - [x] M-DELETE-4 `src/utils/memoryDelete.ts`：`softDeleteMemoryEntry`（搬檔 + 更新 MEMORY.md 索引）+ `softDeleteStandaloneFile`（無索引類）+ `assertSafeMemoryFilename` 路徑安全驗證 + 27 case smoke
-- [x] M-DELETE-5 `src/utils/memoryList.ts`：`listAllMemoryEntries(cwd)` 列 auto-memory 條目（讀 frontmatter）+ MY-AGENT.md + `./.my-agent/*.md` + Kairos daily logs（`logs/YYYY/MM/*.md`），mtime DESC
+- [x] M-DELETE-5 `src/utils/memoryList.ts`：`listAllMemoryEntries(cwd)` 列 auto-memory 條目（讀 frontmatter）+ MY-AGENT.md + `./.virtual-assistant-desktop/*.md` + Kairos daily logs（`logs/YYYY/MM/*.md`），mtime DESC
 
 #### 階段三：Slash Commands
 - [x] M-DELETE-6 `/session-delete`：listSessions → picker → 軟刪（trashSession = moveToTrash + deleteSession DB）；時間範圍 1/2/3/0、live `/` filter、`[cur]` 標記禁刪、二段 y/Esc 確認
@@ -882,7 +882,7 @@
 
 ### 任務
 - [x] M-CRON-W3-1 CronTask schema 擴充（scheduleSpec / notify / history / retry / condition / catchupMax 6 個 optional 欄位 + FailureMode type export + writeCronTasks strip 邏輯保持，typecheck 全綠）
-- [x] M-CRON-W3-2 Run history store + `CronHistoryTool` + `/cron-history` slash（`.my-agent/cron/history/{id}.jsonl` append-only + keepRuns truncate）
+- [x] M-CRON-W3-2 Run history store + `CronHistoryTool` + `/cron-history` slash（`.virtual-assistant-desktop/cron/history/{id}.jsonl` append-only + keepRuns truncate）
 - [x] M-CRON-W3-3 Condition gate（`src/utils/cronCondition.ts` 支援 shell/lastRunOk/lastRunFailed/fileChanged，cronWiring.handleFire 開頭 evaluateCondition 不通過 emit skipped）
 - [x] M-CRON-W3-4 Catch-up 明確化（enumerateMissedFires + selectCatchUpFires，daemon startup spread jitter 連續 fire `min(actual, catchupMax)` 次）
 - [x] M-CRON-W3-5 Retry / backoff（cronFailureClassifier 5 種 mode，handleFire 訂 turnEnd → setTimeout exponential backoff，daemon restart attemptCount&gt;0 視同放棄）
@@ -988,7 +988,7 @@
 
 **架構決策**：
 - ADR-TP-01：tool **註冊**（編譯時）不變；只在**組裝**層（`useMergedTools` + `getTools`）加 filter step。每 turn 重新組裝，改 AppState 下個 turn 立即生效、不需 rebuild / restart
-- ADR-TP-02：三層持久化 — session (AppState) / per-project (`~/.my-agent/projects/<slug>/settings.json`) / global (`~/.my-agent/settings.json`)，優先 session > project > global > 預設（全開）
+- ADR-TP-02：三層持久化 — session (AppState) / per-project (`~/.virtual-assistant-desktop/projects/<slug>/settings.json`) / global (`~/.virtual-assistant-desktop/settings.json`)，優先 session > project > global > 預設（全開）
 - ADR-TP-03：核心 tool 不可關 — `FileRead` / `FileWrite` / `FileEdit` / `Bash` / `Glob` / `Grep` 固定為 `UNTOGGLEABLE_TOOLS`，picker 顯示但灰色鎖定
 - ADR-TP-04：關掉的 tool 從 tool array 完全隱藏，LLM 不知道其存在（而非「可見但標 disabled」）
 - ADR-TP-05：REPL client local scope — daemon / Discord / cron turn 不受影響（user 決策）；日後要擴 daemon-wide 再加 WS frame
@@ -1041,12 +1041,12 @@
 **架構決策**：
 - ADR-M6-01：三方案漸進式實施，每階段驗證效果後再決定是否繼續下一階段
 - ADR-M6-02：方案二的 nudge hook 使用現有 `apiQueryHookHelper` + `postSamplingHooks` 框架（已被 `skillImprovement.ts` 驗證）
-- ADR-M6-03：方案三的 skill 自動建立需經 skillGuard 安全掃描 + 3 session 驗證；Dream agent 的寫入邊界擴展到 `.my-agent/skills/`
+- ADR-M6-03：方案三的 skill 自動建立需經 skillGuard 安全掃描 + 3 session 驗證；Dream agent 的寫入邊界擴展到 `.virtual-assistant-desktop/skills/`
 - ADR-M6-04：llama.cpp 單 slot 環境下背景任務序列化執行（extractMemories → sessionReview → autoDream）；非 llama.cpp 環境保留原本 fire-and-forget
 - ADR-M6-05：`getSmallFastModel()` 在 llama.cpp 環境下返回 `DEFAULT_LLAMACPP_MODEL`（qwopus3.5-9b-v3），nudge 的 side-channel 呼叫走同一模型
 
 #### 階段一：EnhancedDream — 擴展 Dream 職責（方案一）
-- [x] M6-01 擴展 `consolidationPrompt.ts`：在 Phase 4 之後新增 Phase 5（Skill Audit：掃描 `.my-agent/skills/` + transcript 識別跨 session 重複 workflow）和 Phase 6（Behavior Notes：識別用戶修正/偏好寫入 `user-behavior-notes.md`）
+- [x] M6-01 擴展 `consolidationPrompt.ts`：在 Phase 4 之後新增 Phase 5（Skill Audit：掃描 `.virtual-assistant-desktop/skills/` + transcript 識別跨 session 重複 workflow）和 Phase 6（Behavior Notes：識別用戶修正/偏好寫入 `user-behavior-notes.md`）
 - [x] M6-02 自動化測試 `tests/integration/self-improve/enhanced-dream.test.ts`：驗證 Phase 5/6 存在、Phase 1-4 保留、extra 參數正確附加（4 個 test case）
 - [x] M6-03 `bun run typecheck` + `bun test tests/integration/self-improve/` 全綠 — typecheck 基線不變（TS5101）；4/4 綠
 
@@ -1069,7 +1069,7 @@
 - [x] M6-17 自動化測試 `tests/integration/self-improve/session-review.test.ts`（3 個 test case 全綠）
 - [x] M6-18 新增 `src/tasks/SessionReviewTask/SessionReviewTask.ts`：仿 DreamTask 結構 + Task.ts 新增 `'session_review'` TaskType 和 `'s'` prefix
 - [x] M6-19 擴展 `consolidationPrompt.ts`：加入 Phase 7（Skill Draft Review — 3+ session 驗證後自動升級）、Phase 8（Safety Checklist）、Phase 9（Trajectory Pruning — 保留最近 30 天）
-- [x] M6-20 擴展 `autoDream.ts` 工具權限：新增 `createEnhancedDreamCanUseTool` 包裝 `createAutoMemCanUseTool` + `.my-agent/skills/` 寫入權限 + `isSkillsPath()` 判斷；import `scanSkill` 備用
+- [x] M6-20 擴展 `autoDream.ts` 工具權限：新增 `createEnhancedDreamCanUseTool` 包裝 `createAutoMemCanUseTool` + `.virtual-assistant-desktop/skills/` 寫入權限 + `isSkillsPath()` 判斷；import `scanSkill` 備用
 - [x] M6-21 自動化測試 `tests/integration/self-improve/enhanced-dream-permissions.test.ts`（4 個 test case 全綠：Phase 7-9 存在 + Safety Checklist + Trajectory Pruning + Phase 1-6 保留）
 - [x] M6-22 修改 `src/query/stopHooks.ts`：加入 `executeSessionReview` + llama.cpp 序列化（extractMemories → sessionReview → autoDream），非 llama.cpp 保留 fire-and-forget
 - [x] M6-23 修改 `src/utils/backgroundHousekeeping.ts`：`initAutoDream()` 之後加入 `initSessionReview()`
@@ -1140,21 +1140,21 @@
 - [x] M6c-05 修改 `src/screens/REPL.tsx`：加入 SkillCreationSurvey import + render；移除 SkillImprovementSurvey 的 `"external" === 'ant'` guard（my-agent 已解鎖所有功能）
 
 #### 品牌重塑：config 檔案搬移
-- [x] M6c-06 修改 `src/utils/env.ts`：`getGlobalClaudeFile()` 的檔名 `.claude.json` → `.my-agent.json`，含自動 migration（複製舊檔到新路徑）
-- [x] M6c-07 修改 `src/utils/permissions/filesystem.ts`：DANGEROUS_FILES 清單 `.claude.json` → `.my-agent.json`
-- [x] M6c-08 修改 `src/utils/env.ts`：config 檔從 `~/.my-agent.json` 搬移至 `~/.my-agent/.my-agent.json`（config 目錄內），三層 migration 鏈（`~/.claude.json` → `~/.my-agent.json` → `~/.my-agent/.my-agent.json`）
-- [x] M6c-09 更新 12 個檔案中 16 處硬編碼的 `~/.my-agent.json` 路徑字串（註解/錯誤訊息/prompt）
+- [x] M6c-06 修改 `src/utils/env.ts`：`getGlobalClaudeFile()` 的檔名 `.claude.json` → `.virtual-assistant-desktop.json`，含自動 migration（複製舊檔到新路徑）
+- [x] M6c-07 修改 `src/utils/permissions/filesystem.ts`：DANGEROUS_FILES 清單 `.claude.json` → `.virtual-assistant-desktop.json`
+- [x] M6c-08 修改 `src/utils/env.ts`：config 檔從 `~/.virtual-assistant-desktop.json` 搬移至 `~/.virtual-assistant-desktop/.virtual-assistant-desktop.json`（config 目錄內），三層 migration 鏈（`~/.claude.json` → `~/.virtual-assistant-desktop.json` → `~/.virtual-assistant-desktop/.virtual-assistant-desktop.json`）
+- [x] M6c-09 更新 12 個檔案中 16 處硬編碼的 `~/.virtual-assistant-desktop.json` 路徑字串（註解/錯誤訊息/prompt）
 
 #### 預設 bypassPermissions 模式
 - [x] M6c-10 修改 `src/main.tsx`：`dangerouslySkipPermissions` 和 `allowDangerouslySkipPermissions` 預設值改為 `true` — 不需加 `--dangerously-skip-permissions` 即自動 bypass
 - [x] M6c-11 修改 `src/interactiveHelpers.tsx`：跳過 `BypassPermissionsModeDialog` 首次確認對話框
 
 #### 驗證
-- [x] M6c-12 typecheck 通過 + 端到端驗證 `permissionMode: bypassPermissions` 確認生效 + config 路徑 `~/.my-agent/.my-agent.json`
+- [x] M6c-12 typecheck 通過 + 端到端驗證 `permissionMode: bypassPermissions` 確認生效 + config 路徑 `~/.virtual-assistant-desktop/.virtual-assistant-desktop.json`
 
 ### M6d — 移除 Auth 依賴 + GrowthBook 本地化 + 功能解鎖
 
-**目標**：my-agent 完全使用本地模型，移除所有 Anthropic auth 依賴。GrowthBook 停用遠端 fetch，所有 flag 預設 true 並從 .my-agent.json 讀取。解鎖被 auth gate 擋住的功能。
+**目標**：my-agent 完全使用本地模型，移除所有 Anthropic auth 依賴。GrowthBook 停用遠端 fetch，所有 flag 預設 true 並從 .virtual-assistant-desktop.json 讀取。解鎖被 auth gate 擋住的功能。
 
 #### 區塊 1：GrowthBook 本地化
 - [x] M6d-01 修改 `src/services/analytics/growthbook.ts`：`initializeGrowthBook()` 直接回 null（不連遠端）
@@ -1302,7 +1302,7 @@
 - [x] M-MEMRECALL-2 fallback：selector 回 `[]` 時，按 mtime 排序帶最新 `FALLBACK_MAX_FILES=8` 檔（簡化版：用檔案數而非 bytes，省 stat IO）+ `logForDebugging` warn
 - [x] M-MEMRECALL-3 unit test：`tests/integration/memory/findRelevantMemories-llamacpp.test.ts`（23 test：純函式 16 + selector 整合 7，mock fetch + mock.module）全綠
 - [x] M-MEMRECALL-3b CJK fix：`src/utils/attachments.ts:2367` 原 `/\s/.test()` early-return 對中文 query（無空白）誤判 → bailout prefetch，所有 CJK 用戶 memory 機制完全失效。改成 `hasWhitespace || trimmed.length >= 4`（CJK 4 字 + 英文 4 字單字都觸發）
-- [x] M-MEMRECALL-3c disk config 修正：`~/.my-agent/.my-agent.json` 的 `cachedGrowthBookFeatures.tengu_moth_copse` 被舊版 my-agent 寫死成 `false`，覆蓋了 code 預設 true → prefetch 整路關閉。本機 `sed` 改回 true + backup 到 `.my-agent.json.bak.before-mothcopse-fix`。永久修法另立 M-DISK-CFG-MIGRATION
+- [x] M-MEMRECALL-3c disk config 修正：`~/.virtual-assistant-desktop/.virtual-assistant-desktop.json` 的 `cachedGrowthBookFeatures.tengu_moth_copse` 被舊版 my-agent 寫死成 `false`，覆蓋了 code 預設 true → prefetch 整路關閉。本機 `sed` 改回 true + backup 到 `.virtual-assistant-desktop.json.bak.before-mothcopse-fix`。永久修法另立 M-DISK-CFG-MIGRATION
 - [x] M-MEMRECALL-4 typecheck（已過 baseline）+ 手動 E2E（2026-04-24 04:09）：daemon 重啟後新 session 問「現在台北天氣？」 — debug log 顯示 4 gate 全過 → llamacpp branch 觸發 → selector 回 0（local model 26s）→ fallback 帶 5 檔（含 `feedback_weather_api.md`）→ session JSONL 確認 LLM 直接 `curl wttr.in/Taipei` 拿到 `+21°C 🌓` 並正確答覆。Debug 程式碼已清掉
 - [x] M-MEMRECALL-5 文件：CLAUDE.md ADR-014 + LESSONS.md（sideQuery hardcoded Sonnet 教訓）+ session log（docs/memory.md 待專題擴充時一起補）
 
@@ -1316,7 +1316,7 @@
 - [x] M-EXTRACT-LOCAL：自動隨 M-SIDEQUERY-PROVIDER 解 — `extractMemories.ts` 不直連 sideQuery（用 `executeExtractMemories` → ToolUse loop），sideQuery callers 改 llama.cpp-only 後 extractMemories 在純 llama.cpp 環境也能跑
 - [ ] M-MEMRECALL-FLAG-AUDIT：評估 `tengu_moth_copse` 預設值是否該對純本地用戶反轉（回到 MEMORY.md 全進 system prompt） — 跟既有 ADR + 上下文 budget 取捨衝突，需專題討論
 - [ ] M-CJK-AUDIT：全倉庫搜「以英文為前提」的字串處理（regex word boundary `\b`、whitespace `\s` token split、字數 / 詞數計算），逐一驗證 CJK 行為。`src/utils/attachments.ts:2367` 已修；可能還有 `extractMemories` / `memoryScan` / FTS query 預處理等
-- [ ] M-DISK-CFG-MIGRATION：`~/.my-agent/.my-agent.json` 上的 `cachedGrowthBookFeatures` 是舊版本 sync 的快取，可能含被改成 `false` 的 my-agent-default-true flag（如本次的 `tengu_moth_copse`，或其他 `tengu_*` 解鎖 flag）。`getFeatureValue_CACHED_MAY_BE_STALE` 純讀 disk → 蓋掉 code 預設。要做：(a) 啟動時 detect my-agent-shipped flags 跟 disk 衝突，warn 或自動覆寫；(b) 或在 lookup 加一層「my-agent strong-default override」優先於 disk false。需考慮使用者手動關閉 flag 的情境（差別在哪）
+- [ ] M-DISK-CFG-MIGRATION：`~/.virtual-assistant-desktop/.virtual-assistant-desktop.json` 上的 `cachedGrowthBookFeatures` 是舊版本 sync 的快取，可能含被改成 `false` 的 my-agent-default-true flag（如本次的 `tengu_moth_copse`，或其他 `tengu_*` 解鎖 flag）。`getFeatureValue_CACHED_MAY_BE_STALE` 純讀 disk → 蓋掉 code 預設。要做：(a) 啟動時 detect my-agent-shipped flags 跟 disk 衝突，warn 或自動覆寫；(b) 或在 lookup 加一層「my-agent strong-default override」優先於 disk false。需考慮使用者手動關閉 flag 的情境（差別在哪）
 
 ---
 
@@ -1377,7 +1377,7 @@
 ### 任務
 
 #### Phase 1 — 基礎 list / detail（無 mutation）
-- [x] M-MEMTUI-1-1 `src/utils/memoryList.ts` 補 `kind: 'user-profile'`（global `~/.my-agent/USER.md` + project `<slug>/USER.md`）
+- [x] M-MEMTUI-1-1 `src/utils/memoryList.ts` 補 `kind: 'user-profile'`（global `~/.virtual-assistant-desktop/USER.md` + project `<slug>/USER.md`）
 - [x] M-MEMTUI-1-2 新 `src/commands/memory/memoryManagerLogic.ts` — TABS 能力矩陣 / nextTab/prevTab/tabIdOfEntry/filterByTab/filterByKeyword/sortEntries/truncate/formatRelativeTime/previewBody/stripFrontmatter；27 單元測試全綠
 - [x] M-MEMTUI-1-3 新 `src/commands/memory/MemoryManager.tsx` — 5-tab master view + ←/→ 切 tab + Enter 進 detail + body 預覽前 30 行 + 5s poll + V 全螢幕 viewer（行捲動）
 - [x] M-MEMTUI-1-4 改寫 `src/commands/memory/memory.tsx` 入口渲染 `MemoryManager`（保留 `LocalJSXCommandCall` 介面）；index.ts description 更新
@@ -1520,13 +1520,13 @@
 - P2 master TUI（/cron /memory /llamacpp）導向右欄
 - Q2 web 可 add/remove project + S3 雙向 session 建立同步
 - T1 一刀切（單一大 milestone，內含 ~21 個 sub-task commit）
-- V3 `~/.my-agent/web.json` 控制 port（預設 9090）+ autoStart
+- V3 `~/.virtual-assistant-desktop/web.json` 控制 port（預設 9090）+ autoStart
 
 **預估工期**：8–12 週（單人）
 
 ### Phase 1 — Infra & 骨架（2 週）✅ 2026-04-26 完成
 - [x] M-WEB-1：`web/` Vite 專案 scaffold（React 18 + TS + Tailwind + zustand + react-router）+ `bun run build:web` / `bun run dev:web` script — build 5.76s 159 KB JS / 5.68 KB CSS
-- [x] M-WEB-2：`src/webConfig/` 6 檔（schema/paths/loader/seed/bundledTemplate/index）+ `~/.my-agent/web.README.md` seed — 19 unit tests
+- [x] M-WEB-2：`src/webConfig/` 6 檔（schema/paths/loader/seed/bundledTemplate/index）+ `~/.virtual-assistant-desktop/web.README.md` seed — 19 unit tests
 - [x] M-WEB-3：`src/web/httpServer.ts` + `staticServer.ts` 第二個 Bun.serve listener，serve `web/dist` + SPA fallback + path traversal 防護 + port probing + dev proxy — 32 unit/integration tests
 - [x] M-WEB-4：`src/web/wsServer.ts` + `browserSession.ts` WS 連線管理（heartbeat / subscribe filter / 真 WebSocket client 整合測試）— 10 tests
 - [x] M-WEB-5：`src/web/webGateway.ts` 訂閱 `registry.onLoad/onUnload` + per-runtime broker / permissionRouter / cron.events listener；mirror DiscordGateway pattern — 15 tests
@@ -1840,7 +1840,7 @@
 ### 任務
 - [x] M-QWEN35-1 確認 buun-llama-cpp build 8961 已存在 + CUDA 啟用 + RTX 5070 Ti 12GB 偵測（免重編）
 - [x] M-QWEN35-2 下載 `Qwen3.5-9B-Q4_K_M.gguf`（5.68 GB）+ `mmproj-Qwen3.5-9B-F16.gguf`（918 MB）→ `models/`
-- [x] M-QWEN35-3 改 `~/.my-agent/llamacpp.jsonc`：local + remote 都指 Qwen3.5-9B Q4_K_M；alias `qwen3.5-9b`；vision.enabled=true 加 `server.vision.mmprojPath`；modelAliases 加 `qwen3.5-9b`；extraArgs 升 `-b 2048 -ub 512 --threads 12 --no-mmap`
+- [x] M-QWEN35-3 改 `~/.virtual-assistant-desktop/llamacpp.jsonc`：local + remote 都指 Qwen3.5-9B Q4_K_M；alias `qwen3.5-9b`；vision.enabled=true 加 `server.vision.mmprojPath`；modelAliases 加 `qwen3.5-9b`；extraArgs 升 `-b 2048 -ub 512 --threads 12 --no-mmap`
 - [x] M-QWEN35-4 同步改 `src/llamacppConfig/bundledTemplate.ts`（seed 對齊）+ 重寫 `scripts/llama/setup.sh`（buun submodule build + unsloth 模型）
 - [x] M-QWEN35-5 寫 vision E2E `tests/e2e/vision-e2e.sh` 三 phase（adapter 直連 / TUI standalone / daemon attach）+ `_make-red-png.ts` 128×128 PNG 產生器；雙準則：stdout 含 red/紅 OR server `/slots id_task` 在 cli 跑期間遞增（規避 my-agent 對 reasoning + tool_use 在 headless `-p` 不渲染的 bug）
 - [x] M-QWEN35-6 冒煙：`./cli -p` 純文字 PASS；vision E2E 3/3 綠（adapter ✓ red、TUI standalone pipeline ✓ id 23334→24122、daemon attach pipeline ✓ id 24122→24949）；`bun run typecheck` 只剩 baseline TS5101
@@ -1875,13 +1875,13 @@
 - [x] M-XMLLEAK-7 LESSONS.md + dev log + commit
 
 ### 不在範圍 → 後續
-- 根治：在 `~/.my-agent/llamacpp.jsonc` extraArgs 加 `--chat-template-kwargs '{"enable_thinking":false}'`（會關 thinking，目前先保留 thinking + adapter 兜底的折衷）
+- 根治：在 `~/.virtual-assistant-desktop/llamacpp.jsonc` extraArgs 加 `--chat-template-kwargs '{"enable_thinking":false}'`（會關 thinking，目前先保留 thinking + adapter 兜底的折衷）
 
 ---
 
 ## 當前里程碑：M-CONFIG-SEED-COMPLETE — 首次啟動 config seed 完整性修復 + 全覆蓋測試（2026-04-30 啟動）
 
-**目標**：把 5 個 config 檔（settings.jsonc / .my-agent.jsonc / llamacpp.jsonc / web.jsonc / discord.jsonc）+ system-prompt 目錄的 seed 行為對齊，補完所有發現的洞，並寫整合測試覆蓋 seed / migration / 壞檔 fallback / schema validation。
+**目標**：把 5 個 config 檔（settings.jsonc / .virtual-assistant-desktop.jsonc / llamacpp.jsonc / web.jsonc / discord.jsonc）+ system-prompt 目錄的 seed 行為對齊，補完所有發現的洞，並寫整合測試覆蓋 seed / migration / 壞檔 fallback / schema validation。
 
 **對齊決策**：
 - P1 saveConfigWithLock 改用 jsonc-parser modify API 保留註解（取代 M-CONFIG-JSONC-SAVE 提案）
@@ -1902,7 +1902,7 @@
 ### 完成標準
 - `bun run typecheck` 過
 - `bun test tests/integration/bootstrap/` 全綠
-- 黑箱測：清空 `~/.my-agent/`，跑 `./cli -p "hi"` 後所有 5 個 .jsonc + system-prompt/ + 子目錄齊全
+- 黑箱測：清空 `~/.virtual-assistant-desktop/`，跑 `./cli -p "hi"` 後所有 5 個 .jsonc + system-prompt/ + 子目錄齊全
 - 黑箱測：daemon start 後 web.jsonc 已 seed（P5）
 
 ### 不在範圍 → 後續 milestone
@@ -1994,7 +1994,7 @@
 - [x] M-SP-FULL-2-1 新 `src/systemPromptFiles/overrides.ts`（`loadProjectPromptOverrides` / `getProjectPromptOverrides`）
 - [x] M-SP-FULL-2-2 `paths.ts` 加 override / append 路徑 helper
 - [x] M-SP-FULL-2-3 snapshot 整合 overrides 欄位（per-cwd 一起快取）
-- [x] M-SP-FULL-2-4 `composeFullDefaultPrompt()` helper 拼 29 section；`seed.ts` 寫 `~/.my-agent/system-prompt-override.md`（append.md 不 seed）
+- [x] M-SP-FULL-2-4 `composeFullDefaultPrompt()` helper 拼 29 section；`seed.ts` 寫 `~/.virtual-assistant-desktop/system-prompt-override.md`（append.md 不 seed）
 - [x] M-SP-FULL-2-5 `seed.ts` README 加 override/append 章節（含漂移警告 + per-project 複製方式）
 - [x] M-SP-FULL-2-6 `projectRuntimeFactory.ts:89` 讀 overrides 注入 runner `customSystemPrompt`/`appendSystemPrompt`
 - [x] M-SP-FULL-2-7 `main.tsx` REPL 路徑接 file fallback（CLI flag > 檔案 > 無）
@@ -2006,14 +2006,14 @@
 
 **範圍重訂理由**：原 plan 14 條，盤點後實際分成 4 類：
 - **Tier A（5 條，本 phase）**：純靜態或少變數，外部化簡單高 ROI
-- **Tier B（3 條，已外部化）**：SessionMemory template/prompt（`~/.my-agent/session-memory/`）、MagicDocs prompt（`~/.my-agent/magic-docs/`）已有自己的 file-based 載入機制。重複納入 M-SP 會造成兩套載入機制衝突。本 phase 不動，docs 加備註。
+- **Tier B（3 條，已外部化）**：SessionMemory template/prompt（`~/.virtual-assistant-desktop/session-memory/`）、MagicDocs prompt（`~/.virtual-assistant-desktop/magic-docs/`）已有自己的 file-based 載入機制。重複納入 M-SP 會造成兩套載入機制衝突。本 phase 不動，docs 加備註。
 - **Tier C（1 條，留 backlog）**：coordinator-user-context 7 成是動態組裝（worker tools 列舉），靜態文字太短不值得外部化
 - **Tier D（5 條，獨立 milestone M-SP-SUBLLM-COMPOSITION）**：agent-tool/prompt.ts（200 行 9+ feature flag）+ extractMemories 4 條（composition function + 6 個工具名插值）。這些是 prompt builder 不是純 prompt，外部化會 lose 條件邏輯
 
 #### 本 phase 任務
 - [x] M-SP-FULL-3-1 `sections.ts` 加 5 個 `subllm/*` SectionId（cron-parser / memory-selector / verification-agent / tool-use-summary / buddy-companion）
 - [x] M-SP-FULL-3-2 `bundledDefaults.ts` 搬入 5 條 hardcoded 字串（變數轉 `{x}` 單花括號格式）
-- [x] M-SP-FULL-3-3 `seed.ts` seed 進 `~/.my-agent/system-prompt/subllm/`
+- [x] M-SP-FULL-3-3 `seed.ts` seed 進 `~/.virtual-assistant-desktop/system-prompt/subllm/`
 - [x] M-SP-FULL-3-4 改 `cronNlParser.ts:30` → `getSection('subllm/cron-parser')` ?? FALLBACK
 - [x] M-SP-FULL-3-5 改 `findRelevantMemories.ts:69` → memory-selector（`{maxFiles}` 插值）
 - [x] M-SP-FULL-3-6 改 `verificationAgent.ts:10` → verification-agent（`{BASH_TOOL_NAME}`, `{WEB_FETCH_TOOL_NAME}` 插值）
@@ -2246,21 +2246,21 @@
 
 - 2026-04-16 15:50: Session 結束 | 進度：49/57 任務 | 6251289 docs: LESSONS.md 新增 FTS5 中文 phrase match 教訓
 
-- 2026-04-16 16:05: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
+- 2026-04-16 16:05: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .virtual-assistant-desktop、.virtual-assistant-desktop → .virtual-assistant-desktop
 
-- 2026-04-16 16:13: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
+- 2026-04-16 16:13: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .virtual-assistant-desktop、.virtual-assistant-desktop → .virtual-assistant-desktop
 
-- 2026-04-16 20:54: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
+- 2026-04-16 20:54: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .virtual-assistant-desktop、.virtual-assistant-desktop → .virtual-assistant-desktop
 
-- 2026-04-16 21:15: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
+- 2026-04-16 21:15: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .virtual-assistant-desktop、.virtual-assistant-desktop → .virtual-assistant-desktop
 
-- 2026-04-16 21:26: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
+- 2026-04-16 21:26: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .virtual-assistant-desktop、.virtual-assistant-desktop → .virtual-assistant-desktop
 
-- 2026-04-16 21:39: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
+- 2026-04-16 21:39: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .virtual-assistant-desktop、.virtual-assistant-desktop → .virtual-assistant-desktop
 
-- 2026-04-16 21:44: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
+- 2026-04-16 21:44: Session 結束 | 進度：55/57 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .virtual-assistant-desktop、.virtual-assistant-desktop → .virtual-assistant-desktop
 
-- 2026-04-16 22:01: Session 結束 | 進度：60/77 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .my-agent、.my-agent → .my-agent
+- 2026-04-16 22:01: Session 結束 | 進度：60/77 任務 | 8931dce refactor: 品牌重塑 — @anthropic-ai → my-agent-ai、.claude → .virtual-assistant-desktop、.virtual-assistant-desktop → .virtual-assistant-desktop
 
 - 2026-04-16 22:43: Session 結束 | 進度：75/77 任務 | a1125a3 docs: 修正 CLAUDE.md 及 .claude/ 設定對齊現狀
 
@@ -2394,7 +2394,7 @@
 ## M16 — 移除失效的 Claude Code migration hint（2026-04-18 完成，commit `f4baa7d`）
 
 **Context**：設定目錄稽核時發現 `printFreeCodeMigrationHintOnce()` 機制已失效：
-1. `LEGACY_CLAUDE_HOME_DIR_NAME` 被 commit `8931dce` 誤改成 `.my-agent`（應為 `.claude`），偵測條件永遠 false
+1. `LEGACY_CLAUDE_HOME_DIR_NAME` 被 commit `8931dce` 誤改成 `.virtual-assistant-desktop`（應為 `.claude`），偵測條件永遠 false
 2. M15 P4 後 OAuth 全停，「沿用舊登入」文案誤導
 3. Session / settings schema drift 風險
 
@@ -2407,7 +2407,7 @@
 
 ### 驗收
 - `bun src/entrypoints/cli.tsx --help` 不再印 my-agent hint stderr ✅
-- `getClaudeConfigHomeDir()` 預設 `~/.my-agent`、`CLAUDE_CONFIG_DIR` env 覆寫保留 ✅
+- `getClaudeConfigHomeDir()` 預設 `~/.virtual-assistant-desktop`、`CLAUDE_CONFIG_DIR` env 覆寫保留 ✅
 - 從 Claude Code 切過來的使用者可查 CLAUDE.md 遷移指南 ✅
 
 - 2026-04-18 16:32: Session 結束 | 進度：252/265 任務 | 10fed0a test(m16): 完整測試執行報告 + 2 處漏網字串補修
@@ -2472,13 +2472,13 @@
 
 - 2026-04-19 09:59: Session 結束 | 進度：311/329 任務 | 67a20c9 feat(llamacpp-ctx): 上下文溢出偵測與自動復原（解決 128K 模型卡死問題）
 
-- 2026-04-19 10:19: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.my-agent/llamacpp.json
+- 2026-04-19 10:19: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.virtual-assistant-desktop/llamacpp.json
 
-- 2026-04-19 10:26: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.my-agent/llamacpp.json
+- 2026-04-19 10:26: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.virtual-assistant-desktop/llamacpp.json
 
-- 2026-04-19 10:39: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.my-agent/llamacpp.json
+- 2026-04-19 10:39: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.virtual-assistant-desktop/llamacpp.json
 
-- 2026-04-19 10:42: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.my-agent/llamacpp.json
+- 2026-04-19 10:42: Session 結束 | 進度：323/341 任務 | 075574a feat(llama-cfg): 本地 LLM server 設定統一到 ~/.virtual-assistant-desktop/llamacpp.json
 
 - 2026-04-19 11:01: Session 結束 | 進度：331/352 任務 | abdc37b feat(rename): 專案改名 free-code → My Agent（Phase 1–6）
 
@@ -3005,11 +3005,11 @@
 
 - 2026-04-24 17:35: Session 結束 | 進度：505/550 任務 | f99462c chore(todo): session 結束 log — llamacpp memory + tool nudge 工作期間累積
 
-- 2026-04-24 17:54: Session 結束 | 進度：505/550 任務 | 779a05c fix(context): ctx size fallback 200K → 128K + 全域 .my-agent.json 可覆蓋
+- 2026-04-24 17:54: Session 結束 | 進度：505/550 任務 | 779a05c fix(context): ctx size fallback 200K → 128K + 全域 .virtual-assistant-desktop.json 可覆蓋
 
-- 2026-04-24 18:07: Session 結束 | 進度：505/550 任務 | 779a05c fix(context): ctx size fallback 200K → 128K + 全域 .my-agent.json 可覆蓋
+- 2026-04-24 18:07: Session 結束 | 進度：505/550 任務 | 779a05c fix(context): ctx size fallback 200K → 128K + 全域 .virtual-assistant-desktop.json 可覆蓋
 
-- 2026-04-24 18:10: Session 結束 | 進度：505/550 任務 | 779a05c fix(context): ctx size fallback 200K → 128K + 全域 .my-agent.json 可覆蓋
+- 2026-04-24 18:10: Session 結束 | 進度：505/550 任務 | 779a05c fix(context): ctx size fallback 200K → 128K + 全域 .virtual-assistant-desktop.json 可覆蓋
 
 - 2026-04-24 18:30: Session 結束 | 進度：505/550 任務 | 7f11a35 chore(todo): session 結束 log — ctx size fix 驗收與 daemon 重啟
 
@@ -3335,23 +3335,23 @@
 
 - 2026-05-01 11:29: Session 結束 | 進度：712/800 任務 | ecec212 chore: 清理專案廢檔與更新 .gitignore
 
-- 2026-05-01 12:04: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+- 2026-05-01 12:04: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .virtual-assistant-desktop.json 文字殘留
 
-- 2026-05-01 12:10: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+- 2026-05-01 12:10: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .virtual-assistant-desktop.json 文字殘留
 
-- 2026-05-01 12:32: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+- 2026-05-01 12:32: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .virtual-assistant-desktop.json 文字殘留
 
-- 2026-05-01 12:42: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+- 2026-05-01 12:42: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .virtual-assistant-desktop.json 文字殘留
 
-- 2026-05-01 12:49: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+- 2026-05-01 12:49: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .virtual-assistant-desktop.json 文字殘留
 
-- 2026-05-01 12:53: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+- 2026-05-01 12:53: Session 結束 | 進度：712/800 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .virtual-assistant-desktop.json 文字殘留
 
-- 2026-05-01 13:07: Session 結束 | 進度：712/806 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+- 2026-05-01 13:07: Session 結束 | 進度：712/806 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .virtual-assistant-desktop.json 文字殘留
 
-- 2026-05-01 13:15: Session 結束 | 進度：712/806 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+- 2026-05-01 13:15: Session 結束 | 進度：712/806 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .virtual-assistant-desktop.json 文字殘留
 
-- 2026-05-01 13:24: Session 結束 | 進度：712/806 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .my-agent.json 文字殘留
+- 2026-05-01 13:24: Session 結束 | 進度：712/806 任務 | 41128c5 fix(state): daemon 路徑也讀取 verbose 設定 + 清理 .virtual-assistant-desktop.json 文字殘留
 
 - 2026-05-01 13:41: Session 結束 | 進度：712/806 任務 | 85c4c31 feat(commands): 新增 /self-improve 指令管理 nudge 開關與閾值
 
@@ -3882,3 +3882,7 @@
 - 2026-05-11 12:03: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
 
 - 2026-05-11 12:55: Session 結束 | 進度：840/949 任務 | 60a46ea feat(llamacpp-config): seed 補三個缺漏區塊 + 預設改 tcq 棧
+
+- 2026-05-14 12:31: Session 結束 | 進度：840/949 任務 | 6e817e8 docs(mascot): 新增桌寵整合 + SSH 遠端模式文件，更新 prompt 索引
+
+- 2026-05-14 12:39: Session 結束 | 進度：840/949 任務 | 6e817e8 docs(mascot): 新增桌寵整合 + SSH 遠端模式文件，更新 prompt 索引

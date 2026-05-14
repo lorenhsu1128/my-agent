@@ -54,7 +54,7 @@ interface PidFile {
 }
 
 function readPidFile(): PidFile | null {
-  const path = join(homedir(), '.my-agent', 'daemon.pid.json')
+  const path = join(homedir(), '.virtual-assistant-desktop', 'daemon.pid.json')
   if (!existsSync(path)) return null
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as PidFile

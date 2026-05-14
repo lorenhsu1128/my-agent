@@ -49,14 +49,14 @@ export function parseWebArgs(raw: string): ParsedWebArgs {
 export const HELP_TEXT = `/web — Web UI 控制（M-WEB）
 
 子指令：
-  /web start    啟動 web HTTP server（依 ~/.my-agent/web.jsonc 的 port / bindHost）
+  /web start    啟動 web HTTP server（依 ~/.virtual-assistant-desktop/web.jsonc 的 port / bindHost）
   /web stop     停止 web server
   /web status   顯示當前狀態（running / port / 連線數 / URL 清單）
   /web open     在系統瀏覽器開啟第一個 URL（需 running）
   /web qr       印 ASCII QR code 方便手機掃（需 running）
   /web help     此說明
 
-設定檔：~/.my-agent/web.jsonc
+設定檔：~/.virtual-assistant-desktop/web.jsonc
   enabled       boolean（預設 false；改 true 才能用）
   autoStart     boolean（預設 true；daemon 啟動時自動 start）
   port          number （預設 9090；衝突自動 +1）

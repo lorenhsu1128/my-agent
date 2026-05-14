@@ -40,7 +40,7 @@ type SkillManageResult = {
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 function getSkillsRoot(): string {
-  return join(getProjectRoot(), '.my-agent', 'skills')
+  return join(getProjectRoot(), '.virtual-assistant-desktop', 'skills')
 }
 
 function getSkillDir(name: string): string {

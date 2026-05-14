@@ -4,21 +4,21 @@
 
 ## 若從官方 Claude Code 遷移設定
 
-my-agent 使用獨立的 `~/.my-agent/` 設定目錄，與官方 Claude Code 的 `~/.claude/` 完全隔離。
+my-agent 使用獨立的 `~/.virtual-assistant-desktop/` 設定目錄，與官方 Claude Code 的 `~/.claude/` 完全隔離。
 
 ### 推薦作法（選擇性複製）
 
 ```bash
 # Session 歷史
-cp -r ~/.claude/projects ~/.my-agent/
+cp -r ~/.claude/projects ~/.virtual-assistant-desktop/
 
 # Memory（如有）
-cp -r ~/.claude/projects/<slug>/memory ~/.my-agent/projects/<slug>/
+cp -r ~/.claude/projects/<slug>/memory ~/.virtual-assistant-desktop/projects/<slug>/
 
 # 自訂 skills / commands / agents
-cp -r ~/.claude/skills ~/.my-agent/       # 按需
-cp -r ~/.claude/commands ~/.my-agent/     # 按需
-cp -r ~/.claude/agents ~/.my-agent/       # 按需
+cp -r ~/.claude/skills ~/.virtual-assistant-desktop/       # 按需
+cp -r ~/.claude/commands ~/.virtual-assistant-desktop/     # 按需
+cp -r ~/.claude/agents ~/.virtual-assistant-desktop/       # 按需
 ```
 
 ### 直接指向舊目錄（不推薦）

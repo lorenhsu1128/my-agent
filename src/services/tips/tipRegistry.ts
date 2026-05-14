@@ -310,7 +310,7 @@ const externalTips: Tip[] = [
   {
     id: 'custom-commands',
     content: async () =>
-      '在 .my-agent/skills/（專案）或 ~/.my-agent/skills/（全域）放 .md 檔即可建立 skill',
+      '在 .virtual-assistant-desktop/skills/（專案）或 ~/.virtual-assistant-desktop/skills/（全域）放 .md 檔即可建立 skill',
     cooldownSessions: 15,
     async isRelevant() {
       const config = getGlobalConfig()

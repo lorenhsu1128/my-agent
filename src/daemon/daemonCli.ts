@@ -608,7 +608,7 @@ export async function runDaemonStart(
         } else if (webCfg.enabled) {
           out(`  web:         enabled in config, autoStart=false (use /web start)\n`)
         } else {
-          out(`  web:         disabled (set enabled:true in ~/.my-agent/web.jsonc)\n`)
+          out(`  web:         disabled (set enabled:true in ~/.virtual-assistant-desktop/web.jsonc)\n`)
         }
         disposeWeb = async () => {
           try {
@@ -927,7 +927,7 @@ export async function runDaemonRestart(
 
 /**
  * `my-agent daemon autostart on | off | status` 實作。
- * 寫入 `~/.my-agent/.claude.json` 的 `daemonAutoStart` key。REPL 啟動時
+ * 寫入 `~/.virtual-assistant-desktop/.claude.json` 的 `daemonAutoStart` key。REPL 啟動時
  * 讀這個決定要不要 spawn background daemon。
  */
 export type AutostartAction = 'on' | 'off' | 'status'

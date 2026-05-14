@@ -3,7 +3,7 @@
  *
  * 設計目的：
  *   - my-agent 的設定檔（llamacpp.json / discord.json / scheduled_tasks.json
- *     / .my-agent.json）從嚴格 JSON 改為 JSONC（允許 // 與 /* *\/ 註解），
+ *     / .virtual-assistant-desktop.json）從嚴格 JSON 改為 JSONC（允許 // 與 /* *\/ 註解），
  *     使用者可直接在 JSON 內看到每個欄位的繁體中文解釋。
  *   - 寫回（更新欄位值）必須**保留註解**，否則使用者的註解會被 my-agent
  *     例行寫回（如 lastCost / numStartups / skillUsage）洗光。

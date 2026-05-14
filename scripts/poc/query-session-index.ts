@@ -8,7 +8,7 @@ import { join } from 'path'
 
 const dbPath = join(
   homedir(),
-  '.my-agent',
+  '.virtual-assistant-desktop',
   'projects',
   'C--Users-LOREN-Documents--projects-my-agent',
   'session-index.db',

@@ -63,8 +63,8 @@ Update \`${ENTRYPOINT_NAME}\` so it stays under ${MAX_ENTRYPOINT_LINES} lines AN
 
 ## Phase 5 — Skill Audit
 
-Scan the \`.my-agent/skills/\` directory (relative to the project root) to see what skills already exist:
-\`ls .my-agent/skills/\`
+Scan the \`.virtual-assistant-desktop/skills/\` directory (relative to the project root) to see what skills already exist:
+\`ls .virtual-assistant-desktop/skills/\`
 
 Then search recent transcripts for repeated multi-step workflows:
 

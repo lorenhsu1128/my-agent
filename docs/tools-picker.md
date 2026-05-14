@@ -72,8 +72,8 @@ React 重 render，新 tool array 進 REPL state
 ### 資料流
 
 ```
-~/.my-agent/settings.json                  (globalDisabledTools)
-~/.my-agent/projects/<slug>/settings.json  (projectDisabledTools)
+~/.virtual-assistant-desktop/settings.json                  (globalDisabledTools)
+~/.virtual-assistant-desktop/projects/<slug>/settings.json  (projectDisabledTools)
     ↓ bootstrap 合併（project 蓋 global）
 AppState.disabledTools: Set<string>         (session override from picker)
     ↓ 讀取
@@ -85,14 +85,14 @@ getTools → filter out names in disabledTools（UNTOGGLEABLE 集合永遠不過
 
 ### 儲存 schema
 
-Global `~/.my-agent/settings.json`：
+Global `~/.virtual-assistant-desktop/settings.json`：
 ```json
 {
   "disabledTools": ["WebCrawl", "Notebook"]
 }
 ```
 
-Per-project `~/.my-agent/projects/<slug>/settings.json`：同格式 `disabledTools: string[]`。
+Per-project `~/.virtual-assistant-desktop/projects/<slug>/settings.json`：同格式 `disabledTools: string[]`。
 
 ### Picker UI
 
@@ -174,7 +174,7 @@ Enter 只寫回 AppState（session-only）。`p` / `g` 做完 session 改後額�
 - **tool 名稱變更**：settings.json 裡寫死名稱。若未來 rename tool，舊 settings 的名字會變 no-op（tool 已經不存在），不會炸。Merge 時會自動忽略
 - **UNTOGGLEABLE 被設定檔誤塞**：bootstrap 時 filter 掉，不生效；不拋錯
 - **空 list vs undefined**：settings.json 沒寫 key、寫 `[]`、寫 `null` 都一致處理成「全開」
-- **project scope 判定**：用現有 `getOriginalCwd()` + project slug（沿用 ~/.my-agent/projects/<slug>/）
+- **project scope 判定**：用現有 `getOriginalCwd()` + project slug（沿用 ~/.virtual-assistant-desktop/projects/<slug>/）
 - **Discord / cron 不受影響**：這是明確的設計選擇（user 決策 #3）。未來若要擴展到 daemon-wide，新增 WS frame `disabledToolsChanged` 加上 daemon-side 的 `ProjectRuntime.disabledTools`
 
 ## 驗證
@@ -185,9 +185,9 @@ Enter 只寫回 AppState（session-only）。`p` / `g` 做完 session 改後額�
 4. REPL 打 `/tools` → 彈出 picker，看到所有 tool，core tool 有 `[core, locked]` tag 不可選
 5. 空白切換 WebCrawl → Enter → 退出 picker
 6. REPL 確認 `/tools` 再進去 WebCrawl 仍是關的（session 內持久）
-7. 打 `/tools` 再按 `p` → 檢查 `~/.my-agent/projects/<slug>/settings.json` 有 `"disabledTools": ["WebCrawl"]`
+7. 打 `/tools` 再按 `p` → 檢查 `~/.virtual-assistant-desktop/projects/<slug>/settings.json` 有 `"disabledTools": ["WebCrawl"]`
 8. 關 REPL 重開 → `/tools` 應維持 WebCrawl 關閉（per-project 生效）
-9. 刪掉 per-project settings，寫 global `~/.my-agent/settings.json` 加 `"disabledTools": ["WebCrawl"]` → 重開 REPL 也關
+9. 刪掉 per-project settings，寫 global `~/.virtual-assistant-desktop/settings.json` 加 `"disabledTools": ["WebCrawl"]` → 重開 REPL 也關
 10. per-project 同時寫 `["WebBrowser"]`、global 寫 `["WebCrawl"]` → picker 顯示 WebBrowser 關（per-project 蓋過 global）
 11. `/tools` 按 `r` → 清空所有層 → 下次開全開
 12. 關掉 WebBrowser 後叫 agent「打開 example.com」 → LLM 不該提到 WebBrowser（它不在 tool list），會退到 WebFetch 或 Bash

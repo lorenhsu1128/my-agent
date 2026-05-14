@@ -55,7 +55,7 @@ Exit code：
 | F. Cron lifecycle | 7 | ~1m | NL parser + 寫 task + daemon 起 + 等 fire（90s 內）+ stop，**BIN 跟 SRC 各跑一輪** | llama.cpp + cli-dev |
 | G. Memory recall | 3 | ~1m | memdir 存在 / `findRelevantMemories` 走 llama.cpp / unset key 不 401 | llama.cpp + cli-dev |
 | H. Auto mode | 1 | 2s | `yoloClassifier` 不 401 | llama.cpp |
-| I. Discord gateway | 3 | ~16s | 模組 load / 單元測試 pass / **真起 daemon 連 Discord 看 `discord ready` log** | llama.cpp + cli-dev + （I3）`~/.my-agent/discord.jsonc` 含 `enabled:true` + `botToken` |
+| I. Discord gateway | 3 | ~16s | 模組 load / 單元測試 pass / **真起 daemon 連 Discord 看 `discord ready` log** | llama.cpp + cli-dev + （I3）`~/.virtual-assistant-desktop/discord.jsonc` 含 `enabled:true` + `botToken` |
 | J. PTY interactive REPL | 2 | ~45s | `node-pty` spawn cli-dev → ink attach + 真送 prompt → 真收 `\b9\b` | llama.cpp + cli-dev + Node + `node-pty` 已裝 |
 | K. Memory TUI (M-MEMTUI) | 8+1skip | ~2min | 模組 load / unit / user-profile kind / PTY 5-tab + ←/→ / mutation paths / alias / delete+restore / standalone fallback；K12 真 broadcast 需 daemon 在跑 | llama.cpp + cli-dev + Node/node-pty（K4+K5）；K12 額外需 daemon |
 | L. Llamacpp watchdog (M-LLAMACPP-WATCHDOG) | 5+1skip | ~1min | 模組 load / 三層 watchdog unit / args→hot-reload / PTY /llamacpp TUI ←/→ / daemon RPC 真 broadcast / slot kill 503 偵測；L8/L9 需 daemon | llama.cpp + cli-dev + Node/node-pty（L7）；L8 需 daemon；L9 需 server 帶 `--slot-save-path` |
@@ -137,7 +137,7 @@ E4 + E5。
 抽 `cron_lifecycle()` helper 包 「寫 task → 起 daemon → 等 fire（90s 內）→ stop」
 為 3 case 一組。F1-F3 跑 BIN、F4-F6 跑 SRC，外加 F0 NL parser 不 throw（純單元）。
 
-每輪用獨立 task ID（含 `BIN` / `SRC` suffix），驗 `.my-agent/cron/history/{id}.jsonl`
+每輪用獨立 task ID（含 `BIN` / `SRC` suffix），驗 `.virtual-assistant-desktop/cron/history/{id}.jsonl`
 有 entry 或 `scheduled_tasks.jsonc` 的 `lastFiredAt` 已寫。
 
 E section 開頭有 prophylactic 清理 — 讀 `scheduled_tasks.jsonc` filter 砍
@@ -148,7 +148,7 @@ E section 開頭有 prophylactic 清理 — 讀 `scheduled_tasks.jsonc` filter �
 
 | Case | 驗 |
 |---|---|
-| G1 | `~/.my-agent/projects/<slug>/memory` 存在 |
+| G1 | `~/.virtual-assistant-desktop/projects/<slug>/memory` 存在 |
 | G2 | `findRelevantMemories` 走 llama.cpp 路徑（M-MEMRECALL-LOCAL）不 throw |
 | G3 | `unset ANTHROPIC_API_KEY` + `cli -p "ok"` 不 401 |
 
@@ -162,7 +162,7 @@ E section 開頭有 prophylactic 清理 — 讀 `scheduled_tasks.jsonc` filter �
 |---|---|
 | I1 | 5 個關鍵 discord 模組可動態 import + helper 不 throw（router / messageAdapter / truncate / channelNaming / discordConfig） |
 | I2 | `bun test tests/integration/discord/` 全 pass（155 tests） |
-| I3 | discord enabled + token 可解時，daemon start 60s 內 `~/.my-agent/daemon.log` 出現 `discord ready` + `slash commands registered` 雙 marker |
+| I3 | discord enabled + token 可解時，daemon start 60s 內 `~/.virtual-assistant-desktop/daemon.log` 出現 `discord ready` + `slash commands registered` 雙 marker |
 
 I3 token 不可解 → skip 不算 fail（這台機器可能沒設 bot）。
 

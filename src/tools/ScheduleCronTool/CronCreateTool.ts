@@ -85,7 +85,7 @@ const inputSchema = lazySchema(() =>
         'Cap on how many times a recurring task fires before self-deleting. Omit for unlimited. Ignored for one-shots.',
       ),
     durable: semanticBoolean(z.boolean().optional()).describe(
-      'true = persist to .my-agent/scheduled_tasks.json and survive restarts. false (default) = in-memory only, dies when this Claude session ends. Use true only when the user asks the task to survive across sessions.',
+      'true = persist to .virtual-assistant-desktop/scheduled_tasks.json and survive restarts. false (default) = in-memory only, dies when this Claude session ends. Use true only when the user asks the task to survive across sessions.',
     ),
   }),
 )
@@ -335,7 +335,7 @@ export const CronCreateTool = buildTool({
   },
   mapToolResultToToolResultBlockParam(output, toolUseID) {
     const where = output.durable
-      ? 'Persisted to .my-agent/scheduled_tasks.jsonc'
+      ? 'Persisted to .virtual-assistant-desktop/scheduled_tasks.jsonc'
       : 'Session-only (not written to disk, dies when Claude exits)'
     const label = output.name ? ` [${output.name}]` : ''
     const repeatSuffix =

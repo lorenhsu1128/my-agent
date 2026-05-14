@@ -407,7 +407,7 @@ export function createRestRoutes(opts: RestRoutesOptions): RestHandler {
     }
 
     // POST /api/projects/:id/images — M-WEB-PARITY-5：Web 圖片上傳
-    // body 期望 { mimeType, data: base64 }；存到 ~/.my-agent/web-images/...，
+    // body 期望 { mimeType, data: base64 }；存到 ~/.virtual-assistant-desktop/web-images/...，
     // 回 refToken 讓 web textarea 插入。
     {
       const m = /^\/api\/projects\/([^/]+)\/images$/.exec(url.pathname)

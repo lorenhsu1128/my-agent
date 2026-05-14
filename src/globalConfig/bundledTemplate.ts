@@ -1,5 +1,5 @@
 /**
- * 全域設定檔 JSONC 模板（~/.my-agent/.my-agent.jsonc）。
+ * 全域設定檔 JSONC 模板（~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc）。
  *
  * 100+ 欄位完整含繁中 // 註解。首次 seed 時直接寫入；migration 時作為
  * baseline（使用者既有值會覆蓋 template 的預設值、同時保留模板所有註解）。
@@ -20,7 +20,7 @@
 
 export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
   // ═══════════════════════════════════════════════════════════════════
-  // my-agent 全域設定（~/.my-agent/.my-agent.jsonc）
+  // my-agent 全域設定（~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc）
   //
   // 此檔為 JSONC（JSON with Comments）— 允許 // 與 /* */ 註解、尾部逗號。
   // my-agent 寫回此檔時會**保留註解**（deep diff + jsonc.modify），使用者
@@ -30,7 +30,7 @@ export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
   // skillUsage），勿手改；以下節列出的「功能開關」才適合人類編輯。
   //
   // 若檔案壞掉（JSON 語法 / schema 不符）→ my-agent stderr 警告並走內建
-  // 預設，不 crash。~/.my-agent/backups/ 保留最近 5 份備份。
+  // 預設，不 crash。~/.virtual-assistant-desktop/backups/ 保留最近 5 份備份。
   // ═══════════════════════════════════════════════════════════════════
 
   // ═══ §1 身份 / 認證 ═══
@@ -338,7 +338,7 @@ export const GLOBAL_CONFIG_JSONC_TEMPLATE = `{
   // 🗑️ Plan mode 最後使用時間。
   // "lastPlanModeUse": 0,
 
-  // 🗑️ Marketplace 自動安裝標記。my-agent 用自己的 .my-agent/skills 機制。
+  // 🗑️ Marketplace 自動安裝標記。my-agent 用自己的 .virtual-assistant-desktop/skills 機制。
   "officialMarketplaceAutoInstallAttempted": false,
   "officialMarketplaceAutoInstalled": false,
 

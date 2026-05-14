@@ -20,7 +20,7 @@ fields below.
 | `back` | — | Browser back button. |
 | `press` | `key` | Keyboard key (`Enter`, `Tab`, `Escape`…). |
 | `console` | `clear?` | Read accumulated `console.*` messages from the page. |
-| `evaluate` | `expression` | Run JS in the page context. **Requires explicit allow rule** in `~/.my-agent/settings.jsonc`. |
+| `evaluate` | `expression` | Run JS in the page context. **Requires explicit allow rule** in `~/.virtual-assistant-desktop/settings.jsonc`. |
 | `screenshot` | `full_page?` | PNG bytes (returned as base64). |
 | `vision` | `question` | Screenshot + ask a vision model about it. |
 | `get_images` | — | Enumerate `<img>` elements with `src`/`alt`/dimensions. |
@@ -67,7 +67,7 @@ Applied uniformly regardless of provider:
   / tokens (including percent-encoded form) are rejected before navigate.
 - **SSRF**: DNS-level block of private / link-local / CGNAT / cloud
   metadata addresses before navigate.
-- **Website blocklist**: `~/.my-agent/website-blocklist.yaml` with
+- **Website blocklist**: `~/.virtual-assistant-desktop/website-blocklist.yaml` with
   fnmatch wildcards and 30 s cache.
 - **Secret redaction**: every text return (snapshot tree, console logs,
   evaluate result, vision description) passes through `redactSecrets`.

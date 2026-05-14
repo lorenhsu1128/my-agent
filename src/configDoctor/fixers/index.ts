@@ -2,7 +2,7 @@
  * Fix dispatchers（M-CONFIG-DOCTOR）。
  *
  * 收 Issue[]，依 code 派給對應 fixer；每個 fixer 自己負責備份 + atomic 寫入。
- * 安全策略：所有 destructive 動作前都備份原檔到 ~/.my-agent/backups/<file>.<ts>。
+ * 安全策略：所有 destructive 動作前都備份原檔到 ~/.virtual-assistant-desktop/backups/<file>.<ts>。
  */
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { basename, join } from 'path'

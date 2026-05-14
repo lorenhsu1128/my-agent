@@ -167,9 +167,9 @@ describe('M6 Self-Improving Loop — 完整端到端', () => {
       }
     })
 
-    test('Phase 5 引導掃描 .my-agent/skills/', () => {
+    test('Phase 5 引導掃描 .virtual-assistant-desktop/skills/', () => {
       const prompt = buildConsolidationPrompt(memoryRoot, '/tmp/t', '')
-      expect(prompt).toContain('.my-agent/skills/')
+      expect(prompt).toContain('.virtual-assistant-desktop/skills/')
       expect(prompt).toContain('skill-candidates.md')
     })
 

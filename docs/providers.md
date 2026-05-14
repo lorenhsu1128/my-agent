@@ -51,7 +51,7 @@ bash scripts/llama/verify.sh    # 冒煙測試 OpenAI 相容端點
 
 完整部署細節見 `scripts/llama/README.md`。
 
-### 統一設定檔：`~/.my-agent/llamacpp.jsonc`
+### 統一設定檔：`~/.virtual-assistant-desktop/llamacpp.jsonc`
 
 所有 llama.cpp 相關設定集中在此，TS 與 shell 共用同一份來源：
 

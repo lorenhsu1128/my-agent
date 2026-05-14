@@ -87,7 +87,7 @@ export function MemoryFileSelector(t0) {
     let description;
     const isGit = projectIsInGitRepo(getOriginalCwd());
     if (file.type === "User" && !file.isNested) {
-      description = "Saved in ~/.my-agent/MY-AGENT.md";
+      description = "Saved in ~/.virtual-assistant-desktop/MY-AGENT.md";
     } else {
       if (file.type === "Project" && !file.isNested && file.path === projectMemoryPath) {
         description = `${isGit ? "Checked in at" : "Saved in"} ./MY-AGENT.md`;

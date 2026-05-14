@@ -23,7 +23,7 @@ import { logForDebugging } from '../utils/debug.js'
 
 const README_FILENAME = 'discord.README.md'
 
-const README_CONTENT = `# ~/.my-agent/discord.json
+const README_CONTENT = `# ~/.virtual-assistant-desktop/discord.json
 
 Discord gateway 設定（M-DISCORD）。預設 \`enabled: false\`；編輯完填妥
 token / whitelist / projects 再改 \`true\` 才會生效。
@@ -36,7 +36,7 @@ token / whitelist / projects 再改 \`true\` 才會生效。
 1. 在 Discord Developer Portal 建 application → bot → 拿 Bot Token
 2. Token 寫進 \`botToken\` 欄位 **或** env var \`DISCORD_BOT_TOKEN\`（env 優先）
    - 推薦 env var：重啟 shell / 不小心分享檔案時風險較低
-   - 也可直接寫 \`botToken\`：方便 daemon 每次啟動自動帶 — 但 \`~/.my-agent/discord.json\` 檔案權限請保持 0600，不要丟進 git / 聊天室 / 公開備份
+   - 也可直接寫 \`botToken\`：方便 daemon 每次啟動自動帶 — 但 \`~/.virtual-assistant-desktop/discord.json\` 檔案權限請保持 0600，不要丟進 git / 聊天室 / 公開備份
 3. 邀請 bot 進你的私人 guild（Developer Portal → OAuth2 → URL Generator → scope: bot + applications.commands，permissions 至少：Read Messages / Send Messages / Add Reactions / Attach Files）
 4. 填 \`whitelistUserIds\` = [你的 Discord user id]（右鍵 → Copy User ID，需開啟開發者模式）
 5. 編輯 \`projects\` 列出要讓 Discord 聊的 cwd；至少一個
@@ -53,8 +53,8 @@ token / whitelist / projects 再改 \`true\` 才會生效。
 
 - **白名單**：個人使用請只放自己的 user id。bot 被拉進公開 guild 也不會回應陌生人。
 - **Token 保護**：
-  - \`~/.my-agent/discord.json\` **不要 commit 進 git**（家目錄預設不會，但注意別手動把它複製到 repo）
-  - 檔案權限建議 \`chmod 600 ~/.my-agent/discord.json\`（Windows 可改為只有本人可讀）
+  - \`~/.virtual-assistant-desktop/discord.json\` **不要 commit 進 git**（家目錄預設不會，但注意別手動把它複製到 repo）
+  - 檔案權限建議 \`chmod 600 ~/.virtual-assistant-desktop/discord.json\`（Windows 可改為只有本人可讀）
   - Token 外洩 → Developer Portal → Bot → Reset Token
 - **Permission mode**：從 Discord \`/mode default\` 等 slash command 可切 permission mode，會雙向同步到 REPL。
 

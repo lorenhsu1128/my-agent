@@ -2,7 +2,7 @@
  * M-WEB-PARITY-5：Web 圖片上傳 storage。
  *
  * 設計：
- *   - 存到 ~/.my-agent/web-images/<projectIdSafe>/<imageId>.<ext>
+ *   - 存到 ~/.virtual-assistant-desktop/web-images/<projectIdSafe>/<imageId>.<ext>
  *   - imageId = randomUUID 沒做 hash 去重（簡單起見；同檔多次上傳兩份）
  *   - refToken 格式 `[Image:<imageId>]`，daemon 端轉送 ask() 前解析成 image
  *     content block。Lifetime 與 ProjectRuntime 解耦：rotateProject 後仍可用，
@@ -24,7 +24,7 @@ const MIME_EXT: Record<string, string> = {
 }
 
 function rootDir(): string {
-  return process.env.MY_AGENT_CONFIG_HOME ?? join(homedir(), '.my-agent')
+  return process.env.MY_AGENT_CONFIG_HOME ?? join(homedir(), '.virtual-assistant-desktop')
 }
 
 function imagesDir(projectIdSafe: string): string {

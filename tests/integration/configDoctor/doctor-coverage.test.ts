@@ -73,7 +73,7 @@ describe('runConfigDoctor — 全綠（all configs seeded）', () => {
     await seedWebConfigIfMissing()
     await seedDiscordConfigIfMissing()
     await seedSystemPromptDirIfMissing()
-    seedGlobalConfigIfMissingSync(join(testDir, '.my-agent.jsonc'))
+    seedGlobalConfigIfMissingSync(join(testDir, '.virtual-assistant-desktop.jsonc'))
 
     const { runConfigDoctor, hasErrors } = await import(
       '../../../src/configDoctor/index'

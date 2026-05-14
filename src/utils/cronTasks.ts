@@ -1,4 +1,4 @@
-// Scheduled prompts, stored in <project>/.my-agent/scheduled_tasks.json.
+// Scheduled prompts, stored in <project>/.virtual-assistant-desktop/scheduled_tasks.json.
 //
 // Tasks come in two flavors:
 //   - One-shot (recurring: false/undefined) — fire once, then auto-delete.
@@ -134,7 +134,7 @@ export type CronTask = {
    */
   notify?: CronNotifyConfig
   /**
-   * Run history 設定。寫入 `.my-agent/cron/history/{id}.jsonl` append-only。
+   * Run history 設定。寫入 `.virtual-assistant-desktop/cron/history/{id}.jsonl` append-only。
    * `keepRuns` = 保留最舊的幾筆，超過 truncate；預設 50。
    */
   history?: { keepRuns: number }
@@ -189,8 +189,8 @@ export type CronCondition =
 
 type CronFile = { tasks: CronTask[] }
 
-const CRON_FILE_REL = join('.my-agent', 'scheduled_tasks.jsonc')
-const CRON_FILE_REL_LEGACY = join('.my-agent', 'scheduled_tasks.json')
+const CRON_FILE_REL = join('.virtual-assistant-desktop', 'scheduled_tasks.jsonc')
+const CRON_FILE_REL_LEGACY = join('.virtual-assistant-desktop', 'scheduled_tasks.json')
 
 /**
  * Path to the cron file. `dir` defaults to getProjectRoot() — pass it
@@ -217,7 +217,7 @@ export function getCronFilePath(dir?: string): string {
 }
 
 /**
- * Read and parse .my-agent/scheduled_tasks.json. Returns an empty task list if the file
+ * Read and parse .virtual-assistant-desktop/scheduled_tasks.json. Returns an empty task list if the file
  * is missing, empty, or malformed. Tasks with invalid cron strings are
  * silently dropped (logged at debug level) so a single bad entry never
  * blocks the whole file.
@@ -372,7 +372,7 @@ export function hasCronTasksSync(dir?: string): boolean {
 }
 
 /**
- * Overwrite .my-agent/scheduled_tasks.json with the given tasks. Creates .my-agent/ if
+ * Overwrite .virtual-assistant-desktop/scheduled_tasks.json with the given tasks. Creates .virtual-assistant-desktop/ if
  * missing. Empty task list writes an empty file (rather than deleting) so
  * the file watcher sees a change event on last-task-removed.
  */
@@ -384,7 +384,7 @@ export async function writeCronTasks(
   // Windows + bun：對已存在目錄 `recursive: true` 仍會 throw EEXIST（跟 Node
   // 規範相反）。`mode: EEXIST` 忽略掉即可；其他錯誤（EACCES / ENOSPC）才 rethrow。
   try {
-    await mkdir(join(root, '.my-agent'), { recursive: true })
+    await mkdir(join(root, '.virtual-assistant-desktop'), { recursive: true })
   } catch (e) {
     if ((e as NodeJS.ErrnoException)?.code !== 'EEXIST') throw e
   }
@@ -450,7 +450,7 @@ export async function writeCronTasks(
  *
  * When `durable` is false the task is held in process memory only
  * (bootstrap/state.ts) — it fires on schedule this session but is never
- * written to .my-agent/scheduled_tasks.json and dies with the process. The
+ * written to .virtual-assistant-desktop/scheduled_tasks.json and dies with the process. The
  * scheduler merges session tasks into its tick loop directly, so no file
  * change event is needed.
  */
@@ -1108,7 +1108,7 @@ export async function updateCronTask(
 
 /**
  * Audit-log the fact that a task fired. Writes to
- * `<project>/.my-agent/cron/output/{id}/{ts}.md`. We don't have the model
+ * `<project>/.virtual-assistant-desktop/cron/output/{id}/{ts}.md`. We don't have the model
  * response at enqueue time (REPL drains async), so the body is the prompt
  * + fire timestamp — enough to reconstruct "what fired when" after the
  * fact. Matches Hermes `save_job_output` on disk layout.
@@ -1120,7 +1120,7 @@ export async function saveJobOutput(
   dir?: string,
 ): Promise<string> {
   const root = dir ?? getProjectRoot()
-  const outDir = join(root, '.my-agent', 'cron', 'output', id)
+  const outDir = join(root, '.virtual-assistant-desktop', 'cron', 'output', id)
   await mkdir(outDir, { recursive: true })
   const d = new Date(firedAtMs)
   const pad = (n: number) => n.toString().padStart(2, '0')

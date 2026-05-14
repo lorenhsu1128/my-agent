@@ -149,11 +149,11 @@ const CHORD_EXAMPLE: KeybindingsSchemaType['bindings'][number] = {
 const SECTION_INTRO = [
   '# Keybindings Skill',
   '',
-  'Create or modify `~/.my-agent/keybindings.jsonc` to customize keyboard shortcuts.',
+  'Create or modify `~/.virtual-assistant-desktop/keybindings.jsonc` to customize keyboard shortcuts.',
   '',
   '## CRITICAL: Read Before Write',
   '',
-  '**Always read `~/.my-agent/keybindings.jsonc` first** (it may not exist yet). Merge changes with existing bindings — never replace the entire file.',
+  '**Always read `~/.virtual-assistant-desktop/keybindings.jsonc` first** (it may not exist yet). Merge changes with existing bindings — never replace the entire file.',
   '',
   '- Use **Edit** tool for modifications to existing files',
   '- Use **Write** tool only if the file does not exist yet',
@@ -231,7 +231,7 @@ const SECTION_BEHAVIORAL_RULES = [
 const SECTION_DOCTOR = [
   '## Validation with /doctor',
   '',
-  'The `/doctor` command includes a "Keybinding Configuration Issues" section that validates `~/.my-agent/keybindings.jsonc`.',
+  'The `/doctor` command includes a "Keybinding Configuration Issues" section that validates `~/.virtual-assistant-desktop/keybindings.jsonc`.',
   '',
   '### Common Issues and Fixes',
   '',
@@ -280,7 +280,7 @@ const SECTION_DOCTOR = [
   '',
   '```',
   'Keybinding Configuration Issues',
-  'Location: ~/.my-agent/keybindings.jsonc',
+  'Location: ~/.virtual-assistant-desktop/keybindings.jsonc',
   '  └ [Error] Unknown context "chat"',
   '    → Valid contexts: Global, Chat, Autocomplete, ...',
   '  └ [Warning] "ctrl+c" may not work: Terminal interrupt (SIGINT)',
@@ -293,7 +293,7 @@ export function registerKeybindingsSkill(): void {
   registerBundledSkill({
     name: 'keybindings-help',
     description:
-      'Use when the user wants to customize keyboard shortcuts, rebind keys, add chord bindings, or modify ~/.my-agent/keybindings.jsonc. Examples: "rebind ctrl+s", "add a chord shortcut", "change the submit key", "customize keybindings".',
+      'Use when the user wants to customize keyboard shortcuts, rebind keys, add chord bindings, or modify ~/.virtual-assistant-desktop/keybindings.jsonc. Examples: "rebind ctrl+s", "add a chord shortcut", "change the submit key", "customize keybindings".',
     allowedTools: ['Read'],
     userInvocable: false,
     isEnabled: isKeybindingCustomizationEnabled,

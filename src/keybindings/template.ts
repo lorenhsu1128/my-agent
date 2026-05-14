@@ -1,6 +1,6 @@
 /**
  * Keybindings template generator.
- * Generates a well-documented template file for ~/.my-agent/keybindings.jsonc
+ * Generates a well-documented template file for ~/.virtual-assistant-desktop/keybindings.jsonc
  */
 
 import { jsonStringify } from '../utils/slowOperations.js'

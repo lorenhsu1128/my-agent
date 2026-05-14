@@ -79,7 +79,7 @@ export function isExtractModeActive(): boolean {
  * Returns the base directory for persistent memory storage.
  * Resolution order:
  *   1. MY_AGENT_REMOTE_MEMORY_DIR env var (explicit override, set in CCR)
- *   2. ~/.my-agent (default config home)
+ *   2. ~/.virtual-assistant-desktop (default config home)
  */
 export function getMemoryBaseDir(): string {
   if (process.env.MY_AGENT_REMOTE_MEMORY_DIR) {
@@ -168,7 +168,7 @@ function getAutoMemPathOverride(): string | undefined {
  * Settings.json override for the full auto-memory directory path.
  * Supports ~/ expansion for user convenience.
  *
- * SECURITY: projectSettings (.my-agent/settings.json committed to the repo) is
+ * SECURITY: projectSettings (.virtual-assistant-desktop/settings.json committed to the repo) is
  * intentionally excluded — a malicious repo could otherwise set
  * autoMemoryDirectory: "~/.ssh" and gain silent write access to sensitive
  * directories via the filesystem.ts write carve-out (which fires when

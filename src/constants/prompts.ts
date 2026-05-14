@@ -199,7 +199,7 @@ export function prependBullets(items: Array<string | string[]>): string[] {
   )
 }
 
-// M-SP-1: 預設路徑已外部化至 ~/.my-agent/system-prompt/intro.md
+// M-SP-1: 預設路徑已外部化至 ~/.virtual-assistant-desktop/system-prompt/intro.md
 // outputStyle 啟用時走原組裝（字面不同，需動態組 "according to your Output Style below..."）
 function getSimpleIntroSection(
   outputStyleConfig: OutputStyleConfig | null,
@@ -232,7 +232,7 @@ ${cyberRisk}
 IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.`
 }
 
-// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/system.md
+// M-SP-1: 本段已外部化至 ~/.virtual-assistant-desktop/system-prompt/system.md
 // 缺檔回 fallback 組裝。
 function getSimpleSystemSection(): string {
   const external = getExternalSection('system')
@@ -249,7 +249,7 @@ function getSimpleSystemSection(): string {
   return ['# System', ...prependBullets(items)].join(`\n`)
 }
 
-// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/doing-tasks.md（非-ant 版）
+// M-SP-1: 本段已外部化至 ~/.virtual-assistant-desktop/system-prompt/doing-tasks.md（非-ant 版）
 // USER_TYPE=ant 有額外 bullets（commenting、false-claims、my-agent bug report），走原組裝。
 function getSimpleDoingTasksSection(): string {
   if (process.env.USER_TYPE !== 'ant') {
@@ -311,7 +311,7 @@ function getSimpleDoingTasksSection(): string {
   return [`# Doing tasks`, ...prependBullets(items)].join(`\n`)
 }
 
-// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/actions.md
+// M-SP-1: 本段已外部化至 ~/.virtual-assistant-desktop/system-prompt/actions.md
 // 使用者可編輯該檔、下次 session 生效；缺檔回本 fallback。
 const ACTIONS_SECTION_FALLBACK = `# Executing actions with care
 
@@ -329,7 +329,7 @@ function getActionsSection(): string {
   return getExternalSection('actions') ?? ACTIONS_SECTION_FALLBACK
 }
 
-// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/using-tools.md
+// M-SP-1: 本段已外部化至 ~/.virtual-assistant-desktop/system-prompt/using-tools.md
 // 預設情境：非 REPL、非 embedded search、TaskCreate 啟用 → 讀檔
 // REPL / embedded / TaskCreate 缺席 → 走原組裝
 function getUsingYourToolsSection(enabledTools: Set<string>): string {
@@ -474,7 +474,7 @@ function getSessionSpecificGuidanceSection(
   return ['# Session-specific guidance', ...prependBullets(items)].join('\n')
 }
 
-// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/output-efficiency.md（非-ant 版）
+// M-SP-1: 本段已外部化至 ~/.virtual-assistant-desktop/system-prompt/output-efficiency.md（非-ant 版）
 // USER_TYPE=ant 分支仍保留在 TS，外部化僅覆蓋預設路徑。
 const OUTPUT_EFFICIENCY_FALLBACK = `# Output efficiency
 
@@ -506,7 +506,7 @@ These user-facing text instructions do not apply to code or tool calls.`
   return getExternalSection('output-efficiency') ?? OUTPUT_EFFICIENCY_FALLBACK
 }
 
-// M-SP-1: 本段已外部化至 ~/.my-agent/system-prompt/tone-style.md（非-ant 版）
+// M-SP-1: 本段已外部化至 ~/.virtual-assistant-desktop/system-prompt/tone-style.md（非-ant 版）
 // USER_TYPE=ant 走原組裝邏輯（省略一個 bullet）；其他情況讀檔或 fallback。
 function getSimpleToneAndStyleSection(): string {
   if (process.env.USER_TYPE === 'ant') {
@@ -861,7 +861,7 @@ export function getUnameSR(): string {
   return `${osType()} ${osRelease()}`
 }
 
-// M-SP-2: DEFAULT_AGENT_PROMPT 的預設文字已外部化至 ~/.my-agent/system-prompt/default-agent.md
+// M-SP-2: DEFAULT_AGENT_PROMPT 的預設文字已外部化至 ~/.virtual-assistant-desktop/system-prompt/default-agent.md
 // 此處保留 const 以維持既有 export 合約；在被匯出使用端讀取時會走 getDefaultAgentPrompt()。
 const DEFAULT_AGENT_PROMPT_FALLBACK = `You are an agent for my-agent, a local-first coding assistant. Given the user's message, you should use the tools available to complete the task. Complete the task fully—don't gold-plate, but don't leave it half-done. When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.`
 
@@ -909,7 +909,7 @@ export async function enhanceSystemPromptWithEnvDetails(
  * Returns instructions for using the scratchpad directory if enabled.
  * The scratchpad is a per-session directory where Claude can write temporary files.
  */
-// M-SP-2: scratchpad 段已外部化至 ~/.my-agent/system-prompt/scratchpad.md
+// M-SP-2: scratchpad 段已外部化至 ~/.virtual-assistant-desktop/system-prompt/scratchpad.md
 // 含 {scratchpadDir} 插值（session-specific 路徑，由 getScratchpadDir() 注入）
 export function getScratchpadInstructions(): string | null {
   if (!isScratchpadEnabled()) {

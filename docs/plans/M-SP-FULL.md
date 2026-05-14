@@ -17,7 +17,7 @@
 
 3. `docs/prompt-inventory.md` 記錄 13+ 條 sub-LLM prompt（cron NL parser / queryHaiku / memory selector / persona editor / extract memories / verification agent / agent tool / SessionMemory / MagicDocs / toolUseSummary / coordinator / buddy）全部 hardcoded，使用者無法外部化。
 
-**目標**：把這三層全部修掉，使用者只要編輯 `~/.my-agent/projects/<slug>/` 下的 markdown 檔，就能在不改程式、不重 build 的前提下，完全替換 / 追加 / 微調系統提示與 sub-LLM 提示。
+**目標**：把這三層全部修掉，使用者只要編輯 `~/.virtual-assistant-desktop/projects/<slug>/` 下的 markdown 檔，就能在不改程式、不重 build 的前提下，完全替換 / 追加 / 微調系統提示與 sub-LLM 提示。
 
 ## 既有可重用設施
 
@@ -60,10 +60,10 @@
 **新增檔案約定**（`src/systemPromptFiles/paths.ts`）：
 
 ```
-~/.my-agent/projects/<slug>/system-prompt-override.md   ← 完全替代 default
-~/.my-agent/projects/<slug>/system-prompt-append.md     ← 追加在最後
-~/.my-agent/system-prompt-override.md                   ← global 層 override
-~/.my-agent/system-prompt-append.md                     ← global 層 append
+~/.virtual-assistant-desktop/projects/<slug>/system-prompt-override.md   ← 完全替代 default
+~/.virtual-assistant-desktop/projects/<slug>/system-prompt-append.md     ← 追加在最後
+~/.virtual-assistant-desktop/system-prompt-override.md                   ← global 層 override
+~/.virtual-assistant-desktop/system-prompt-append.md                     ← global 層 append
 ```
 
 優先序：per-project > global > 無。Override 與 append 各自獨立解析（兩者可同時存在）。
@@ -98,7 +98,7 @@ const rawRunner = createQueryEngineRunner({
 
 **Seed**（`src/systemPromptFiles/seed.ts`）：
 
-- Global 層 `~/.my-agent/system-prompt-override.md` 與 `system-prompt-append.md` **首次啟動 seed 真檔案**（不用 `.example` 後綴）。
+- Global 層 `~/.virtual-assistant-desktop/system-prompt-override.md` 與 `system-prompt-append.md` **首次啟動 seed 真檔案**（不用 `.example` 後綴）。
 - `system-prompt-override.md` seed 內容：**把 default 29 個 section 依 `getSystemPrompt()` 的順序拼成完整字串寫入**，當作使用者改寫的起點。
   - 實作：在 seed 階段呼叫一個新 helper `composeFullDefaultPrompt()`，把 `BUNDLED_DEFAULTS` 內 29 個 section 依 `SECTIONS` 排序串接（含 dynamic boundary 標記與 section 之間空行）。
   - 注意：seed 出來的字串是「snapshot 當下的 bundled default 組合」，my-agent 後續升級改了 bundled default，使用者的 override.md **不會自動跟上**（這是 override 機制的本質；REPL 與 daemon 都同樣）。README 必須明寫此語義。
@@ -106,12 +106,12 @@ const rawRunner = createQueryEngineRunner({
   - **修正方案**：append.md seed 內容改為**真正的空字串 + 一行註解**，但要在 `loadProjectPromptOverrides()` 內把純註解 / 空字串視為「無 append」（不傳給 runner）。
   - 或更簡單：append.md 不 seed，使用者要用就自己建（與 override 不對稱，但安全）。
   - **採用後者**（append 不 seed），保留 override seed。
-- Per-project 層 `~/.my-agent/projects/<slug>/` 不自動 seed 任何 override / append 檔，維持 lazy（與現行 per-project section 同語義）。
+- Per-project 層 `~/.virtual-assistant-desktop/projects/<slug>/` 不自動 seed 任何 override / append 檔，維持 lazy（與現行 per-project section 同語義）。
 - README.md（`seedSystemPromptDirIfMissing()` 寫入的）章節更新：
   - 解釋 override.md 是 default 拷貝，可直接編輯做客製。
   - 警告：override.md 存在會 bypass 整個 default 組裝；my-agent 升級時 default 改了，override.md 不會自動同步，要手動 diff / 刪檔回 default。
   - 解釋 append.md 沒 seed，要追加就自建，內容會接在 system prompt 最後。
-  - 解釋 per-project 覆寫：把檔複製到 `~/.my-agent/projects/<slug>/` 同名位置即優先生效。
+  - 解釋 per-project 覆寫：把檔複製到 `~/.virtual-assistant-desktop/projects/<slug>/` 同名位置即優先生效。
 
 **文件**：`docs/customizing-system-prompt.md` 加 §override-and-append 章節，並加範例（桌寵伴侶人格、code review 人格等）。
 
@@ -147,7 +147,7 @@ const rawRunner = createQueryEngineRunner({
 - 不包含：tool descriptions（41 個）與 bundled skills（27 個）— 量太大且 schema 本身是 LLM API 契約，留作獨立 milestone（M-TOOL-PROMPT-EXTERNALIZE / M-SKILL-EXTERNALIZE）。
 - 不包含：`computeSimpleEnvInfo()`（`prompts.ts:733`）— 環境資訊本來就是動態填值，不適合純 markdown。
 
-**Seed**：所有 13 個 sub-LLM prompt 都 seed 進 `~/.my-agent/system-prompt/subllm/`（與現行 29 section 一致）。預期容量 ~15KB，使用者用不到 sub-LLM 客製就維持預設。
+**Seed**：所有 13 個 sub-LLM prompt 都 seed 進 `~/.virtual-assistant-desktop/system-prompt/subllm/`（與現行 29 section 一致）。預期容量 ~15KB，使用者用不到 sub-LLM 客製就維持預設。
 
 ## 檔案清單（要改 / 新增）
 
@@ -222,7 +222,7 @@ const rawRunner = createQueryEngineRunner({
 
 ### 手測
 - `./cli -p "what are you"` 在 my-agent repo cwd → 預設程式助理人格。
-- `mkdir -p ~/.my-agent/projects/$(pwd-slug)/system-prompt-override.md`，寫「你是 Linus Torvalds」→ 同 cwd 再跑 `./cli -p "what are you"` 驗變身。
+- `mkdir -p ~/.virtual-assistant-desktop/projects/$(pwd-slug)/system-prompt-override.md`，寫「你是 Linus Torvalds」→ 同 cwd 再跑 `./cli -p "what are you"` 驗變身。
 - `./cli daemon` + 兩個不同 cwd 同時 attach（用 web mode 或 mascot WS 驗），每個 project 收到自己的 override。
 - `bun run scripts/dump-system-prompt.ts --cwd /path/to/proj-a` 驗 dump 內容反映 per-project 檔案。
 
@@ -250,9 +250,9 @@ const rawRunner = createQueryEngineRunner({
 ## 與後續桌寵方案的銜接
 
 完成 Plan C 後，桌寵方案最簡解法：
-- desktop 端 spawn daemon 時把 cwd 設成 `~/.my-agent/mascot-workspace/`（新建空目錄）。
-- 在 `~/.my-agent/projects/<mascot-slug>/system-prompt-override.md` 寫桌寵伴侶人格。
-- 在 `~/.my-agent/projects/<mascot-slug>/.my-agent.jsonc` 設 `allowedTools` 限縮工具集（這是既有 config 機制，不在 Plan C 範圍）。
+- desktop 端 spawn daemon 時把 cwd 設成 `~/.virtual-assistant-desktop/mascot-workspace/`（新建空目錄）。
+- 在 `~/.virtual-assistant-desktop/projects/<mascot-slug>/system-prompt-override.md` 寫桌寵伴侶人格。
+- 在 `~/.virtual-assistant-desktop/projects/<mascot-slug>/.virtual-assistant-desktop.jsonc` 設 `allowedTools` 限縮工具集（這是既有 config 機制，不在 Plan C 範圍）。
 - REPL 使用者的 cwd 是專案目錄，看到的是程式助理人格；桌寵 cwd 不同 → 看到桌寵人格。**單一 daemon 多 project 並存，零 my-agent 程式碼改動**。
 
 桌寵方案還會用到的另一塊（B4 source-aware tool filter）獨立於 Plan C，作為桌寵專屬 milestone。

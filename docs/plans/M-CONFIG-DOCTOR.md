@@ -9,7 +9,7 @@
 - llamacpp template 加新欄位後，舊 jsonc 沒有那段繁中註解（schema validation 過但缺解釋）
 - 跨平台搬遷後 binaryPath 副檔名不對（`.exe` on macOS）→ shell 端啟動失敗
 - env var override 蓋掉了使用者 jsonc 設定，使用者不知道為何修改沒生效
-- 5 個 backup 留在 `~/.my-agent/backups/` 但無 retention TUI
+- 5 個 backup 留在 `~/.virtual-assistant-desktop/backups/` 但無 retention TUI
 
 **目標**：一個 `/config doctor`（slash）+ `my-agent config doctor`（CLI）入口，
 分 `--check`（純讀）/ `--fix`（自動修可修的）/ `--rewrite-with-docs`（重套模板）三模式，
@@ -22,7 +22,7 @@
 - **Q1=C**：slash command + CLI subcommand 兩者都做
 - **Q2=B**：每次 session start 跑 `--check`（REPL + daemon 都跑）— 比建議的 A 更頻繁，要確保 check 跑得夠快（< 50ms）
 - **Q3=A**：只 my-agent 5 個 jsonc + system-prompt/
-- **Q4=A**：每次 `--fix` 寫前都備份到 `~/.my-agent/backups/`
+- **Q4=A**：每次 `--fix` 寫前都備份到 `~/.virtual-assistant-desktop/backups/`
 - **Q5=A**：跨檔一致性檢查走警告級（mismatch 但不自動 fix）
 
 ---
@@ -43,12 +43,12 @@
 
 ### Q3：檢查範圍
 - **A**：只 my-agent 5 個 jsonc + system-prompt/
-- **B**：A + `.claude/settings.json`、`.my-agent/skills/*/SKILL.md`、`docs/dev-log/` 等周邊檔
+- **B**：A + `.claude/settings.json`、`.virtual-assistant-desktop/skills/*/SKILL.md`、`docs/dev-log/` 等周邊檔
 - **C**：A + 使用者額外指定路徑
 - **建議：A**，避免 scope creep；周邊檔由各模組自己驗
 
 ### Q4：backup 策略
-- **A**：每次 `--fix` 寫前都備份到 `~/.my-agent/backups/<file>.<ts>`（已有機制）
+- **A**：每次 `--fix` 寫前都備份到 `~/.virtual-assistant-desktop/backups/<file>.<ts>`（已有機制）
 - **B**：只 destructive 修復才備份（rewrite-with-docs / migration）
 - **C**：完全不備份，靠 git
 - **建議：A**，跟 saveConfigWithLock 既有 backup 邏輯一致，並沿用 5 個 retention
@@ -84,7 +84,7 @@
 6. env var override 覆蓋了 jsonc 中的非 default 值 → 列出哪個 env / 哪個 field / jsonc 值 / 實際值
 7. bundled template 含使用者 jsonc 沒有的新欄位（schema 加了但模板沒同步落地）→ 建議 rewrite-with-docs
 8. backup dir 超過 5 份 → 提示舊的會被自動清掉
-9. `~/.my-agent/.my-agent.jsonc` 是 strict JSON（沒升級成 JSONC）→ 建議 fix（走 migration）
+9. `~/.virtual-assistant-desktop/.virtual-assistant-desktop.jsonc` 是 strict JSON（沒升級成 JSONC）→ 建議 fix（走 migration）
 
 **INFO（純資訊）**
 10. 列出每個 config 的實際載入路徑 + env override 來源

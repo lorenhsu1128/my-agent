@@ -9,7 +9,7 @@
  * 用法：
  *   bun scripts/dump-system-prompt.ts                    # stdout
  *   bun scripts/dump-system-prompt.ts > /tmp/prompt.txt  # 存檔
- *   bun scripts/dump-system-prompt.ts --no-external      # 跳過讀 .my-agent，只看 bundled
+ *   bun scripts/dump-system-prompt.ts --no-external      # 跳過讀 .virtual-assistant-desktop，只看 bundled
  *
  * 注意：本腳本繞過 getSystemPrompt() 組裝（涉及工具註冊表 / MCP / output style），
  * 只輸出靜態 + 已外部化的各段，足夠驗證 M-SP 範圍。

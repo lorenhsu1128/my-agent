@@ -2,8 +2,8 @@
  * Files are loaded in the following order:
  *
  * 1. Managed memory (eg. /etc/claude-code/MY-AGENT.md) - Global instructions for all users
- * 2. User memory (~/.my-agent/MY-AGENT.md) - Private global instructions for all projects
- * 3. Project memory (MY-AGENT.md, .my-agent/MY-AGENT.md, and .my-agent/rules/*.md in project roots) - Instructions checked into the codebase
+ * 2. User memory (~/.virtual-assistant-desktop/MY-AGENT.md) - Private global instructions for all projects
+ * 3. Project memory (MY-AGENT.md, .virtual-assistant-desktop/MY-AGENT.md, and .virtual-assistant-desktop/rules/*.md in project roots) - Instructions checked into the codebase
  * 4. Local memory (MY-AGENT.local.md in project roots) - Private project-specific instructions
  *
  * Files are loaded in reverse order of priority, i.e. the latest files are highest priority
@@ -13,7 +13,7 @@
  * - User memory is loaded from the user's home directory
  * - Project and Local files are discovered by traversing from the current directory up to root
  * - Files closer to the current directory have higher priority (loaded later)
- * - MY-AGENT.md, .my-agent/MY-AGENT.md, and all .md files in .my-agent/rules/ are checked in each directory for Project memory
+ * - MY-AGENT.md, .virtual-assistant-desktop/MY-AGENT.md, and all .md files in .virtual-assistant-desktop/rules/ are checked in each directory for Project memory
  *
  * Memory @include directive:
  * - Memory files can include other files using @ notation
@@ -684,7 +684,7 @@ export async function processMemoryFile(
 }
 
 /**
- * Processes all .md files in the .my-agent/rules/ directory and its subdirectories
+ * Processes all .md files in the .virtual-assistant-desktop/rules/ directory and its subdirectories
  * @param rulesDir The path to the rules directory
  * @param type Type of memory file (User, Project, Local)
  * @param processedPaths Set of already processed file paths
@@ -809,7 +809,7 @@ export const getMemoryFiles = memoize(
         includeExternal,
       )),
     )
-    // Process Managed .my-agent/rules/*.md files
+    // Process Managed .virtual-assistant-desktop/rules/*.md files
     const managedClaudeRulesDir = getManagedClaudeRulesDir()
     result.push(
       ...(await processMdRules({
@@ -832,7 +832,7 @@ export const getMemoryFiles = memoize(
           true, // User memory can always include external files
         )),
       )
-      // Process User ~/.my-agent/rules/*.md files
+      // Process User ~/.virtual-assistant-desktop/rules/*.md files
       const userClaudeRulesDir = getUserClaudeRulesDir()
       result.push(
         ...(await processMdRules({
@@ -856,9 +856,9 @@ export const getMemoryFiles = memoize(
     }
 
     // When running from a git worktree nested inside its main repo (e.g.,
-    // .my-agent/worktrees/<name>/ from `claude -w`), the upward walk passes
+    // .virtual-assistant-desktop/worktrees/<name>/ from `claude -w`), the upward walk passes
     // through both the worktree root and the main repo root. Both contain
-    // checked-in files like MY-AGENT.md and .my-agent/rules/*.md, so the same
+    // checked-in files like MY-AGENT.md and .virtual-assistant-desktop/rules/*.md, so the same
     // content gets loaded twice. Skip Project-type (checked-in) files from
     // directories above the worktree but within the main repo — the worktree
     // already has its own checkout. MY-AGENT.local.md is gitignored so it only
@@ -894,8 +894,8 @@ export const getMemoryFiles = memoize(
           )),
         )
 
-        // Try reading .my-agent/MY-AGENT.md (Project)
-        const dotClaudePath = join(dir, '.my-agent', 'MY-AGENT.md')
+        // Try reading .virtual-assistant-desktop/MY-AGENT.md (Project)
+        const dotClaudePath = join(dir, '.virtual-assistant-desktop', 'MY-AGENT.md')
         result.push(
           ...(await processMemoryFile(
             dotClaudePath,
@@ -905,8 +905,8 @@ export const getMemoryFiles = memoize(
           )),
         )
 
-        // Try reading .my-agent/rules/*.md files (Project)
-        const rulesDir = join(dir, '.my-agent', 'rules')
+        // Try reading .virtual-assistant-desktop/rules/*.md files (Project)
+        const rulesDir = join(dir, '.virtual-assistant-desktop', 'rules')
         result.push(
           ...(await processMdRules({
             rulesDir,
@@ -950,8 +950,8 @@ export const getMemoryFiles = memoize(
           )),
         )
 
-        // Try reading .my-agent/MY-AGENT.md from the additional directory
-        const dotClaudePath = join(dir, '.my-agent', 'MY-AGENT.md')
+        // Try reading .virtual-assistant-desktop/MY-AGENT.md from the additional directory
+        const dotClaudePath = join(dir, '.virtual-assistant-desktop', 'MY-AGENT.md')
         result.push(
           ...(await processMemoryFile(
             dotClaudePath,
@@ -961,8 +961,8 @@ export const getMemoryFiles = memoize(
           )),
         )
 
-        // Try reading .my-agent/rules/*.md files from the additional directory
-        const rulesDir = join(dir, '.my-agent', 'rules')
+        // Try reading .virtual-assistant-desktop/rules/*.md files from the additional directory
+        const rulesDir = join(dir, '.virtual-assistant-desktop', 'rules')
         result.push(
           ...(await processMdRules({
             rulesDir,
@@ -1203,7 +1203,7 @@ export async function getManagedAndUserConditionalRules(
 ): Promise<MemoryFileInfo[]> {
   const result: MemoryFileInfo[] = []
 
-  // Process Managed conditional .my-agent/rules/*.md files
+  // Process Managed conditional .virtual-assistant-desktop/rules/*.md files
   const managedClaudeRulesDir = getManagedClaudeRulesDir()
   result.push(
     ...(await processConditionedMdRules(
@@ -1216,7 +1216,7 @@ export async function getManagedAndUserConditionalRules(
   )
 
   if (isSettingSourceEnabled('userSettings')) {
-    // Process User conditional .my-agent/rules/*.md files
+    // Process User conditional .virtual-assistant-desktop/rules/*.md files
     const userClaudeRulesDir = getUserClaudeRulesDir()
     result.push(
       ...(await processConditionedMdRules(
@@ -1248,7 +1248,7 @@ export async function getMemoryFilesForNestedDirectory(
 ): Promise<MemoryFileInfo[]> {
   const result: MemoryFileInfo[] = []
 
-  // Process project memory files (MY-AGENT.md and .my-agent/MY-AGENT.md)
+  // Process project memory files (MY-AGENT.md and .virtual-assistant-desktop/MY-AGENT.md)
   if (isSettingSourceEnabled('projectSettings')) {
     const projectPath = join(dir, 'MY-AGENT.md')
     result.push(
@@ -1259,7 +1259,7 @@ export async function getMemoryFilesForNestedDirectory(
         false,
       )),
     )
-    const dotClaudePath = join(dir, '.my-agent', 'MY-AGENT.md')
+    const dotClaudePath = join(dir, '.virtual-assistant-desktop', 'MY-AGENT.md')
     result.push(
       ...(await processMemoryFile(
         dotClaudePath,
@@ -1278,9 +1278,9 @@ export async function getMemoryFilesForNestedDirectory(
     )
   }
 
-  const rulesDir = join(dir, '.my-agent', 'rules')
+  const rulesDir = join(dir, '.virtual-assistant-desktop', 'rules')
 
-  // Process project unconditional .my-agent/rules/*.md files, which were not eagerly loaded
+  // Process project unconditional .virtual-assistant-desktop/rules/*.md files, which were not eagerly loaded
   // Use a separate processedPaths set to avoid marking conditional rule files as processed
   const unconditionalProcessedPaths = new Set(processedPaths)
   result.push(
@@ -1293,7 +1293,7 @@ export async function getMemoryFilesForNestedDirectory(
     })),
   )
 
-  // Process project conditional .my-agent/rules/*.md files
+  // Process project conditional .virtual-assistant-desktop/rules/*.md files
   result.push(
     ...(await processConditionedMdRules(
       targetPath,
@@ -1326,7 +1326,7 @@ export async function getConditionalRulesForCwdLevelDirectory(
   targetPath: string,
   processedPaths: Set<string>,
 ): Promise<MemoryFileInfo[]> {
-  const rulesDir = join(dir, '.my-agent', 'rules')
+  const rulesDir = join(dir, '.virtual-assistant-desktop', 'rules')
   return processConditionedMdRules(
     targetPath,
     rulesDir,
@@ -1337,7 +1337,7 @@ export async function getConditionalRulesForCwdLevelDirectory(
 }
 
 /**
- * Processes all .md files in the .my-agent/rules/ directory and its subdirectories,
+ * Processes all .md files in the .virtual-assistant-desktop/rules/ directory and its subdirectories,
  * filtering to only include files with frontmatter paths that match the target path
  * @param targetPath The file path to match against frontmatter glob patterns
  * @param rulesDir The path to the rules directory
@@ -1425,7 +1425,7 @@ export async function shouldShowClaudeMdExternalIncludesWarning(): Promise<boole
 }
 
 /**
- * Check if a file path is a memory file (MY-AGENT.md, MY-AGENT.local.md, or .my-agent/rules/*.md)
+ * Check if a file path is a memory file (MY-AGENT.md, MY-AGENT.local.md, or .virtual-assistant-desktop/rules/*.md)
  */
 export function isMemoryFilePath(filePath: string): boolean {
   const name = basename(filePath)
@@ -1435,7 +1435,7 @@ export function isMemoryFilePath(filePath: string): boolean {
     return true
   }
 
-  // .md files in .my-agent/rules/ directories
+  // .md files in .virtual-assistant-desktop/rules/ directories
   if (
     name.endsWith('.md') &&
     filePath.includes(`${sep}.claude${sep}rules${sep}`)

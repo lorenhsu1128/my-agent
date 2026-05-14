@@ -43,7 +43,7 @@ export function getAddDirEnabledPlugins(): NonNullable<
   const result: NonNullable<SettingsJson['enabledPlugins']> = {}
   for (const dir of getAdditionalDirectoriesForClaudeMd()) {
     for (const file of SETTINGS_FILES) {
-      const { settings } = parseSettingsFile(join(dir, '.my-agent', file))
+      const { settings } = parseSettingsFile(join(dir, '.virtual-assistant-desktop', file))
       if (!settings?.enabledPlugins) {
         continue
       }
@@ -66,7 +66,7 @@ export function getAddDirExtraMarketplaces(): Record<
   const result: Record<string, ExtraKnownMarketplace> = {}
   for (const dir of getAdditionalDirectoriesForClaudeMd()) {
     for (const file of SETTINGS_FILES) {
-      const { settings } = parseSettingsFile(join(dir, '.my-agent', file))
+      const { settings } = parseSettingsFile(join(dir, '.virtual-assistant-desktop', file))
       if (!settings?.extraKnownMarketplaces) {
         continue
       }

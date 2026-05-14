@@ -2,13 +2,13 @@
 
 ## Context
 
-使用者想把 Hermes Agent 的 **使用者建模** 概念移植進 my-agent，並加上可開關的參數；設定檔 / 記錄檔放在 `~/.my-agent/` 下。
+使用者想把 Hermes Agent 的 **使用者建模** 概念移植進 my-agent，並加上可開關的參數；設定檔 / 記錄檔放在 `~/.virtual-assistant-desktop/` 下。
 
 ### 兩邊現況比較
 
 | 面向 | Hermes | my-agent M2 現況 |
 |---|---|---|
-| 檔案結構 | `~/.hermes/memories/MEMORY.md` + `USER.md` 兩檔 | `~/.my-agent/projects/<slug>/memory/` 下多個 typed 檔案（`user_*.md`, `feedback_*.md`, `project_*.md`, `reference_*.md`）+ `MEMORY.md` 索引 |
+| 檔案結構 | `~/.hermes/memories/MEMORY.md` + `USER.md` 兩檔 | `~/.virtual-assistant-desktop/projects/<slug>/memory/` 下多個 typed 檔案（`user_*.md`, `feedback_*.md`, `project_*.md`, `reference_*.md`）+ `MEMORY.md` 索引 |
 | 使用者檔案 | **獨立 `USER.md`**、字元上限 1375、session 啟動**凍結快照**注入 system prompt | 無獨立 persona 檔；使用者資訊散落在 `user_*.md` / `feedback_*.md` 多檔 |
 | 工具寫入 | `memory` 工具 `target=user\|memory` | `MemoryTool` 寫到 typed entry，無 `user_profile` target |
 | 注入機制 | System prompt 前綴（凍結快照、prefix cache 友善） | `buildMemoryPrompt()` 讀 `MEMORY.md` 索引（truncate 200 lines / 25KB） |
@@ -23,15 +23,15 @@ my-agent 雖然已有 typed user memories，但它們是**條目式、散落、�
 1. 新增 `USER.md` 使用者檔案 —— 獨立於現有 typed memories，session 啟動凍結快照注入 system prompt。
 2. 提供可開關參數（settings.json + env var + CLI flag 三路）。
 3. 不破壞現有 M2 memory（並存、不替代）。
-4. 設定與資料全部存在 `~/.my-agent/` 體系下。
+4. 設定與資料全部存在 `~/.virtual-assistant-desktop/` 體系下。
 
 ---
 
 ## 關鍵設計決策（已與 user 對齊）
 
 - **D1 儲存範圍**：**雙層 — global + per-project override**
-  - Global base：`~/.my-agent/USER.md`
-  - Per-project override：`~/.my-agent/projects/<slug>/USER.md`
+  - Global base：`~/.virtual-assistant-desktop/USER.md`
+  - Per-project override：`~/.virtual-assistant-desktop/projects/<slug>/USER.md`
   - 注入時：`global` + `per-project`（若存在則 append，以 `### Project-specific` 標題分隔）
   - 寫入時：`target='user_profile'` 預設寫 global；加 `scope: 'project'` 參數時寫 per-project
 - **D2 寫入介面**：延伸現有 `MemoryTool`，新增 `target: 'user_profile'` + 可選 `scope: 'global' | 'project'`（預設 `global`）
@@ -49,8 +49,8 @@ my-agent 雖然已有 typed user memories，但它們是**條目式、散落、�
 **新增**
 - `src/userModel/userModel.ts` — 讀寫 / 快照 / 格式化 `USER.md`（雙層合併）
 - `src/userModel/paths.ts` — 解析 global + per-project 路徑
-  - global：`~/.my-agent/USER.md`（env override: `MYAGENT_USER_MODEL_PATH`）
-  - project：`~/.my-agent/projects/<slug>/USER.md`（複用 `getProjectDir()`）
+  - global：`~/.virtual-assistant-desktop/USER.md`（env override: `MYAGENT_USER_MODEL_PATH`）
+  - project：`~/.virtual-assistant-desktop/projects/<slug>/USER.md`（複用 `getProjectDir()`）
 - `src/userModel/prompt.ts` — 產生 `<user-profile>` 區塊（1500 char 上限、超出告警）
 - `tests/integration/user-model/` — smoke test（寫入 → 快照 → 注入 → 雙層合併 → 開關）
 
@@ -75,7 +75,7 @@ my-agent 雖然已有 typed user memories，但它們是**條目式、散落、�
 寫入：
   LLM → MemoryTool(target='user_profile', action='add', content='...')
        → userModel.append(content)
-       → ~/.my-agent/USER.md (檔案鎖 proper-lockfile)
+       → ~/.virtual-assistant-desktop/USER.md (檔案鎖 proper-lockfile)
 
 讀取（session 啟動）：
   bootstrap → userModel.loadSnapshot()
@@ -113,7 +113,7 @@ my-agent 雖然已有 typed user memories，但它們是**條目式、散落、�
    - `user-model-snapshot.test.ts` — session 啟動凍結、mid-session 寫不影響 system prompt
    - `user-model-toggle.test.ts` — 三個開關各自正確關閉注入
 3. E2E：
-   - `./cli -p "我叫 Loren，用繁中，主要 shell 是 PowerShell"` → 檢查 `~/.my-agent/USER.md` 有寫入
+   - `./cli -p "我叫 Loren，用繁中，主要 shell 是 PowerShell"` → 檢查 `~/.virtual-assistant-desktop/USER.md` 有寫入
    - 重開 session，`./cli -p "你還記得我的 shell 嗎？"` → 答案提及 PowerShell
    - `MYAGENT_DISABLE_USER_MODEL=1 ./cli -p "..."` → system prompt 不含 `<user-profile>` fence（用 `--debug` 或 inspect 驗證）
 

@@ -283,7 +283,7 @@ Tier 3 (skill_view):  支援檔案（references/, templates/, scripts/）
 | 機制 | 檔案 | 功能 |
 |------|------|------|
 | **loadSkillsDir** | `src/skills/loadSkillsDir.ts` | 從 managed/user/project/additional 四層來源載入 SKILL.md |
-| **Dynamic Discovery** | `loadSkillsDir.ts:861` | 文件操作時向上走目錄樹發現新 `.my-agent/skills/` |
+| **Dynamic Discovery** | `loadSkillsDir.ts:861` | 文件操作時向上走目錄樹發現新 `.virtual-assistant-desktop/skills/` |
 | **Conditional Skills** | `loadSkillsDir.ts:997` | `paths` frontmatter 支援路徑條件啟用 |
 | **Skill Change Detector** | `src/utils/skills/skillChangeDetector.ts` | chokidar 監視 skill 目錄，300ms 防抖後自動重載 |
 | **Bundled Skills** | `src/skills/bundledSkills.ts` | 編譯時內建的 skill，首次呼叫時提取到磁碟 |
@@ -412,7 +412,7 @@ createApiQueryHook({
 ```markdown
 ## Phase 5 — Skill Audit
 
-Scan `.my-agent/skills/` directory to see what skills already exist.
+Scan `.virtual-assistant-desktop/skills/` directory to see what skills already exist.
 Then search recent transcripts for repeated multi-step workflows:
 
 - grep for tool_use sequences that appear in 3+ different sessions
@@ -438,7 +438,7 @@ If found, write or update `user-behavior-notes.md` in the memory directory.
 - `memory/skill-candidates.md` — 候選 skill 清單（普通記憶檔，被 `findRelevantMemories` 自動載入 prompt）
 - `memory/user-behavior-notes.md` — 行為偏好記錄
 
-**工具權限變更**：無需修改 `createAutoMemCanUseTool`。Dream agent 已有 Read/Grep/Glob 的全路徑讀取權限，可讀取 `.my-agent/skills/`。寫入仍限 memory/ 目錄。
+**工具權限變更**：無需修改 `createAutoMemCanUseTool`。Dream agent 已有 Read/Grep/Glob 的全路徑讀取權限，可讀取 `.virtual-assistant-desktop/skills/`。寫入仍限 memory/ 目錄。
 
 #### 與現有系統的整合
 
@@ -744,7 +744,7 @@ update `memory/user-behavior-notes.md`.
 ```
 ✅ 與 createAutoMemCanUseTool 相同的讀取權限
 ✅ Edit/Write: memory/ 目錄（含 skill-drafts/, trajectories/ 子目錄）
-❌ 不能直接修改 .my-agent/skills/（只有 Dream 在宏觀層做）
+❌ 不能直接修改 .virtual-assistant-desktop/skills/（只有 Dream 在宏觀層做）
 ```
 
 **Task UI**：新增 `SessionReviewTask`（類似 `DreamTask`）
@@ -771,7 +771,7 @@ Scan `memory/skill-drafts/` for candidate skills:
 - If a draft has been observed in 3+ sessions:
   1. Validate the steps still make sense
   2. Run the content through the skill safety checklist (see below)
-  3. If safe, create the formal skill at `.my-agent/skills/<name>/SKILL.md`
+  3. If safe, create the formal skill at `.virtual-assistant-desktop/skills/<name>/SKILL.md`
   4. Delete the draft from `memory/skill-drafts/`
 
 ## Phase 6 — Skill Safety Checklist
@@ -794,7 +794,7 @@ Remove trajectories that are fully captured in skills or memories.
 
 **工具權限擴展**（`autoDream.ts`）：
 ```typescript
-// 擴展 createAutoMemCanUseTool，新增 .my-agent/skills/ 寫入權限
+// 擴展 createAutoMemCanUseTool，新增 .virtual-assistant-desktop/skills/ 寫入權限
 // 僅在 FullLoop 模式下啟用
 if ((tool.name === FILE_EDIT_TOOL_NAME || tool.name === FILE_WRITE_TOOL_NAME) &&
     'file_path' in input) {
@@ -882,7 +882,7 @@ Discovery 路徑 1 和 2 會互相去重：
 
 - **實作量**：高（8+ 新檔案，4+ 修改，涉及 forked agent、task registry、skill 載入、安全掃描等多個子系統）
 - **風險**：
-  - **安全**：自動寫入 `.my-agent/skills/` 是信任邊界突破。緩解措施：skillGuard + 3 session 驗證 + Dream agent 的有限工具權限 + 結構限制（≤10KB, ≤50 skills）
+  - **安全**：自動寫入 `.virtual-assistant-desktop/skills/` 是信任邊界突破。緩解措施：skillGuard + 3 session 驗證 + Dream agent 的有限工具權限 + 結構限制（≤10KB, ≤50 skills）
   - **資源**：llama.cpp 序列化背景任務增加 session 結束時的等待時間
   - **重疊管理**：Session Review 與 extractMemories 的記憶功能重疊 → Session Review 限定只做 skill-drafts + trajectories
   - **skillChangeDetector**：Dream 自動建立的 skill 會觸發 chokidar 重載 → 這是好事（自動生效），但需確認重載不會 race condition
@@ -899,7 +899,7 @@ Discovery 路徑 1 和 2 會互相去重：
 
 **修改**：
 - `src/services/autoDream/consolidationPrompt.ts` — Phase 5-7
-- `src/services/autoDream/autoDream.ts` — 擴展 canUseTool 到 `.my-agent/skills/`
+- `src/services/autoDream/autoDream.ts` — 擴展 canUseTool 到 `.virtual-assistant-desktop/skills/`
 - `src/query/stopHooks.ts` — 加入 Session Review + 序列化邏輯
 - `src/utils/backgroundHousekeeping.ts` — 初始化
 
@@ -987,14 +987,14 @@ User Turn（每次 query 的模型回應完成後）
         ├─ sessionReview → 呼叫 SkillManage(create) 直接建立 skill  ← M6b 改造
         │   (forkedAgent, maxTurns=8)
         │   門控：tool_use ≥ 15 + 距上次 ≥ 2h
-        │   產出：skill 直接建立到 .my-agent/skills/ + trajectories/
+        │   產出：skill 直接建立到 .virtual-assistant-desktop/skills/ + trajectories/
         │   完成後通知用戶 "Skill created"
         │   檔案：src/services/selfImprove/sessionReview.ts
         │
         └─ autoDream → 跨 session 記憶整合                          ← M6b 簡化
             (forkedAgent, 三重門：24h + 5 sessions + lock)
             Phase 1-4：記憶整合（原有）
-            Phase 5：Skill Audit — 掃描 .my-agent/skills/（M6）
+            Phase 5：Skill Audit — 掃描 .virtual-assistant-desktop/skills/（M6）
             Phase 6：Behavior Notes — 偵測用戶修正寫入記憶（M6）
             Phase 7：Skill Draft Cleanup — 清理殘留草稿（M6b 簡化）
             Phase 8：Trajectory Pruning — 保留最近 30 天（M6b）
@@ -1072,7 +1072,7 @@ startBackgroundHousekeeping()
 | Read/Grep/Glob（任意路徑）| ✅ | ✅ | ✅ |
 | Bash（唯讀：ls/grep/cat/stat 等）| ✅ | ✅ | ✅ |
 | Edit/Write（memory/ 目錄）| ✅ | ✅ | ✅ |
-| Edit/Write（.my-agent/skills/）| ❌ | ❌ | ✅ ← M6 新增 |
+| Edit/Write（.virtual-assistant-desktop/skills/）| ❌ | ❌ | ✅ ← M6 新增 |
 | Edit/Write（其他路徑）| ❌ | ❌ | ❌ |
 
 ### 門控條件摘要

@@ -220,7 +220,7 @@ export type LlamaOptions = {
      * If no directories are provided or non are writable, these fallback will be used instead:
      * - The directory of where `node-llama-cpp` is installed inside `node_modules`.
      * - A `nlc.` prefixed directory under the OS's temp dir (e.g. `/tmp` on Linux).
-     * - A `.node-llama-cpp/.temp` directory under the home directory of the current user.
+     * - A `.virtual-assistant-desktop/.temp` directory under the home directory of the current user.
      *
      * To disable the usage of any temporary directory and caching, set this option to `false`.
      *
@@ -350,7 +350,7 @@ export type LastBuildOptions = {
      * If no directories are provided or non are writable, these fallback will be used instead:
      * - The directory of where `node-llama-cpp` is installed inside `node_modules`.
      * - A `nlc.` prefixed directory under the OS's temp dir (e.g. `/tmp` on Linux).
-     * - A `.node-llama-cpp/.temp` directory under the home directory of the current user.
+     * - A `.virtual-assistant-desktop/.temp` directory under the home directory of the current user.
      *
      * To disable the usage of any temporary directory and caching, set this option to `false`.
      *

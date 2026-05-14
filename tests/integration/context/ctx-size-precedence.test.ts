@@ -6,7 +6,7 @@
  * 優先序鏈（getContextWindowForModel）：
  *   1. /slots 實際 n_ctx（getLlamaCppContextSize 回傳數字）
  *   2. LLAMACPP_CTX_SIZE env var
- *   3. getGlobalConfig().contextSize（.my-agent.json）
+ *   3. getGlobalConfig().contextSize（.virtual-assistant-desktop.json）
  *   4. getLlamaCppConfigSnapshot().contextSize（llamacpp.json）
  *   5. MODEL_CONTEXT_WINDOW_DEFAULT（128K 硬編）
  */

@@ -33,7 +33,7 @@ export type ModelDownloaderOptions = ({
 }) & {
     /**
      * The directory to save the model file to.
-     * Default to `node-llama-cpp`'s default global models directory (`~/.node-llama-cpp/models`).
+     * Default to `node-llama-cpp`'s default global models directory (`~/.virtual-assistant-desktop/models`).
      */
     dirPath?: string,
 

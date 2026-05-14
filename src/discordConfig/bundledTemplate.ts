@@ -1,12 +1,12 @@
 /**
  * Discord gateway 設定檔 JSONC 模板（bundled）。
  *
- * 首次 seed 時寫入 ~/.my-agent/discord.jsonc。schema.ts 有欄位改動需同步本檔。
+ * 首次 seed 時寫入 ~/.virtual-assistant-desktop/discord.jsonc。schema.ts 有欄位改動需同步本檔。
  */
 
 export const DISCORD_JSONC_TEMPLATE = `{
   // ═══════════════════════════════════════════════════════════════════
-  // Discord Gateway 設定（~/.my-agent/discord.jsonc）
+  // Discord Gateway 設定（~/.virtual-assistant-desktop/discord.jsonc）
   //
   // 讓 my-agent daemon 接上 Discord bot，使用者可透過 DM / guild channel
   // 跨專案跟 agent 對話。單 daemon 多 project（M-DISCORD）。
@@ -25,7 +25,7 @@ export const DISCORD_JSONC_TEMPLATE = `{
 
   // Bot token — 從 Discord Developer Portal → Bot → Token 取得。
   // 安全提醒：
-  //   - 此檔在家目錄（~/.my-agent/），建議檔案權限 0600（chmod 600 discord.json）
+  //   - 此檔在家目錄（~/.virtual-assistant-desktop/），建議檔案權限 0600（chmod 600 discord.json）
   //   - 不要 commit 進 git（家目錄預設不會，但仍請確認）
   //   - 外洩立即到 Developer Portal → Reset Token
   //   - 或改用 env var DISCORD_BOT_TOKEN（env 優先於此欄位，適合 CI / 容器部署）

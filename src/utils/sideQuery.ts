@@ -14,7 +14,7 @@ export type SideQueryOptions = {
   /**
    * Model name kept in the signature for API compatibility but ignored at
    * runtime — sideQuery is now llama.cpp-only and uses the model from
-   * `~/.my-agent/llamacpp.json`. See ADR-014 + Phase 3 of the dapper-sonnet plan.
+   * `~/.virtual-assistant-desktop/llamacpp.json`. See ADR-014 + Phase 3 of the dapper-sonnet plan.
    */
   model: string
   /** System prompt — string or array of text blocks. */

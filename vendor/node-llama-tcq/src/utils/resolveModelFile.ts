@@ -17,7 +17,7 @@ export type ResolveModelFileOptions = {
     /**
      * The directory to resolve models from, and download models to.
      *
-     * Default to `node-llama-cpp`'s default global models directory (`~/.node-llama-cpp/models`).
+     * Default to `node-llama-cpp`'s default global models directory (`~/.virtual-assistant-desktop/models`).
      */
     directory?: string,
 
@@ -105,7 +105,7 @@ export type ResolveModelFileOptions = {
  * If a file path is given, and the path exists, it will be returned, otherwise an error will be thrown.
  *
  * Files are resolved from and downloaded to the `directory` option,
- * which defaults to `node-llama-cpp`'s default global models directory (`~/.node-llama-cpp/models`).
+ * which defaults to `node-llama-cpp`'s default global models directory (`~/.virtual-assistant-desktop/models`).
  *
  * Set the `cli` option to `false` to hide the download progress from the console.
  * @example

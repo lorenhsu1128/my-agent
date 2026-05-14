@@ -72,7 +72,7 @@ Claude / Llama / GPT-OSS 等其他模型。
 
 ## 自訂 Preset
 
-在 `~/.my-agent/llamacpp.jsonc` 加 key（與預設 dict merge — 但 zod record default 在
+在 `~/.virtual-assistant-desktop/llamacpp.jsonc` 加 key（與預設 dict merge — 但 zod record default 在
 使用者覆蓋時整個被取代，要重列預設項目，或只覆蓋部分時純加新 key）：
 
 ```jsonc

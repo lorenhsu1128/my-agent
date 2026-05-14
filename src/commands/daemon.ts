@@ -85,7 +85,7 @@ const call: LocalCommandCall = async args => {
       value:
         `autostart 已開啟，spawn 已送出但 6 秒內未觀察到 pid.json。child 可能 silently 死了。診斷：\n` +
         `  1. 手動跑 \`my-agent daemon start\` 看錯誤訊息\n` +
-        `  2. 檢查 \`~/.my-agent/daemon.log\` 最後幾行\n` +
+        `  2. 檢查 \`~/.virtual-assistant-desktop/daemon.log\` 最後幾行\n` +
         `  3. 若是 stale .daemon.lock（EEXIST）：新版已自動清 dead pid；` +
         `若仍卡死可手動刪 \`<projectDir>/.daemon.lock\``,
     }
@@ -153,7 +153,7 @@ const call: LocalCommandCall = async args => {
           value:
             `spawn 已送出但 6 秒內未觀察到 pid.json。診斷：\n` +
             `  1. 手動跑 \`my-agent daemon start\` 看錯誤訊息\n` +
-            `  2. 檢查 \`~/.my-agent/daemon.log\`\n` +
+            `  2. 檢查 \`~/.virtual-assistant-desktop/daemon.log\`\n` +
             `  3. 檢查 \`<projectDir>/.daemon.lock\`（stale 可手動刪）`,
         }
       }

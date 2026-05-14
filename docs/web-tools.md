@@ -50,7 +50,7 @@ BFS 多頁抓取。從一個入口 URL 出發，依 `allowDomains` / `maxDepth` 
 - **Per-host rate limit**：同一 host 的請求會節流，避免被 ban
 - **cheerio 抽連結**：從 HTML 萃出 `<a href>`，加入佇列
 - **SSRF guard 每個 URL 都查**：BFS 過程中新發現的 URL 也過安全層
-- **Blocklist 逐 URL 查**：`~/.my-agent/website-blocklist.yaml` 可維護黑名單
+- **Blocklist 逐 URL 查**：`~/.virtual-assistant-desktop/website-blocklist.yaml` 可維護黑名單
 
 ### Firecrawl backend（選配）
 
@@ -171,7 +171,7 @@ Gemini / 其他 VLM。
 **四個工具都在發 request 前呼叫 ssrfGuard**，包括 WebCrawl 的 BFS
 新發現 URL 與 WebBrowser 的 navigate。
 
-### Blocklist（`~/.my-agent/website-blocklist.yaml`）
+### Blocklist（`~/.virtual-assistant-desktop/website-blocklist.yaml`）
 
 使用者層級黑名單，30 秒 cache、支援 fnmatch 萬用字元、fail-open
 （檔案有問題不會擋住合法請求）：
@@ -236,7 +236,7 @@ Telegram bot token、PEM 私鑰、DB connection string。
 - 若需要存取特定內網服務，目前沒有白名單機制；請改用專用的 proxy 端點
 
 ### Blocklist 被忽略
-- 檢查 `~/.my-agent/website-blocklist.yaml` 是否存在且 `enabled: true`
+- 檢查 `~/.virtual-assistant-desktop/website-blocklist.yaml` 是否存在且 `enabled: true`
 - 等 30 秒 cache 過期，或重開 session
 
 ---
