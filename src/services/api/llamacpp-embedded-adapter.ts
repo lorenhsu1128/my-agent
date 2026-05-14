@@ -29,6 +29,15 @@ import {
     sseGeneratorToStream,
     mkMsgId,
 } from "./llamacpp-fetch-adapter.js";
+// node-llama-tcq TCQ-shim core utilities — Phase G4 暴露給 embedded 模式。
+// 同一份 Qwen tool-format / 對話歷史處理邏輯，與 HTTP server 路徑完全等價。
+import {
+    packMessages as tcqPackMessages,
+    runChatCompletionCoreNonStreaming as tcqRunCoreNonStreaming,
+    isQwenModel as tcqIsQwenModel,
+    countFullPromptTokens as tcqCountFullPromptTokens,
+    type RunCtx as TcqRunCtx,
+} from "node-llama-tcq";
 
 interface OpenAIImageUrl {
     type: "image_url";
@@ -81,6 +90,10 @@ interface NodeLlamaTcqModule {
 let _moduleCache: NodeLlamaTcqModule | null = null;
 let _llamaCache: any = null;
 let _modelCache: Map<string, any> = new Map();
+/** Cache state per modelPath — context / chatSession / mtmdCtx 都共用，
+ * 避免每次 fetchFn 都 createContext 吃掉 65K * 多次 VRAM 直到 OOM。
+ * 與 TCQ-shim server 一致（單 model 單 context 單 chatSession）。 */
+let _stateCache: Map<string, EmbeddedAdapterState> = new Map();
 
 async function loadModule(): Promise<NodeLlamaTcqModule> {
     if (_moduleCache) return _moduleCache;
@@ -94,12 +107,22 @@ export interface EmbeddedAdapterState {
     llama: any;
     model: any;
     context: any;
+    /** Cached context sequence — 單 slot context 只有一個 sequence，per-request
+     *  LlamaChatSession 共用同一個（setChatHistory 會重整 KV cache）。 */
+    sequence: any;
+    /** Legacy session 欄位仍保留供 vision path 用（v2 移除）；非 vision path
+     *  不再讀此欄位。 */
     session: any;
     /** 若 config.mmprojPath 有值，會載入。null 代表純文字模式 */
     mtmdCtx: any | null;
 }
 
 async function ensureState(config: EmbeddedRoutingConfig): Promise<EmbeddedAdapterState> {
+    if (!config.modelPath) throw new Error("Embedded adapter: modelPath required");
+
+    const cached = _stateCache.get(config.modelPath);
+    if (cached) return cached;
+
     const m = await loadModule();
 
     const avail = m.isTCQAvailable();
@@ -112,8 +135,6 @@ async function ensureState(config: EmbeddedRoutingConfig): Promise<EmbeddedAdapt
     if (!_llamaCache) {
         _llamaCache = await m.getLlama({gpu: config.gpu ?? "cuda"});
     }
-
-    if (!config.modelPath) throw new Error("Embedded adapter: modelPath required");
 
     let model = _modelCache.get(config.modelPath);
     if (!model) {
@@ -131,7 +152,11 @@ async function ensureState(config: EmbeddedRoutingConfig): Promise<EmbeddedAdapt
             : {})
     });
 
-    const session = new m.LlamaChatSession({contextSequence: context.getSequence()});
+    // Pre-acquire the single context sequence — 後續 per-request chatSession
+    // 都重用同一個 sequence（LlamaChatSession.setChatHistory 會處理 KV cache reset）。
+    const sequence = context.getSequence();
+    // Legacy session — vision path 仍用，純文字 path 改成 fetchFn 內 new
+    const session = new m.LlamaChatSession({contextSequence: sequence});
 
     let mtmdCtx: any = null;
     if (config.mmprojPath) {
@@ -142,7 +167,9 @@ async function ensureState(config: EmbeddedRoutingConfig): Promise<EmbeddedAdapt
         });
     }
 
-    return {config, llama: _llamaCache, model, context, session, mtmdCtx};
+    const state: EmbeddedAdapterState = {config, llama: _llamaCache, model, context, sequence, session, mtmdCtx};
+    _stateCache.set(config.modelPath, state);
+    return state;
 }
 
 function resolveKvCacheType(
@@ -272,7 +299,9 @@ function extractVisionInput(
 
 function hasMediaContent(messages: OpenAIChatRequest["messages"]): boolean {
     for (const m of messages) {
-        if (typeof m.content === "string") continue;
+        // assistant 訊息含 tool_calls 時 content 是 null；其餘訊息可能是 string
+        if (m.content == null || typeof m.content === "string") continue;
+        if (!Array.isArray(m.content)) continue;
         if (m.content.some(p =>
             p.type === "image_url" || p.type === "audio_url" || p.type === "input_audio"
         )) return true;
@@ -320,7 +349,27 @@ export interface EmbeddedFetchOptions {
 export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof globalThis.fetch {
     const ensure = opts.overrideEnsureState ?? ensureState;
 
+    let _fetchCallCount = 0;
     const fetchFn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        _fetchCallCount++;
+        const callN = _fetchCallCount;
+        try {
+            return await fetchFnInner(input, init, callN);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`[embedded] fetchFn #${callN} threw: ${msg}`);
+            if (process.env.LLAMA_DEBUG === "1" && err instanceof Error && err.stack) {
+                console.error(err.stack.split("\n").slice(0, 6).join("\n"));
+            }
+            throw err;
+        }
+    };
+
+    const fetchFnInner = async (
+        _input: RequestInfo | URL,
+        init: RequestInit | undefined,
+        callN: number
+    ): Promise<Response> => {
         if (!init || !init.body) return new Response("missing body", {status: 400});
 
         // 桌寵 / my-agent 透過 Anthropic SDK 注入 fetch，body 是 Anthropic 格式
@@ -351,33 +400,10 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
         const wantsMedia = hasMediaContent(body.messages);
         const mediaAvailable = state.mtmdCtx != null;
 
-        // 非 streaming：等完整 reply 再回 OpenAI JSON
-        const generateReplyBlocking = async (): Promise<string> => {
-            if (wantsMedia && mediaAvailable) return await runVisionPath(state, body);
-            const userMsg = lastUserMessage(body.messages);
-            return await state.session.prompt(userMsg, {
-                maxTokens: (body.max_tokens ?? (anthropicBody.max_tokens as number)) ?? 256,
-                temperature: body.temperature
-            });
-        };
-
-        // Streaming：逐 token push OpenAI SSE chunk
-        const generateReplyStreaming = async (
-            onChunk: (text: string) => void
-        ): Promise<string> => {
-            if (wantsMedia && mediaAvailable) return await runVisionPath(state, body, onChunk);
-            const userMsg = lastUserMessage(body.messages);
-            return await state.session.prompt(userMsg, {
-                maxTokens: (body.max_tokens ?? (anthropicBody.max_tokens as number)) ?? 256,
-                temperature: body.temperature,
-                onTextChunk: onChunk
-            });
-        };
-
-        const adapterMode: "vanilla" | "tcq" = "tcq";
-
-        if (!isStream) {
-            const reply = await generateReplyBlocking();
+        // Vision path（含 image / audio）目前還沒接 TCQ-shim 核心 — 走自家 batch
+        // 流程。tools 在 vision 模式下也不會被解析。v2 再整合。
+        if (wantsMedia && mediaAvailable) {
+            const reply = await runVisionPath(state, body);
             const openaiJson = {
                 id: "embedded-" + Date.now(),
                 object: "chat.completion" as const,
@@ -390,11 +416,10 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
                 }],
                 usage: {prompt_tokens: 0, completion_tokens: 0, total_tokens: 0},
             };
-            // OpenAI ChatCompletion → Anthropic Message
             const anthropicJson = translateChatCompletionToAnthropic(
                 openaiJson as Parameters<typeof translateChatCompletionToAnthropic>[0],
                 modelLabel,
-                adapterMode,
+                "tcq",
             );
             return new Response(JSON.stringify(anthropicJson), {
                 status: 200,
@@ -402,31 +427,205 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
             });
         }
 
-        // Stream 模式：生 OpenAI SSE chunks → 餵 translateOpenAIStreamToAnthropic
-        // → 包成 Anthropic SSE Response。
-        const openaiSseStream = new ReadableStream<Uint8Array>({
-            async start(controller) {
-                const enc = new TextEncoder();
-                try {
-                    await generateReplyStreaming((delta) => {
-                        if (delta.length === 0) return;
-                        controller.enqueue(enc.encode(makeSseChunk(delta, modelLabel)));
-                    });
-                    controller.enqueue(enc.encode(makeSseFinal(modelLabel)));
-                    controller.close();
-                } catch (err) {
-                    controller.error(err);
-                }
-            }
+        // 純文字路徑 — reuse TCQ-shim 核心：packMessages 把 OpenAI messages + tools
+        // 組成 systemPrompt（含 <tools> 區塊）+ history（含過去 tool_call XML）+
+        // lastUserPrompt（可能含 buildQwenToolsReminder）；再丟給
+        // runChatCompletionCoreNonStreaming 跑 promptWithMeta + parseQwenToolCalls。
+        const useQwenFormat = tcqIsQwenModel(modelLabel);
+        const {systemPrompt, history, lastUserPrompt} = tcqPackMessages(
+            body.messages as Parameters<typeof tcqPackMessages>[0],
+            (body.tools ?? []) as Parameters<typeof tcqPackMessages>[1],
+            useQwenFormat,
+        );
+        if (process.env.LLAMA_DEBUG === "1") {
+            console.error(`[embedded] #${callN} tools=${(body.tools ?? []).length} qwen=${useQwenFormat} sysLen=${systemPrompt.length} histLen=${history.length} userLen=${lastUserPrompt.length} stream=${isStream}`);
+        }
+
+        // 為 embedded 模式建 per-request LlamaChatSession，與 TCQ-shim
+        // runNonStreaming 同模式（new LlamaChatSession({contextSequence, systemPrompt})
+        // + setChatHistory(history)）。Sequence 從 cached context 取既有 slot，
+        // LlamaChatSession 內部會依 setChatHistory 重填 KV cache（與舊狀態不匹配
+        // 就 evict），不需手動 dispose+recreate sequence。
+        const m = await loadModule();
+        // 用 cached sequence（單 slot context 只有一個），每次 request 新建
+        // LlamaChatSession 包它。setChatHistory + promptWithMeta 會處理 KV cache
+        // 與舊狀態的差異（增量 prefill / evict 舊 tokens）。
+        const sequence = state.sequence;
+        const chatSession = new m.LlamaChatSession({
+            contextSequence: sequence,
+            ...(systemPrompt ? {systemPrompt} : {}),
+            autoDisposeSequence: false,
         });
-        const anthropicSse = translateOpenAIStreamToAnthropic(
-            openaiSseStream,
+        if (history.length > 0) chatSession.setChatHistory(history);
+
+        // 建構 ServerSession-shape 給 core function 用（embedded 不走 ensureSession）
+        const ssOptions = {
+            modelPath: opts.config.modelPath ?? "",
+            contextSize: opts.config.contextSize ?? 4096,
+            gpuLayers: 0,
+            cacheTypeK: "f16",
+            cacheTypeV: "f16",
+            flashAttention: true,
+            noMmap: false,
+            debug: process.env.LLAMA_DEBUG === "1",
+            // mascot embedded 預設 reasoning 走 server-level "auto"
+            reasoning: "auto" as const,
+        };
+        const serverSession = {
+            llama: state.llama,
+            model: state.model,
+            context: state.context,
+            sequence,
+            mtmdCtx: state.mtmdCtx,
+            inferenceLockScope: [{}] as readonly [object],
+            options: ssOptions,
+            cacheTypeKLabel: "f16",
+            cacheTypeVLabel: "f16",
+        };
+
+        const promptTokens = tcqCountFullPromptTokens(
+            serverSession as Parameters<typeof tcqCountFullPromptTokens>[0],
+            systemPrompt,
+            history,
+            lastUserPrompt,
+        );
+
+        const abort = new AbortController();
+        // 若 SDK 透過 init.signal 傳取消訊號，串接到 promptWithMeta
+        if (init.signal) {
+            if (init.signal.aborted) abort.abort();
+            else init.signal.addEventListener("abort", () => abort.abort(), {once: true});
+        }
+
+        const runCtx: TcqRunCtx = {
+            body: body as unknown as TcqRunCtx["body"],
+            chatSession,
+            lastUserPrompt,
+            systemPrompt,
+            history,
+            session: serverSession as TcqRunCtx["session"],
+            useQwenFormat,
+            id: "chatcmpl-embedded-" + Date.now(),
+            created: Math.floor(Date.now() / 1000),
+            model: modelLabel,
+            declaredTools: (body.tools ?? []) as TcqRunCtx["declaredTools"],
+            promptTokens,
+            abort,
+        };
+
+        const result = await tcqRunCoreNonStreaming(runCtx);
+        if (result.type === "aborted") {
+            return new Response("aborted", {status: 499});
+        }
+        if (result.type === "contextOverflow") {
+            return new Response(JSON.stringify({
+                error: {message: "context length exceeded", type: "invalid_request_error"},
+            }), {status: 413, headers: {"content-type": "application/json"}});
+        }
+
+        // Server-side parse 已等價於 TCQ-shim — adapterMode 設 'tcq' 跳過下游 leak parser。
+        const adapterMode: "vanilla" | "tcq" = "tcq";
+        const anthropicJson = translateChatCompletionToAnthropic(
+            result.completion as unknown as Parameters<typeof translateChatCompletionToAnthropic>[0],
             modelLabel,
-            mkMsgId(),
-            "turn",
             adapterMode,
         );
-        return new Response(sseGeneratorToStream(anthropicSse), {
+
+        if (!isStream) {
+            return new Response(JSON.stringify(anthropicJson), {
+                status: 200,
+                headers: {"content-type": "application/json"},
+            });
+        }
+
+        // Stream 模式 v1：把已產出的 Anthropic Message 序列化為 Anthropic SSE
+        // events。v2 整合 runChatCompletionCoreStreaming 後可逐 token push。
+        const anthropicSseStream = new ReadableStream<Uint8Array>({
+            async start(controller) {
+                const enc = new TextEncoder();
+                const msg = anthropicJson as any;
+                const msgId = msg.id ?? mkMsgId();
+                const writeEvent = (event: string, data: any) => {
+                    controller.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+                };
+
+                writeEvent("message_start", {
+                    type: "message_start",
+                    message: {
+                        id: msgId,
+                        type: "message",
+                        role: "assistant",
+                        model: msg.model ?? modelLabel,
+                        content: [],
+                        stop_reason: null,
+                        stop_sequence: null,
+                        usage: msg.usage ?? {input_tokens: 0, output_tokens: 0},
+                    },
+                });
+
+                const blocks: any[] = msg.content ?? [];
+                for (let i = 0; i < blocks.length; i++) {
+                    const block = blocks[i];
+                    if (block.type === "text") {
+                        writeEvent("content_block_start", {
+                            type: "content_block_start", index: i,
+                            content_block: {type: "text", text: ""},
+                        });
+                        if (block.text) {
+                            writeEvent("content_block_delta", {
+                                type: "content_block_delta", index: i,
+                                delta: {type: "text_delta", text: block.text},
+                            });
+                        }
+                        writeEvent("content_block_stop", {type: "content_block_stop", index: i});
+                    } else if (block.type === "tool_use") {
+                        writeEvent("content_block_start", {
+                            type: "content_block_start", index: i,
+                            content_block: {
+                                type: "tool_use",
+                                id: block.id,
+                                name: block.name,
+                                input: {},
+                            },
+                        });
+                        writeEvent("content_block_delta", {
+                            type: "content_block_delta", index: i,
+                            delta: {
+                                type: "input_json_delta",
+                                partial_json: JSON.stringify(block.input ?? {}),
+                            },
+                        });
+                        writeEvent("content_block_stop", {type: "content_block_stop", index: i});
+                    } else if (block.type === "thinking") {
+                        writeEvent("content_block_start", {
+                            type: "content_block_start", index: i,
+                            content_block: {type: "thinking", thinking: ""},
+                        });
+                        if (block.thinking) {
+                            writeEvent("content_block_delta", {
+                                type: "content_block_delta", index: i,
+                                delta: {type: "thinking_delta", thinking: block.thinking},
+                            });
+                        }
+                        writeEvent("content_block_stop", {type: "content_block_stop", index: i});
+                    }
+                }
+
+                writeEvent("message_delta", {
+                    type: "message_delta",
+                    delta: {
+                        stop_reason: msg.stop_reason ?? "end_turn",
+                        stop_sequence: msg.stop_sequence ?? null,
+                    },
+                    usage: msg.usage ?? {input_tokens: 0, output_tokens: 0},
+                });
+
+                writeEvent("message_stop", {type: "message_stop"});
+                controller.close();
+            },
+        });
+
+        return new Response(anthropicSseStream, {
             status: 200,
             headers: {
                 "content-type": "text/event-stream",

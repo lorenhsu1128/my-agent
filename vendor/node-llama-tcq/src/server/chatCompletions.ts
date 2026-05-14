@@ -149,7 +149,7 @@ export async function handleChatCompletions(
     }); } finally { clearTimeout(serverTimer); inflightEnd(); }
 }
 
-type RunCtx = {
+export type RunCtx = {
     body: OpenAIChatRequest,
     chatSession: LlamaChatSession,
     lastUserPrompt: string,
@@ -168,7 +168,7 @@ type RunCtx = {
     abort: AbortController
 };
 
-function extractToolCallsForFormat(
+export function extractToolCallsForFormat(
     text: string,
     declaredTools: OpenAIChatRequest["tools"],
     useQwenFormat: boolean
@@ -198,7 +198,7 @@ function warnToolCallLeak(leak: import("./qwenToolFormat.js").ToolCallLeakReport
     console.warn(`[qwen-tool-leak] markers=[${markers}] recovered=${recoveredCalls} contentLen=${leak.contentLength} stats=[${stats}]\n  snippet: ${leak.snippet.replace(/\n/g, "\\n")}`);
 }
 
-function countTokens(session: ServerSession, text: string | undefined): number {
+export function countTokens(session: ServerSession, text: string | undefined): number {
     if (text == null || text.length === 0) return 0;
     try { return session.model.tokenize(text).length; }
     catch { return 0; }
@@ -214,7 +214,7 @@ function countTokens(session: ServerSession, text: string | undefined): number {
  * (M-TCQ-SHIM-2-7) — pre-fix this only counted lastUserPrompt, which under-
  * reported by 2–10× on multi-turn / tool-heavy requests.
  */
-function countFullPromptTokens(
+export function countFullPromptTokens(
     session: ServerSession,
     systemPrompt: string,
     history: ChatHistoryItem[],
@@ -242,7 +242,7 @@ function countFullPromptTokens(
  * 限縮：tool_choice 前綴只在 useQwenFormat=true 時才產生；非 Qwen 路徑（JSON-fallback）
  * 完全不受影響。
  */
-function composeResponsePrefix(
+export function composeResponsePrefix(
     reasoning: ResolvedReasoning,
     body: OpenAIChatRequest,
     useQwenFormat: boolean,
@@ -278,7 +278,7 @@ function composeResponsePrefix(
 }
 
 /** Strip the responsePrefix we injected (e.g. "</think>\n\n") from start of model output, if present. */
-function stripResponsePrefix(text: string, prefix: string | undefined): string {
+export function stripResponsePrefix(text: string, prefix: string | undefined): string {
     if (prefix == null || prefix === "" || text == null) return text;
     if (text.startsWith(prefix)) return text.slice(prefix.length);
     // Sometimes the model echoes a slightly different leading whitespace pattern.
@@ -341,7 +341,7 @@ type ResolvedReasoning = {
  *   model leaves room for a visible answer. Reproduces T3 fix without changing
  *   default behavior for callers who set max_tokens generously.
  */
-function resolveReasoning(session: ServerSession, body: OpenAIChatRequest): ResolvedReasoning {
+export function resolveReasoning(session: ServerSession, body: OpenAIChatRequest): ResolvedReasoning {
     const serverMode = session.options.reasoning ?? "auto";
     const serverBudget = session.options.reasoningBudget;
     const serverBudgetMessage = session.options.reasoningBudgetMessage;
@@ -406,7 +406,7 @@ function resolveReasoning(session: ServerSession, body: OpenAIChatRequest): Reso
  * Apply the configured `reasoning_format` to a raw response text (used when the
  * chat wrapper didn't expose thought segments — fallback to inline <think> regex).
  */
-function formatReasoning(
+export function formatReasoning(
     rawText: string,
     format: ResolvedReasoning["reasoningFormat"]
 ): {content: string, reasoning: string | null} {
@@ -427,7 +427,7 @@ function formatReasoning(
  * Like formatReasoning, but for the case where the chat wrapper already split
  * thought from visible (no need to regex parse). Just assemble per format.
  */
-function assembleFormattedFromSegments(
+export function assembleFormattedFromSegments(
     visibleText: string,
     reasoningText: string,
     format: ResolvedReasoning["reasoningFormat"]
@@ -467,7 +467,7 @@ function assembleFormattedFromSegments(
  *
  * Caller can disable by leaving `--reasoning-budget-message` unset.
  */
-function maybeApplyBudgetExhaustionMessage(
+export function maybeApplyBudgetExhaustionMessage(
     visibleContent: string,
     stopReason: ShimStopReason,
     resolved: ResolvedReasoning,
@@ -494,8 +494,28 @@ function maybeApplyBudgetExhaustionMessage(
     return `${visibleContent}\n\n${resolved.budgetMessage}`;
 }
 
-async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<void> {
-    const {res, body, chatSession, lastUserPrompt, id, created, model, declaredTools, abort} = opts;
+/**
+ * Pure-logic core of non-streaming chat completion — runs the actual prompt +
+ * parses tool_calls + builds OpenAI ChatCompletion **without** writing to any
+ * HTTP response. HTTP handler (runNonStreaming) and embedded adapter（in-process
+ * mascot 端 import this directly）共用同一條路徑。
+ *
+ * 回傳的 discriminated union 讓 caller 決定怎麼處理：
+ *  - 'completion'：正常產出 → HTTP 200 / Anthropic translate
+ *  - 'aborted'：client/呼叫端 abort → HTTP 靜默 return / 上層判斷
+ *  - 'contextOverflow'：preflight 沒抓到的 ctx overflow → HTTP 413 / 上層 raise
+ *
+ * 注意：throw 出去的 unknown error（既不是 abort 也不是 overflow）保持原樣
+ * propagate，由 caller 包 try/catch。
+ */
+export async function runChatCompletionCoreNonStreaming(
+    opts: RunCtx
+): Promise<
+    | {type: "completion"; completion: OpenAIChatCompletion}
+    | {type: "aborted"}
+    | {type: "contextOverflow"; underlying: unknown}
+> {
+    const {body, chatSession, lastUserPrompt, id, created, model, declaredTools, abort} = opts;
     const abortSignal = abort.signal;
     const reasoning = resolveReasoning(opts.session, body);
     const {engineResponsePrefix, stripPrefix} = composeResponsePrefix(reasoning, body, opts.useQwenFormat, declaredTools);
@@ -520,32 +540,17 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
             ...(reasoning.thoughtTokens != null ? {budgets: {thoughtTokens: reasoning.thoughtTokens}} : {})
         });
     } catch (err) {
-        // Client 已斷：靜默 return，沒人在收 5xx，繼續寫 res 反而 EPIPE。
-        if (abortSignal.aborted) return;
-        // Fallback when our preflight token estimate underestimated due to
-        // chat-template overhead and the engine still couldn't compress history.
-        if (isContextOverflowError(err)) {
-            sendJson(res, 413, makeContextLengthExceededError({
-                promptTokens: opts.promptTokens,
-                maxTokens: body.max_tokens,
-                ctxSize: opts.session.options.contextSize,
-                underlying: err
-            }));
-            return;
-        }
+        if (abortSignal.aborted) return {type: "aborted"};
+        if (isContextOverflowError(err)) return {type: "contextOverflow", underlying: err};
         throw err;
     }
-    if (abortSignal.aborted) return;
+    if (abortSignal.aborted) return {type: "aborted"};
     stopReason = mapStopReason((meta as any).stopReason);
 
-    // Use the chat wrapper's segmented response (knows Qwen3.5 thought / Gemma /
-    // Llama3 etc.) instead of regex-splitting responseText. Falls back to text
-    // split when wrapper didn't segment.
     const bundle = bundleResponse(meta.response);
     const rawVisibleText = stripResponsePrefix(bundle.visibleText, stripPrefix);
     const rawReasoningText = bundle.reasoningText;
 
-    // For non-Qwen models that emit `<think>` inline (no segments), splitter still helps.
     const haveSegments = bundle.thoughtSegments > 0;
     const formatted = haveSegments
         ? assembleFormattedFromSegments(rawVisibleText, rawReasoningText, reasoning.reasoningFormat)
@@ -564,8 +569,6 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
     const completionTokens = countTokens(opts.session, rawVisibleText + rawReasoningText);
     if (opts.session.options.debug) {
         console.error(`[TCQ-shim:chat] segments=${bundle.thoughtSegments} thoughtTrunc=${bundle.thoughtTruncated} visLen=${rawVisibleText.length} reaLen=${rawReasoningText.length}`);
-    }
-    if (opts.session.options.debug) {
         console.error(`[TCQ-shim:chat] respLen=${meta.responseText?.length ?? 0} stopReason=${(meta as any).stopReason} pTok=${promptTokens} cTok=${completionTokens}`);
     }
 
@@ -589,7 +592,26 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
     };
 
     recordChatTokens(promptTokens, completionTokens);
-    sendJson(res, 200, completion);
+    return {type: "completion", completion};
+}
+
+/**
+ * HTTP wrapper：呼叫 core function 把結果寫進 ServerResponse。維持與舊版完全
+ * 一樣的對外行為（200 / 413 / 靜默 abort）。
+ */
+async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<void> {
+    const result = await runChatCompletionCoreNonStreaming(opts);
+    if (result.type === "aborted") return;
+    if (result.type === "contextOverflow") {
+        sendJson(opts.res, 413, makeContextLengthExceededError({
+            promptTokens: opts.promptTokens,
+            maxTokens: opts.body.max_tokens,
+            ctxSize: opts.session.options.contextSize,
+            underlying: result.underlying
+        }));
+        return;
+    }
+    sendJson(opts.res, 200, result.completion);
 }
 
 async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerResponse}): Promise<void> {
@@ -798,12 +820,12 @@ function makeChunk(
     };
 }
 
-function normalizeStop(stop: string | string[] | undefined): string[] | undefined {
+export function normalizeStop(stop: string | string[] | undefined): string[] | undefined {
     if (stop == null) return undefined;
     return Array.isArray(stop) ? stop : [stop];
 }
 
-function mapStopReason(raw: unknown): ShimStopReason {
+export function mapStopReason(raw: unknown): ShimStopReason {
     if (typeof raw !== "string") return undefined;
     if (raw === "maxTokens" || raw === "abort" || raw === "eosToken" || raw === "stopGenerationTrigger") return raw;
     return undefined;
@@ -818,7 +840,7 @@ function mapStopReason(raw: unknown): ShimStopReason {
  * Tool/assistant messages with tool_calls are flattened to text since the underlying
  * chat wrapper does not natively model OpenAI tool call turns yet (Phase 2 task).
  */
-function packMessages(messages: OpenAIMessage[], tools: OpenAIChatRequest["tools"], useQwenFormat: boolean): {
+export function packMessages(messages: OpenAIMessage[], tools: OpenAIChatRequest["tools"], useQwenFormat: boolean): {
     systemPrompt: string,
     history: ChatHistoryItem[],
     lastUserPrompt: string

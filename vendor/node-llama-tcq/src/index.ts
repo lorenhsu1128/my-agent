@@ -363,3 +363,29 @@ export {
 
 // node-llama-tcq Phase G2/G3: speculative decoding（純文字）
 export type {SpeculativeOpts} from "./bindings/AddonTypes.js";
+
+// node-llama-tcq Phase G4: TCQ-shim server core 可重用 utilities（給 in-process
+// embedded adapter / mascot 整合用，無需起 HTTP server）。直接複用 server-side
+// Qwen tool-format 處理（packMessages / parseQwenToolCalls / 等等）達到與 HTTP
+// 模式完全一致的行為。
+export {
+    packMessages,
+    extractToolCallsForFormat,
+    composeResponsePrefix,
+    stripResponsePrefix,
+    resolveReasoning,
+    formatReasoning,
+    assembleFormattedFromSegments,
+    maybeApplyBudgetExhaustionMessage,
+    normalizeStop,
+    mapStopReason,
+    countTokens,
+    countFullPromptTokens,
+    runChatCompletionCoreNonStreaming,
+    type RunCtx
+} from "./server/chatCompletions.js";
+export {isQwenModel} from "./server/qwenToolFormat.js";
+export {buildRepeatPenalty} from "./server/samplerCoalesce.js";
+export {bundleResponse} from "./server/segmentExtract.js";
+export {toOpenAIFinishReason} from "./server/finishReason.js";
+export {makeUsage} from "./server/usage.js";
