@@ -19,16 +19,45 @@ export interface EmbeddedRoutingConfig {
     modelPath?: string;
     /** mmproj 檔案路徑（vision 用，目前 Phase C 不啟用） */
     mmprojPath?: string;
-    /** KV cache type（"turbo3_tcq" 等字串或 GgmlType 數字） */
+    /** KV cache key type — TCQ-shim resolveCacheType 接受字串（"turbo4" / "turbo3_tcq" / "f16" 等） */
+    cacheTypeK?: string;
+    /** KV cache value type */
+    cacheTypeV?: string;
+    /** @deprecated 改用 cacheTypeK + cacheTypeV；舊欄位保留向後相容 */
     kvCacheType?: string | number;
-    /** 是否套用 TCQ codebook 環境變數 */
-    applyTCQCodebooks?: boolean;
-    /** 自訂 codebook 路徑（覆蓋 default） */
+    /** 自訂 codebook 路徑（覆蓋 default）；isTcq 時 ensureSession 會自動 apply */
     codebooks?: {threeBit?: string; twoBit?: string; layerAdaptive?: boolean};
     /** Context size */
     contextSize?: number;
     /** GPU 後端：'cuda' | 'metal' | 'vulkan' | false */
     gpu?: "auto" | "cuda" | "metal" | "vulkan" | false;
+    /** GPU offload layer 數 — number / "max" / "auto"；對齊 jsonc server.gpuLayers */
+    gpuLayers?: number | "max" | "auto";
+    /** 推論 batch size（對齊 llama-server `-b`） */
+    batchSize?: number;
+    /** ubatch size（對齊 llama-server `-ub`） */
+    ubatchSize?: number;
+    /** 推論 thread 數（對齊 llama-server `--threads`） */
+    threads?: number;
+    /** Flash attention（對齊 llama-server `--flash-attn on`） */
+    flashAttention?: boolean;
+    /** 不使用 mmap（對齊 llama-server `--no-mmap`） */
+    noMmap?: boolean;
+    /** stderr 詳細 log */
+    debug?: boolean;
+    /** server-level reasoning default：on/off/auto */
+    reasoning?: "on" | "off" | "auto";
+    /** Sampler defaults（從 jsonc samplingPresets 注入，per-request 仍可覆蓋） */
+    samplerDefaults?: {
+        temperature?: number;
+        topP?: number;
+        topK?: number;
+        minP?: number;
+        repeatPenalty?: number;
+        presencePenalty?: number;
+        frequencyPenalty?: number;
+        repeatLastN?: number;
+    };
 }
 
 export interface EmbeddedRoutingDecision {
@@ -59,6 +88,7 @@ export function decideEmbeddedRouting(modelConfig: {
         if (!modelConfig.modelPath)
             return {useEmbedded: false, reason: "embedded requested but modelPath missing"};
 
+        const ec = modelConfig.embeddedConfig ?? {};
         return {
             useEmbedded: true,
             reason: modelConfig.useEmbedded === true
@@ -67,12 +97,22 @@ export function decideEmbeddedRouting(modelConfig: {
             config: {
                 enabled: true,
                 modelPath: modelConfig.modelPath,
-                gpu: modelConfig.embeddedConfig?.gpu ?? "cuda",
-                contextSize: modelConfig.embeddedConfig?.contextSize ?? 4096,
-                kvCacheType: modelConfig.embeddedConfig?.kvCacheType,
-                applyTCQCodebooks: modelConfig.embeddedConfig?.applyTCQCodebooks ?? false,
-                codebooks: modelConfig.embeddedConfig?.codebooks,
-                mmprojPath: modelConfig.embeddedConfig?.mmprojPath
+                gpu: ec.gpu ?? "cuda",
+                contextSize: ec.contextSize ?? 4096,
+                cacheTypeK: ec.cacheTypeK,
+                cacheTypeV: ec.cacheTypeV,
+                kvCacheType: ec.kvCacheType,
+                codebooks: ec.codebooks,
+                mmprojPath: ec.mmprojPath,
+                gpuLayers: ec.gpuLayers,
+                batchSize: ec.batchSize,
+                ubatchSize: ec.ubatchSize,
+                threads: ec.threads,
+                flashAttention: ec.flashAttention,
+                noMmap: ec.noMmap,
+                debug: ec.debug,
+                reasoning: ec.reasoning,
+                samplerDefaults: ec.samplerDefaults,
             }
         };
     }

@@ -42,6 +42,134 @@ import { createCodexFetch } from './codex-fetch-adapter.js'
 import { createLlamaCppFetch } from './llamacpp-fetch-adapter.js'
 import { createLlamaCppEmbeddedFetch } from './llamacpp-embedded-adapter.js'
 import { decideEmbeddedRouting } from '../../utils/model/embeddedRouting.js'
+import type { SamplingPreset } from '../../llamacppConfig/schema.js'
+
+/**
+ * 解析 llamacpp.jsonc 的 server.extraArgs（llama-server CLI flag 形式）。
+ *
+ * 取出 embedded 模式 ensureSession 需要的參數：
+ *   --flash-attn on/off → flashAttention
+ *   --cache-type-k <name> / --cache-type-v <name> → cacheTypeK/V
+ *   -b <n> / --batch-size <n> → batchSize
+ *   -ub <n> / --ubatch-size <n> → ubatchSize
+ *   --threads <n> → threads（--threads-batch 額外存在但 ensureSession 用同一參數）
+ *   --no-mmap → noMmap=true
+ *
+ * 對齊 TCQ-shim ServeCommand 的 yargs 解析（同一個 jsonc 兩種模式行為一致）。
+ */
+function parseServerExtraArgs(args: string[]): {
+  flashAttention?: boolean
+  cacheTypeK?: string
+  cacheTypeV?: string
+  batchSize?: number
+  ubatchSize?: number
+  threads?: number
+  noMmap?: boolean
+} {
+  const out: ReturnType<typeof parseServerExtraArgs> = {}
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]
+    const next = args[i + 1]
+    switch (a) {
+      case '--flash-attn':
+      case '-fa':
+        if (next === 'on' || next === '1' || next === 'true') {
+          out.flashAttention = true
+          i++
+        } else if (next === 'off' || next === '0' || next === 'false') {
+          out.flashAttention = false
+          i++
+        } else {
+          out.flashAttention = true // bare flag = on
+        }
+        break
+      case '--cache-type-k':
+      case '-ctk':
+        if (next != null) {
+          out.cacheTypeK = next
+          i++
+        }
+        break
+      case '--cache-type-v':
+      case '-ctv':
+        if (next != null) {
+          out.cacheTypeV = next
+          i++
+        }
+        break
+      case '-b':
+      case '--batch-size':
+        if (next != null) {
+          out.batchSize = parseInt(next, 10)
+          i++
+        }
+        break
+      case '-ub':
+      case '--ubatch-size':
+        if (next != null) {
+          out.ubatchSize = parseInt(next, 10)
+          i++
+        }
+        break
+      case '--threads':
+      case '-t':
+        if (next != null) {
+          out.threads = parseInt(next, 10)
+          i++
+        }
+        break
+      case '--no-mmap':
+        out.noMmap = true
+        break
+    }
+  }
+  return out
+}
+
+/** 從 jsonc samplingPresets 找符合 model id 的 default preset（含 family glob gate）。 */
+function pickDefaultSamplerForModel(
+  presets: Record<string, SamplingPreset>,
+  defaultKey: string | undefined,
+  modelId: string,
+):
+  | {
+      temperature?: number
+      topP?: number
+      topK?: number
+      minP?: number
+      presencePenalty?: number
+      frequencyPenalty?: number
+      repeatPenalty?: number
+    }
+  | undefined {
+  if (!defaultKey) return undefined
+  const preset = presets[defaultKey]
+  if (!preset) return undefined
+  const id = modelId.toLowerCase()
+  const matched = preset.appliesTo.some((pattern) => {
+    const p = pattern.toLowerCase()
+    // 簡易 glob：'*' = wildcard
+    const re = new RegExp(
+      '^' +
+        p
+          .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*/g, '.*') +
+        '$',
+    )
+    return re.test(id)
+  })
+  if (!matched) return undefined
+  const p = preset.params
+  return {
+    temperature: p.temperature,
+    topP: p.top_p,
+    topK: p.top_k,
+    minP: p.min_p,
+    presencePenalty: p.presence_penalty,
+    frequencyPenalty: p.frequency_penalty,
+    repeatPenalty: p.repetition_penalty,
+  }
+}
 
 /**
  * Environment variables for different client types:
@@ -138,13 +266,34 @@ export async function getAnthropicClient({
     // 桌寵 master toggle ON 時設 MY_AGENT_LLAMACPP_EMBEDDED=1 走 in-process
     // node-llama-tcq 載入 GGUF 直接推論，不需要外部 llama-server。
     // 既有 CLI / Bun 路徑無此 env var → 走 fetch adapter 連 baseUrl。
+    //
+    // 完整對齊 TCQ-shim serve 路徑：把 ~/.virtual-assistant-desktop/llamacpp.jsonc
+    // 的 server.extraArgs（CLI flag 形式）解析後完整餵給 embedded ensureSession，
+    // 達成「embedded vs HTTP server 用同一份 config + 同一份 ensureSession」一致。
     const snapshot = getLlamaCppConfigSnapshot()
+    const parsedArgs = parseServerExtraArgs(snapshot.server.extraArgs ?? [])
+    // 嘗試從 samplingPresets 找一個 family-gated default preset 注入
+    const samplerDefaults = pickDefaultSamplerForModel(
+      snapshot.samplingPresets ?? {},
+      snapshot.defaultSamplingPreset,
+      snapshot.server.alias ?? snapshot.model ?? model ?? '',
+    )
     const decision = decideEmbeddedRouting({
       modelPath: snapshot.server.modelPath,
       embeddedConfig: {
         contextSize: snapshot.server.ctxSize,
         gpu: 'cuda',
         mmprojPath: snapshot.server.vision?.mmprojPath,
+        gpuLayers: snapshot.server.gpuLayers,
+        cacheTypeK: parsedArgs.cacheTypeK,
+        cacheTypeV: parsedArgs.cacheTypeV,
+        batchSize: parsedArgs.batchSize,
+        ubatchSize: parsedArgs.ubatchSize,
+        threads: parsedArgs.threads,
+        flashAttention: parsedArgs.flashAttention,
+        noMmap: parsedArgs.noMmap,
+        debug: snapshot.debug,
+        samplerDefaults,
       },
     })
 

@@ -36,7 +36,10 @@ import {
     runChatCompletionCoreNonStreaming as tcqRunCoreNonStreaming,
     isQwenModel as tcqIsQwenModel,
     countFullPromptTokens as tcqCountFullPromptTokens,
+    ensureSession as tcqEnsureSession,
     type RunCtx as TcqRunCtx,
+    type ServerSession as TcqServerSession,
+    type SessionInitOptions as TcqSessionInitOptions,
 } from "node-llama-tcq";
 
 interface OpenAIImageUrl {
@@ -79,21 +82,11 @@ interface OpenAIChatRequest {
 }
 
 interface NodeLlamaTcqModule {
-    getLlama: typeof import("node-llama-tcq").getLlama;
     LlamaChatSession: typeof import("node-llama-tcq").LlamaChatSession;
     LlamaMtmdContext: typeof import("node-llama-tcq").LlamaMtmdContext;
-    applyTCQCodebooks: typeof import("node-llama-tcq").applyTCQCodebooks;
-    isTCQAvailable: typeof import("node-llama-tcq").isTCQAvailable;
-    GgmlType: typeof import("node-llama-tcq").GgmlType;
 }
 
 let _moduleCache: NodeLlamaTcqModule | null = null;
-let _llamaCache: any = null;
-let _modelCache: Map<string, any> = new Map();
-/** Cache state per modelPath — context / chatSession / mtmdCtx 都共用，
- * 避免每次 fetchFn 都 createContext 吃掉 65K * 多次 VRAM 直到 OOM。
- * 與 TCQ-shim server 一致（單 model 單 context 單 chatSession）。 */
-let _stateCache: Map<string, EmbeddedAdapterState> = new Map();
 
 async function loadModule(): Promise<NodeLlamaTcqModule> {
     if (_moduleCache) return _moduleCache;
@@ -102,86 +95,81 @@ async function loadModule(): Promise<NodeLlamaTcqModule> {
     return _moduleCache;
 }
 
+/**
+ * Embedded adapter state — 直接重用 TCQ-shim 的 ServerSession（單例 module-level
+ * cache，與 HTTP server 路徑共用同一份）。第二次以後 ensureState 從 tcqEnsureSession
+ * 取既有 _session（withLock guard），不會重複載 model / 重建 context。
+ *
+ * 等價於 TCQ-shim httpServer.ts 啟動時的 ensureSession 結果。
+ */
 export interface EmbeddedAdapterState {
     config: EmbeddedRoutingConfig;
-    llama: any;
-    model: any;
-    context: any;
-    /** Cached context sequence — 單 slot context 只有一個 sequence，per-request
-     *  LlamaChatSession 共用同一個（setChatHistory 會重整 KV cache）。 */
-    sequence: any;
-    /** Legacy session 欄位仍保留供 vision path 用（v2 移除）；非 vision path
-     *  不再讀此欄位。 */
-    session: any;
-    /** 若 config.mmprojPath 有值，會載入。null 代表純文字模式 */
-    mtmdCtx: any | null;
+    serverSession: TcqServerSession;
+    /** 別名：fetchFn 內部使用對應名稱 */
+    llama: TcqServerSession["llama"];
+    model: TcqServerSession["model"];
+    context: TcqServerSession["context"];
+    sequence: TcqServerSession["sequence"];
+    mtmdCtx: TcqServerSession["mtmdCtx"];
+}
+
+/** 把 embedded routing config 轉成 TCQ-shim ensureSession 接受的 SessionInitOptions。
+ *  缺欄位填合理 default（與 jsonc schema 預設一致）。 */
+function toSessionInitOptions(config: EmbeddedRoutingConfig): TcqSessionInitOptions {
+    if (!config.modelPath) throw new Error("Embedded adapter: modelPath required");
+
+    // gpuLayers: jsonc 預設 99（全層 offload），"max" / "auto" 走 binding 解析
+    const gpuLayers = typeof config.gpuLayers === "number"
+        ? config.gpuLayers
+        : config.gpuLayers === "max" ? 99
+            : config.gpuLayers === "auto" ? -1  // -1 = auto 在 binding 內部處理
+                : 99;  // default: 等同 llama-server `--n-gpu-layers 99`
+
+    // KV cache：jsonc extraArgs `--cache-type-k turbo4 --cache-type-v turbo4` →
+    // cacheTypeK/V 字串。若兩者都未設，fallback "f16"（與 llama-server default 對齊）。
+    const cacheTypeK = config.cacheTypeK
+        ?? (typeof config.kvCacheType === "string" ? config.kvCacheType : "f16");
+    const cacheTypeV = config.cacheTypeV
+        ?? (typeof config.kvCacheType === "string" ? config.kvCacheType : "f16");
+
+    return {
+        modelPath: config.modelPath,
+        mmprojPath: config.mmprojPath,
+        contextSize: config.contextSize ?? 4096,
+        gpuLayers,
+        gpu: config.gpu ?? "auto",
+        threads: config.threads,
+        batchSize: config.batchSize,
+        ubatchSize: config.ubatchSize,
+        cacheTypeK,
+        cacheTypeV,
+        flashAttention: config.flashAttention ?? true,
+        noMmap: config.noMmap ?? false,
+        debug: config.debug ?? process.env.LLAMA_DEBUG === "1",
+        reasoning: config.reasoning ?? "auto",
+        samplerDefaults: config.samplerDefaults,
+    };
 }
 
 async function ensureState(config: EmbeddedRoutingConfig): Promise<EmbeddedAdapterState> {
-    if (!config.modelPath) throw new Error("Embedded adapter: modelPath required");
+    const opts = toSessionInitOptions(config);
+    // tcqEnsureSession 是 module-level singleton（withLock guard）。第二次起直接拿
+    // 既有 _session，model / context / sequence / mtmdCtx 都不重建。
+    const serverSession = await tcqEnsureSession(opts);
 
-    const cached = _stateCache.get(config.modelPath);
-    if (cached) return cached;
-
-    const m = await loadModule();
-
-    const avail = m.isTCQAvailable();
-    if (config.applyTCQCodebooks && !avail.ok)
-        throw new Error(`Embedded adapter: TCQ unavailable on this platform: ${avail.reason}`);
-
-    if (config.applyTCQCodebooks)
-        m.applyTCQCodebooks(config.codebooks);
-
-    if (!_llamaCache) {
-        _llamaCache = await m.getLlama({gpu: config.gpu ?? "cuda"});
+    if (process.env.LLAMA_DEBUG === "1") {
+        console.error(`[embedded] session ready: gpuLayers=${serverSession.model.gpuLayers}/${(serverSession.model as any).fileInfo?.totalLayers ?? "?"} vramUsed=${((serverSession.model as any).vramUsedBytes ?? 0) >> 20}MiB k=${serverSession.cacheTypeKLabel} v=${serverSession.cacheTypeVLabel} ctx=${opts.contextSize} batch=${opts.batchSize ?? "?"} threads=${opts.threads ?? "?"} flashAttn=${opts.flashAttention} noMmap=${opts.noMmap}`);
     }
 
-    let model = _modelCache.get(config.modelPath);
-    if (!model) {
-        model = await _llamaCache.loadModel({modelPath: config.modelPath});
-        _modelCache.set(config.modelPath, model);
-    }
-
-    const kvType = resolveKvCacheType(config.kvCacheType, m.GgmlType);
-
-    const context = await model.createContext({
-        contextSize: config.contextSize ?? 4096,
-        flashAttention: true,
-        ...(kvType != null
-            ? {experimentalKvCacheKeyType: kvType, experimentalKvCacheValueType: kvType}
-            : {})
-    });
-
-    // Pre-acquire the single context sequence — 後續 per-request chatSession
-    // 都重用同一個 sequence（LlamaChatSession.setChatHistory 會處理 KV cache reset）。
-    const sequence = context.getSequence();
-    // Legacy session — vision path 仍用，純文字 path 改成 fetchFn 內 new
-    const session = new m.LlamaChatSession({contextSequence: sequence});
-
-    let mtmdCtx: any = null;
-    if (config.mmprojPath) {
-        mtmdCtx = await m.LlamaMtmdContext.loadMmproj(model, {
-            mmprojPath: config.mmprojPath,
-            useGpu: true,
-            nThreads: 4
-        });
-    }
-
-    const state: EmbeddedAdapterState = {config, llama: _llamaCache, model, context, sequence, session, mtmdCtx};
-    _stateCache.set(config.modelPath, state);
-    return state;
-}
-
-function resolveKvCacheType(
-    val: string | number | undefined,
-    GgmlType: NodeLlamaTcqModule["GgmlType"]
-): number | undefined {
-    if (val == null) return undefined;
-    if (typeof val === "number") return val;
-    // 字串：先試 GgmlType key（如 "TURBO3_TCQ"）
-    const key = val.toUpperCase() as keyof typeof GgmlType;
-    if (Object.hasOwn(GgmlType, key)) return GgmlType[key] as number;
-    return undefined;
+    return {
+        config,
+        serverSession,
+        llama: serverSession.llama,
+        model: serverSession.model,
+        context: serverSession.context,
+        sequence: serverSession.sequence,
+        mtmdCtx: serverSession.mtmdCtx,
+    };
 }
 
 /**
@@ -458,33 +446,12 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
         });
         if (history.length > 0) chatSession.setChatHistory(history);
 
-        // 建構 ServerSession-shape 給 core function 用（embedded 不走 ensureSession）
-        const ssOptions = {
-            modelPath: opts.config.modelPath ?? "",
-            contextSize: opts.config.contextSize ?? 4096,
-            gpuLayers: 0,
-            cacheTypeK: "f16",
-            cacheTypeV: "f16",
-            flashAttention: true,
-            noMmap: false,
-            debug: process.env.LLAMA_DEBUG === "1",
-            // mascot embedded 預設 reasoning 走 server-level "auto"
-            reasoning: "auto" as const,
-        };
-        const serverSession = {
-            llama: state.llama,
-            model: state.model,
-            context: state.context,
-            sequence,
-            mtmdCtx: state.mtmdCtx,
-            inferenceLockScope: [{}] as readonly [object],
-            options: ssOptions,
-            cacheTypeKLabel: "f16",
-            cacheTypeVLabel: "f16",
-        };
+        // 直接用 tcqEnsureSession 已建立的 ServerSession（含正確 options /
+        // cacheTypeKLabel / inferenceLockScope）— 不再自製空殼。
+        const serverSession = state.serverSession;
 
         const promptTokens = tcqCountFullPromptTokens(
-            serverSession as Parameters<typeof tcqCountFullPromptTokens>[0],
+            serverSession,
             systemPrompt,
             history,
             lastUserPrompt,
