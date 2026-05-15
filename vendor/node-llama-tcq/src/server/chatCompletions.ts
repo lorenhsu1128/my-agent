@@ -614,50 +614,72 @@ async function runNonStreaming(opts: RunCtx & {res: ServerResponse}): Promise<vo
     sendJson(opts.res, 200, result.completion);
 }
 
-async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerResponse}): Promise<void> {
-    const {res, body, chatSession, lastUserPrompt, session, id, created, model, declaredTools, abort} = opts;
+/**
+ * Pure-logic streaming sink — I/O 抽象。HTTP path 用 SseWriter sink wrap
+ * IncomingMessage/ServerResponse；embedded（in-process）path 用 ReadableStream
+ * sink wrap controller.enqueue。
+ *
+ * 設計對齊既有 runStreaming 行為：
+ *  - onChunk：每個 OpenAI ChatCompletion chunk（含 role / content delta /
+ *    reasoning_content / tool_calls / 最終 usage chunk）
+ *  - onError：mid-stream 錯誤（非 abort），caller 決定是否 propagate 到 client
+ *  - onDone：正常結束，caller 關閉 stream
+ *
+ * keepalive ping 與 res.destroyed 偵測屬於 HTTP-specific 邏輯，留在 HTTP wrapper，
+ * 不下放到 core；embedded path 不需要 TCP keepalive。
+ */
+export interface StreamingSink {
+    /** Emit one OpenAI ChatCompletion streaming chunk. */
+    onChunk(chunk: OpenAIChatChunk): void;
+    /** Mid-stream error（context overflow 以外）。core 已 incChatError；caller
+     *  決定怎麼把錯誤傳給 client（HTTP 走 sse.error；embedded 走 controller.error）。 */
+    onError(err: Error): void;
+    /** Normal completion — caller 關閉 stream（SseWriter.done / controller.close）。 */
+    onDone(): void;
+}
+
+/**
+ * Pure-logic core of streaming chat completion — runs the actual prompt +
+ * streams OpenAI chunks via sink **without** touching HTTP res. HTTP handler
+ * (runStreaming) 與 embedded adapter 共用同一條路徑。
+ *
+ * Sink 收到的 chunk 序列與舊 runStreaming 寫進 SseWriter 的內容完全一致：
+ *   1. role:assistant 初始 chunk
+ *   2. N × content / reasoning_content delta chunks（promptWithMeta.onTextChunk 觸發）
+ *   3. sniffer / splitter flush 後可能 0-2 個尾巴 chunk
+ *   4. budget exhaustion fallback chunk（如觸發）
+ *   5. tool_calls chunks（每個 tool call 一個）
+ *   6. final chunk（含 finish_reason + usage）
+ *
+ * 回傳 discriminated union 與 runChatCompletionCoreNonStreaming 對稱：
+ *  - 'completion'：正常完成，sink.onDone 已呼叫
+ *  - 'aborted'：client/呼叫端 abort，sink 已停止接收 chunk（caller 通常靜默 return）
+ *  - 'contextOverflow'：mid-stream overflow（preflight 沒抓到），sink 沒 onError
+ *    呼叫，由 caller 自行決定要不要對 client 噴錯（HTTP 走 sse.error；embedded
+ *    可包成 Anthropic error event）
+ *
+ * 其他 unknown error 已透過 sink.onError 通報並 return 'completion'（與舊行為
+ * 對齊 — sse.error 後 SSE 直接結束）。
+ */
+export async function runChatCompletionCoreStreaming(
+    opts: RunCtx,
+    sink: StreamingSink
+): Promise<
+    | {type: "completion"}
+    | {type: "aborted"}
+    | {type: "contextOverflow"; underlying: unknown}
+> {
+    const {body, chatSession, lastUserPrompt, session, id, created, model, declaredTools, abort} = opts;
     const abortSignal = abort.signal;
-    const sse = new SseWriter(res);
     const splitter = new StreamReasoningSplitter();
     const sniffer = new StreamToolSniffer(declaredTools);
     const reasoning = resolveReasoning(session, body);
     const {engineResponsePrefix, stripPrefix} = composeResponsePrefix(reasoning, body, opts.useQwenFormat, declaredTools);
     let totalRaw = "";
-    let visibleContentEmitted = "";  // accumulated `delta.content` characters (for budget-msg detection)
-    // reasoning_format=none → don't split <think> out of content stream
-    // deepseek (default) and deepseek-legacy both route reasoning through splitter
-    // (legacy mode's "keep <think> in content" flavor only applies to non-streaming JSON;
-    //  documented limitation for now).
+    let visibleContentEmitted = "";
     const useReasoningSplitter = reasoning.reasoningFormat !== "none";
 
-    // Initial role chunk (OpenAI convention)
-    sse.send(makeChunk(id, created, model, {role: "assistant"}, null));
-
-    // (A) Streaming keepalive ping — 每 KEEPALIVE_INTERVAL_MS 寫一行 SSE comment（spec
-    // 規定 client 必須忽略以 ":" 開頭的行）。寫失敗（EPIPE/ECONNRESET）或 res 被 destroy
-    // 時主動 abort，cover「fetch AbortController 客戶端 abort 但 TCP 沒關」這條（Bun
-    // / undici 可能不發 FIN）— req.on('close') 永不觸發，但實際上 client 不再讀，
-    // 久了 server 寫的 chunks 會塞滿 TCP send buffer 然後 write 開始 throw／res 變
-    // destroyed，這時被偵測到。
-    const KEEPALIVE_INTERVAL_MS = Number(process.env.TCQ_STREAM_KEEPALIVE_MS) || 10_000;
-    const keepalive = setInterval(() => {
-        if (abortSignal.aborted) return;
-        try {
-            if (res.destroyed || res.writableEnded) {
-                // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
-                console.warn(`[TCQ-shim] stream id=${id} res destroyed/ended — aborting`);
-                abort.abort();
-                return;
-            }
-            const ok = res.write(": keep-alive\n\n");
-            if (!ok && (res.destroyed || res.writableEnded)) abort.abort();
-        } catch (e) {
-            // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
-            console.warn(`[TCQ-shim] stream id=${id} keepalive write failed: ${(e as Error).message} — aborting`);
-            abort.abort();
-        }
-    }, KEEPALIVE_INTERVAL_MS);
-    abortSignal.addEventListener("abort", () => clearInterval(keepalive));
+    sink.onChunk(makeChunk(id, created, model, {role: "assistant"}, null));
 
     let prefixToStrip = stripPrefix ?? "";
     try {
@@ -678,16 +700,14 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
             ...(reasoning.thoughtTokens != null ? {budgets: {thoughtTokens: reasoning.thoughtTokens}} : {}),
             onTextChunk(rawText: string) {
                 let text = rawText;
-                // Strip injected responsePrefix from the head of the stream
                 if (prefixToStrip.length > 0) {
                     if (text.startsWith(prefixToStrip)) {
                         text = text.slice(prefixToStrip.length);
                         prefixToStrip = "";
                     } else if (prefixToStrip.startsWith(text)) {
                         prefixToStrip = prefixToStrip.slice(text.length);
-                        return; // entire chunk consumed by prefix
+                        return;
                     } else {
-                        // No clean alignment — give up stripping.
                         prefixToStrip = "";
                     }
                 }
@@ -695,15 +715,14 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
                 const visible = sniffer.feed(text);
                 if (visible.length === 0) return;
                 if (!useReasoningSplitter) {
-                    // format=none: emit as content directly
                     visibleContentEmitted += visible;
-                    sse.send(makeChunk(id, created, model, {content: visible}, null));
+                    sink.onChunk(makeChunk(id, created, model, {content: visible}, null));
                     return;
                 }
                 const part = splitter.feed(visible);
                 if (part.content) visibleContentEmitted += part.content;
                 if (part.content || part.reasoning) {
-                    sse.send(makeChunk(id, created, model, {
+                    sink.onChunk(makeChunk(id, created, model, {
                         ...(part.content ? {content: part.content} : {}),
                         ...(part.reasoning ? {reasoning_content: part.reasoning} : {})
                     }, null));
@@ -711,17 +730,16 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
             }
         });
 
-        // Flush sniffer head if undecided / decided text
         const sniffTail = sniffer.flush();
         if (sniffTail.length > 0) {
             if (!useReasoningSplitter) {
                 visibleContentEmitted += sniffTail;
-                sse.send(makeChunk(id, created, model, {content: sniffTail}, null));
+                sink.onChunk(makeChunk(id, created, model, {content: sniffTail}, null));
             } else {
                 const part = splitter.feed(sniffTail);
                 if (part.content) visibleContentEmitted += part.content;
                 if (part.content || part.reasoning) {
-                    sse.send(makeChunk(id, created, model, {
+                    sink.onChunk(makeChunk(id, created, model, {
                         ...(part.content ? {content: part.content} : {}),
                         ...(part.reasoning ? {reasoning_content: part.reasoning} : {})
                     }, null));
@@ -733,27 +751,25 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
             const tail = splitter.flush();
             if (tail.content) visibleContentEmitted += tail.content;
             if (tail.content || tail.reasoning) {
-                sse.send(makeChunk(id, created, model, {
+                sink.onChunk(makeChunk(id, created, model, {
                     ...(tail.content ? {content: tail.content} : {}),
                     ...(tail.reasoning ? {reasoning_content: tail.reasoning} : {})
                 }, null));
             }
         }
 
-        // Budget exhausted? Emit fallback content message before final chunk.
         const stopReasonForBudget = mapStopReason((meta as any).stopReason);
         const budgetMsg = maybeApplyBudgetExhaustionMessage("", stopReasonForBudget, reasoning);
         if (visibleContentEmitted.trim().length === 0 && budgetMsg.length > 0) {
-            sse.send(makeChunk(id, created, model, {content: budgetMsg}, null));
+            sink.onChunk(makeChunk(id, created, model, {content: budgetMsg}, null));
         }
 
-        // Tool extraction is whole-text only in Phase 1 — emit as single chunk after stream.
         const fullSplit = splitReasoning(totalRaw);
         const {toolCalls, leak} = extractToolCallsForFormat(fullSplit.content, declaredTools, opts.useQwenFormat);
         if (toolCalls.length > 0) {
             for (let i = 0; i < toolCalls.length; i++) {
                 const tc = toolCalls[i]!;
-                sse.send(makeChunk(id, created, model, {
+                sink.onChunk(makeChunk(id, created, model, {
                     tool_calls: [{
                         index: i,
                         id: tc.id,
@@ -780,25 +796,82 @@ async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerRes
             };
         }
         recordChatTokens(opts.promptTokens, completionTokens);
-        sse.send(finalChunk);
-        sse.done();
+        sink.onChunk(finalChunk);
+        sink.onDone();
+        return {type: "completion"};
     } catch (err) {
-        // Client 已斷：靜默 return，不寫 sse.error（EPIPE）也不算 server error。
-        if (abortSignal.aborted) return;
+        if (abortSignal.aborted) return {type: "aborted"};
         if (isContextOverflowError(err)) {
             incChatError("overflow");
+            return {type: "contextOverflow", underlying: err};
+        }
+        incChatError("other");
+        sink.onError(err instanceof Error ? err : new Error(String(err)));
+        return {type: "completion"};
+    }
+}
+
+/**
+ * HTTP wrapper：把 IncomingMessage/ServerResponse 包成 SseWriter sink，串接
+ * keepalive ping + res.destroyed 偵測（embedded path 不需要），呼叫 core
+ * function。維持與舊 runStreaming 完全一樣的對外行為。
+ */
+async function runStreaming(opts: RunCtx & {req: IncomingMessage, res: ServerResponse}): Promise<void> {
+    const {res, id, abort, body, session} = opts;
+    const abortSignal = abort.signal;
+    const sse = new SseWriter(res);
+
+    // (A) Streaming keepalive ping — 每 KEEPALIVE_INTERVAL_MS 寫一行 SSE comment
+    // （spec 規定 client 必須忽略以 ":" 開頭的行）。寫失敗（EPIPE/ECONNRESET）或
+    // res 被 destroy 時主動 abort，cover「fetch AbortController 客戶端 abort 但
+    // TCP 沒關」這條（Bun / undici 可能不發 FIN）— req.on('close') 永不觸發，但
+    // 實際上 client 不再讀，久了 server 寫的 chunks 會塞滿 TCP send buffer 然後
+    // write 開始 throw／res 變 destroyed，這時被偵測到。
+    const KEEPALIVE_INTERVAL_MS = Number(process.env.TCQ_STREAM_KEEPALIVE_MS) || 10_000;
+    const keepalive = setInterval(() => {
+        if (abortSignal.aborted) return;
+        try {
+            if (res.destroyed || res.writableEnded) {
+                // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
+                console.warn(`[TCQ-shim] stream id=${id} res destroyed/ended — aborting`);
+                abort.abort();
+                return;
+            }
+            const ok = res.write(": keep-alive\n\n");
+            if (!ok && (res.destroyed || res.writableEnded)) abort.abort();
+        } catch (e) {
+            // biome-ignore lint/suspicious/noConsole: loud warn for diagnostic
+            console.warn(`[TCQ-shim] stream id=${id} keepalive write failed: ${(e as Error).message} — aborting`);
+            abort.abort();
+        }
+    }, KEEPALIVE_INTERVAL_MS);
+    abortSignal.addEventListener("abort", () => clearInterval(keepalive));
+
+    const sink: StreamingSink = {
+        onChunk: (chunk) => sse.send(chunk),
+        onError: (err) => {
+            // Client 已斷：靜默 return，不寫 sse.error（EPIPE）也不算 server error。
+            if (abortSignal.aborted) return;
+            sse.error(err);
+        },
+        onDone: () => sse.done(),
+    };
+
+    try {
+        const result = await runChatCompletionCoreStreaming(opts, sink);
+        if (result.type === "aborted") return;
+        if (result.type === "contextOverflow") {
+            if (abortSignal.aborted) return;
             // SSE already opened with HTTP 200 — best we can do is emit a
             // structured error event that mirrors the 413 JSON body.
             sse.error(new Error(makeContextLengthExceededError({
                 promptTokens: opts.promptTokens,
                 maxTokens: body.max_tokens,
                 ctxSize: session.options.contextSize,
-                underlying: err
+                underlying: result.underlying
             }).error.message));
             return;
         }
-        incChatError("other");
-        sse.error(err);
     } finally {
         clearInterval(keepalive);
     }

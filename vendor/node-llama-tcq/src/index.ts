@@ -382,6 +382,8 @@ export {
     countTokens,
     countFullPromptTokens,
     runChatCompletionCoreNonStreaming,
+    runChatCompletionCoreStreaming,
+    type StreamingSink,
     type RunCtx
 } from "./server/chatCompletions.js";
 export {isQwenModel} from "./server/qwenToolFormat.js";
@@ -396,6 +398,17 @@ export {
     type ServerSession
 } from "./server/session.js";
 export {resolveCacheType, type ResolvedCacheType} from "./server/tcqPresetMap.js";
+// G5: vision pipeline core — 給 embedded adapter 重用，與 HTTP server 路徑共用
+// 同一份 mtmd tokenize/eval/generate + Qwen tool parse 邏輯。
+export {
+    runVisionChatCompletionCoreNonStreaming,
+    buildVisionPrompt,
+    type VisionCoreResult,
+    type VisionCoreInput,
+} from "./server/visionInference.js";
+export {extractMediaParts, type MediaInput} from "./server/visionPath.js";
+export {resolveMedia, cleanupMedia, type ResolvedMedia} from "./server/mediaResolver.js";
+export {buildQwenToolChoicePrefix} from "./server/qwenToolFormat.js";
 export {buildRepeatPenalty} from "./server/samplerCoalesce.js";
 export {bundleResponse} from "./server/segmentExtract.js";
 export {toOpenAIFinishReason} from "./server/finishReason.js";

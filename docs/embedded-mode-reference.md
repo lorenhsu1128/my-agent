@@ -155,30 +155,44 @@ embedded adapter 提供「fetch-shaped function」給 Anthropic SDK 注入：
 
 ### 輸出
 
-- **Non-streaming**：JSON `application/json`，Anthropic Message shape（id / content blocks / usage / stop_reason）
-- **Streaming SSE**：以 `text/event-stream` 自訂序列化
-  - `message_start`
-  - per block: `content_block_start` → `content_block_delta` → `content_block_stop`
-    - 支援 `text` / `tool_use`（轉 `input_json_delta`）/ `thinking`（轉 `thinking_delta`）
-  - `message_delta`（stop_reason / usage）
-  - `message_stop`
+- **Non-streaming**：JSON `application/json`，Anthropic Message shape（id / content blocks / usage / stop_reason）— 走 `tcqRunCoreNonStreaming`
+- **Streaming SSE**：byte-pipe pipeline（B 階段）
+  1. `tcqRunCoreStreaming(runCtx, sink)` 在 background 跑，token-by-token 餵 `sink.onChunk(OpenAIChatChunk)`
+  2. sink 序列化為 `data: {json}\n\n` 進 upstream `ReadableStream<Uint8Array>`
+  3. `translateOpenAIStreamToAnthropic(upstream, model, msgId, callSite, 'tcq')` 翻譯
+     - watchSseStream 內建 interChunk / reasoning / tokenCap 三層 watchdog 自動套用
+     - watchdog 觸發 → catch WatchdogAbortError → 補 `content_block_stop` ＋ `message_delta`（含 watchdog→stop_reason mapping）+ `message_stop`
+  4. `sseGeneratorToStream` 包成 `text/event-stream` Response
+  5. translator 結束（不論 graceful or watchdog abort）→ `abort.abort()` 反向通知 background tcq core 停止生成
 - **錯誤回應**：
-  - `499` aborted
-  - `413` context overflow
+  - `499` aborted（embedded fetchFn level）
+  - `413` context overflow（preflight `promptTokens + max_tokens > ctxSize`）
+  - `500` vision tokenize/eval failed
 
 ---
 
 ## 9. Vision / Audio multimodal 路徑
 
-當 `body.messages` 含 `image_url` / `audio_url` / `input_audio` block 且 `state.mtmdCtx != null`：
+A 階段重寫 — embedded 與 HTTP server `handleChatWithVision` 共用同一份 vision pipeline：
 
-1. `extractMediaInput()` 把 data URL / `file://` / 絕對路徑解析成檔案路徑陣列，base64 寫 temp 檔
-2. `mtmdCtx.tokenize({text, media})` → chunks
-3. `mtmdCtx.evalChunks(context, chunks, 0, {seqId})`
-4. `AddonSampler` + `mtmdCtx.generate()` 一次性產出 reply
-5. temp 檔在 `finally` block 清理
+1. **`tcqExtractMediaParts(messages)`**：列出 `image_url` / `audio_url` / `input_audio` block
+2. **`tcqBuildVisionPrompt(messages, mediaParts, marker, {useQwenFormat, tools, toolChoicePrefix})`**：
+   - 拼出 system + history + last-user with `<__media__>` markers 的 ChatML prompt
+   - useQwenFormat + tools → 自動附 Qwen tools system block
+   - `buildQwenToolChoicePrefix(body.tool_choice)` 注入 assistant 前綴
+3. **`tcqResolveMedia(url)`**：data: / file:// / http(s) / 絕對路徑 → 本地檔
+4. **`tcqRunVisionChatCompletionCoreNonStreaming(input)`**：
+   - `resetSessionSequence`（libmtmd KV 殘留乾淨）
+   - `mtmdCtx.tokenize` → context overflow preflight → `mtmdCtx.evalChunks`
+   - `AddonSampler.applyConfig({temp, topK, topP, minP, seed})`
+   - `mtmdCtx.generate`
+   - `splitReasoning` + `parseQwenToolCalls`（toolChoicePrefix 前綴補正）
+5. **`translateChatCompletionToAnthropic(completion, model, 'tcq')`**：產 Anthropic JSON response
+6. **`finally cleanupMedia()`**：刪除 temp 檔
 
-**限制**：vision 路徑目前不走 TCQ-shim core，tools 不會被解析；v2 整合到 `runChatCompletionCoreNonStreaming`。
+**驗證**（embeddedVisionToolE2E）：圖（網球選手 jpg）+ mascot tools → LLM 描述圖 + dispatch `set_expression(surprised)` + `say("網球選手正揮拍擊球")`。
+
+**v1 限制**：vision 路徑只支援 non-streaming（一次 batch generate）；vision streaming sink 留給 v2。
 
 ---
 
@@ -253,12 +267,14 @@ KV cache 不會在 request 之間漂移；長對話會被 context shift 自動 t
 
 | 項目 | 狀態 |
 |---|---|
-| Vision / audio 純文字以外路徑 | 不走 TCQ-shim core，tools 不解析（v2 整合） |
-| Streaming 真正 token-by-token push | v1 一次拿完整 reply 再序列化成 SSE events；v2 整合 `runChatCompletionCoreStreaming` |
-| Token cap / interChunk / reasoning watchdog | jsonc 有 schema 但 embedded 路徑沒接（Watchdog 目前是 fetch adapter 專屬） |
+| Vision / audio 純文字以外路徑 | ✅ **G5 完成**：embedded vision branch 改走 `runVisionChatCompletionCoreNonStreaming`，與 HTTP server `handleChatWithVision` 共用同一份 mtmd pipeline；tools / Qwen format / reasoning split 全部生效（v1 vision 仍 batch 模式不 streaming） |
+| Streaming 真正 token-by-token push | ✅ **B 完成**：`runChatCompletionCoreStreaming` 抽出，embedded 走 byte-pipe 進 `translateOpenAIStreamToAnthropic`；wire-level 驗證 9 chunks / 29-46ms gaps |
+| Token cap / interChunk / reasoning watchdog | ✅ **C 完成**：embedded streaming 路徑透過 translator 內建 `watchSseStream` 三層全自動生效，graceful close + `abort.abort()` 反向通知 GPU 停止 |
+| Streaming vision | 不支援（v1 vision 走 non-streaming）；v2 補 streaming vision sink |
 | macOS Metal TCQ | node-llama-tcq fork 尚未實作；fallback `f16` |
 | 多 model 同時載入 | TCQ-shim 是單 slot singleton，切換 model 必須先 dispose；embedded 自動繼承此限制 |
 | 跨進程 daemon WS（opt-in） | M-MASCOT-EMBED Phase 4 已完成 Bun.serve → Node ws+http 抽象 |
+| `session.abort()` | sessionAdapter 目前 no-op（Phase 5 placeholder）；watchdog / SDK signal 路徑仍可中止 turn |
 
 ---
 
@@ -267,13 +283,19 @@ KV cache 不會在 request 之間漂移；長對話會被 context shift 自動 t
 | 測試 | 路徑 | 用途 |
 |---|---|---|
 | `gpuSanityCheck.mjs` | `tests/integration/` | 繞過 my-agent，直接用 node-llama-tcq 載入跑推論，驗證 binding GPU 行為 |
-| `gpuProofE2E.mjs` | `tests/integration/` | 端到端透過 AgentEmbedded 觸發推論，nvidia-smi 100ms 採樣驗證 GPU util / VRAM 對比 |
+| `gpuProofE2E.mjs` | `tests/integration/` | 端到端透過 AgentEmbedded 觸發推論，nvidia-smi 採樣驗證 GPU util / VRAM 對比 |
 | `agentScenariosE2E.mjs` | `tests/integration/` | 10 個對話情境（中英 / 顯式 tool / 隱式 tool / 多步 chain / 拒絕 tool / 閒聊 / 模糊指示） |
+| `embeddedStreamingTimingE2E.mjs` | `tests/integration/` | B 階段：sink debug log 解析 wire-level chunks，驗證 token-by-token streaming |
+| `embeddedWatchdogE2E.mjs` | `tests/integration/` | C 階段：tokenCap / interChunk / disabled 三個獨立子 process，驗證 watchdog graceful close |
+| `embeddedVisionToolE2E.mjs` | `tests/integration/` | A 階段：圖 + mascot tools → LLM 描述圖 + 觸發 tool dispatch |
 
-最近驗證結果（Windows / CUDA / Qwen3.5-9B-Q4_K_M）：
+最近驗證結果（Windows / CUDA / Qwen3.5-9B-Q4_K_M / 128K ctx）：
 - `gpuSanityCheck`：GPU peak 95%, avg 64.5%, VRAM 5708 MiB
 - `gpuProofE2E`：GPU peak 65%, VRAM 7968 MiB，debug log 顯示 `k=turbo4 v=turbo4 batch=2048 threads=12 flashAttn=true noMmap=true`
 - `agentScenariosE2E`：10/10 PASS（含 S7 multi-step 16 dispatch）
+- `embeddedStreamingTimingE2E`：T1 incremental PASS（9 chunks, gaps 29-46ms）
+- `embeddedWatchdogE2E`：3/3 PASS（tokenCap @ 51 tokens > cap 50；interChunk @ gap 5010ms > 100ms；disabled 完整 837 字回應）
+- `embeddedVisionToolE2E`：PASS（網球選手圖 → set_expression(surprised) + say("網球選手正揮拍擊球")）
 
 ---
 

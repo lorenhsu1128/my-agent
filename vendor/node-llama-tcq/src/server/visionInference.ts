@@ -478,3 +478,164 @@ function renderMessageWithMarkers(m: OpenAIMessage, marker: string, mediaOut: Me
     }
     return parts.join("\n");
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// G5: Embedded mode reuse — 暴露給 in-process adapter 直接呼叫的 vision
+// pipeline core。HTTP 路徑（handleChatWithVision）不變；core 函式只跑 mtmd
+// tokenize/eval/generate + Qwen tool parse，不寫 res 不取 lock（caller 負責）。
+// 對齊既有 handleChatWithVision 的 non-streaming 行為。
+// ──────────────────────────────────────────────────────────────────────────
+
+export type VisionCoreResult =
+    | {type: "completion"; completion: OpenAIChatCompletion}
+    | {type: "aborted"}
+    | {type: "contextOverflow"; promptTokens?: number; underlying?: unknown}
+    | {type: "tokenizeFailed"; message: string}
+    | {type: "evalFailed"; message: string};
+
+export interface VisionCoreInput {
+    session: ServerSession;
+    fullText: string;
+    mediaInputs: MtmdMediaInput[];
+    body: OpenAIChatRequest;
+    declaredTools: OpenAIToolDef[];
+    useQwenFormat: boolean;
+    toolChoicePrefix: string | undefined;
+    id: string;
+    created: number;
+    model: string;
+    maxTokens: number;
+    /** abort 由 caller 提供以串接到後續 generate（v1 預留欄位，目前 mtmdCtx.generate
+     *  未接 signal — embedded 仍可在外層 race abort 結束 turn） */
+    abortSignal?: AbortSignal;
+}
+
+/**
+ * Embedded 用 vision pipeline core — 不依賴 IncomingMessage/ServerResponse。
+ *
+ * 與既有 handleChatWithVision + runVisionNonStreaming 行為對齊：
+ *  - resetSessionSequence（libmtmd KV 殘留乾淨）
+ *  - mtmdCtx.tokenize → contextOverflow preflight → evalChunks
+ *  - AddonSampler.applyConfig（沿用既有 sampler 預設 + body 覆蓋）
+ *  - mtmdCtx.generate
+ *  - splitReasoning + parseQwenToolCalls（toolChoicePrefix 前綴補正）
+ *  - 回傳 OpenAIChatCompletion JSON
+ *
+ * Caller 通常包 `withLock(session.inferenceLockScope, ...)` 避免並發 KV 衝突。
+ * Embedded mode 單 slot context 通常天然單請求，可省略 lock。
+ */
+export async function runVisionChatCompletionCoreNonStreaming(
+    input: VisionCoreInput
+): Promise<VisionCoreResult> {
+    const {session, fullText, mediaInputs, body, declaredTools, useQwenFormat,
+        toolChoicePrefix, id, created, model, maxTokens} = input;
+    const mtmdCtx = session.mtmdCtx;
+    if (mtmdCtx == null) {
+        return {type: "evalFailed", message: "mtmdCtx is null (no --mmproj loaded)"};
+    }
+
+    await resetSessionSequence(session);
+    const visionSeq = session.sequence;
+
+    let chunks;
+    try {
+        chunks = await mtmdCtx.tokenize({text: fullText, media: mediaInputs});
+    } catch (err) {
+        if (isContextOverflowError(err)) {
+            incChatError("overflow");
+            return {type: "contextOverflow", promptTokens: 0, underlying: err};
+        }
+        incChatError("other");
+        return {type: "tokenizeFailed", message: (err as Error).message};
+    }
+
+    const promptTokens = chunks.totalTokens;
+    if (promptTokens + maxTokens > session.options.contextSize) {
+        chunks.dispose();
+        incChatError("overflow");
+        return {type: "contextOverflow", promptTokens};
+    }
+
+    let nPast: number;
+    try {
+        nPast = await mtmdCtx.evalChunks(session.context, chunks, 0, {
+            seqId: ((visionSeq as any)._sequenceId ?? (visionSeq as any).sequenceId ?? 0),
+            nBatch: 512,
+            logitsLast: true,
+        });
+    } catch (err) {
+        chunks.dispose();
+        if (isContextOverflowError(err)) {
+            incChatError("overflow");
+            return {type: "contextOverflow", promptTokens, underlying: err};
+        }
+        incChatError("other");
+        return {type: "evalFailed", message: (err as Error).message};
+    }
+
+    // Build sampler — 沿用 handleChatWithVision 預設 + body 顯式覆蓋
+    const bindings = (session.model as any)._llama._bindings;
+    const sampler = new bindings.AddonSampler((session.model as any)._model);
+    sampler.applyConfig({
+        temperature: body.temperature ?? 0.7,
+        topK: body.top_k ?? 40,
+        topP: body.top_p ?? 0.95,
+        minP: 0.05,
+        ...(body.seed != null ? {seed: body.seed} : {}),
+    });
+
+    try {
+        const result = await mtmdCtx.generate(
+            session.context, sampler, nPast, maxTokens,
+            {seqId: ((visionSeq as any)._sequenceId ?? (visionSeq as any).sequenceId ?? 0)},
+        );
+        const split = splitReasoning(result.text);
+        const completionTokens = result.tokens.length;
+
+        let toolCalls: ReturnType<typeof parseQwenToolCalls>["toolCalls"] = [];
+        let visibleContent = split.content;
+        let leak: ToolCallLeakReport | null = null;
+        if (useQwenFormat && declaredTools.length > 0) {
+            const textForExtract = (toolChoicePrefix ?? "") + split.content;
+            const parsed = parseQwenToolCalls(textForExtract, declaredTools);
+            toolCalls = parsed.toolCalls;
+            leak = parsed.leak;
+            if (parsed.leak != null) warnVisionToolLeak(parsed.leak, parsed.toolCalls.length);
+            if (toolCalls.length > 0) {
+                visibleContent = parsed.content;
+                if (toolChoicePrefix && visibleContent.startsWith(toolChoicePrefix)) {
+                    visibleContent = visibleContent.slice(toolChoicePrefix.length);
+                }
+            }
+        }
+
+        const stopReason = completionTokens >= maxTokens ? "maxTokens" as const : undefined;
+        const completion: OpenAIChatCompletion = {
+            id,
+            object: SHIM_OBJECT_NON_STREAM,
+            created,
+            model,
+            choices: [{
+                index: 0,
+                message: {
+                    role: "assistant",
+                    content: toolCalls.length > 0 ? null : visibleContent,
+                    reasoning_content: split.reasoning ?? null,
+                    ...(toolCalls.length > 0 ? {tool_calls: toolCalls} : {}),
+                },
+                finish_reason: toOpenAIFinishReason(stopReason, toolCalls.length > 0),
+            }],
+            usage: makeUsage(promptTokens, completionTokens),
+            ...(leak != null ? {_qwen_tool_leak: {markers: leak.markers, recovered: toolCalls.length, contentLength: leak.contentLength, snippet: leak.snippet}} : {}),
+        };
+        recordChatTokens(promptTokens, completionTokens);
+        return {type: "completion", completion};
+    } finally {
+        try { sampler.dispose(); } catch { /* */ }
+        chunks.dispose();
+    }
+}
+
+// 給 embedded 用的 buildVisionPrompt 包裝（同名 export 暴露既有實作）
+export {buildVisionPrompt};
+

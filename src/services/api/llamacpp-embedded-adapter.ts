@@ -34,10 +34,19 @@ import {
 import {
     packMessages as tcqPackMessages,
     runChatCompletionCoreNonStreaming as tcqRunCoreNonStreaming,
+    runChatCompletionCoreStreaming as tcqRunCoreStreaming,
     isQwenModel as tcqIsQwenModel,
     countFullPromptTokens as tcqCountFullPromptTokens,
     ensureSession as tcqEnsureSession,
+    // G5: vision pipeline core — embedded vision branch 改走 tcq-shim 同一份邏輯
+    runVisionChatCompletionCoreNonStreaming as tcqRunVisionCore,
+    buildVisionPrompt as tcqBuildVisionPrompt,
+    extractMediaParts as tcqExtractMediaParts,
+    resolveMedia as tcqResolveMedia,
+    cleanupMedia as tcqCleanupMedia,
+    buildQwenToolChoicePrefix as tcqBuildQwenToolChoicePrefix,
     type RunCtx as TcqRunCtx,
+    type StreamingSink as TcqStreamingSink,
     type ServerSession as TcqServerSession,
     type SessionInitOptions as TcqSessionInitOptions,
 } from "node-llama-tcq";
@@ -149,6 +158,39 @@ function toSessionInitOptions(config: EmbeddedRoutingConfig): TcqSessionInitOpti
         reasoning: config.reasoning ?? "auto",
         samplerDefaults: config.samplerDefaults,
     };
+}
+
+/**
+ * 從 Anthropic request body 推 watchdog callSite。
+ *
+ * Anthropic Messages API metadata 沒有標準 callSite 欄位，my-agent 的 fetch adapter
+ * 也是 hardcoded 'turn'（caller 沒注入機制）。為了讓 tokenCap watchdog 在 embedded
+ * 模式對 cron/memoryPrefetch 等 background 任務套用對應 cap，這裡支援兩種 caller
+ * 注入方式（任一即可）：
+ *   1. anthropicBody.metadata.callSite — 字串 'turn'|'memoryPrefetch'|...
+ *   2. anthropicBody.metadata.user_id starts with 'callSite:<name>'
+ * 都沒提供 → 預設 'turn'（與 fetch adapter 行為一致）。
+ */
+function inferCallSite(
+    anthropicBody: Record<string, unknown>,
+): "turn" | "memoryPrefetch" | "sideQuery" | "background" | "vision" {
+    const meta = anthropicBody.metadata as Record<string, unknown> | undefined;
+    if (!meta) return "turn";
+    const direct = meta.callSite;
+    if (typeof direct === "string"
+        && (direct === "turn" || direct === "memoryPrefetch"
+            || direct === "sideQuery" || direct === "background"
+            || direct === "vision")) {
+        return direct;
+    }
+    const userId = meta.user_id;
+    if (typeof userId === "string" && userId.startsWith("callSite:")) {
+        const name = userId.slice("callSite:".length);
+        if (name === "turn" || name === "memoryPrefetch"
+            || name === "sideQuery" || name === "background"
+            || name === "vision") return name;
+    }
+    return "turn";
 }
 
 async function ensureState(config: EmbeddedRoutingConfig): Promise<EmbeddedAdapterState> {
@@ -387,32 +429,93 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
 
         const wantsMedia = hasMediaContent(body.messages);
         const mediaAvailable = state.mtmdCtx != null;
+        const useQwenFormatGlobal = tcqIsQwenModel(modelLabel);
 
-        // Vision path（含 image / audio）目前還沒接 TCQ-shim 核心 — 走自家 batch
-        // 流程。tools 在 vision 模式下也不會被解析。v2 再整合。
+        // Vision / audio path（A 階段）— 改走 tcq-shim 同一份 vision core：
+        //   buildVisionPrompt（含 system + tools system block + history + markers）
+        //   resolveMedia（data:/file://下載/解析為 local path）
+        //   runVisionChatCompletionCoreNonStreaming（tokenize / evalChunks / sampler /
+        //   generate / splitReasoning / parseQwenToolCalls） → OpenAIChatCompletion
+        // 與 HTTP server handleChatWithVision 完全一致行為（含 tools 解析）。
+        // v1 vision 不做 streaming（沿用 batch 路徑）— 完成後給 translator 翻成 Anthropic。
         if (wantsMedia && mediaAvailable) {
-            const reply = await runVisionPath(state, body);
-            const openaiJson = {
-                id: "embedded-" + Date.now(),
-                object: "chat.completion" as const,
-                created: Math.floor(Date.now() / 1000),
-                model: modelLabel,
-                choices: [{
-                    index: 0,
-                    message: {role: "assistant" as const, content: reply},
-                    finish_reason: "stop" as const,
-                }],
-                usage: {prompt_tokens: 0, completion_tokens: 0, total_tokens: 0},
-            };
-            const anthropicJson = translateChatCompletionToAnthropic(
-                openaiJson as Parameters<typeof translateChatCompletionToAnthropic>[0],
-                modelLabel,
-                "tcq",
-            );
-            return new Response(JSON.stringify(anthropicJson), {
-                status: 200,
-                headers: {"content-type": "application/json"},
-            });
+            const mtmdCtx = state.mtmdCtx;
+            const mediaParts = tcqExtractMediaParts(body.messages as Parameters<typeof tcqExtractMediaParts>[0]);
+            if (mediaParts.length === 0) {
+                // 不應該到這（hasMediaContent 已偵測），保險起見走純文字路徑
+                if (process.env.LLAMA_DEBUG === "1")
+                    console.error(`[embedded] vision detected but no extractable media parts; falling through to text path`);
+            } else {
+                const declaredTools = (body.tools ?? []) as Parameters<typeof tcqRunVisionCore>[0]["declaredTools"];
+                const toolChoicePrefix = (useQwenFormatGlobal && declaredTools.length > 0)
+                    ? tcqBuildQwenToolChoicePrefix((body as any).tool_choice)
+                    : undefined;
+                const {systemPrompt, conversationText, mediaInOrder} = tcqBuildVisionPrompt(
+                    body.messages as Parameters<typeof tcqBuildVisionPrompt>[0],
+                    mediaParts,
+                    mtmdCtx.defaultMarker,
+                    {useQwenFormat: useQwenFormatGlobal, tools: declaredTools as any, toolChoicePrefix},
+                );
+                const fullText = systemPrompt
+                    ? `<|im_start|>system\n${systemPrompt}<|im_end|>\n${conversationText}`
+                    : conversationText;
+
+                // resolveMedia：data: / file:// / http(s) / 絕對路徑 → 本地檔
+                let resolved: Awaited<ReturnType<typeof tcqResolveMedia>>[] = [];
+                const cleanup = async () => {
+                    await Promise.all(resolved.map((r) => tcqCleanupMedia(r)));
+                };
+                try {
+                    resolved = await Promise.all(
+                        mediaInOrder.map((m) => tcqResolveMedia(m.url)),
+                    );
+                    const mediaInputs = resolved.map((r) => ({type: "file" as const, data: r.filePath}));
+
+                    if (process.env.LLAMA_DEBUG === "1") {
+                        console.error(`[embedded] vision #${callN} tools=${declaredTools.length} qwen=${useQwenFormatGlobal} mediaCount=${mediaInputs.length} sysLen=${systemPrompt.length} convLen=${conversationText.length}`);
+                    }
+
+                    const result = await tcqRunVisionCore({
+                        session: state.serverSession,
+                        fullText,
+                        mediaInputs,
+                        body,
+                        declaredTools,
+                        useQwenFormat: useQwenFormatGlobal,
+                        toolChoicePrefix,
+                        id: "chatcmpl-embedded-vision-" + Date.now(),
+                        created: Math.floor(Date.now() / 1000),
+                        model: modelLabel,
+                        maxTokens: body.max_tokens ?? 512,
+                    });
+
+                    if (result.type === "aborted") {
+                        return new Response("aborted", {status: 499});
+                    }
+                    if (result.type === "contextOverflow") {
+                        return new Response(JSON.stringify({
+                            error: {message: "context length exceeded", type: "invalid_request_error"},
+                        }), {status: 413, headers: {"content-type": "application/json"}});
+                    }
+                    if (result.type === "tokenizeFailed" || result.type === "evalFailed") {
+                        return new Response(JSON.stringify({
+                            error: {message: `vision_${result.type}: ${result.message}`, type: "server_error"},
+                        }), {status: 500, headers: {"content-type": "application/json"}});
+                    }
+
+                    const anthropicJson = translateChatCompletionToAnthropic(
+                        result.completion as unknown as Parameters<typeof translateChatCompletionToAnthropic>[0],
+                        modelLabel,
+                        "tcq",
+                    );
+                    return new Response(JSON.stringify(anthropicJson), {
+                        status: 200,
+                        headers: {"content-type": "application/json"},
+                    });
+                } finally {
+                    await cleanup();
+                }
+            }
         }
 
         // 純文字路徑 — reuse TCQ-shim 核心：packMessages 把 OpenAI messages + tools
@@ -457,6 +560,19 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
             lastUserPrompt,
         );
 
+        // Preflight context-overflow（與 HTTP handleChatCompletions 對齊）—
+        // 在開始推論前先檢查，避免 mid-stream sink.onError 讓 SDK 拿到含糊錯訊。
+        const ctxSize = serverSession.options.contextSize;
+        const effectiveMax = body.max_tokens ?? 0;
+        if (promptTokens + effectiveMax > ctxSize) {
+            return new Response(JSON.stringify({
+                error: {
+                    message: `context length exceeded (prompt=${promptTokens} + max=${effectiveMax} > ctx=${ctxSize})`,
+                    type: "invalid_request_error",
+                },
+            }), {status: 413, headers: {"content-type": "application/json"}});
+        }
+
         const abort = new AbortController();
         // 若 SDK 透過 init.signal 傳取消訊號，串接到 promptWithMeta
         if (init.signal) {
@@ -480,119 +596,105 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
             abort,
         };
 
-        const result = await tcqRunCoreNonStreaming(runCtx);
-        if (result.type === "aborted") {
-            return new Response("aborted", {status: 499});
-        }
-        if (result.type === "contextOverflow") {
-            return new Response(JSON.stringify({
-                error: {message: "context length exceeded", type: "invalid_request_error"},
-            }), {status: 413, headers: {"content-type": "application/json"}});
-        }
-
-        // Server-side parse 已等價於 TCQ-shim — adapterMode 設 'tcq' 跳過下游 leak parser。
-        const adapterMode: "vanilla" | "tcq" = "tcq";
-        const anthropicJson = translateChatCompletionToAnthropic(
-            result.completion as unknown as Parameters<typeof translateChatCompletionToAnthropic>[0],
-            modelLabel,
-            adapterMode,
-        );
-
+        // Non-streaming：跑 core function 拿完整 OpenAI Completion，翻成 Anthropic JSON。
         if (!isStream) {
+            const result = await tcqRunCoreNonStreaming(runCtx);
+            if (result.type === "aborted") {
+                return new Response("aborted", {status: 499});
+            }
+            if (result.type === "contextOverflow") {
+                return new Response(JSON.stringify({
+                    error: {message: "context length exceeded", type: "invalid_request_error"},
+                }), {status: 413, headers: {"content-type": "application/json"}});
+            }
+
+            // Server-side parse 已等價於 TCQ-shim — adapterMode 設 'tcq' 跳過下游 leak parser。
+            const anthropicJson = translateChatCompletionToAnthropic(
+                result.completion as unknown as Parameters<typeof translateChatCompletionToAnthropic>[0],
+                modelLabel,
+                "tcq",
+            );
             return new Response(JSON.stringify(anthropicJson), {
                 status: 200,
                 headers: {"content-type": "application/json"},
             });
         }
 
-        // Stream 模式 v1：把已產出的 Anthropic Message 序列化為 Anthropic SSE
-        // events。v2 整合 runChatCompletionCoreStreaming 後可逐 token push。
-        const anthropicSseStream = new ReadableStream<Uint8Array>({
-            async start(controller) {
-                const enc = new TextEncoder();
-                const msg = anthropicJson as any;
-                const msgId = msg.id ?? mkMsgId();
-                const writeEvent = (event: string, data: any) => {
-                    controller.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
-                };
-
-                writeEvent("message_start", {
-                    type: "message_start",
-                    message: {
-                        id: msgId,
-                        type: "message",
-                        role: "assistant",
-                        model: msg.model ?? modelLabel,
-                        content: [],
-                        stop_reason: null,
-                        stop_sequence: null,
-                        usage: msg.usage ?? {input_tokens: 0, output_tokens: 0},
-                    },
-                });
-
-                const blocks: any[] = msg.content ?? [];
-                for (let i = 0; i < blocks.length; i++) {
-                    const block = blocks[i];
-                    if (block.type === "text") {
-                        writeEvent("content_block_start", {
-                            type: "content_block_start", index: i,
-                            content_block: {type: "text", text: ""},
-                        });
-                        if (block.text) {
-                            writeEvent("content_block_delta", {
-                                type: "content_block_delta", index: i,
-                                delta: {type: "text_delta", text: block.text},
-                            });
-                        }
-                        writeEvent("content_block_stop", {type: "content_block_stop", index: i});
-                    } else if (block.type === "tool_use") {
-                        writeEvent("content_block_start", {
-                            type: "content_block_start", index: i,
-                            content_block: {
-                                type: "tool_use",
-                                id: block.id,
-                                name: block.name,
-                                input: {},
-                            },
-                        });
-                        writeEvent("content_block_delta", {
-                            type: "content_block_delta", index: i,
-                            delta: {
-                                type: "input_json_delta",
-                                partial_json: JSON.stringify(block.input ?? {}),
-                            },
-                        });
-                        writeEvent("content_block_stop", {type: "content_block_stop", index: i});
-                    } else if (block.type === "thinking") {
-                        writeEvent("content_block_start", {
-                            type: "content_block_start", index: i,
-                            content_block: {type: "thinking", thinking: ""},
-                        });
-                        if (block.thinking) {
-                            writeEvent("content_block_delta", {
-                                type: "content_block_delta", index: i,
-                                delta: {type: "thinking_delta", thinking: block.thinking},
-                            });
-                        }
-                        writeEvent("content_block_stop", {type: "content_block_stop", index: i});
-                    }
-                }
-
-                writeEvent("message_delta", {
-                    type: "message_delta",
-                    delta: {
-                        stop_reason: msg.stop_reason ?? "end_turn",
-                        stop_sequence: msg.stop_sequence ?? null,
-                    },
-                    usage: msg.usage ?? {input_tokens: 0, output_tokens: 0},
-                });
-
-                writeEvent("message_stop", {type: "message_stop"});
-                controller.close();
-            },
+        // Streaming v2：用 byte-pipe 把 tcqRunCoreStreaming sink 串到既有
+        // translateOpenAIStreamToAnthropic — 100% 重用 fetch adapter 的 OpenAI SSE
+        // → Anthropic SSE 翻譯 + watchdog（watchSseStream 在 translator 內部自帶），
+        // 零行為 drift。core 在 background 跑，token 一出來立刻寫進 upstream
+        // ReadableStream，translator 即時翻譯吐出 Anthropic events。
+        const enc = new TextEncoder();
+        let upstreamCtrl!: ReadableStreamDefaultController<Uint8Array>;
+        const upstreamReadable = new ReadableStream<Uint8Array>({
+            start(c) { upstreamCtrl = c; },
         });
 
-        return new Response(anthropicSseStream, {
+        const _tSinkStart = Date.now();
+        let _sinkChunkCount = 0;
+        const sink: TcqStreamingSink = {
+            onChunk(chunk) {
+                upstreamCtrl.enqueue(enc.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+                _sinkChunkCount++;
+                if (process.env.LLAMA_STREAM_DEBUG === "1" && _sinkChunkCount <= 8) {
+                    const delta: any = (chunk.choices?.[0] as any)?.delta ?? {};
+                    const preview = (delta.content ?? delta.reasoning_content ?? "").toString().slice(0, 25);
+                    console.error(`[embedded:sink] +${Date.now() - _tSinkStart}ms #${_sinkChunkCount} "${preview.replace(/\n/g, "\\n")}"`);
+                }
+            },
+            onError(err) {
+                try { upstreamCtrl.error(err); } catch { /* already errored/closed */ }
+            },
+            onDone() {
+                upstreamCtrl.enqueue(enc.encode(`data: [DONE]\n\n`));
+                try { upstreamCtrl.close(); } catch { /* already closed */ }
+            },
+        };
+
+        // background 跑 tcq core — token 即時推進 upstream，main path 同步
+        // 把 upstream 經 translator 翻成 Anthropic SSE 回傳給 SDK
+        void (async () => {
+            try {
+                const result = await tcqRunCoreStreaming(runCtx, sink);
+                if (result.type === "contextOverflow") {
+                    sink.onError(new Error("context length exceeded"));
+                    return;
+                }
+                // 'aborted' 與 'completion' 都已由 sink 處理（aborted: stream 半開 →
+                // SDK abort 時 cancel upstream；completion: onDone 已 close）
+                if (result.type === "aborted") {
+                    try { upstreamCtrl.close(); } catch { /* */ }
+                }
+            } catch (err) {
+                sink.onError(err instanceof Error ? err : new Error(String(err)));
+            }
+        })();
+
+        // 用 fetch adapter 既有翻譯（mode='tcq' 跳過 leak parser）。
+        // translator 內含 watchSseStream（M-LLAMACPP-WATCHDOG）— interChunk / reasoning /
+        // tokenCap 三層 watchdog 在 byte-pipe 上自動生效，watchdog 觸發時 translator
+        // catch WatchdogAbortError 後 yield message_delta + message_stop graceful 結束。
+        // callSite 從 anthropicBody.metadata 推（caller 若提供）— 對應 jsonc tokenCap
+        // per-callSite 設定（turn/memoryPrefetch/sideQuery/background/vision）
+        const callSite = inferCallSite(anthropicBody);
+        const msgId = mkMsgId();
+        const upstreamWrapper = async function* () {
+            try {
+                yield* translateOpenAIStreamToAnthropic(
+                    upstreamReadable, modelLabel, msgId, callSite, "tcq",
+                );
+            } finally {
+                // Translator 結束（不論 watchdog graceful close 或自然 done）→
+                // 反向 abort 背景 tcqRunCoreStreaming，避免 watchdog 後 GPU 還在
+                // 跑沒人讀的 tokens。abort.abort() 對自然 done 是 noop（generation
+                // 已停），對 watchdog 是必要的 GPU 釋放訊號。
+                abort.abort();
+            }
+        };
+        const anthropicReadable = sseGeneratorToStream(upstreamWrapper());
+
+        return new Response(anthropicReadable, {
             status: 200,
             headers: {
                 "content-type": "text/event-stream",
