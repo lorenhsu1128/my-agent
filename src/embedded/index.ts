@@ -47,7 +47,45 @@ import {
   type EmbeddedDaemonServerHandle,
   type EmbeddedDaemonServerOptions,
 } from './daemonServer.js'
+import type {
+  DiscordSupervisor,
+  DiscordTokenSource,
+} from '../discord/discordSupervisor.js'
+import type { DiscordConfig } from '../discordConfig/schema.js'
 import type { PreloadPhase, PreloadProgress } from './types.js'
+
+/** AgentEmbedded.startDiscordBot() 選項。 */
+export interface DiscordBotStartOptions {
+  /** 覆寫 token；優先序：override > DISCORD_BOT_TOKEN env > discord.jsonc */
+  tokenOverride?: string
+  /** 跳過 cfg.enabled 檢查；預設 true（桌寵 UI 透過 toggle 啟用，不必編 jsonc） */
+  forceEnabled?: boolean
+}
+
+/** Discord bot 運行 handle — 對應 supervisor 的 lifecycle。 */
+export interface DiscordBotHandle {
+  readonly isRunning: boolean
+  /** 取得當前載入的 Discord config 快照（含 channelBindings / whitelistUserIds 等） */
+  readonly config: DiscordConfig | null
+  stop(): Promise<void>
+  restart(opts?: DiscordBotStartOptions): Promise<{ ok: boolean; reason?: string }>
+  /** 重讀 config snapshot；token/intents 變更需 restart */
+  reload(): Promise<{ ok: boolean; reason?: string }>
+}
+
+function makeDiscordBotHandle(supervisor: DiscordSupervisor): DiscordBotHandle {
+  return {
+    get isRunning() {
+      return supervisor.isRunning()
+    },
+    get config() {
+      return supervisor.getConfig()
+    },
+    stop: () => supervisor.stop(),
+    restart: opts => supervisor.restart(opts),
+    reload: () => supervisor.reload(),
+  }
+}
 
 // Re-export public types so 桌寵 type-safe import
 export { AgentSession } from './sessionAdapter.js'
@@ -55,6 +93,8 @@ export type {
   EmbeddedDaemonServerHandle,
   EmbeddedDaemonServerOptions,
 } from './daemonServer.js'
+export type { DiscordTokenSource } from '../discord/discordSupervisor.js'
+export type { DiscordConfig } from '../discordConfig/schema.js'
 export type {
   Frame,
   PreloadPhase,
@@ -262,6 +302,52 @@ export class AgentEmbedded extends EventEmitter {
    */
   getDaemonServer(): EmbeddedDaemonServerHandle | null {
     return this.daemonServer
+  }
+
+  /**
+   * 啟動 Discord bot。需先 `startDaemonServer()`。
+   *
+   * Token 解析優先序：tokenOverride > DISCORD_BOT_TOKEN env > discord.jsonc 內 botToken。
+   * 預設 `forceEnabled=true`：跳過 `discord.jsonc` 內 `enabled` 欄位檢查（桌寵
+   * UI 直接 toggle 用，使用者不必手動編輯 jsonc）。
+   *
+   * Channel binding / whitelistUserIds 等其餘設定仍從 `~/.virtual-assistant-desktop/discord.jsonc`
+   * 載入（`seedDiscordConfigIfMissing()` 已自動建立預設範本）。
+   *
+   * @see src/discord/discordSupervisor.ts — 真正啟 Discord gateway 的邏輯
+   */
+  async startDiscordBot(
+    opts: DiscordBotStartOptions = {},
+  ): Promise<DiscordBotHandle> {
+    if (this.disposed) {
+      throw new Error('AgentEmbedded has been shut down')
+    }
+    if (!this.daemonServer) {
+      throw new Error(
+        'startDiscordBot requires startDaemonServer() to be called first',
+      )
+    }
+    const supervisor = this.daemonServer.discordSupervisor
+    if (supervisor.isRunning()) {
+      // 已 running — 回現有 handle（idempotent）
+      return makeDiscordBotHandle(supervisor)
+    }
+    const result = await supervisor.start({
+      tokenOverride: opts.tokenOverride,
+      forceEnabled: opts.forceEnabled ?? true,
+    })
+    if (!result.ok) {
+      throw new Error(`Discord bot start failed: ${result.reason}`)
+    }
+    return makeDiscordBotHandle(supervisor)
+  }
+
+  /**
+   * 取得目前 Discord bot 狀態（未啟動 daemon 或 supervisor 未 start 則 isRunning=false）。
+   */
+  getDiscordBot(): DiscordBotHandle | null {
+    if (!this.daemonServer) return null
+    return makeDiscordBotHandle(this.daemonServer.discordSupervisor)
   }
 
   /**

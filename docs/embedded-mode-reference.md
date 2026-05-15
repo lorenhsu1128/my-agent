@@ -273,7 +273,8 @@ KV cache 不會在 request 之間漂移；長對話會被 context shift 自動 t
 | Streaming vision | 不支援（v1 vision 走 non-streaming）；v2 補 streaming vision sink |
 | macOS Metal TCQ | node-llama-tcq fork 尚未實作；fallback `f16` |
 | 多 model 同時載入 | TCQ-shim 是單 slot singleton，切換 model 必須先 dispose；embedded 自動繼承此限制 |
-| 跨進程 daemon WS（opt-in） | ✅ **G7 Phase 1 完成**：`AgentEmbedded.startDaemonServer({ port? })` 啟 WS，回 `{ url, token, port, defaultProjectCwd, stop() }`；外部 client 連 `ws://host:port/sessions?token=...&source=...&cwd=...` 對話，與 mascot session 共享 LLM 但對話歷史獨立。實作 `src/embedded/daemonServer.ts` 重用 daemon `startDaemon` + ProjectRegistry + factory + sessionBroker，minimal onMessage（input/permission/queryStatus；cron/memory/discord/web RPC 留待 Phase 2/3） |
+| 跨進程 daemon WS（opt-in） | ✅ **G7 Phase 1 完成**：`AgentEmbedded.startDaemonServer({ port? })` 啟 WS，回 `{ url, token, port, defaultProjectCwd, stop() }`；外部 client 連 `ws://host:port/sessions?token=...&source=...&cwd=...` 對話，與 mascot session 共享 LLM 但對話歷史獨立。實作 `src/embedded/daemonServer.ts` 重用 daemon `startDaemon` + ProjectRegistry + factory + sessionBroker，minimal onMessage（input/permission/queryStatus；cron/memory/web RPC 留待 Phase 3） |
+| Discord adapter（opt-in） | ✅ **G7 Phase 2 完成**：`AgentEmbedded.startDiscordBot({ tokenOverride?, forceEnabled? })` 啟 Discord gateway。需先 `startDaemonServer()`。Token 優先序：override > env DISCORD_BOT_TOKEN > discord.jsonc。`forceEnabled=true`（預設）跳過 cfg.enabled 檢查，桌寵 UI 不必手動編 jsonc。Handle 提供 `{ isRunning, config, stop, restart, reload }` 與 supervisor lifecycle 對應 |
 | `session.abort()` | ✅ **G6 完成**：InputQueue 公開 `abort()`；AgentSession.abort() 觸發完整 chain — `currentController.abort()` → runner ac.abort() → ask abortController → fetch init.signal → runCtx.abort → tcqRunCore* 中止生成 → sink onDone → translator finally → 反向 abort 釋放 GPU。e2e 驗 17-26ms latency, 0 token growth |
 
 ---
@@ -290,6 +291,7 @@ KV cache 不會在 request 之間漂移；長對話會被 context shift 自動 t
 | `embeddedVisionToolE2E.mjs` | `tests/integration/` | A 階段：圖 + mascot tools → LLM 描述圖 + 觸發 tool dispatch |
 | `embeddedAbortE2E.mjs` | `tests/integration/` | G6：streaming 中途 `session.abort()` → turnEnd reason='aborted' < 6s + 0 token growth |
 | `embeddedDaemonWsE2E.mjs` | `tests/integration/` | G7 Phase 1：startDaemonServer → 外部 ws client 連入 → hello / turnStart / runnerEvent / turnEnd 完整 frame 流；mascot session 並存 |
+| `embeddedDiscordE2E.mjs` | `tests/integration/` | G7 Phase 2：startDiscordBot 契約驗證（無 daemon throw / 無 token throw / handle shape）；export `MY_AGENT_DISCORD_TOKEN` 進真實連線測試 |
 
 最近驗證結果（Windows / CUDA / Qwen3.5-9B-Q4_K_M / 128K ctx）：
 - `gpuSanityCheck`：GPU peak 95%, avg 64.5%, VRAM 5708 MiB
@@ -300,6 +302,7 @@ KV cache 不會在 request 之間漂移；長對話會被 context shift 自動 t
 - `embeddedVisionToolE2E`：PASS（網球選手圖 → set_expression(surprised) + say("網球選手正揮拍擊球")）
 - `embeddedAbortE2E`：PASS（first chunk +18s → abort 後 26ms turnEnd reason='aborted'，growth=0）
 - `embeddedDaemonWsE2E`：PASS（daemon startup 27ms → WS turn 18.3s done → mascot turn 15.2s done）
+- `embeddedDiscordE2E`：PASS（T1 no-daemon throws / T2 isRunning=false / T3 no-token throws / T4 skipped無 token）
 
 ---
 

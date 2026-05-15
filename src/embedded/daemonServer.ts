@@ -35,6 +35,11 @@ import {
   type ProjectRuntime,
 } from '../daemon/projectRegistry.js'
 import { createDefaultProjectRuntimeFactory } from '../daemon/projectRuntimeFactory.js'
+import {
+  createDiscordSupervisor,
+  type DiscordSupervisor,
+} from '../discord/discordSupervisor.js'
+import { isVisionEnabled } from '../llamacppConfig/loader.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 import type { PermissionMode } from '../types/permissions.js'
 
@@ -72,6 +77,8 @@ export interface EmbeddedDaemonServerHandle {
   readonly registry: ProjectRegistry
   /** Default project runtime */
   readonly defaultRuntime: ProjectRuntime
+  /** Discord supervisor（不自動 start；Phase 2 給 AgentEmbedded.startDiscordBot 用） */
+  readonly discordSupervisor: DiscordSupervisor
 }
 
 /**
@@ -135,6 +142,33 @@ export async function startEmbeddedDaemonServer(
   // Auto-load the starting cwd as the default project.
   const defaultRuntime = await registry.loadProject(cwd)
 
+  // 建 Discord supervisor（不自動 start；AgentEmbedded.startDiscordBot() 才會 start）
+  const discordSupervisor = createDiscordSupervisor({
+    registry,
+    visionEnabled: () => isVisionEnabled(),
+    log: msg => void handle.logger.info(`[discord] ${msg}`),
+    broadcasts: {
+      broadcastPermissionMode: (projectId, mode) => {
+        handle.server!.broadcast(
+          { type: 'permissionModeChanged', projectId, mode },
+          c => c.projectId === projectId,
+        )
+      },
+      broadcastDiscordInbound: (projectId, payload) => {
+        handle.server!.broadcast(
+          { type: 'discordInboundMessage', projectId, ...payload },
+          c => c.projectId === projectId,
+        )
+      },
+      broadcastDiscordTurn: (projectId, payload) => {
+        handle.server!.broadcast(
+          { type: 'discordTurnEvent', projectId, ...payload },
+          c => c.projectId === projectId,
+        )
+      },
+    },
+  })
+
   // M-DISCORD-2：client 連線時若帶 cwd → lazy-load 對應 runtime；失敗 → reject
   const rejectedClients = new Set<string>()
   const pendingClients = new Map<string, string>()
@@ -163,7 +197,7 @@ export async function startEmbeddedDaemonServer(
         type: 'daemonStatus',
         requestId: String(req.requestId ?? ''),
         replCount,
-        discordEnabled: false, // Phase 1 不支援 discord
+        discordEnabled: discordSupervisor.isRunning(),
       })
       return
     }
@@ -274,6 +308,11 @@ export async function startEmbeddedDaemonServer(
 
   const stop = async (): Promise<void> => {
     try {
+      await discordSupervisor.stop()
+    } catch {
+      // best-effort
+    }
+    try {
       await registry.dispose()
     } catch {
       // best-effort
@@ -291,5 +330,6 @@ export async function startEmbeddedDaemonServer(
     daemonHandle: handle,
     registry,
     defaultRuntime,
+    discordSupervisor,
   }
 }
