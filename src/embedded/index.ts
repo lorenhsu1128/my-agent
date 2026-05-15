@@ -42,10 +42,19 @@ import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import type { ClientSource } from '../server/clientRegistry.js'
 
 import { AgentSession } from './sessionAdapter.js'
+import {
+  startEmbeddedDaemonServer,
+  type EmbeddedDaemonServerHandle,
+  type EmbeddedDaemonServerOptions,
+} from './daemonServer.js'
 import type { PreloadPhase, PreloadProgress } from './types.js'
 
 // Re-export public types so 桌寵 type-safe import
 export { AgentSession } from './sessionAdapter.js'
+export type {
+  EmbeddedDaemonServerHandle,
+  EmbeddedDaemonServerOptions,
+} from './daemonServer.js'
 export type {
   Frame,
   PreloadPhase,
@@ -110,6 +119,7 @@ export class AgentEmbedded extends EventEmitter {
   private readonly context: DaemonSessionContext
   private extraTools: Tool[]
   private readonly sessions: Set<AgentSession> = new Set()
+  private daemonServer: EmbeddedDaemonServerHandle | null = null
   private disposed = false
 
   private constructor(
@@ -218,6 +228,43 @@ export class AgentEmbedded extends EventEmitter {
   }
 
   /**
+   * 啟動 opt-in daemon WS server，讓外部 client（my-agent CLI / 第二個視窗 /
+   * Discord adapter / Web UI）連入共用同個 in-process agent。
+   *
+   * - 預設不啟動（mascot 對話走 in-process createSession() 不需要 WS）
+   * - 同一個 AgentEmbedded 只能啟動一次；重複呼叫回現有 handle
+   * - 啟動後，外部 client 連 `ws://host:port/sessions?token=...&source=...&cwd=...`
+   *   即可對話；frame schema 與 createSession() 完全一致
+   * - 與 mascot AgentSession 共用 LLM singleton（TCQ-shim cache），但對話歷史
+   *   獨立（daemon 走自己的 ProjectRegistry + InputQueue）
+   *
+   * @see src/embedded/daemonServer.ts — 實作細節與限制
+   */
+  async startDaemonServer(
+    opts: Omit<EmbeddedDaemonServerOptions, 'cwd'> & { cwd?: string } = {},
+  ): Promise<EmbeddedDaemonServerHandle> {
+    if (this.disposed) {
+      throw new Error('AgentEmbedded has been shut down')
+    }
+    if (this.daemonServer) {
+      return this.daemonServer
+    }
+    const cwd = opts.cwd ?? this.config.cwd ?? process.cwd()
+    this.daemonServer = await startEmbeddedDaemonServer({
+      ...opts,
+      cwd,
+    })
+    return this.daemonServer
+  }
+
+  /**
+   * 取得目前 daemon server handle（未啟動則回 null）。
+   */
+  getDaemonServer(): EmbeddedDaemonServerHandle | null {
+    return this.daemonServer
+  }
+
+  /**
    * 釋放整個 agent：關閉所有 session、dispose context（含 settings watcher）。
    *
    * 注意：node-llama-tcq model / context 由 llamacpp-embedded-adapter
@@ -227,6 +274,15 @@ export class AgentEmbedded extends EventEmitter {
   async shutdown(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    // 先停 daemon server（避免外部 client 在 shutdown 期間還送 input）
+    if (this.daemonServer) {
+      try {
+        await this.daemonServer.stop()
+      } catch {
+        // best-effort
+      }
+      this.daemonServer = null
+    }
     for (const session of this.sessions) {
       try {
         await session.close()
