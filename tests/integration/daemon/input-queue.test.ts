@@ -253,6 +253,87 @@ describe('InputQueue — slash priority', () => {
   })
 })
 
+describe('InputQueue — public abort()', () => {
+  test('abort during RUNNING ends current as aborted, returns to IDLE', async () => {
+    const runner = createDelayedEchoRunner({ chunks: 10, perChunkDelayMs: 30 })
+    q = createInputQueue({ runner, interruptGraceMs: 500 })
+    const ends = collect<TurnEndEvent>(q, 'turnEnd')
+    q.submit('long', {
+      clientId: 'c1',
+      source: 'repl',
+      intent: 'interactive',
+    })
+    await waitFor(() => q!.state === 'RUNNING')
+    await q.abort()
+    expect(q.state).toBe('IDLE')
+    expect(ends.length).toBe(1)
+    expect(ends[0]!.reason).toBe('aborted')
+  })
+
+  test('abort while IDLE is no-op', async () => {
+    q = createInputQueue({ runner: echoRunner })
+    const ends = collect<TurnEndEvent>(q, 'turnEnd')
+    await q.abort()
+    expect(q.state).toBe('IDLE')
+    expect(ends.length).toBe(0)
+  })
+
+  test('concurrent abort calls resolve safely, single turnEnd', async () => {
+    const runner = createDelayedEchoRunner({ chunks: 10, perChunkDelayMs: 30 })
+    q = createInputQueue({ runner, interruptGraceMs: 500 })
+    const ends = collect<TurnEndEvent>(q, 'turnEnd')
+    q.submit('long', {
+      clientId: 'c1',
+      source: 'repl',
+      intent: 'interactive',
+    })
+    await waitFor(() => q!.state === 'RUNNING')
+    await Promise.all([q.abort(), q.abort(), q.abort(), q.abort(), q.abort()])
+    expect(q.state).toBe('IDLE')
+    expect(ends.length).toBe(1)
+    expect(ends[0]!.reason).toBe('aborted')
+  })
+
+  test('abort then dispose does not hang', async () => {
+    const runner = createDelayedEchoRunner({ chunks: 10, perChunkDelayMs: 30 })
+    q = createInputQueue({ runner, interruptGraceMs: 500 })
+    q.submit('long', {
+      clientId: 'c1',
+      source: 'repl',
+      intent: 'interactive',
+    })
+    await waitFor(() => q!.state === 'RUNNING')
+    await q.abort()
+    expect(q.state).toBe('IDLE')
+    await q.dispose()
+    expect(q.state).toBe('IDLE')
+    // Avoid afterEach calling dispose again
+    q = null
+  })
+
+  test('abort force-clears if runner ignores signal', async () => {
+    const deafRunner: SessionRunner = {
+      async *run() {
+        await new Promise(r => setTimeout(r, 2_000))
+        yield { type: 'done' } satisfies RunnerEvent
+      },
+    }
+    q = createInputQueue({ runner: deafRunner, interruptGraceMs: 50 })
+    const ends = collect<TurnEndEvent>(q, 'turnEnd')
+    q.submit('stuck', {
+      clientId: 'c1',
+      source: 'repl',
+      intent: 'interactive',
+    })
+    await waitFor(() => q!.state === 'RUNNING')
+    await q.abort()
+    expect(q.state).toBe('IDLE')
+    expect(ends.length).toBe(1)
+    expect(ends[0]!.reason).toBe('aborted')
+    expect(ends[0]!.error).toContain('runner stuck')
+  })
+})
+
 describe('InputQueue — dispose', () => {
   test('dispose clears pending and aborts current', async () => {
     const runner = createDelayedEchoRunner({ chunks: 100, perChunkDelayMs: 20 })

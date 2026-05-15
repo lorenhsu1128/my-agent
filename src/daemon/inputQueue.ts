@@ -83,6 +83,12 @@ export interface InputQueue {
   on(event: 'turnStart', handler: (e: TurnStartEvent) => void): void
   on(event: 'turnEnd', handler: (e: TurnEndEvent) => void): void
   off(event: string, handler: (...args: unknown[]) => void): void
+  /**
+   * 中斷當前 turn（不送替代輸入）。state === IDLE 為 no-op。
+   * 內部邏輯與 interrupt+replace 共用：送 abort signal、等 grace、必要時
+   * 強制 emit synthetic turnEnd 並清狀態。回傳 resolve 時 state === IDLE。
+   */
+  abort(): Promise<void>
   /** 停掉 queue：中止當前、清空 pending、拒絕未來 submit。 */
   dispose(): Promise<void>
 }
@@ -115,7 +121,10 @@ export function createInputQueue(opts: InputQueueOptions): InputQueue {
    */
   const runInput = async (input: QueuedInput): Promise<void> => {
     current = input
-    currentController = new AbortController()
+    // Snapshot 給本次 runInput 用。currentController 是 module-scoped 可能被
+    // abortCurrent 的 force-clear path 設成 null，這裡用 local ref 避免 NPE。
+    const ac = new AbortController()
+    currentController = ac
     setState('RUNNING')
     emitter.emit('turnStart', { input, startedAt: Date.now() })
 
@@ -123,10 +132,10 @@ export function createInputQueue(opts: InputQueueOptions): InputQueue {
     let errMsg: string | undefined
 
     try {
-      for await (const event of runner.run(input, currentController.signal)) {
+      for await (const event of runner.run(input, ac.signal)) {
         emitter.emit('runnerEvent', { input, event })
         if (event.type === 'error') {
-          reason = currentController.signal.aborted ? 'aborted' : 'error'
+          reason = ac.signal.aborted ? 'aborted' : 'error'
           errMsg = event.error
           break
         }
@@ -136,7 +145,7 @@ export function createInputQueue(opts: InputQueueOptions): InputQueue {
         }
       }
     } catch (e) {
-      reason = currentController.signal.aborted ? 'aborted' : 'error'
+      reason = ac.signal.aborted ? 'aborted' : 'error'
       errMsg = String(e)
       emitter.emit('runnerEvent', {
         input,
@@ -144,14 +153,18 @@ export function createInputQueue(opts: InputQueueOptions): InputQueue {
       } satisfies RunnerEventWrapper)
     }
 
-    emitter.emit('turnEnd', {
-      input,
-      endedAt: Date.now(),
-      reason,
-      error: errMsg,
-    })
-    current = null
-    currentController = null
+    // 若 abortCurrent 的 force-clear 已 emit synthetic turnEnd 並把 current
+    // 清成 null，這裡就不要重複 emit（避免兩個 turnEnd 給同一 input）。
+    if (current === input) {
+      emitter.emit('turnEnd', {
+        input,
+        endedAt: Date.now(),
+        reason,
+        error: errMsg,
+      })
+      current = null
+      currentController = null
+    }
 
     // 轉下一筆
     if (!disposed) {
@@ -168,14 +181,16 @@ export function createInputQueue(opts: InputQueueOptions): InputQueue {
   }
 
   /**
-   * 發 abort，等 runner 自然結束（runInput 的 finally 會把 state 轉回）。
-   * 逾時強制清狀態、啟動下個 queue head。
+   * 發 abort signal、等 runner 自然結束（runInput 的 finally 會把 state 轉回）；
+   * 逾時則強制 emit synthetic turnEnd + 清狀態。state === IDLE 為 no-op。
+   * 並發呼叫安全（state 已是 INTERRUPTING 時不重複發 abort）。
    */
-  const interruptAndReplace = async (
-    replacement: QueuedInput,
-  ): Promise<void> => {
-    setState('INTERRUPTING')
-    currentController?.abort()
+  const abortCurrent = async (): Promise<void> => {
+    if (state === 'IDLE') return
+    if (state !== 'INTERRUPTING') {
+      setState('INTERRUPTING')
+      currentController?.abort()
+    }
     const grace = interruptGraceMs
     const started = Date.now()
     while (state !== 'IDLE' && Date.now() - started < grace) {
@@ -195,6 +210,15 @@ export function createInputQueue(opts: InputQueueOptions): InputQueue {
       currentController = null
       setState('IDLE')
     }
+  }
+
+  /**
+   * 中斷當前 + 安排替代輸入啟動（interactive intent 的 preempt 流程）。
+   */
+  const interruptAndReplace = async (
+    replacement: QueuedInput,
+  ): Promise<void> => {
+    await abortCurrent()
     if (!disposed) {
       void runInput(replacement)
     }
@@ -241,6 +265,10 @@ export function createInputQueue(opts: InputQueueOptions): InputQueue {
     },
     off(event, handler) {
       emitter.off(event, handler)
+    },
+    async abort() {
+      if (disposed) return
+      await abortCurrent()
     },
     async dispose() {
       if (disposed) return

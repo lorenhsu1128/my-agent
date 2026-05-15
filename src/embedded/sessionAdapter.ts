@@ -149,11 +149,19 @@ export class AgentSession extends EventEmitter {
     })
   }
 
-  /** 取消當前 turn（透過 dispose + 重建 queue 太重；目前用 submit 新 interactive 來打斷）。 */
+  /**
+   * 取消當前 turn — 觸發完整 abort chain：
+   *   InputQueue.abort() → currentController.abort() → runner ac.abort()
+   *   → ask({abortController}) → LLM fetch init.signal → embedded adapter
+   *   runCtx.abort → tcqRunCore* 中止生成 → sink onDone graceful close
+   *   → translator finally → 反向 abort 釋放 GPU。
+   *
+   * Fire-and-forget；caller 若需要等 turn 真正結束，訂閱 'frame' 取 turnEnd。
+   * state === IDLE 時為 no-op。
+   */
   abort(): void {
-    // InputQueue 目前不公開 abort API。要打斷當前 turn，submit 一筆
-    // interactive input 會觸發 INTERRUPTING flow（見 inputQueue.ts）。
-    // 桌寵 Phase 5 若需要明確 cancel UI，再回頭評估補 queue.abort() 公開 API。
+    if (this.disposed) return
+    void this.queue.abort()
   }
 
   async close(): Promise<void> {

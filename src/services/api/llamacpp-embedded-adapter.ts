@@ -4,23 +4,22 @@
  * 平行於 llamacpp-fetch-adapter.ts，提供同一介面（fetch-shaped function）。
  * 既有 ADR-005 / ADR-010 規定不修改的檔案完全不動。
  *
- * Phase C/E：純文字 + vision binding（mmproj）兩條路徑共存
+ * Phase C/E + G4/G5/G6：純文字 + vision multimodal 兩條路徑共存
  *  - 提供 createLlamaCppEmbeddedFetch(config) 回傳 fetch-shaped function
  *  - lazy import node-llama-tcq 避免無 binding 時 my-agent 啟動失敗
- *  - 單例 LlamaModel + LlamaContext 重用
- *  - vision：detect OpenAI image_url content → mtmd tokenize/eval/generate
- *  - 純文字：走 LlamaChatSession.prompt（Phase C 既有）
- *  - 都吐 OpenAI ChatCompletion JSON / SSE，銜接 translateOpenAIStreamToAnthropic
+ *  - 透過 tcqEnsureSession module-level singleton 重用 model / context / sequence
+ *  - 純文字：tcqPackMessages + tcqRunCoreNonStreaming / tcqRunCoreStreaming
+ *  - vision：tcqBuildVisionPrompt + tcqRunVisionCore（與 HTTP server 共用）
+ *  - streaming：byte-pipe → translateOpenAIStreamToAnthropic（含 watchdog）
+ *  - abort：fetch init.signal → runCtx.abort → tcqRunCore* 中止生成
+ *  - 都吐 OpenAI ChatCompletion JSON / SSE，銜接 fetch adapter 的翻譯層
  *
  * 仍不在範圍：
- *  - 多 sequence 並行
- *  - tool call leak detection（fetch-adapter 處理，本 adapter 純文字）
- *  - 真正 token-by-token streaming（先一次吐單一 chunk）
+ *  - 多 sequence 並行（TCQ-shim 單 slot 限制）
+ *  - vision streaming（v1 vision 走 batch；v2 補 streaming sink）
+ *  - tool call leak detection（mode='tcq' 跳過下游 leak parser，由 tcq core 自家 parse）
  */
 
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import type {EmbeddedRoutingConfig} from "../../utils/model/embeddedRouting.js";
 import {
     translateRequestToOpenAI,
@@ -38,6 +37,7 @@ import {
     isQwenModel as tcqIsQwenModel,
     countFullPromptTokens as tcqCountFullPromptTokens,
     ensureSession as tcqEnsureSession,
+    disposeSession as tcqDisposeSession,
     // G5: vision pipeline core — embedded vision branch 改走 tcq-shim 同一份邏輯
     runVisionChatCompletionCoreNonStreaming as tcqRunVisionCore,
     buildVisionPrompt as tcqBuildVisionPrompt,
@@ -229,104 +229,6 @@ function lastUserMessage(messages: OpenAIChatRequest["messages"]): string {
     return "";
 }
 
-/**
- * 從 last user message 萃取 image inputs（OpenAI vision 格式：
- *   {type: "image_url", image_url: {url: "data:image/png;base64,..." | "file:..." | "http..."}}
- * data URL 解 base64 後寫到 temp file，回傳檔案路徑陣列；
- * file URL 直接回傳路徑；http URL 暫不支援（拋錯）。
- *
- * 同時組出 prompt 文字 — 每張圖前插一個 mtmd marker。
- */
-/**
- * 從 last user message 萃取 image / audio inputs。
- * 支援格式：
- *   image_url: data: / file: / 絕對路徑
- *   input_audio: {data: <base64>, format: "mp3"|"wav"|...}
- *   audio_url: data: / file: / 絕對路徑（同 image 模式）
- *
- * 對每個 marker 在 prompt 中插一個 mtmd marker。
- * 順序對應 mtmd_tokenize 期望（marker 順序 = bitmaps 陣列順序）。
- */
-function extractMediaInput(
-    messages: OpenAIChatRequest["messages"],
-    marker: string
-): {prompt: string; mediaPaths: string[]; tempFiles: string[]} {
-    const mediaPaths: string[] = [];
-    const tempFiles: string[] = [];
-
-    let lastUser: OpenAIChatRequest["messages"][number] | undefined;
-    for (let i = messages.length - 1; i >= 0; i--) {
-        const mm = messages[i];
-        if (mm && mm.role === "user") {
-            lastUser = mm;
-            break;
-        }
-    }
-    if (!lastUser) return {prompt: "", mediaPaths: [], tempFiles: []};
-
-    if (typeof lastUser.content === "string") {
-        return {prompt: lastUser.content, mediaPaths: [], tempFiles: []};
-    }
-
-    const writeBase64ToTemp = (b64: string, ext: string): string => {
-        const buf = Buffer.from(b64, "base64");
-        const tmpPath = path.join(
-            os.tmpdir(),
-            `nltcq-media-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
-        );
-        fs.writeFileSync(tmpPath, buf);
-        tempFiles.push(tmpPath);
-        return tmpPath;
-    };
-
-    const resolveUrlToPath = (url: string, defaultExt: string): string => {
-        if (url.startsWith("data:")) {
-            const m = /^data:([^;]+);base64,(.+)$/.exec(url);
-            if (!m) throw new Error("invalid data: URL");
-            const mime = m[1]!.toLowerCase();
-            const ext = mime.includes("png") ? ".png"
-                : mime.includes("jpeg") || mime.includes("jpg") ? ".jpg"
-                    : mime.includes("mp3") || mime.includes("mpeg") ? ".mp3"
-                        : mime.includes("wav") ? ".wav"
-                            : mime.includes("flac") ? ".flac"
-                                : mime.includes("ogg") ? ".ogg"
-                                    : defaultExt;
-            return writeBase64ToTemp(m[2]!, ext);
-        }
-        if (url.startsWith("file://")) return url.slice(7);
-        if (url.startsWith("/") || /^[A-Za-z]:[\\/]/.test(url)) return url;
-        throw new Error(`unsupported media URL scheme: ${url.slice(0, 30)}...`);
-    };
-
-    const textParts: string[] = [];
-    for (const part of lastUser.content) {
-        if (part.type === "image_url" && "image_url" in part && part.image_url?.url) {
-            mediaPaths.push(resolveUrlToPath(part.image_url.url, ".bin"));
-            textParts.push(marker);
-        } else if (part.type === "audio_url" && "audio_url" in part && part.audio_url?.url) {
-            mediaPaths.push(resolveUrlToPath(part.audio_url.url, ".mp3"));
-            textParts.push(marker);
-        } else if (part.type === "input_audio" && "input_audio" in part && part.input_audio?.data) {
-            const fmt = part.input_audio.format ?? "mp3";
-            mediaPaths.push(writeBase64ToTemp(part.input_audio.data, "." + fmt));
-            textParts.push(marker);
-        } else if (part.type === "text" && "text" in part) {
-            textParts.push(part.text ?? "");
-        }
-    }
-
-    return {prompt: textParts.join("\n"), mediaPaths, tempFiles};
-}
-
-/** @deprecated 改用 extractMediaInput */
-function extractVisionInput(
-    messages: OpenAIChatRequest["messages"],
-    marker: string
-): {prompt: string; imagePaths: string[]; tempFiles: string[]} {
-    const {prompt, mediaPaths, tempFiles} = extractMediaInput(messages, marker);
-    return {prompt, imagePaths: mediaPaths, tempFiles};
-}
-
 function hasMediaContent(messages: OpenAIChatRequest["messages"]): boolean {
     for (const m of messages) {
         // assistant 訊息含 tool_calls 時 content 是 null；其餘訊息可能是 string
@@ -337,37 +239,6 @@ function hasMediaContent(messages: OpenAIChatRequest["messages"]): boolean {
         )) return true;
     }
     return false;
-}
-
-/** @deprecated 改用 hasMediaContent — 保留向後相容 */
-function hasVisionContent(messages: OpenAIChatRequest["messages"]): boolean {
-    return hasMediaContent(messages);
-}
-
-/**
- * 產生符合 OpenAI streaming 格式的 SSE chunk。
- * translateOpenAIStreamToAnthropic 會吃這格式。
- */
-function makeSseChunk(deltaText: string, model: string): string {
-    const obj = {
-        id: "embedded-" + Date.now(),
-        object: "chat.completion.chunk",
-        created: Math.floor(Date.now() / 1000),
-        model,
-        choices: [{index: 0, delta: {content: deltaText}, finish_reason: null}]
-    };
-    return `data: ${JSON.stringify(obj)}\n\n`;
-}
-
-function makeSseFinal(model: string): string {
-    const obj = {
-        id: "embedded-" + Date.now(),
-        object: "chat.completion.chunk",
-        created: Math.floor(Date.now() / 1000),
-        model,
-        choices: [{index: 0, delta: {}, finish_reason: "stop"}]
-    };
-    return `data: ${JSON.stringify(obj)}\n\ndata: [DONE]\n\n`;
 }
 
 export interface EmbeddedFetchOptions {
@@ -704,65 +575,17 @@ export function createLlamaCppEmbeddedFetch(opts: EmbeddedFetchOptions): typeof 
         });
     };
 
-    async function runVisionPath(
-        state: EmbeddedAdapterState,
-        body: OpenAIChatRequest,
-        onChunk?: (text: string) => void
-    ): Promise<string> {
-        // F1 階段 vision 仍是 batch — 整段 reply 算完一次餵 onChunk。
-        // F2 改 mtmdCtx.generate 接 onTextChunk 後可逐 token push。
-        const m = await loadModule();
-        const marker = state.mtmdCtx.defaultMarker;
-        const {prompt, mediaPaths, tempFiles} = extractMediaInput(body.messages, marker);
-        try {
-            const chunks = await state.mtmdCtx.tokenize({
-                text: prompt,
-                media: mediaPaths.map(p => ({type: "file", data: p}))
-            });
-            const seq = state.context.getSequence();
-            const newNPast = await state.mtmdCtx.evalChunks(state.context, chunks, 0, {
-                seqId: seq.sequenceId ?? 0
-            });
-
-            const bindings = (state.model as any)._llama._bindings;
-            const sampler = new bindings.AddonSampler((state.model as any)._model);
-            sampler.applyConfig({
-                temperature: body.temperature ?? 0,
-                topK: 40,
-                topP: body.top_p ?? 0.95,
-                minP: 0.05
-            });
-            try {
-                const result = await state.mtmdCtx.generate(
-                    state.context, sampler, newNPast, body.max_tokens ?? 256,
-                    {seqId: seq.sequenceId ?? 0, onTextChunk: onChunk}
-                );
-                // onChunk 已逐 piece 推；若沒人 emit 過（mtmdGenerateStep 路徑）保險 fallback
-                return result.text;
-            } finally {
-                sampler.dispose();
-                chunks.dispose();
-            }
-        } finally {
-            for (const f of tempFiles) {
-                try { fs.unlinkSync(f); } catch { /* ignore */ }
-            }
-        }
-
-        // unreachable; satisfies linter
-        // eslint-disable-next-line no-unreachable
-        return _unreachable(m);
-    }
-
-    // 防 lint
-    function _unreachable(_m: NodeLlamaTcqModule): string { return ""; }
-
     return fetchFn as typeof globalThis.fetch;
 }
 
-/** 測試用：清空所有 cache，下次呼叫會重新初始化 */
+/** 測試用：清空模組 cache + 釋放 TCQ-shim session，下次 fetchFn 呼叫會重新初始化。 */
 export function _resetEmbeddedAdapterCache(): void {
     _moduleCache = null;
-    _llamaCache = null;
-    _modelCache = new Map();
+    // 釋放 TCQ-shim module-level _session（model + context + sequence + mtmdCtx）。
+    // 若尚未 init 過則 no-op（disposeSession 內部 idempotent）。
+    try {
+        tcqDisposeSession();
+    } catch {
+        // 無 session 可釋放；安全忽略
+    }
 }
