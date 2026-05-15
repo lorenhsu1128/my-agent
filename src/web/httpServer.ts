@@ -81,18 +81,12 @@ const DEFAULT_PORT_PROBES = 10
 export async function startHttpServer(
   opts: HttpServerOptions,
 ): Promise<HttpServerHandle> {
-  // Phase 4：Node runtime（embedded mascot）尚未實作 web HTTP server，
-  // 因為 Bun.serve 的 Response 模型 ↔ Node http.ServerResponse 轉換 + 靜態檔 +
-  // dev proxy + WS upgrade 全套對應較複雜。桌寵 mascot 對話走 src-bubble
-  // BrowserWindow + IPC（非 web UI），預設不需要此 server。
-  // Phase 4b（v2 規劃）會補完 Node http 版；目前 opt-in web UI 在 embedded
-  // 模式下會拋出此錯。Bun CLI / daemon 模式下行為不變（走下方既有路徑）。
+  // M-MASCOT-EMBED Phase 4b / G7 Phase 3：Node runtime（embedded mascot）走
+  // nodeHttpServer.ts（http.createServer + ws upgrade），協議完全相同。
+  // Bun CLI / daemon 模式繼續走下方既有 Bun.serve 路徑。
   if (typeof Bun === 'undefined') {
-    throw new Error(
-      'web HTTP server 尚未支援 Node runtime（embedded 模式）。' +
-        '桌寵 mascot 對話走 src-bubble，不需要此 server。' +
-        '若需要 web UI opt-in，請等 M-MASCOT-EMBED Phase 4b。',
-    )
+    const { startNodeHttpServer } = await import('./nodeHttpServer.js')
+    return startNodeHttpServer(opts)
   }
   const maxProbes = opts.maxPortProbes ?? DEFAULT_PORT_PROBES
   const webRootPath = opts.webRootPath ?? resolveDefaultWebRoot()

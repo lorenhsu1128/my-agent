@@ -39,7 +39,15 @@ import {
   createDiscordSupervisor,
   type DiscordSupervisor,
 } from '../discord/discordSupervisor.js'
+import { createDiscordController } from '../discord/discordController.js'
 import { isVisionEnabled } from '../llamacppConfig/loader.js'
+import { createWebServerController } from '../web/webController.js'
+import type { WebServerController } from '../web/webController.js'
+import {
+  loadWebConfigSnapshot,
+  seedWebConfigIfMissing,
+} from '../webConfig/index.js'
+import type { WebConfig } from '../webConfig/schema.js'
 import type { ClientInfo } from '../server/clientRegistry.js'
 import type { PermissionMode } from '../types/permissions.js'
 
@@ -79,6 +87,10 @@ export interface EmbeddedDaemonServerHandle {
   readonly defaultRuntime: ProjectRuntime
   /** Discord supervisor（不自動 start；Phase 2 給 AgentEmbedded.startDiscordBot 用） */
   readonly discordSupervisor: DiscordSupervisor
+  /** Web server controller（不自動 start；Phase 3 給 AgentEmbedded.startWebUi 用） */
+  readonly webController: WebServerController
+  /** 取得 / 更新 web config override（startWebUi 內部用） */
+  setWebConfigOverride(override: Partial<WebConfig>): void
 }
 
 /**
@@ -142,6 +154,18 @@ export async function startEmbeddedDaemonServer(
   // Auto-load the starting cwd as the default project.
   const defaultRuntime = await registry.loadProject(cwd)
 
+  // 建 Web config snapshot + controller（不自動 start；AgentEmbedded.startWebUi()
+  // 才呼叫 controller.start()）。Config 從 ~/.virtual-assistant-desktop/web.jsonc 載；
+  // seed 若不存在則建預設範本。webConfigOverride 由 startWebUi 注入（port/bindHost
+  // 等使用者透過設定 UI 指定的覆寫值，每次 start 透過 reloadConfig callback 取最新）
+  await seedWebConfigIfMissing()
+  const baseWebConfig = await loadWebConfigSnapshot()
+  let webConfigOverride: Partial<WebConfig> = {}
+  const mergedWebConfig = (): WebConfig => ({
+    ...baseWebConfig,
+    ...webConfigOverride,
+  })
+
   // 建 Discord supervisor（不自動 start；AgentEmbedded.startDiscordBot() 才會 start）
   const discordSupervisor = createDiscordSupervisor({
     registry,
@@ -166,6 +190,23 @@ export async function startEmbeddedDaemonServer(
           c => c.projectId === projectId,
         )
       },
+    },
+  })
+
+  const discordController = createDiscordController(discordSupervisor)
+
+  // 建 Web controller（不自動 start；AgentEmbedded.startWebUi() 才 start）
+  const webController = createWebServerController({
+    registry,
+    config: baseWebConfig,
+    reloadConfig: mergedWebConfig,
+    log: msg => void handle.logger.info(`[web] ${msg}`),
+    getDiscordController: () => discordController,
+    notifyPermissionModeToThinClients: (projectId, mode) => {
+      handle.server!.broadcast(
+        { type: 'permissionModeChanged', projectId, mode },
+        c => c.projectId === projectId,
+      )
     },
   })
 
@@ -308,6 +349,11 @@ export async function startEmbeddedDaemonServer(
 
   const stop = async (): Promise<void> => {
     try {
+      await webController.dispose()
+    } catch {
+      // best-effort
+    }
+    try {
       await discordSupervisor.stop()
     } catch {
       // best-effort
@@ -331,5 +377,9 @@ export async function startEmbeddedDaemonServer(
     registry,
     defaultRuntime,
     discordSupervisor,
+    webController,
+    setWebConfigOverride(override) {
+      webConfigOverride = override
+    },
   }
 }

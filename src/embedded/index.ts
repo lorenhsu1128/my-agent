@@ -52,6 +52,8 @@ import type {
   DiscordTokenSource,
 } from '../discord/discordSupervisor.js'
 import type { DiscordConfig } from '../discordConfig/schema.js'
+import type { WebServerStatus } from '../web/webController.js'
+import type { WebConfig } from '../webConfig/schema.js'
 import type { PreloadPhase, PreloadProgress } from './types.js'
 
 /** AgentEmbedded.startDiscordBot() 選項。 */
@@ -73,6 +75,32 @@ export interface DiscordBotHandle {
   reload(): Promise<{ ok: boolean; reason?: string }>
 }
 
+/** AgentEmbedded.startWebUi() 選項。 */
+export interface WebUiStartOptions {
+  /** 覆寫 web.jsonc 內的 port；不傳則用 jsonc 設定 */
+  port?: number
+  /** 覆寫 web.jsonc 內的 bindHost；不傳則用 jsonc 設定 */
+  bindHost?: string
+  /** Dev proxy URL（指向 vite dev server，例 http://127.0.0.1:5173）。
+   *  設了優先於靜態 serve，給開發模式 HMR 用 */
+  devProxyUrl?: string
+}
+
+/** Web UI HTTP server 運行 handle。 */
+export interface WebUiHandle {
+  readonly isRunning: boolean
+  readonly url: string | null
+  readonly port: number | null
+  readonly bindHost: string | null
+  readonly urls: readonly string[]
+  /** 連線中的瀏覽器 tab 數 */
+  readonly connectedClients: number
+  status(): WebServerStatus
+  stop(): Promise<WebServerStatus>
+  /** Restart：sequential stop + start with new opts */
+  restart(opts?: WebUiStartOptions): Promise<WebUiHandle>
+}
+
 function makeDiscordBotHandle(supervisor: DiscordSupervisor): DiscordBotHandle {
   return {
     get isRunning() {
@@ -87,6 +115,63 @@ function makeDiscordBotHandle(supervisor: DiscordSupervisor): DiscordBotHandle {
   }
 }
 
+function makeWebUiHandle(
+  daemonServer: EmbeddedDaemonServerHandle,
+  initialStatus: WebServerStatus,
+): WebUiHandle {
+  const controller = daemonServer.webController
+  const buildUrl = (st: WebServerStatus): string | null => {
+    if (!st.running || !st.port || !st.bindHost) return null
+    // 0.0.0.0 → localhost 給瀏覽器友善的 URL
+    const host = st.bindHost === '0.0.0.0' || st.bindHost === '::'
+      ? 'localhost'
+      : st.bindHost
+    return `http://${host}:${st.port}`
+  }
+  let currentStatus = initialStatus
+  return {
+    get isRunning() {
+      currentStatus = controller.status()
+      return currentStatus.running
+    },
+    get url() {
+      currentStatus = controller.status()
+      return buildUrl(currentStatus)
+    },
+    get port() {
+      currentStatus = controller.status()
+      return currentStatus.port ?? null
+    },
+    get bindHost() {
+      currentStatus = controller.status()
+      return currentStatus.bindHost ?? null
+    },
+    get urls() {
+      currentStatus = controller.status()
+      return currentStatus.urls ?? []
+    },
+    get connectedClients() {
+      currentStatus = controller.status()
+      return currentStatus.connectedClients ?? 0
+    },
+    status() {
+      currentStatus = controller.status()
+      return currentStatus
+    },
+    stop: () => controller.stop(),
+    async restart(opts) {
+      await controller.stop()
+      const override: Partial<WebConfig> = { enabled: true }
+      if (opts?.port !== undefined) override.port = opts.port
+      if (opts?.bindHost !== undefined) override.bindHost = opts.bindHost
+      if (opts?.devProxyUrl !== undefined) override.devProxyUrl = opts.devProxyUrl
+      daemonServer.setWebConfigOverride(override)
+      const status = await controller.start()
+      return makeWebUiHandle(daemonServer, status)
+    },
+  }
+}
+
 // Re-export public types so 桌寵 type-safe import
 export { AgentSession } from './sessionAdapter.js'
 export type {
@@ -95,6 +180,8 @@ export type {
 } from './daemonServer.js'
 export type { DiscordTokenSource } from '../discord/discordSupervisor.js'
 export type { DiscordConfig } from '../discordConfig/schema.js'
+export type { WebServerStatus } from '../web/webController.js'
+export type { WebConfig } from '../webConfig/schema.js'
 export type {
   Frame,
   PreloadPhase,
@@ -348,6 +435,51 @@ export class AgentEmbedded extends EventEmitter {
   getDiscordBot(): DiscordBotHandle | null {
     if (!this.daemonServer) return null
     return makeDiscordBotHandle(this.daemonServer.discordSupervisor)
+  }
+
+  /**
+   * 啟動 Web UI（chat HTTP server）。需先 `startDaemonServer()`。
+   *
+   * 服務內容：
+   *   - GET /api/* — REST routes（health / version / cron CRUD / memory / discord admin
+   *     / slash command list/execute 等，整套 my-agent web admin API）
+   *   - WS /ws — browser chat client 連線（共用 daemon ProjectRegistry）
+   *   - GET /* — 靜態檔（web/dist）+ SPA fallback；devProxyUrl 設了則轉發到 Vite
+   *
+   * Port / bindHost / devProxyUrl 透過 opts 覆寫 `web.jsonc` 內對應欄位。
+   *
+   * @see src/web/webController.ts — 真正啟 HTTP + WS server 的 lifecycle
+   * @see src/web/nodeHttpServer.ts — Node runtime 的 http.createServer 實作
+   */
+  async startWebUi(opts: WebUiStartOptions = {}): Promise<WebUiHandle> {
+    if (this.disposed) {
+      throw new Error('AgentEmbedded has been shut down')
+    }
+    if (!this.daemonServer) {
+      throw new Error(
+        'startWebUi requires startDaemonServer() to be called first',
+      )
+    }
+    const daemonServer = this.daemonServer
+    // 套用 user override 到 webController 下次 reloadConfig() 取得的 config
+    const override: Partial<WebConfig> = {}
+    if (opts.port !== undefined) override.port = opts.port
+    if (opts.bindHost !== undefined) override.bindHost = opts.bindHost
+    if (opts.devProxyUrl !== undefined) override.devProxyUrl = opts.devProxyUrl
+    // 強制 enabled = true（桌寵 UI 直接啟動，不需要 jsonc 設 enabled:true）
+    override.enabled = true
+    daemonServer.setWebConfigOverride(override)
+
+    const status = await daemonServer.webController.start()
+    return makeWebUiHandle(daemonServer, status)
+  }
+
+  /**
+   * 取得目前 Web UI 狀態（未啟動 daemon 或 controller 未 start 則 isRunning=false）。
+   */
+  getWebUi(): WebUiHandle | null {
+    if (!this.daemonServer) return null
+    return makeWebUiHandle(this.daemonServer, this.daemonServer.webController.status())
   }
 
   /**
