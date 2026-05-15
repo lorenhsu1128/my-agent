@@ -385,6 +385,17 @@ export {
     type RunCtx
 } from "./server/chatCompletions.js";
 export {isQwenModel} from "./server/qwenToolFormat.js";
+// node-llama-tcq Phase G4+: TCQ-shim session lifecycle 共用（embedded 模式直接重用
+// 同一份 ensureSession，避免 in-process adapter 重寫 getLlama/loadModel/createContext）。
+export {
+    ensureSession,
+    getSessionSync,
+    disposeSession,
+    resetSessionSequence,
+    type SessionInitOptions,
+    type ServerSession
+} from "./server/session.js";
+export {resolveCacheType, type ResolvedCacheType} from "./server/tcqPresetMap.js";
 export {buildRepeatPenalty} from "./server/samplerCoalesce.js";
 export {bundleResponse} from "./server/segmentExtract.js";
 export {toOpenAIFinishReason} from "./server/finishReason.js";
