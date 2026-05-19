@@ -538,3 +538,11 @@ export class AgentEmbedded extends EventEmitter {
     }
   }
 }
+
+/**
+ * 釋放 embedded LLM 的 native handle（VRAM）。
+ * 包 llamacpp-embedded-adapter 的 `_resetEmbeddedAdapterCache`，
+ * 內部呼叫 tcqDisposeSession 釋放 model + context + sequence + mtmdCtx。
+ * 桌寵 master toggle OFF 時呼叫，避免 LLM 常駐 VRAM。
+ */
+export { _resetEmbeddedAdapterCache as releaseEmbeddedLlm } from '../services/api/llamacpp-embedded-adapter.js'
