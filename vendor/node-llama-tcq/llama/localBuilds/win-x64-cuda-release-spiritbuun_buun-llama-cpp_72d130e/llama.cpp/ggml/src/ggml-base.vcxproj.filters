@@ -1,0 +1,72 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\ggml.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\ggml.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\ggml-alloc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\ggml-backend.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\ggml-backend-meta.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\ggml-opt.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\ggml-threading.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\ggml-quants.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\ggml-turbo-quant.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\gguf.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\include\ggml.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\include\ggml-alloc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\include\ggml-backend.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\include\ggml-cpp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\include\ggml-opt.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\include\gguf.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\ggml-threading.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\ggml-quants.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{56DABF90-9903-3B06-9BA1-66ED81302E64}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{22FE0375-644C-3F20-9B4C-B93E145E4F47}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

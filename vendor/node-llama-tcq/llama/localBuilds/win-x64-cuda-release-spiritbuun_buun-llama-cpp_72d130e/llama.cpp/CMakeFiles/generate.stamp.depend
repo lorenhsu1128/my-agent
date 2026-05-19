@@ -1,0 +1,16 @@
+# CMake generation dependency list for this directory.
+C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.31/Modules/BasicConfigVersion-SameMajorVersion.cmake.in
+C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.31/Modules/CMakePackageConfigHelpers.cmake
+C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.31/Modules/CheckIncludeFileCXX.cmake
+C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.31/Modules/FindGit.cmake
+C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.31/Modules/FindPackageHandleStandardArgs.cmake
+C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.31/Modules/FindPackageMessage.cmake
+C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.31/Modules/GNUInstallDirs.cmake
+C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.31/Modules/WriteBasicConfigVersionFile.cmake
+C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/llama.cpp/CMakeLists.txt
+C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/llama.cpp/cmake/build-info.cmake
+C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/llama.cpp/cmake/common.cmake
+C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/llama.cpp/cmake/license.cmake
+C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/llama.cpp/cmake/llama-config.cmake.in
+C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/llama.cpp/cmake/llama.pc.in
+C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/llama.cpp/ggml/cmake/common.cmake

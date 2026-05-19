@@ -1,0 +1,241 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{12C2D4C9-5C46-3E47-BF01-64D0C83CF6A6}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>llama-common</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.8.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\bin\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">llama-common.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">llama-common</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.dll</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</GenerateManifest>
+  </PropertyGroup>
+  <PropertyGroup />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\node_modules\node-addon-api;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\node_modules\node-api-headers\include;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\.;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\..\vendor;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\src\..\include;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\.\llama.cpp\src;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /utf-8 /bigobj</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <SupportJustMyCode></SupportJustMyCode>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;NAPI_VERSION=7;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;LLAMA_SHARED;GGML_USE_CPU;GGML_USE_CUDA;GGML_SHARED;GGML_BACKEND_SHARED;CMAKE_INTDIR="Release";llama_common_EXPORTS</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;NAPI_VERSION=7;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;LLAMA_SHARED;GGML_USE_CPU;GGML_USE_CUDA;GGML_SHARED;GGML_BACKEND_SHARED;CMAKE_INTDIR=\"Release\";llama_common_EXPORTS</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\node_modules\node-addon-api;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\node_modules\node-api-headers\include;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\.;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\..\vendor;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\src\..\include;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\.\llama.cpp\src;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\node_modules\node-addon-api;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\node_modules\node-api-headers\include;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\.;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\..\vendor;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\src\..\include;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\.\llama.cpp\src;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\ggml\src\..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PreLinkEvent>
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message>Auto build dll exports</Message>
+      <Command>setlocal
+cd C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\llama.cpp\common
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E __create_def C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/localBuilds/win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e/llama.cpp/common/llama-common.dir/Release/exports.def C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/localBuilds/win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e/llama.cpp/common/llama-common.dir/Release//objects.txt
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PreLinkEvent>
+    <Link>
+      <AdditionalDependencies>Release\llama-common-base.lib;..\vendor\cpp-httplib\Release\cpp-httplib.lib;..\src\Release\llama.cuda.spiritbuun_buun-llama-cpp_72d130e.lib;..\ggml\src\Release\ggml.cuda.spiritbuun_buun-llama-cpp_72d130e.lib;..\ggml\src\Release\ggml-cpu.lib;..\ggml\src\ggml-cuda\Release\ggml-cuda.lib;..\ggml\src\Release\ggml-base.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <DelayLoadDLLs>NODE.EXE</DelayLoadDLLs>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/localBuilds/win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e/llama.cpp/common/Release/llama-common.lib</ImportLibrary>
+      <ModuleDefinitionFile>C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/localBuilds/win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e/llama.cpp/common/llama-common.dir/Release/exports.def</ModuleDefinitionFile>
+      <ProgramDataBaseFile>C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/localBuilds/win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e/bin/Release/llama-common.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <CudaLink>
+      <AdditionalOptions></AdditionalOptions>
+      <PerformDeviceLink>false</PerformDeviceLink>
+    </CudaLink>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/llama.cpp/common/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama -BC:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/localBuilds/win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e --check-stamp-file C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/localBuilds/win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e/llama.cpp/common/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CheckCSourceCompiles.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CheckIncludeFile.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CheckLibraryExists.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\FindPackageHandleStandardArgs.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\FindPackageMessage.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\FindThreads.cmake;C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\build-info.cpp.in;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\llama.cpp\common\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\arg.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\arg.h" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\base64.hpp" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\chat-auto-parser-generator.cpp" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\chat-auto-parser-helpers.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\chat-auto-parser.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\chat-diff-analyzer.cpp" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\chat-peg-parser.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\chat-peg-parser.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\chat.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\chat.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\common.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\common.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\console.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\console.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\debug.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\debug.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\download.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\download.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\fit.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\fit.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\hf-cache.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\hf-cache.h" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\http.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\json-partial.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\json-partial.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\json-schema-to-grammar.cpp" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\llguidance.cpp" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\log.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\log.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\ngram-cache.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\ngram-cache.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\ngram-map.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\ngram-map.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\ngram-mod.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\ngram-mod.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\peg-parser.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\peg-parser.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\preset.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\preset.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\regex-partial.cpp" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\reasoning-budget.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\reasoning-budget.h" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\regex-partial.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\sampling.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\sampling.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\speculative.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\speculative.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\suffix-tree.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\suffix-tree.h" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\int32-map.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\unicode.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\unicode.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\lexer.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\lexer.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\parser.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\parser.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\runtime.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\runtime.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\value.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\value.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\string.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\string.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\caps.cpp" />
+    <ClInclude Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\llama.cpp\common\jinja\caps.h" />
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\license.cpp" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\ZERO_CHECK.vcxproj">
+      <Project>{9AC2B793-A09D-3B87-812A-5B23CB286EAF}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\llama.cpp\vendor\cpp-httplib\cpp-httplib.vcxproj">
+      <Project>{56D10B6E-D6E3-3D97-AD6E-177563811103}</Project>
+      <Name>cpp-httplib</Name>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\llama.cpp\ggml\src\ggml.vcxproj">
+      <Project>{25041637-8ED6-36AC-AA61-7BA30DC7889A}</Project>
+      <Name>ggml</Name>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\llama.cpp\ggml\src\ggml-base.vcxproj">
+      <Project>{A8CF8738-44E3-37E9-89E9-FE93DFA37971}</Project>
+      <Name>ggml-base</Name>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\llama.cpp\ggml\src\ggml-cpu.vcxproj">
+      <Project>{238AE0F0-127D-32D1-A117-AC5BD7A05764}</Project>
+      <Name>ggml-cpu</Name>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\llama.cpp\ggml\src\ggml-cuda\ggml-cuda.vcxproj">
+      <Project>{373C50BF-B84C-3191-921B-E84F8CD53F9F}</Project>
+      <Name>ggml-cuda</Name>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\llama.cpp\src\llama.vcxproj">
+      <Project>{9C8FE858-5F51-344F-BCAD-CA6BC7541B33}</Project>
+      <Name>llama</Name>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\localBuilds\win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e\llama.cpp\common\llama-common-base.vcxproj">
+      <Project>{2022FDD5-F6EB-33BB-BEBE-18A8BA89A3E1}</Project>
+      <Name>llama-common-base</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.8.targets" />
+  </ImportGroup>
+</Project>

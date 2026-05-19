@@ -1,0 +1,64 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\AddonContext.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\AddonGenerateWithSpec.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\AddonGrammar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\AddonGrammarEvaluationState.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\AddonModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\AddonModelData.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\AddonModelLora.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\AddonMtmd.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\AddonSampler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\addon.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\addonGlobals.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\globals\addonLog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\globals\addonProgress.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\globals\getGpuInfo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\globals\getMemoryInfo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\addon\globals\getSwapInfo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\node_modules\cmake-js\lib\cpp\win_delay_load_hook.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\LOREN\Documents\_projects\my-agent\vendor\node-llama-tcq\llama\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{22FE0375-644C-3F20-9B4C-B93E145E4F47}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

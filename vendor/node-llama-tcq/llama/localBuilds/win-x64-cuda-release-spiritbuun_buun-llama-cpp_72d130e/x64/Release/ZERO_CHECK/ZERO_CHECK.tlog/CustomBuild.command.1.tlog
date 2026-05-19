@@ -1,0 +1,10 @@
+^C:\USERS\LOREN\DOCUMENTS\_PROJECTS\MY-AGENT\VENDOR\NODE-LLAMA-TCQ\LLAMA\LOCALBUILDS\WIN-X64-CUDA-RELEASE-SPIRITBUUN_BUUN-LLAMA-CPP_72D130E\CMAKEFILES\75F1D9FF9E42A38AE0C7DDCFCB85DAA9\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama -BC:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/localBuilds/win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/llama/localBuilds/win-x64-cuda-release-spiritbuun_buun-llama-cpp_72d130e/llama-addon.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

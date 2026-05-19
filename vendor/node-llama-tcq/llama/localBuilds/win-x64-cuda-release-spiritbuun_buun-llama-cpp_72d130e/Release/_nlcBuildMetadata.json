@@ -1,0 +1,1 @@
+{"buildOptions":{"customCmakeOptions":{},"progressLogs":true,"platform":"win","platformInfo":{"name":"Windows","version":"10.0.26200"},"arch":"x64","gpu":"cuda","llamaCpp":{"repo":"spiritbuun/buun-llama-cpp","release":"72d130e"}}}

@@ -1,0 +1,6 @@
+set(CMAKE_RC_COMPILER "C:/Users/LOREN/Documents/_projects/my-agent/vendor/node-llama-tcq/node_modules/.bin/rc")
+set(CMAKE_RC_COMPILER_ARG1 "")
+set(CMAKE_RC_COMPILER_LOADED 1)
+set(CMAKE_RC_SOURCE_FILE_EXTENSIONS rc;RC)
+set(CMAKE_RC_OUTPUT_EXTENSION .res)
+set(CMAKE_RC_COMPILER_ENV_VAR "RC")
